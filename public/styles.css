@@ -1,0 +1,45 @@
+:root { --green:#1f4d2e; --line:#000; }
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: Arial, Helvetica, sans-serif;
+  color: #000;
+  background: #fff;
+  -webkit-text-size-adjust: 100%;
+}
+.wrap { max-width: 640px; margin: 0 auto; padding: 16px 16px 96px; }
+h1 { text-align: center; font-size: 22px; color: #000; margin: 12px 0 4px; }
+.sub { text-align: center; color: #000; font-size: 14px; margin: 0 0 18px; }
+label { display: block; font-weight: bold; color: #000; margin: 16px 0 6px; font-size: 15px; }
+input[type=text], input[type=password], textarea, select {
+  width: 100%; padding: 12px; font-size: 16px; color: #000; background: #fff;
+  border: 1px solid #000; border-radius: 8px; font-family: inherit;
+}
+textarea { min-height: 96px; resize: vertical; }
+.btn {
+  display: block; width: 100%; padding: 15px; font-size: 17px; font-weight: bold;
+  color: #fff; background: var(--green); border: none; border-radius: 10px; margin-top: 18px;
+}
+.btn.secondary { background: #fff; color: #000; border: 1px solid #000; }
+.btn:disabled { opacity: .5; }
+.row { display: flex; gap: 10px; }
+.row > * { flex: 1; }
+.photo-box { border: 1px solid #000; border-radius: 10px; padding: 10px; text-align: center; }
+.photo-box img { max-width: 100%; border-radius: 6px; display: none; }
+.pill-group { display: flex; gap: 8px; flex-wrap: wrap; }
+.pill { border: 1px solid #000; border-radius: 20px; padding: 8px 14px; font-size: 15px; color: #000; background: #fff; }
+.pill.on { background: var(--green); color: #fff; }
+.status { font-size: 14px; color: #000; margin-top: 6px; }
+.toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--green); color: #fff; padding: 12px 18px; border-radius: 10px; font-weight: bold; display: none; z-index: 10; }
+.topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.link { background: none; border: none; color: #000; text-decoration: underline; font-size: 14px; }
+.tabs { display: flex; gap: 8px; margin: 8px 0 16px; }
+.tab { flex: 1; text-align: center; padding: 10px; border: 1px solid #000; border-radius: 8px; color: #000; background: #fff; font-weight: bold; }
+.tab.on { background: #000; color: #fff; }
+.card { border: 1px solid #000; border-radius: 10px; padding: 12px; margin-bottom: 14px; }
+.card img { width: 100%; border-radius: 6px; margin-bottom: 8px; }
+.card .addr { font-weight: bold; color: #000; }
+.card .meta { font-size: 13px; color: #000; margin: 4px 0; }
+.badge { display: inline-block; border: 1px solid #000; border-radius: 12px; padding: 2px 8px; font-size: 12px; margin-right: 6px; }
+.badge.task { background: #000; color: #fff; }
+.empty { text-align: center; color: #000; margin-top: 40px; }

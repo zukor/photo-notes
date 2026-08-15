@@ -1,0 +1,21 @@
+{
+  "name": "photo-notes",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Photo Notes: photograph something, say what you see, and it's saved with location. Admin-only, exportable, Board-Hub-ready.",
+  "main": "server.js",
+  "scripts": {
+    "postinstall": "node scripts/gen-icons.js",
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "cookie-parser": "^1.4.6",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^1.4.5-lts.1",
+    "pg": "^8.12.0"
+  }
+}
