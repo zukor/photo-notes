@@ -172,13 +172,39 @@ async function renderList() {
       <button class="btn secondary" id="selnone">Clear</button>
     </div>
 
-    <label>Export selected as <span style="font-weight:normal">(pick one or more)</span></label>
+    <label>Export <span style="font-weight:normal">(pick one or more)</span></label>
     <div class="pill-group" id="fmts">
       <div class="pill" data-fmt="pdf">PDF</div>
       <div class="pill" data-fmt="docx">Word</div>
-      <div class="pill" data-fmt="bundle">Claude bundle</div>
+      <div class="pill" data-fmt="bundle">For Claude (.zip)</div>
     </div>
+
+    <details style="margin-top:8px">
+      <summary style="cursor:pointer;font-weight:bold;color:#000">Photo quality &amp; format</summary>
+      <label style="margin-top:10px">Resolution</label>
+      <select id="imgres">
+        <option value="standard" selected>Standard, up to 2048px (recommended)</option>
+        <option value="print">Print quality, up to 3000px</option>
+        <option value="full">Full resolution, original size</option>
+        <option value="web">Web / small files, up to 1400px</option>
+      </select>
+      <label>File format</label>
+      <select id="imgfmt">
+        <option value="jpeg" selected>JPEG, smaller files (recommended)</option>
+        <option value="png">PNG, lossless, larger</option>
+        <option value="webp">WebP, smallest, modern</option>
+        <option value="original">Keep original file, no changes</option>
+      </select>
+      <p class="status" style="color:#000;margin-top:6px">Your originals stay full-resolution on the server. These only change what gets exported. Standard JPEG is best for uploading to Claude.</p>
+    </details>
+
     <button class="btn" id="exportbtn">Export selected</button>
+
+    <label style="margin-top:18px">Manage</label>
+    <div class="row">
+      <button class="btn secondary" id="fixaddr">Fix addresses</button>
+      <button class="btn" id="delbtn" style="background:#b3261e">Delete selected</button>
+    </div>
 
     <div id="cards" style="margin-top:16px"></div>`;
   document.getElementById('filter').onchange = e => loadCards(e.target.value);
@@ -186,7 +212,45 @@ async function renderList() {
   document.getElementById('selnone').onclick = () => document.querySelectorAll('.capchk').forEach(c => c.checked = false);
   document.getElementById('fmts').onclick = (e) => { const p = e.target.closest('.pill'); if (p) p.classList.toggle('on'); };
   document.getElementById('exportbtn').onclick = doExportSelected;
+  document.getElementById('delbtn').onclick = doDeleteSelected;
+  document.getElementById('fixaddr').onclick = doFixAddresses;
   loadCards('');
+}
+
+async function doDeleteSelected() {
+  const ids = Array.from(document.querySelectorAll('.capchk:checked')).map(x => x.value);
+  if (!ids.length) { toast('Select at least one capture'); return; }
+  if (!confirm(`Delete ${ids.length} capture${ids.length > 1 ? 's' : ''}? This can't be undone.`)) return;
+  const btn = document.getElementById('delbtn');
+  btn.disabled = true; btn.textContent = 'Deleting...';
+  try {
+    const r = await api('/api/captures/delete', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids }),
+    });
+    if (!r.ok) throw new Error('bad');
+    toast('Deleted');
+    loadCards(document.getElementById('filter').value || '');
+  } catch (e) { toast('Delete failed'); }
+  finally { btn.disabled = false; btn.textContent = 'Delete selected'; }
+}
+
+async function doFixAddresses() {
+  const checked = Array.from(document.querySelectorAll('.capchk:checked')).map(x => x.value);
+  const btn = document.getElementById('fixaddr');
+  btn.disabled = true; btn.textContent = 'Fixing...';
+  try {
+    const body = checked.length ? { ids: checked } : {};
+    const r = await api('/api/regeocode', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) throw new Error('bad');
+    const d = await r.json();
+    toast(`Updated ${d.updated} of ${d.total}`);
+    loadCards(document.getElementById('filter').value || '');
+  } catch (e) { toast('Fix addresses failed'); }
+  finally { btn.disabled = false; btn.textContent = 'Fix addresses'; }
 }
 
 async function doExportSelected() {
@@ -195,11 +259,13 @@ async function doExportSelected() {
   if (!ids.length) { toast('Select at least one capture'); return; }
   if (!fmts.length) { toast('Pick at least one format'); return; }
   const names = { pdf: 'photonotes.pdf', docx: 'photonotes.docx', bundle: 'photonotes-bundle.zip' };
+  const imgRes = (document.getElementById('imgres') || {}).value || 'standard';
+  const imgFmt = (document.getElementById('imgfmt') || {}).value || 'jpeg';
   const btn = document.getElementById('exportbtn');
   btn.disabled = true; btn.textContent = 'Exporting...';
   for (const f of fmts) {
     try {
-      const r = await api(`/api/export/${f}?ids=${ids.join(',')}`);
+      const r = await api(`/api/export/${f}?ids=${ids.join(',')}&res=${imgRes}&fmt=${imgFmt}`);
       if (!r.ok) throw new Error('bad');
       const blob = await r.blob();
       const url = URL.createObjectURL(blob);
