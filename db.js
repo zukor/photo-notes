@@ -96,6 +96,16 @@ async function init() {
     adminId = a.rows.length ? a.rows[0].id : existing.rows[0].id;
   }
 
+  // 1b. One-time admin password reset. When ADMIN_PASSWORD_RESET is set, force the
+  //     admin account's password to the current ADMIN_PASSWORD. The flag is turned
+  //     off again after use so ordinary redeploys never override a password the
+  //     admin later changes from the admin area.
+  if (process.env.ADMIN_PASSWORD_RESET && String(process.env.ADMIN_PASSWORD_RESET).trim() && process.env.ADMIN_PASSWORD) {
+    const hash = bcrypt.hashSync(process.env.ADMIN_PASSWORD, 10);
+    await pool.query(`UPDATE users SET password_hash = $1 WHERE id = $2`, [hash, adminId]);
+    console.log('[db] admin password reset applied for user ' + adminId);
+  }
+
   // 2. Add owner columns to existing tables (idempotent) and backfill legacy
   //    rows to the admin so nothing is orphaned.
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id)`);
