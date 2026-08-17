@@ -1,5 +1,5 @@
 const el = document.getElementById('app');
-// Phones/tablets open to Capture (grab a photo fast); computers open to Captures (review the photos).
+// Phones/tablets open to Capture (grab a photo fast); computers open to the Library (review the photos).
 const IS_HANDHELD = (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) || window.innerWidth < 768;
 let state = { view: IS_HANDHELD ? 'capture' : 'list', location: null, address: null, photoFile: null, kind: 'note', area: '', areas: [], groupId: null, imgv: 0 };
 let recognizer = null;
@@ -112,7 +112,7 @@ function renderApp() {
       </div>
       <div class="tabs">
         <div class="tab ${state.view==='capture'?'on':''}" id="tabCapture">Capture</div>
-        <div class="tab ${state.view==='list'?'on':''}" id="tabList">Captures</div>
+        <div class="tab ${state.view==='list'?'on':''}" id="tabList">Library</div>
         <div class="tab ${state.view==='groups'?'on':''}" id="tabGroups">Groups</div>
       </div>
       <div id="body"></div>
@@ -330,7 +330,7 @@ async function saveNote(id, text, after) {
   else toast('Save failed');
 }
 
-// ---- Captures list ----
+// ---- Library (saved captures) ----
 async function renderList() {
   const body = document.getElementById('body');
   body.innerHTML = `
@@ -568,7 +568,7 @@ async function loadGroups() {
   const r = await api('/api/groups');
   if (!r.ok) { list.innerHTML = '<p class="status">Could not load.</p>'; return; }
   const groups = await r.json();
-  if (!groups.length) { list.innerHTML = '<p class="empty">No groups yet. Create one above, then add photos from the Captures tab.</p>'; return; }
+  if (!groups.length) { list.innerHTML = '<p class="empty">No groups yet. Create one above, then add photos from the Library tab.</p>'; return; }
   list.innerHTML = groups.map(g => `
     <div class="card">
       <div style="font-weight:bold;font-size:17px">${esc(g.title || 'Untitled group')}</div>
@@ -630,7 +630,7 @@ function renderGroupItems() {
   const box = document.getElementById('gitems');
   if (!box) return;
   const items = currentGroupItems;
-  if (!items.length) { box.innerHTML = '<p class="empty">No photos in this group yet. Go to Captures, select some, and use "Add selected to a group".</p>'; return; }
+  if (!items.length) { box.innerHTML = '<p class="empty">No photos in this group yet. Go to Library, select some, and use "Add selected to a group".</p>'; return; }
   box.innerHTML = items.map((c, i) => `
     <div class="card">
       <div class="meta">#${i + 1}</div>

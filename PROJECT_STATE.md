@@ -88,7 +88,7 @@ Files:
 - `public/index.html`, `public/manifest.json` — shell + PWA manifest
   (theme color also `#1d4ed8`).
 - `public/sw.js` — service worker (network-first; cache name bumped to bust
-  stale assets — currently `efc-shell-v3`).
+  stale assets — currently `efc-shell-v4`).
 - `scripts/gen-icons.js` — regenerates PNG icons at build (postinstall).
 - `railway.json` — NIXPACKS builder, `node server.js` start command.
 
@@ -111,8 +111,8 @@ Files:
   keyboard-mic hint otherwise); location captured at photo time and shown as
   GPS coordinates + Address; editable Area chips (add/delete, server-saved);
   Save.
-- **Captures list** (the saved items view — tab currently named "Captures",
-  rename pending, see §9): filter by area; per-item Edit note; rotate photo
+- **Library** (the saved items view; the tab was renamed from "Captures" to
+  "Library" on 2026-08-17): filter by area; per-item Edit note; rotate photo
   90° left/right (rewrites stored file); select captures; add selected to a
   group; delete selected; "Fix addresses" (re-geocode).
 - **Groups:** create with title + description; add selected captures; open a
@@ -126,7 +126,7 @@ Files:
   thread.
 - **Responsive** layout verified 320–1440px; small-phone media query.
 - **Device default view:** phones open to Capture, computers open to the
-  saved list.
+  Library.
 
 ## 8. iOS Safari page zoom (support note)
 
@@ -137,21 +137,18 @@ the top — tap it (or the smaller "A") until it reads **100%**.
 
 ## 9. Pending / roadmap (nothing here is lost — just not done yet)
 
-1. **Rename the second tab.** "Capture" and "Captures" are too similar.
-   "Capture" stays; the saved-items tab needs a clearer name (candidates
-   discussed: Library, Gallery, Log, Saved). Awaiting Sam's pick.
-2. **Add `MAPBOX_TOKEN`** in Railway for accurate addresses, then run
+1. **Add `MAPBOX_TOKEN`** in Railway for accurate addresses, then run
    "Fix addresses" once to correct existing records. Also confirm iOS
    Precise Location is ON for Safari.
-3. **Photo enhancement** (deliberately deferred): auto-enhance, brightness,
+2. **Photo enhancement** (deliberately deferred): auto-enhance, brightness,
    contrast — to be done non-destructively (not overwriting originals).
-4. **Logo + final colors.** Currently blue `#1d4ed8`; may become blue with
+3. **Logo + final colors.** Currently blue `#1d4ed8`; may become blue with
    red accents, or black/white. Change `--accent` in styles.css (+ theme
    color in index.html/manifest.json) once decided. Logo brief exists in the
    fieldwork docs.
-5. **Delete the dud services** noted in §2.
-6. **Multi-user / per-person logins** (currently single admin password).
-7. **Board Hub integration** (embed into the Elm Creek Board Hub later).
+4. **Delete the dud services** noted in §2.
+5. **Multi-user / per-person logins** (currently single admin password).
+6. **Board Hub integration** (embed into the Elm Creek Board Hub later).
 
 ## 10. How to resume
 
