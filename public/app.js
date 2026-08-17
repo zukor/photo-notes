@@ -1,10 +1,37 @@
-const AREAS = ['Roads', 'Maintenance', 'Walls', 'Security', 'Landscaping', 'Other'];
 const el = document.getElementById('app');
 // Phones/tablets open to Capture (grab a photo fast); computers open to Captures (review the photos).
 const IS_HANDHELD = (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) || window.innerWidth < 768;
-let state = { view: IS_HANDHELD ? 'capture' : 'list', location: null, photoFile: null, kind: 'note', area: 'Roads', groupId: null, imgv: 0 };
+let state = { view: IS_HANDHELD ? 'capture' : 'list', location: null, address: null, photoFile: null, kind: 'note', area: '', areas: [], groupId: null, imgv: 0 };
 let recognizer = null;
 let currentGroupItems = [];
+
+async function loadAreas() {
+  const r = await api('/api/areas');
+  state.areas = r.ok ? await r.json() : [];
+  if (!state.area || !state.areas.includes(state.area)) state.area = state.areas[0] || '';
+}
+
+async function addArea() {
+  const input = document.getElementById('newarea');
+  const name = input.value.trim();
+  if (!name) return;
+  const r = await api('/api/areas', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  });
+  if (r.ok) { state.areas = await r.json(); state.area = name; toast('Area added'); renderCapture(); }
+  else toast('Could not add area');
+}
+
+async function deleteArea(name) {
+  if (!confirm(`Remove the "${name}" area? Photos already tagged keep their label.`)) return;
+  const r = await api('/api/areas/delete', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  });
+  if (r.ok) { state.areas = await r.json(); if (state.area === name) state.area = state.areas[0] || ''; renderCapture(); }
+  else toast('Could not remove area');
+}
 
 function esc(s) {
   return String(s == null ? '' : s)
@@ -49,7 +76,7 @@ async function api(path, opts = {}) {
 
 async function boot() {
   const r = await api('/api/me');
-  if (r.ok) renderApp(); else renderLogin();
+  if (r.ok) { await loadAreas(); renderApp(); } else renderLogin();
 }
 
 function renderLogin() {
@@ -99,54 +126,61 @@ function renderApp() {
   else renderList();
 }
 
+function areaChips() {
+  if (!state.areas.length) return '<p class="status">No areas yet. Add one below.</p>';
+  return state.areas.map(a =>
+    `<div class="pill ${state.area===a?'on':''}" data-area="${esc(a)}">${esc(a)} <span class="areax" data-del="${esc(a)}">&times;</span></div>`
+  ).join('');
+}
+
 function renderCapture() {
   const body = document.getElementById('body');
   body.innerHTML = `
     <label>Photo</label>
-    <div class="photo-box">
-      <input type="file" accept="image/*" capture="environment" id="photo" />
-      <img id="preview" alt="preview" />
-    </div>
+    <button type="button" class="btn" id="takephoto">Take photo</button>
+    <button type="button" class="btn secondary" id="choosephoto" style="margin-top:8px">Choose from library or files</button>
+    <input type="file" accept="image/*" capture="environment" id="photoCam" style="display:none" />
+    <input type="file" accept="image/*" id="photoLib" style="display:none" />
+    <div class="photo-box" id="previewBox" style="display:none;margin-top:12px"><img id="preview" alt="preview" style="display:block" /></div>
 
-    <label>Location</label>
-    <div class="status" id="loc">Getting location...</div>
-    <button class="btn secondary" id="relocate">Refresh location</button>
+    <div id="locwrap" style="display:none">
+      <label>GPS coordinates</label>
+      <div class="status" id="gps"></div>
+      <label>Address</label>
+      <div class="status" id="addr"></div>
+      <button type="button" class="link" id="relocate" style="margin-top:6px">Update location</button>
+    </div>
 
     <label>Note</label>
     <button type="button" class="btn secondary" id="dictate" style="margin-bottom:8px">🎤 Record note</button>
     <textarea id="note" placeholder="Describe what you're looking at, or tap Record note..."></textarea>
 
     <label>Area</label>
-    <div class="pill-group" id="areas">
-      ${AREAS.map(a => `<div class="pill ${state.area===a?'on':''}" data-area="${a}">${a}</div>`).join('')}
+    <div class="pill-group" id="areas">${areaChips()}</div>
+    <div class="row" style="margin-top:10px">
+      <input type="text" id="newarea" placeholder="Add an area..." />
+      <button class="btn secondary" id="addarea" style="margin-top:0">Add</button>
     </div>
 
-    <label>Type</label>
-    <div class="pill-group" id="kinds">
-      <div class="pill ${state.kind==='note'?'on':''}" data-kind="note">Note</div>
-      <div class="pill ${state.kind==='task'?'on':''}" data-kind="task">Task</div>
-    </div>
-
-    <button class="btn" id="save">Save capture</button>
+    <button class="btn" id="save">Save</button>
   `;
 
-  const photo = document.getElementById('photo');
-  const preview = document.getElementById('preview');
-  photo.onchange = () => {
-    state.photoFile = photo.files[0] || null;
-    if (state.photoFile) { preview.src = URL.createObjectURL(state.photoFile); preview.style.display = 'block'; }
-  };
+  document.getElementById('takephoto').onclick = () => document.getElementById('photoCam').click();
+  document.getElementById('choosephoto').onclick = () => document.getElementById('photoLib').click();
+  document.getElementById('photoCam').onchange = (e) => { if (e.target.files[0]) onPhotoChosen(e.target.files[0]); };
+  document.getElementById('photoLib').onchange = (e) => { if (e.target.files[0]) onPhotoChosen(e.target.files[0]); };
+  document.getElementById('relocate').onclick = acquireLocation;
+  document.getElementById('save').onclick = saveCapture;
+  document.getElementById('addarea').onclick = addArea;
+  document.getElementById('newarea').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addArea(); } });
 
   document.getElementById('areas').onclick = (e) => {
-    const a = e.target.getAttribute('data-area'); if (!a) return;
-    state.area = a; renderCapture();
+    const del = e.target.getAttribute('data-del');
+    if (del != null) { deleteArea(del); return; }
+    const pill = e.target.closest('[data-area]');
+    if (pill) { state.area = pill.getAttribute('data-area'); renderCapture(); }
   };
-  document.getElementById('kinds').onclick = (e) => {
-    const k = e.target.getAttribute('data-kind'); if (!k) return;
-    state.kind = k; renderCapture();
-  };
-  document.getElementById('relocate').onclick = getLocation;
-  document.getElementById('save').onclick = saveCapture;
+
   const dictateBtn = document.getElementById('dictate');
   if (dictateBtn) dictateBtn.onclick = toggleDictation;
 
@@ -154,22 +188,48 @@ function renderCapture() {
   if (state._note) document.getElementById('note').value = state._note;
   document.getElementById('note').addEventListener('input', e => state._note = e.target.value);
 
-  if (state.location) showLoc(); else getLocation();
+  // if a photo is already chosen (e.g. re-render after picking an area), keep it and its location visible
+  if (state.photoFile) {
+    const box = document.getElementById('previewBox');
+    document.getElementById('preview').src = URL.createObjectURL(state.photoFile);
+    box.style.display = 'block';
+    document.getElementById('locwrap').style.display = 'block';
+    if (state.location) {
+      document.getElementById('gps').textContent = state.location.lat.toFixed(5) + ', ' + state.location.lng.toFixed(5);
+      document.getElementById('addr').textContent = state.address || 'Address not found';
+    } else {
+      acquireLocation();
+    }
+  }
 }
 
-function showLoc() {
-  const l = document.getElementById('loc');
-  if (!l) return;
-  if (state.location) l.textContent = `Location set (${state.location.lat.toFixed(5)}, ${state.location.lng.toFixed(5)}). Address is added when you save.`;
+function onPhotoChosen(file) {
+  state.photoFile = file;
+  const box = document.getElementById('previewBox');
+  document.getElementById('preview').src = URL.createObjectURL(file);
+  box.style.display = 'block';
+  document.getElementById('locwrap').style.display = 'block';
+  acquireLocation();
 }
 
-function getLocation() {
-  const l = document.getElementById('loc');
-  if (l) l.textContent = 'Getting location...';
-  if (!navigator.geolocation) { if (l) l.textContent = 'Location not available on this device.'; return; }
+function acquireLocation() {
+  const gps = document.getElementById('gps');
+  const addr = document.getElementById('addr');
+  if (gps) gps.textContent = 'Getting location...';
+  if (addr) addr.textContent = '';
+  if (!navigator.geolocation) { if (gps) gps.textContent = 'Location not available on this device.'; return; }
   navigator.geolocation.getCurrentPosition(
-    pos => { state.location = { lat: pos.coords.latitude, lng: pos.coords.longitude }; showLoc(); },
-    err => { if (l) l.textContent = 'Location blocked. Allow location for this site to tag captures.'; },
+    async (pos) => {
+      state.location = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+      if (gps) gps.textContent = state.location.lat.toFixed(5) + ', ' + state.location.lng.toFixed(5);
+      if (addr) addr.textContent = 'Looking up address...';
+      try {
+        const r = await api(`/api/geocode?lat=${state.location.lat}&lng=${state.location.lng}`);
+        if (r.ok) { const d = await r.json(); state.address = d.address || null; if (addr) addr.textContent = d.address || 'Address not found'; }
+        else if (addr) addr.textContent = 'Address lookup failed';
+      } catch (e) { if (addr) addr.textContent = 'Address lookup failed'; }
+    },
+    (err) => { if (gps) gps.textContent = 'Location blocked. Allow location for this site to tag photos.'; },
     { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
   );
 }
@@ -215,24 +275,25 @@ function toggleDictation() {
 async function saveCapture() {
   const btn = document.getElementById('save');
   const note = document.getElementById('note').value.trim();
-  if (!state.photoFile && !note) { toast('Add a photo or a note first'); return; }
+  if (!state.photoFile && !note) { toast('Take a photo or add a note first'); return; }
   btn.disabled = true; btn.textContent = 'Saving...';
   const fd = new FormData();
   if (state.photoFile) fd.append('photo', state.photoFile);
   fd.append('note', note);
-  fd.append('area_tags', JSON.stringify([state.area]));
-  fd.append('kind', state.kind);
+  fd.append('area_tags', JSON.stringify(state.area ? [state.area] : []));
+  fd.append('kind', 'note');
   if (state.location) { fd.append('latitude', state.location.lat); fd.append('longitude', state.location.lng); }
+  if (state.address) fd.append('address', state.address);
   try {
     const r = await api('/api/captures', { method: 'POST', body: fd });
     if (!r.ok) throw new Error('save failed');
     toast('Saved');
-    state.photoFile = null; state._note = '';
+    state.photoFile = null; state._note = ''; state.location = null; state.address = null;
     renderCapture();
   } catch (e) {
     toast('Save failed, try again');
   } finally {
-    btn.disabled = false; btn.textContent = 'Save capture';
+    btn.disabled = false; btn.textContent = 'Save';
   }
 }
 
@@ -276,7 +337,7 @@ async function renderList() {
     <label>Filter by area</label>
     <select id="filter">
       <option value="">All areas</option>
-      ${AREAS.map(a => `<option value="${a}">${a}</option>`).join('')}
+      ${state.areas.map(a => `<option value="${esc(a)}">${esc(a)}</option>`).join('')}
     </select>
     <label>Select</label>
     <div class="row">

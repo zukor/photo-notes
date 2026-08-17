@@ -166,6 +166,43 @@ app.get('/api/captures', requireAuth, async (req, res) => {
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 
+// ---- live address preview for a lat/lng (used right after a photo is taken) ----
+app.get('/api/geocode', requireAuth, async (req, res) => {
+  try {
+    const lat = req.query.lat != null ? parseFloat(req.query.lat) : NaN;
+    const lng = req.query.lng != null ? parseFloat(req.query.lng) : NaN;
+    if (Number.isNaN(lat) || Number.isNaN(lng)) return res.status(400).json({ error: 'lat/lng required' });
+    const address = await reverseGeocode(lat, lng);
+    res.json({ address: address || null });
+  } catch (err) { console.error('[geocode]', err); res.status(500).json({ error: 'geocode failed' }); }
+});
+
+// ---- areas (editable list of area tags) ----
+app.get('/api/areas', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT name FROM areas ORDER BY created_at ASC, name ASC');
+    res.json(rows.map((r) => r.name));
+  } catch (err) { console.error('[areas.list]', err); res.status(500).json({ error: 'failed to list areas' }); }
+});
+app.post('/api/areas', requireAuth, async (req, res) => {
+  try {
+    const name = req.body && req.body.name ? String(req.body.name).trim() : '';
+    if (!name) return res.status(400).json({ error: 'name required' });
+    await pool.query('INSERT INTO areas (name) VALUES ($1) ON CONFLICT DO NOTHING', [name]);
+    const { rows } = await pool.query('SELECT name FROM areas ORDER BY created_at ASC, name ASC');
+    res.json(rows.map((r) => r.name));
+  } catch (err) { console.error('[areas.add]', err); res.status(500).json({ error: 'failed to add area' }); }
+});
+app.post('/api/areas/delete', requireAuth, async (req, res) => {
+  try {
+    const name = req.body && req.body.name ? String(req.body.name) : '';
+    if (!name) return res.status(400).json({ error: 'name required' });
+    await pool.query('DELETE FROM areas WHERE name = $1', [name]);
+    const { rows } = await pool.query('SELECT name FROM areas ORDER BY created_at ASC, name ASC');
+    res.json(rows.map((r) => r.name));
+  } catch (err) { console.error('[areas.delete]', err); res.status(500).json({ error: 'failed to delete area' }); }
+});
+
 // ---- delete selected captures ----
 app.post('/api/captures/delete', requireAuth, async (req, res) => {
   try {

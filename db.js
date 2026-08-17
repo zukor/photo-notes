@@ -35,10 +35,25 @@ CREATE TABLE IF NOT EXISTS group_items (
   position    INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (group_id, capture_id)
 );
+CREATE TABLE IF NOT EXISTS areas (
+  name        TEXT PRIMARY KEY,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 `;
+
+const DEFAULT_AREAS = ['Roads', 'Maintenance', 'Walls', 'Security', 'Landscaping', 'Other'];
 
 async function init() {
   await pool.query(SCHEMA);
+  // Seed the default area list once, only if the table is empty.
+  const { rows } = await pool.query('SELECT COUNT(*)::int AS n FROM areas');
+  if (rows[0].n === 0) {
+    for (let i = 0; i < DEFAULT_AREAS.length; i++) {
+      await pool.query(
+        `INSERT INTO areas (name, created_at) VALUES ($1, now() + ($2 || ' milliseconds')::interval) ON CONFLICT DO NOTHING`,
+        [DEFAULT_AREAS[i], String(i)]);
+    }
+  }
   console.log('[db] schema ready');
 }
 

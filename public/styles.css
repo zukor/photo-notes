@@ -1,4 +1,4 @@
-:root { --green:#1f4d2e; --line:#000; }
+:root { --accent:#1d4ed8; --line:#000; }
 * { box-sizing: border-box; }
 html, body { max-width: 100%; overflow-x: hidden; }
 body {
@@ -21,7 +21,7 @@ input[type=text], input[type=password], textarea, select {
 textarea { min-height: 96px; resize: vertical; }
 .btn {
   display: block; width: 100%; padding: 15px; font-size: 17px; font-weight: bold;
-  color: #fff; background: var(--green); border: none; border-radius: 10px; margin-top: 18px;
+  color: #fff; background: var(--accent); border: none; border-radius: 10px; margin-top: 18px;
 }
 .btn.secondary { background: #fff; color: #000; border: 1px solid #000; }
 .btn:disabled { opacity: .5; }
@@ -31,9 +31,10 @@ textarea { min-height: 96px; resize: vertical; }
 .photo-box img { max-width: 100%; border-radius: 6px; display: none; }
 .pill-group { display: flex; gap: 8px; flex-wrap: wrap; }
 .pill { border: 1px solid #000; border-radius: 20px; padding: 8px 14px; font-size: 15px; color: #000; background: #fff; }
-.pill.on { background: var(--green); color: #fff; }
+.pill.on { background: var(--accent); color: #fff; }
+.areax { margin-left: 6px; font-weight: bold; }
 .status { font-size: 14px; color: #000; margin-top: 6px; }
-.toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--green); color: #fff; padding: 12px 18px; border-radius: 10px; font-weight: bold; display: none; z-index: 10; }
+.toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--accent); color: #fff; padding: 12px 18px; border-radius: 10px; font-weight: bold; display: none; z-index: 10; }
 .topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
 .link { background: none; border: none; color: #000; text-decoration: underline; font-size: 14px; }
 .tabs { display: flex; gap: 8px; margin: 8px 0 16px; }
