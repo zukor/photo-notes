@@ -1,6 +1,6 @@
 # Photo Notes — Project State & Resume Guide
 
-_Last updated: 2026-08-17. This document is the single source of truth for
+_Last updated: 2026-08-17 (multi-user + admin area shipped). This document is the single source of truth for
 resuming work on the Photo Notes app after any delay. It captures what the
 app is, where it lives, how it is built and deployed, the full feature set,
 and everything still pending. If you are a Claude session picking this up
@@ -11,12 +11,19 @@ cold, read this file first._
 ## 1. What this is
 
 **Photo Notes** — tagline "Photo documentation, by voice." A private,
-admin-only web app for documenting maintenance/field issues. You take a
+multi-user web app for documenting maintenance/field issues. You take a
 photo, say (or type) a note about it, and it is saved with GPS location and
 address. Captures can be filtered, edited, grouped into titled ordered
 reports, and exported to PDF, Word, or a "For Claude" zip bundle. Built for
 Sam Turcotte (Elm Creek HOA, San Antonio; founder of Zukor AI). Intended to
 later be integrated into the Elm Creek Board Hub.
+
+Each person signs in with **email + password** and sees ONLY their own
+captures, groups, and areas (per-user data isolation). Sam is being given
+free/testing logins to real customers across different industries. There is
+an **admin area at `/admin`** (admins only) for creating logins and watching
+usage via metadata (counts, dates, upload/location rates) — never note text
+or photos, by design (privacy).
 
 ## 2. Where it lives (all IDs)
 
@@ -36,7 +43,10 @@ later be integrated into the Elm Creek Board Hub.
 
 ## 3. Required Railway environment variables (on selfless-youth)
 
-- `ADMIN_PASSWORD` — the single admin login password.
+- `ADMIN_EMAIL` — the admin account's email (defaults to
+  `turcotte@zukor.com` if unset). Seeded as the first user on a fresh DB.
+- `ADMIN_PASSWORD` — the admin account's starting password (seeds the admin
+  user on first boot; after that, change it from the admin area).
 - `DATABASE_URL` — Postgres connection string (literal value; Railway
   reference variables did NOT resolve reliably here, so a literal copy is used).
 - `SESSION_SECRET` — JWT signing secret.
@@ -74,31 +84,40 @@ later be integrated into the Elm Creek Board Hub.
 - Postgres via `pg` (schema auto-creates on boot; see `db.js`).
 - `multer` disk uploads to the volume; `sharp` for image resize/rotate;
   `pdfkit` (PDF), `docx` (Word), `archiver` (zip) for exports.
-- JWT signed-cookie auth, single admin password.
+- JWT signed-cookie auth (cookie `pn_token`); passwords hashed with
+  `bcryptjs`. Multiple users, each with role `user` or `admin`.
 - Frontend is a vanilla-JS single-page app (no framework), PWA-capable
   (manifest + service worker).
 
 Files:
 - `server.js` — all API routes + export generation + static serving.
-- `db.js` — pg pool, schema (captures, groups, group_items, areas), and
-  default-area seeding.
+- `db.js` — pg pool, schema (users, user_areas, captures, groups,
+  group_items, areas), first-boot admin seeding, legacy-data backfill to the
+  admin user, and per-user default-area seeding (`seedUserAreas`).
+- `public/admin.html` — standalone admin page served at `/admin` (create
+  logins, per-user usage metadata, reset password, deactivate/activate).
 - `public/app.js` — the entire SPA (render + all handlers).
 - `public/styles.css` — styling. Accent color is a CSS var `--accent`
   (currently blue `#1d4ed8`; change this one value to re-theme).
 - `public/index.html`, `public/manifest.json` — shell + PWA manifest
   (theme color also `#1d4ed8`).
 - `public/sw.js` — service worker (network-first; cache name bumped to bust
-  stale assets — currently `efc-shell-v4`).
+  stale assets — currently `efc-shell-v6`).
 - `scripts/gen-icons.js` — regenerates PNG icons at build (postinstall).
 - `railway.json` — NIXPACKS builder, `node server.js` start command.
 
 ## 6. Data model (Postgres)
 
-- `captures` — id, created_at, captured_by, photo_path, note, latitude,
+- `users` — id, email (UNIQUE), name, password_hash (bcrypt), role
+  ('user'|'admin'), industry, active (bool), created_at, last_login_at.
+- `user_areas` — user_id, name, created_at, PK(user_id, name). Per-user area
+  lists (each user edits their own; new users seeded with the defaults).
+- `captures` — id, user_id (owner), created_at, captured_by, photo_path,
+  note, latitude,
   longitude, address, area_tags (text[]), kind ('note'|'task'), status,
   assignee, source. Raw lat/long is always stored so addresses can be
   re-computed later without re-walking.
-- `groups` — id, created_at, title, description.
+- `groups` — id, user_id (owner), created_at, title, description.
 - `group_items` — group_id, capture_id, position (ordered membership;
   many-to-many, cascade on delete).
 - `areas` — name (PK), created_at. Editable list of area tags, seeded with
@@ -126,7 +145,16 @@ Files:
   thread.
 - **Responsive** layout verified 320–1440px; small-phone media query.
 - **Device default view:** phones open to Capture, computers open to the
-  Library.
+  saved list.
+- **Multi-user logins:** email + password sign-in; each user sees only their
+  own captures, groups, and areas. Legacy pre-multi-user data was backfilled
+  to the admin account on migration.
+- **Admin area (`/admin`, admins only):** create a login (name, email,
+  industry, starting password); per-user usage cards showing captures, last
+  7/30 days, with-photo, with-location, group count, first/latest capture,
+  join date and last login; reset a login's password; deactivate/activate a
+  login (data kept). Metadata only — the admin view never exposes note text
+  or photos.
 
 ## 8. iOS Safari page zoom (support note)
 
@@ -140,15 +168,17 @@ the top — tap it (or the smaller "A") until it reads **100%**.
 1. **Add `MAPBOX_TOKEN`** in Railway for accurate addresses, then run
    "Fix addresses" once to correct existing records. Also confirm iOS
    Precise Location is ON for Safari.
-2. **Photo enhancement** (deliberately deferred): auto-enhance, brightness,
+3. **Photo enhancement** (deliberately deferred): auto-enhance, brightness,
    contrast — to be done non-destructively (not overwriting originals).
-3. **Logo + final colors.** Currently blue `#1d4ed8`; may become blue with
+4. **Logo + final colors.** Currently blue `#1d4ed8`; may become blue with
    red accents, or black/white. Change `--accent` in styles.css (+ theme
    color in index.html/manifest.json) once decided. Logo brief exists in the
    fieldwork docs.
-4. **Delete the dud services** noted in §2.
-5. **Multi-user / per-person logins** (currently single admin password).
+5. **Delete the dud services** noted in §2.
 6. **Board Hub integration** (embed into the Elm Creek Board Hub later).
+
+_(Done: multi-user / per-person logins with per-customer isolation and the
+admin area shipped 2026-08-17.)_
 
 ## 10. How to resume
 
