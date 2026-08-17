@@ -23,6 +23,18 @@ CREATE TABLE IF NOT EXISTS captures (
   assignee     TEXT,
   source       TEXT NOT NULL DEFAULT 'elm-creek'
 );
+CREATE TABLE IF NOT EXISTS groups (
+  id          SERIAL PRIMARY KEY,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  title       TEXT,
+  description TEXT
+);
+CREATE TABLE IF NOT EXISTS group_items (
+  group_id    INTEGER NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+  capture_id  INTEGER NOT NULL REFERENCES captures(id) ON DELETE CASCADE,
+  position    INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (group_id, capture_id)
+);
 `;
 
 async function init() {

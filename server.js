@@ -212,8 +212,169 @@ app.post('/api/regeocode', requireAuth, async (req, res) => {
   }
 });
 
+// ---- edit a single capture (note, and optionally area/kind) ----
+app.post('/api/captures/:id', requireAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'bad id' });
+    const b = req.body || {};
+    const sets = [];
+    const vals = [];
+    if (typeof b.note === 'string') { vals.push(b.note); sets.push(`note = $${vals.length}`); }
+    if (Array.isArray(b.area_tags)) { vals.push(b.area_tags); sets.push(`area_tags = $${vals.length}`); }
+    if (b.kind === 'note' || b.kind === 'task') { vals.push(b.kind); sets.push(`kind = $${vals.length}`); }
+    if (!sets.length) return res.status(400).json({ error: 'nothing to update' });
+    vals.push(id);
+    const { rows } = await pool.query(
+      `UPDATE captures SET ${sets.join(', ')} WHERE id = $${vals.length} RETURNING *`, vals);
+    if (!rows.length) return res.status(404).json({ error: 'not found' });
+    res.json(rows[0]);
+  } catch (err) {
+    console.error('[captures.update]', err);
+    res.status(500).json({ error: 'update failed' });
+  }
+});
+
+// ---- rotate a capture's photo 90 degrees (cw or ccw), rewriting the stored file ----
+app.post('/api/captures/:id/rotate', requireAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'bad id' });
+    const dir = (req.body && req.body.dir) === 'ccw' ? 'ccw' : 'cw';
+    const row = (await pool.query(`SELECT photo_path FROM captures WHERE id = $1`, [id])).rows[0];
+    if (!row) return res.status(404).json({ error: 'not found' });
+    const p = localPhoto(row.photo_path);
+    if (!p) return res.status(400).json({ error: 'no photo file to rotate' });
+    const ext = path.extname(p).toLowerCase();
+    const angle = dir === 'ccw' ? 270 : 90;
+    const buf = fs.readFileSync(p);
+    const oriented = await sharp(buf).rotate().toBuffer(); // bake in any EXIF orientation first
+    const s = sharp(oriented).rotate(angle);
+    let out;
+    if (ext === '.png') out = await s.png().toBuffer();
+    else if (ext === '.webp') out = await s.webp().toBuffer();
+    else out = await s.jpeg({ quality: 92 }).toBuffer();
+    fs.writeFileSync(p, out);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[captures.rotate]', err);
+    res.status(500).json({ error: 'rotate failed' });
+  }
+});
+
+// ---- groups ----
+async function addToGroup(groupId, captureIds) {
+  const maxRow = await pool.query(`SELECT COALESCE(MAX(position), -1) AS m FROM group_items WHERE group_id = $1`, [groupId]);
+  let pos = Number(maxRow.rows[0].m) + 1;
+  for (const cid of captureIds) {
+    await pool.query(
+      `INSERT INTO group_items (group_id, capture_id, position) VALUES ($1,$2,$3)
+       ON CONFLICT (group_id, capture_id) DO NOTHING`, [groupId, cid, pos]);
+    pos++;
+  }
+}
+
+app.get('/api/groups', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT g.*, COALESCE(cnt.n, 0)::int AS item_count
+      FROM groups g
+      LEFT JOIN (SELECT group_id, COUNT(*) n FROM group_items GROUP BY group_id) cnt ON cnt.group_id = g.id
+      ORDER BY g.created_at DESC`);
+    res.json(rows);
+  } catch (err) { console.error('[groups.list]', err); res.status(500).json({ error: 'failed to list groups' }); }
+});
+
+app.post('/api/groups', requireAuth, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const title = (b.title != null && String(b.title).trim()) ? String(b.title).trim() : 'Untitled group';
+    const description = b.description ? String(b.description) : null;
+    const ids = Array.isArray(b.ids) ? b.ids.map((n) => parseInt(n, 10)).filter(Number.isInteger) : [];
+    const { rows } = await pool.query(`INSERT INTO groups (title, description) VALUES ($1,$2) RETURNING *`, [title, description]);
+    const group = rows[0];
+    if (ids.length) await addToGroup(group.id, ids);
+    res.json(group);
+  } catch (err) { console.error('[groups.create]', err); res.status(500).json({ error: 'failed to create group' }); }
+});
+
+app.get('/api/groups/:id', requireAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'bad id' });
+    const g = (await pool.query(`SELECT * FROM groups WHERE id = $1`, [id])).rows[0];
+    if (!g) return res.status(404).json({ error: 'not found' });
+    const items = (await pool.query(`
+      SELECT c.*, gi.position FROM group_items gi JOIN captures c ON c.id = gi.capture_id
+      WHERE gi.group_id = $1 ORDER BY gi.position ASC, c.created_at ASC`, [id])).rows;
+    res.json({ group: g, items });
+  } catch (err) { console.error('[groups.get]', err); res.status(500).json({ error: 'failed' }); }
+});
+
+app.post('/api/groups/:id', requireAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'bad id' });
+    const b = req.body || {};
+    const sets = [];
+    const vals = [];
+    if (typeof b.title === 'string') { vals.push(b.title); sets.push(`title = $${vals.length}`); }
+    if (typeof b.description === 'string') { vals.push(b.description); sets.push(`description = $${vals.length}`); }
+    if (!sets.length) return res.status(400).json({ error: 'nothing to update' });
+    vals.push(id);
+    const { rows } = await pool.query(`UPDATE groups SET ${sets.join(', ')} WHERE id = $${vals.length} RETURNING *`, vals);
+    if (!rows.length) return res.status(404).json({ error: 'not found' });
+    res.json(rows[0]);
+  } catch (err) { console.error('[groups.update]', err); res.status(500).json({ error: 'update failed' }); }
+});
+
+app.post('/api/groups/:id/delete', requireAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    await pool.query(`DELETE FROM groups WHERE id = $1`, [id]);
+    res.json({ ok: true });
+  } catch (err) { console.error('[groups.delete]', err); res.status(500).json({ error: 'delete failed' }); }
+});
+
+app.post('/api/groups/:id/add', requireAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const ids = Array.isArray(req.body && req.body.ids) ? req.body.ids.map((n) => parseInt(n, 10)).filter(Number.isInteger) : [];
+    if (!ids.length) return res.status(400).json({ error: 'no ids' });
+    await addToGroup(id, ids);
+    res.json({ ok: true, added: ids.length });
+  } catch (err) { console.error('[groups.add]', err); res.status(500).json({ error: 'add failed' }); }
+});
+
+app.post('/api/groups/:id/remove', requireAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const ids = Array.isArray(req.body && req.body.ids) ? req.body.ids.map((n) => parseInt(n, 10)).filter(Number.isInteger) : [];
+    if (!ids.length) return res.status(400).json({ error: 'no ids' });
+    await pool.query(`DELETE FROM group_items WHERE group_id = $1 AND capture_id = ANY($2)`, [id, ids]);
+    res.json({ ok: true });
+  } catch (err) { console.error('[groups.remove]', err); res.status(500).json({ error: 'remove failed' }); }
+});
+
+app.post('/api/groups/:id/reorder', requireAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const order = Array.isArray(req.body && req.body.order) ? req.body.order.map((n) => parseInt(n, 10)).filter(Number.isInteger) : [];
+    if (!order.length) return res.status(400).json({ error: 'no order' });
+    for (let i = 0; i < order.length; i++) {
+      await pool.query(`UPDATE group_items SET position = $1 WHERE group_id = $2 AND capture_id = $3`, [i, id, order[i]]);
+    }
+    res.json({ ok: true });
+  } catch (err) { console.error('[groups.reorder]', err); res.status(500).json({ error: 'reorder failed' }); }
+});
+
 // ---- exports ----
-async function getCaptures({ area, ids }) {
+async function getCaptures({ area, ids, group }) {
+  if (group) {
+    return (await pool.query(`
+      SELECT c.* FROM group_items gi JOIN captures c ON c.id = gi.capture_id
+      WHERE gi.group_id = $1 ORDER BY gi.position ASC, c.created_at ASC`, [group])).rows;
+  }
   if (ids && ids.length) {
     return (await pool.query(`SELECT * FROM captures WHERE id = ANY($1) ORDER BY created_at ASC`, [ids])).rows;
   }
@@ -233,8 +394,31 @@ function localPhoto(photoPath) {
   const p = path.join(UPLOAD_DIR, fname);
   return fs.existsSync(p) ? p : null;
 }
-function suffix(area) { return area ? '-' + area.toLowerCase().replace(/[^a-z0-9]+/g, '-') : ''; }
+function slug(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''); }
+function suffix(area) { return area ? '-' + slug(area) : ''; }
 function fmtWhen(d) { try { return new Date(d).toLocaleString(); } catch { return ''; } }
+
+// Resolve what to export: rows, heading, description, and filename base.
+async function resolveExport(req) {
+  const area = req.query.area || '';
+  const ids = parseIds(req.query.ids);
+  const groupId = req.query.group ? parseInt(req.query.group, 10) : null;
+  const imgRes = req.query.res || 'standard';
+  const imgFmt = req.query.fmt || 'jpeg';
+  let heading = 'Photo Notes' + (area ? ' - ' + area : '');
+  let desc = '';
+  let fnameBase = 'photonotes' + suffix(area);
+  if (groupId) {
+    const g = (await pool.query(`SELECT * FROM groups WHERE id = $1`, [groupId])).rows[0];
+    if (g) {
+      heading = g.title || 'Photo Notes';
+      desc = g.description || '';
+      fnameBase = 'photonotes-' + (slug(g.title) || 'group');
+    }
+  }
+  const rows = await getCaptures({ area, ids, group: groupId });
+  return { imgRes, imgFmt, heading, desc, fnameBase, rows };
+}
 
 // ---- image resolution / format for export ----
 // Originals are always kept full-resolution on disk; this only shapes what gets exported.
@@ -276,16 +460,13 @@ async function renderForEmbed(localPath, imgRes, imgFmt) {
 
 app.get('/api/export/pdf', requireAuth, async (req, res) => {
   try {
-    const area = req.query.area || '';
-    const ids = parseIds(req.query.ids);
-    const imgRes = req.query.res || 'standard';
-    const imgFmt = req.query.fmt || 'jpeg';
-    const rows = await getCaptures({ area, ids });
+    const { imgRes, imgFmt, heading, desc, fnameBase, rows } = await resolveExport(req);
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="photonotes${suffix(area)}.pdf"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${fnameBase}.pdf"`);
     const doc = new PDFDocument({ size: 'LETTER', margin: 48 });
     doc.pipe(res);
-    doc.fontSize(20).fillColor('#000').text('Photo Notes' + (area ? ' — ' + area : ''), { align: 'center' });
+    doc.fontSize(20).fillColor('#000').text(heading, { align: 'center' });
+    if (desc) { doc.moveDown(0.3); doc.fontSize(12).fillColor('#000').text(desc, { align: 'center' }); }
     doc.moveDown(1);
     for (let i = 0; i < rows.length; i++) {
       const c = rows[i];
@@ -308,12 +489,9 @@ app.get('/api/export/pdf', requireAuth, async (req, res) => {
 
 app.get('/api/export/docx', requireAuth, async (req, res) => {
   try {
-    const area = req.query.area || '';
-    const ids = parseIds(req.query.ids);
-    const imgRes = req.query.res || 'standard';
-    const imgFmt = req.query.fmt || 'jpeg';
-    const rows = await getCaptures({ area, ids });
-    const children = [new Paragraph({ heading: HeadingLevel.HEADING_1, children: [new TextRun({ text: 'Photo Notes' + (area ? ' — ' + area : ''), bold: true, color: '000000', font: 'Arial' })] })];
+    const { imgRes, imgFmt, heading, desc, fnameBase, rows } = await resolveExport(req);
+    const children = [new Paragraph({ heading: HeadingLevel.HEADING_1, children: [new TextRun({ text: heading, bold: true, color: '000000', font: 'Arial' })] })];
+    if (desc) children.push(new Paragraph({ children: [new TextRun({ text: desc, color: '000000', font: 'Arial' })] }));
     for (const c of rows) {
       const img = localPhoto(c.photo_path);
       if (img) {
@@ -329,24 +507,22 @@ app.get('/api/export/docx', requireAuth, async (req, res) => {
     const doc = new Document({ sections: [{ children }] });
     const buf = await Packer.toBuffer(doc);
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
-    res.setHeader('Content-Disposition', `attachment; filename="photonotes${suffix(area)}.docx"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${fnameBase}.docx"`);
     res.send(buf);
   } catch (err) { console.error('[export.docx]', err); if (!res.headersSent) res.status(500).json({ error: 'docx export failed' }); }
 });
 
 app.get('/api/export/bundle', requireAuth, async (req, res) => {
   try {
-    const area = req.query.area || '';
-    const ids = parseIds(req.query.ids);
-    const imgRes = req.query.res || 'standard';
-    const imgFmt = req.query.fmt || 'jpeg';
-    const rows = await getCaptures({ area, ids });
+    const { imgRes, imgFmt, heading, desc, fnameBase, rows } = await resolveExport(req);
     res.setHeader('Content-Type', 'application/zip');
-    res.setHeader('Content-Disposition', `attachment; filename="photonotes-bundle${suffix(area)}.zip"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${fnameBase}-bundle.zip"`);
     const archive = archiver('zip', { zlib: { level: 9 } });
     archive.on('error', (e) => { console.error('[export.bundle]', e); try { res.status(500).end(); } catch {} });
     archive.pipe(res);
-    let md = `# Photo Notes${area ? ' — ' + area : ''}\n\nSource captures for reports. Each item has its photo, address, area, and note.\n\n`;
+    let md = `# ${heading}\n\n`;
+    if (desc) md += `${desc}\n\n`;
+    md += `Source captures for reports. Each item has its photo, address, area, and note.\n\n`;
     for (let i = 0; i < rows.length; i++) {
       const c = rows[i];
       const n = String(i + 1).padStart(2, '0');
