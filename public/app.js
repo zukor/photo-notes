@@ -84,6 +84,8 @@ function renderLogin() {
     <div class="wrap">
       <h1>Photo Notes</h1>
       <p class="sub">Photo documentation, by voice</p>
+      <label for="email">Email</label>
+      <input id="email" type="email" autocomplete="username" inputmode="email" />
       <label for="pw">Password</label>
       <input id="pw" type="password" autocomplete="current-password" />
       <button class="btn" id="loginBtn">Sign in</button>
@@ -91,16 +93,18 @@ function renderLogin() {
     </div>`;
   document.getElementById('loginBtn').onclick = doLogin;
   document.getElementById('pw').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+  document.getElementById('email').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('pw').focus(); });
 }
 
 async function doLogin() {
+  const email = document.getElementById('email').value.trim();
   const pw = document.getElementById('pw').value;
   const r = await api('/api/login', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ password: pw }),
+    body: JSON.stringify({ email, password: pw }),
   });
-  if (r.ok) renderApp();
-  else document.getElementById('loginErr').textContent = 'Wrong password. Try again.';
+  if (r.ok) { await loadAreas(); renderApp(); }
+  else document.getElementById('loginErr').textContent = 'Wrong email or password. Try again.';
 }
 
 function renderApp() {

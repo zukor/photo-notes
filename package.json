@@ -2,7 +2,7 @@
   "name": "photo-notes",
   "version": "0.1.0",
   "private": true,
-  "description": "Photo Notes: photograph something, say what you see, and it's saved with location. Admin-only, exportable, Board-Hub-ready.",
+  "description": "Photo Notes: photograph something, say what you see, and it's saved with location. Multi-user, exportable, Board-Hub-ready.",
   "main": "server.js",
   "scripts": {
     "postinstall": "node scripts/gen-icons.js",
@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "archiver": "^7.0.1",
+    "bcryptjs": "^2.4.3",
     "cookie-parser": "^1.4.6",
     "docx": "^8.5.0",
     "express": "^4.19.2",

@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Photo Notes — Admin</title>
+  <meta name="theme-color" content="#1d4ed8" />
+  <link rel="stylesheet" href="/styles.css" />
+  <style>
+    .stat { display:inline-block; min-width:92px; margin:4px 12px 4px 0; vertical-align:top; }
+    .stat .n { font-size:20px; font-weight:bold; color:#000; }
+    .stat .l { font-size:12px; color:#000; }
+    .userhead { font-weight:bold; font-size:17px; color:#000; }
+    .muted { font-size:13px; color:#000; }
+    .inactive { opacity:.55; }
+    .pill.role { background:#000; color:#fff; border:none; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <script>
+    const el = document.getElementById('app');
+    async function api(path, opts = {}) { return fetch(path, { credentials: 'same-origin', ...opts }); }
+    function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+    function fdate(d){ if(!d) return '—'; try { return new Date(d).toLocaleDateString(); } catch { return '—'; } }
+    function fdatetime(d){ if(!d) return 'never'; try { return new Date(d).toLocaleString(); } catch { return 'never'; } }
+    function toast(msg){ let t=document.querySelector('.toast'); if(!t){t=document.createElement('div');t.className='toast';document.body.appendChild(t);} t.textContent=msg; t.style.display='block'; setTimeout(()=>t.style.display='none',2400); }
+
+    async function boot(){
+      const r = await api('/api/me');
+      if (!r.ok) return renderLogin();
+      const me = await r.json();
+      if (me.role !== 'admin') return renderDenied();
+      renderAdmin();
+    }
+
+    function renderLogin(){
+      el.innerHTML = `
+        <div class="wrap">
+          <h1>Photo Notes — Admin</h1>
+          <label for="email">Email</label>
+          <input id="email" type="email" autocomplete="username" inputmode="email" />
+          <label for="pw">Password</label>
+          <input id="pw" type="password" autocomplete="current-password" />
+          <button class="btn" id="loginBtn">Sign in</button>
+          <p class="status" id="err"></p>
+        </div>`;
+      document.getElementById('loginBtn').onclick = doLogin;
+      document.getElementById('pw').addEventListener('keydown', e => { if (e.key==='Enter') doLogin(); });
+    }
+    async function doLogin(){
+      const email = document.getElementById('email').value.trim();
+      const pw = document.getElementById('pw').value;
+      const r = await api('/api/login', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email, password: pw }) });
+      if (r.ok) boot(); else document.getElementById('err').textContent = 'Wrong email or password.';
+    }
+
+    function renderDenied(){
+      el.innerHTML = `
+        <div class="wrap">
+          <h1>Photo Notes — Admin</h1>
+          <p class="status" style="color:#000">This area is for administrators only.</p>
+          <a class="btn" href="/" style="text-align:center;text-decoration:none">Back to the app</a>
+        </div>`;
+    }
+
+    function renderAdmin(){
+      el.innerHTML = `
+        <div class="wrap">
+          <div class="topbar">
+            <strong>Photo Notes — Admin</strong>
+            <span><a class="link" href="/">Open app</a> &nbsp; <button class="link" id="logout">Log out</button></span>
+          </div>
+
+          <label style="margin-top:8px">Create a login</label>
+          <input id="cname" type="text" placeholder="Name (e.g. Diamond Paving)" />
+          <input id="cemail" type="email" placeholder="Email" inputmode="email" style="margin-top:8px" />
+          <input id="cindustry" type="text" placeholder="Industry (e.g. Asphalt paving)" style="margin-top:8px" />
+          <input id="cpass" type="text" placeholder="Starting password" style="margin-top:8px" />
+          <button class="btn" id="createbtn">Create login</button>
+
+          <label style="margin-top:22px">People &amp; usage</label>
+          <div id="users"></div>
+        </div>`;
+      document.getElementById('logout').onclick = async () => { await api('/api/logout', { method:'POST' }); renderLogin(); };
+      document.getElementById('createbtn').onclick = createUser;
+      loadUsers();
+    }
+
+    async function createUser(){
+      const name = document.getElementById('cname').value.trim();
+      const email = document.getElementById('cemail').value.trim();
+      const industry = document.getElementById('cindustry').value.trim();
+      const password = document.getElementById('cpass').value;
+      if (!email || !password) { toast('Email and starting password are required'); return; }
+      const btn = document.getElementById('createbtn'); btn.disabled = true; btn.textContent = 'Creating...';
+      try {
+        const r = await api('/api/admin/users', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name, email, industry, password }) });
+        if (r.status === 409) { toast('That email already has a login'); }
+        else if (!r.ok) { toast('Could not create login'); }
+        else {
+          toast('Login created');
+          document.getElementById('cname').value=''; document.getElementById('cemail').value='';
+          document.getElementById('cindustry').value=''; document.getElementById('cpass').value='';
+          loadUsers();
+        }
+      } catch(e){ toast('Could not create login'); }
+      finally { btn.disabled = false; btn.textContent = 'Create login'; }
+    }
+
+    async function loadUsers(){
+      const box = document.getElementById('users');
+      box.innerHTML = '<p class="status">Loading...</p>';
+      const r = await api('/api/admin/users');
+      if (!r.ok) { box.innerHTML = '<p class="status">Could not load.</p>'; return; }
+      const users = await r.json();
+      box.innerHTML = users.map(u => `
+        <div class="card ${u.active ? '' : 'inactive'}">
+          <div class="userhead">${esc(u.name || '(no name)')} ${u.role==='admin' ? '<span class="pill role">admin</span>' : ''} ${u.active ? '' : '<span class="muted">(deactivated)</span>'}</div>
+          <div class="muted">${esc(u.email)}${u.industry ? ' · ' + esc(u.industry) : ''}</div>
+          <div class="muted">Joined ${fdate(u.created_at)} · Last login ${fdatetime(u.last_login_at)}</div>
+          <div style="margin-top:10px">
+            <span class="stat"><div class="n">${u.capture_count}</div><div class="l">captures</div></span>
+            <span class="stat"><div class="n">${u.last_7d}</div><div class="l">last 7 days</div></span>
+            <span class="stat"><div class="n">${u.last_30d}</div><div class="l">last 30 days</div></span>
+            <span class="stat"><div class="n">${u.with_photo}</div><div class="l">with photo</div></span>
+            <span class="stat"><div class="n">${u.with_location}</div><div class="l">with location</div></span>
+            <span class="stat"><div class="n">${u.group_count}</div><div class="l">groups</div></span>
+          </div>
+          <div class="muted" style="margin-top:6px">First capture ${fdate(u.first_capture)} · Latest ${fdate(u.last_capture)}</div>
+          <div class="row" style="margin-top:10px">
+            <button class="btn secondary" data-reset="${u.id}">Reset password</button>
+            <button class="btn secondary" data-active="${u.id}" data-to="${u.active ? '0' : '1'}">${u.active ? 'Deactivate' : 'Activate'}</button>
+          </div>
+        </div>`).join('');
+      box.querySelectorAll('[data-reset]').forEach(b => b.onclick = () => resetPassword(parseInt(b.getAttribute('data-reset'),10)));
+      box.querySelectorAll('[data-active]').forEach(b => b.onclick = () => setActive(parseInt(b.getAttribute('data-active'),10), b.getAttribute('data-to')==='1'));
+    }
+
+    async function resetPassword(id){
+      const pw = prompt('New password for this login:');
+      if (pw == null) return;
+      if (pw.length < 4) { toast('Password too short'); return; }
+      const r = await api(`/api/admin/users/${id}/password`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ password: pw }) });
+      toast(r.ok ? 'Password reset' : 'Reset failed');
+    }
+    async function setActive(id, active){
+      if (!active && !confirm('Deactivate this login? They will not be able to sign in. Their data is kept.')) return;
+      const r = await api(`/api/admin/users/${id}`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ active }) });
+      if (r.ok) { toast(active ? 'Activated' : 'Deactivated'); loadUsers(); } else toast('Update failed');
+    }
+
+    boot();
+  </script>
+</body>
+</html>
