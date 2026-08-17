@@ -166,21 +166,51 @@ async function renderList() {
       <option value="">All areas</option>
       ${AREAS.map(a => `<option value="${a}">${a}</option>`).join('')}
     </select>
-    <label>Export ${'<span style="font-weight:normal">(uses the filter above)</span>'}</label>
+    <label>Select</label>
     <div class="row">
-      <button class="btn secondary" onclick="doExport('pdf')">PDF</button>
-      <button class="btn secondary" onclick="doExport('docx')">Word</button>
-      <button class="btn secondary" onclick="doExport('bundle')">Claude bundle</button>
+      <button class="btn secondary" id="selall">Select all</button>
+      <button class="btn secondary" id="selnone">Clear</button>
     </div>
+
+    <label>Export selected as <span style="font-weight:normal">(pick one or more)</span></label>
+    <div class="pill-group" id="fmts">
+      <div class="pill" data-fmt="pdf">PDF</div>
+      <div class="pill" data-fmt="docx">Word</div>
+      <div class="pill" data-fmt="bundle">Claude bundle</div>
+    </div>
+    <button class="btn" id="exportbtn">Export selected</button>
+
     <div id="cards" style="margin-top:16px"></div>`;
   document.getElementById('filter').onchange = e => loadCards(e.target.value);
+  document.getElementById('selall').onclick = () => document.querySelectorAll('.capchk').forEach(c => c.checked = true);
+  document.getElementById('selnone').onclick = () => document.querySelectorAll('.capchk').forEach(c => c.checked = false);
+  document.getElementById('fmts').onclick = (e) => { const p = e.target.closest('.pill'); if (p) p.classList.toggle('on'); };
+  document.getElementById('exportbtn').onclick = doExportSelected;
   loadCards('');
 }
 
-function doExport(kind) {
-  const sel = document.getElementById('filter');
-  const area = sel ? sel.value : '';
-  window.location.href = `/api/export/${kind}` + (area ? `?area=${encodeURIComponent(area)}` : '');
+async function doExportSelected() {
+  const ids = Array.from(document.querySelectorAll('.capchk:checked')).map(x => x.value);
+  const fmts = Array.from(document.querySelectorAll('#fmts .pill.on')).map(x => x.getAttribute('data-fmt'));
+  if (!ids.length) { toast('Select at least one capture'); return; }
+  if (!fmts.length) { toast('Pick at least one format'); return; }
+  const names = { pdf: 'photonotes.pdf', docx: 'photonotes.docx', bundle: 'photonotes-bundle.zip' };
+  const btn = document.getElementById('exportbtn');
+  btn.disabled = true; btn.textContent = 'Exporting...';
+  for (const f of fmts) {
+    try {
+      const r = await api(`/api/export/${f}?ids=${ids.join(',')}`);
+      if (!r.ok) throw new Error('bad');
+      const blob = await r.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = names[f];
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1500);
+      await new Promise(res => setTimeout(res, 500));
+    } catch (e) { toast('Export failed for ' + f); }
+  }
+  btn.disabled = false; btn.textContent = 'Export selected';
+  toast('Exported');
 }
 
 async function loadCards(area) {
@@ -195,6 +225,9 @@ async function loadCards(area) {
     const tags = (c.area_tags || []).map(t => `<span class="badge">${t}</span>`).join('');
     const kind = c.kind === 'task' ? `<span class="badge task">Task</span>` : '';
     return `<div class="card">
+      <label style="display:flex;align-items:center;gap:8px;font-weight:bold;margin-bottom:8px">
+        <input type="checkbox" class="capchk" value="${c.id}" style="width:20px;height:20px"> Select
+      </label>
       ${c.photo_path ? `<img src="${c.photo_path}" alt="capture" />` : ''}
       <div class="addr">${c.address || (c.latitude ? c.latitude.toFixed(5)+', '+c.longitude.toFixed(5) : 'No location')}</div>
       <div class="meta">${kind}${tags}</div>

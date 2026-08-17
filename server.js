@@ -145,11 +145,19 @@ app.get('/api/captures', requireAuth, async (req, res) => {
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 
 // ---- exports ----
-async function getCaptures(area) {
+async function getCaptures({ area, ids }) {
+  if (ids && ids.length) {
+    return (await pool.query(`SELECT * FROM captures WHERE id = ANY($1) ORDER BY created_at ASC`, [ids])).rows;
+  }
   if (area) {
     return (await pool.query(`SELECT * FROM captures WHERE $1 = ANY(area_tags) ORDER BY created_at ASC`, [area])).rows;
   }
   return (await pool.query(`SELECT * FROM captures ORDER BY created_at ASC`)).rows;
+}
+function parseIds(q) {
+  if (!q) return null;
+  const arr = String(q).split(',').map((s) => parseInt(s, 10)).filter((n) => Number.isInteger(n));
+  return arr.length ? arr : null;
 }
 function localPhoto(photoPath) {
   if (!photoPath) return null;
@@ -163,7 +171,8 @@ function fmtWhen(d) { try { return new Date(d).toLocaleString(); } catch { retur
 app.get('/api/export/pdf', requireAuth, async (req, res) => {
   try {
     const area = req.query.area || '';
-    const rows = await getCaptures(area);
+    const ids = parseIds(req.query.ids);
+    const rows = await getCaptures({ area, ids });
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="photonotes${suffix(area)}.pdf"`);
     const doc = new PDFDocument({ size: 'LETTER', margin: 48 });
@@ -188,7 +197,8 @@ app.get('/api/export/pdf', requireAuth, async (req, res) => {
 app.get('/api/export/docx', requireAuth, async (req, res) => {
   try {
     const area = req.query.area || '';
-    const rows = await getCaptures(area);
+    const ids = parseIds(req.query.ids);
+    const rows = await getCaptures({ area, ids });
     const children = [new Paragraph({ heading: HeadingLevel.HEADING_1, children: [new TextRun({ text: 'Photo Notes' + (area ? ' — ' + area : ''), bold: true, color: '000000', font: 'Arial' })] })];
     for (const c of rows) {
       const img = localPhoto(c.photo_path);
@@ -212,7 +222,8 @@ app.get('/api/export/docx', requireAuth, async (req, res) => {
 app.get('/api/export/bundle', requireAuth, async (req, res) => {
   try {
     const area = req.query.area || '';
-    const rows = await getCaptures(area);
+    const ids = parseIds(req.query.ids);
+    const rows = await getCaptures({ area, ids });
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Disposition', `attachment; filename="photonotes-bundle${suffix(area)}.zip"`);
     const archive = archiver('zip', { zlib: { level: 9 } });
