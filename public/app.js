@@ -244,14 +244,21 @@ function cleanupDictation() {
   if (btn) { btn.textContent = '🎤 Record note'; btn.classList.remove('on'); }
 }
 
+function isIOS() {
+  return /iP(hone|ad|od)/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+
 function toggleDictation() {
   const noteEl = document.getElementById('note');
   const btn = document.getElementById('dictate');
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) {
-    // No in-page dictation on this browser; open the keyboard so its mic key is available.
+  // iPhone/iPad: Safari's in-page speech recognition "starts" but never returns
+  // any words, so never use it there. Apple's own keyboard dictation (the mic key
+  // on the on-screen keyboard) is reliable and types straight into the note.
+  if (isIOS() || !SR) {
     if (noteEl) noteEl.focus();
-    toast('Tap the mic key on your keyboard to dictate');
+    toast('Now tap 🎤 on the keyboard, then talk');
     return;
   }
   if (recognizer) { recognizer.stop(); return; }
