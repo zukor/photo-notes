@@ -1,6 +1,9 @@
 const AREAS = ['Roads', 'Maintenance', 'Walls', 'Security', 'Landscaping', 'Other'];
 const el = document.getElementById('app');
-let state = { view: 'capture', location: null, photoFile: null, kind: 'note', area: 'Roads' };
+// Phones/tablets open to Capture (grab a photo fast); computers open to Captures (review the photos).
+const IS_HANDHELD = (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) || window.innerWidth < 768;
+let state = { view: IS_HANDHELD ? 'capture' : 'list', location: null, photoFile: null, kind: 'note', area: 'Roads' };
+let recognizer = null;
 
 function toast(msg) {
   let t = document.querySelector('.toast');
@@ -75,8 +78,9 @@ function renderCapture() {
     <div class="status" id="loc">Getting location...</div>
     <button class="btn secondary" id="relocate">Refresh location</button>
 
-    <label>Note <span style="font-weight:normal">(tap the mic on your keyboard to dictate)</span></label>
-    <textarea id="note" placeholder="Describe what you're looking at..."></textarea>
+    <label>Note</label>
+    <button type="button" class="btn secondary" id="dictate" style="margin-bottom:8px">🎤 Record note</button>
+    <textarea id="note" placeholder="Describe what you're looking at, or tap Record note..."></textarea>
 
     <label>Area</label>
     <div class="pill-group" id="areas">
@@ -109,6 +113,8 @@ function renderCapture() {
   };
   document.getElementById('relocate').onclick = getLocation;
   document.getElementById('save').onclick = saveCapture;
+  const dictateBtn = document.getElementById('dictate');
+  if (dictateBtn) dictateBtn.onclick = toggleDictation;
 
   // preserve any typed note across re-renders
   if (state._note) document.getElementById('note').value = state._note;
@@ -132,6 +138,44 @@ function getLocation() {
     err => { if (l) l.textContent = 'Location blocked. Allow location for this site to tag captures.'; },
     { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
   );
+}
+
+function cleanupDictation() {
+  recognizer = null;
+  const btn = document.getElementById('dictate');
+  if (btn) { btn.textContent = '🎤 Record note'; btn.classList.remove('on'); }
+}
+
+function toggleDictation() {
+  const noteEl = document.getElementById('note');
+  const btn = document.getElementById('dictate');
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) {
+    // No in-page dictation on this browser; open the keyboard so its mic key is available.
+    if (noteEl) noteEl.focus();
+    toast('Tap the mic key on your keyboard to dictate');
+    return;
+  }
+  if (recognizer) { recognizer.stop(); return; }
+  recognizer = new SR();
+  recognizer.lang = 'en-US';
+  recognizer.interimResults = true;
+  recognizer.continuous = true;
+  let base = noteEl ? noteEl.value : '';
+  if (base && !base.endsWith(' ')) base += ' ';
+  if (btn) { btn.textContent = '⏺ Recording... tap to stop'; btn.classList.add('on'); }
+  recognizer.onresult = (ev) => {
+    let finalText = '', interim = '';
+    for (let i = ev.resultIndex; i < ev.results.length; i++) {
+      const t = ev.results[i][0].transcript;
+      if (ev.results[i].isFinal) finalText += t; else interim += t;
+    }
+    if (finalText) base += finalText + ' ';
+    if (noteEl) { noteEl.value = base + interim; state._note = noteEl.value; }
+  };
+  recognizer.onerror = () => { toast('Could not access the mic'); cleanupDictation(); };
+  recognizer.onend = () => { cleanupDictation(); };
+  try { recognizer.start(); } catch (e) { cleanupDictation(); }
 }
 
 async function saveCapture() {
