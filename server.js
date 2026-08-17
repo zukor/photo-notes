@@ -4,6 +4,9 @@ const express = require('express');
 const cookieParser = require('cookie-parser');
 const jwt = require('jsonwebtoken');
 const multer = require('multer');
+const PDFDocument = require('pdfkit');
+const archiver = require('archiver');
+const { Document, Packer, Paragraph, TextRun, ImageRun, HeadingLevel } = require('docx');
 const { pool, init } = require('./db');
 
 const PORT = process.env.PORT || 3000;
@@ -140,6 +143,97 @@ app.get('/api/captures', requireAuth, async (req, res) => {
 });
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
+
+// ---- exports ----
+async function getCaptures(area) {
+  if (area) {
+    return (await pool.query(`SELECT * FROM captures WHERE $1 = ANY(area_tags) ORDER BY created_at ASC`, [area])).rows;
+  }
+  return (await pool.query(`SELECT * FROM captures ORDER BY created_at ASC`)).rows;
+}
+function localPhoto(photoPath) {
+  if (!photoPath) return null;
+  const fname = photoPath.replace(/^\/uploads\//, '');
+  const p = path.join(UPLOAD_DIR, fname);
+  return fs.existsSync(p) ? p : null;
+}
+function suffix(area) { return area ? '-' + area.toLowerCase().replace(/[^a-z0-9]+/g, '-') : ''; }
+function fmtWhen(d) { try { return new Date(d).toLocaleString(); } catch { return ''; } }
+
+app.get('/api/export/pdf', requireAuth, async (req, res) => {
+  try {
+    const area = req.query.area || '';
+    const rows = await getCaptures(area);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="photonotes${suffix(area)}.pdf"`);
+    const doc = new PDFDocument({ size: 'LETTER', margin: 48 });
+    doc.pipe(res);
+    doc.fontSize(20).fillColor('#000').text('Photo Notes' + (area ? ' — ' + area : ''), { align: 'center' });
+    doc.moveDown(1);
+    rows.forEach((c, i) => {
+      if (i > 0) doc.addPage();
+      const img = localPhoto(c.photo_path);
+      if (img) { try { doc.image(img, { fit: [480, 340], align: 'center' }); doc.moveDown(0.6); } catch (e) {} }
+      doc.fontSize(13).fillColor('#000').text((c.address || 'No location') + (c.kind === 'task' ? '   [TASK]' : ''));
+      if (c.area_tags && c.area_tags.length) doc.fontSize(10).fillColor('#000').text('Area: ' + c.area_tags.join(', '));
+      doc.fontSize(9).fillColor('#000').text(fmtWhen(c.created_at));
+      doc.moveDown(0.4);
+      doc.fontSize(12).fillColor('#000').text(c.note || '(no note)');
+    });
+    if (!rows.length) doc.fontSize(12).fillColor('#000').text('No captures yet.');
+    doc.end();
+  } catch (err) { console.error('[export.pdf]', err); if (!res.headersSent) res.status(500).json({ error: 'pdf export failed' }); }
+});
+
+app.get('/api/export/docx', requireAuth, async (req, res) => {
+  try {
+    const area = req.query.area || '';
+    const rows = await getCaptures(area);
+    const children = [new Paragraph({ heading: HeadingLevel.HEADING_1, children: [new TextRun({ text: 'Photo Notes' + (area ? ' — ' + area : ''), bold: true, color: '000000', font: 'Arial' })] })];
+    for (const c of rows) {
+      const img = localPhoto(c.photo_path);
+      if (img) {
+        try { children.push(new Paragraph({ children: [new ImageRun({ type: 'jpg', data: fs.readFileSync(img), transformation: { width: 420, height: 315 } })] })); } catch (e) {}
+      }
+      children.push(new Paragraph({ spacing: { before: 120 }, children: [new TextRun({ text: (c.address || 'No location') + (c.kind === 'task' ? '   [TASK]' : ''), bold: true, color: '000000', font: 'Arial' })] }));
+      if (c.area_tags && c.area_tags.length) children.push(new Paragraph({ children: [new TextRun({ text: 'Area: ' + c.area_tags.join(', '), color: '000000', font: 'Arial' })] }));
+      children.push(new Paragraph({ children: [new TextRun({ text: c.note || '(no note)', color: '000000', font: 'Arial' })] }));
+      children.push(new Paragraph({ children: [new TextRun({ text: '' })] }));
+    }
+    if (!rows.length) children.push(new Paragraph({ children: [new TextRun({ text: 'No captures yet.', color: '000000', font: 'Arial' })] }));
+    const doc = new Document({ sections: [{ children }] });
+    const buf = await Packer.toBuffer(doc);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    res.setHeader('Content-Disposition', `attachment; filename="photonotes${suffix(area)}.docx"`);
+    res.send(buf);
+  } catch (err) { console.error('[export.docx]', err); if (!res.headersSent) res.status(500).json({ error: 'docx export failed' }); }
+});
+
+app.get('/api/export/bundle', requireAuth, async (req, res) => {
+  try {
+    const area = req.query.area || '';
+    const rows = await getCaptures(area);
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="photonotes-bundle${suffix(area)}.zip"`);
+    const archive = archiver('zip', { zlib: { level: 9 } });
+    archive.on('error', (e) => { console.error('[export.bundle]', e); try { res.status(500).end(); } catch {} });
+    archive.pipe(res);
+    let md = `# Photo Notes${area ? ' — ' + area : ''}\n\nSource captures for reports. Each item has its photo, address, area, and note.\n\n`;
+    rows.forEach((c, i) => {
+      const n = String(i + 1).padStart(2, '0');
+      const img = localPhoto(c.photo_path);
+      let imgRef = '';
+      if (img) { const name = `photos/${n}_${path.basename(img)}`; archive.file(img, { name }); imgRef = name; }
+      md += `## ${i + 1}. ${c.address || 'No location'}${c.kind === 'task' ? ' [TASK]' : ''}\n`;
+      if (c.area_tags && c.area_tags.length) md += `Area: ${c.area_tags.join(', ')}  \n`;
+      md += `Captured: ${fmtWhen(c.created_at)}\n\n`;
+      if (imgRef) md += `![photo](${imgRef})\n\n`;
+      md += `${c.note || '(no note)'}\n\n`;
+    });
+    archive.append(md, { name: 'photonotes.md' });
+    archive.finalize();
+  } catch (err) { console.error('[export.bundle]', err); if (!res.headersSent) res.status(500).json({ error: 'bundle export failed' }); }
+});
 
 // SPA fallback
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));

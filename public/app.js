@@ -166,9 +166,21 @@ async function renderList() {
       <option value="">All areas</option>
       ${AREAS.map(a => `<option value="${a}">${a}</option>`).join('')}
     </select>
+    <label>Export ${'<span style="font-weight:normal">(uses the filter above)</span>'}</label>
+    <div class="row">
+      <button class="btn secondary" onclick="doExport('pdf')">PDF</button>
+      <button class="btn secondary" onclick="doExport('docx')">Word</button>
+      <button class="btn secondary" onclick="doExport('bundle')">Claude bundle</button>
+    </div>
     <div id="cards" style="margin-top:16px"></div>`;
   document.getElementById('filter').onchange = e => loadCards(e.target.value);
   loadCards('');
+}
+
+function doExport(kind) {
+  const sel = document.getElementById('filter');
+  const area = sel ? sel.value : '';
+  window.location.href = `/api/export/${kind}` + (area ? `?area=${encodeURIComponent(area)}` : '');
 }
 
 async function loadCards(area) {
