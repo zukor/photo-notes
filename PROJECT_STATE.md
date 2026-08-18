@@ -1,6 +1,6 @@
 # Photo Notes — Project State & Resume Guide
 
-_Last updated: 2026-08-17 (multi-user + admin area shipped). This document is the single source of truth for
+_Last updated: 2026-08-18 (expanded admin analytics + iPhone dictation fix). This document is the single source of truth for
 resuming work on the Photo Notes app after any delay. It captures what the
 app is, where it lives, how it is built and deployed, the full feature set,
 and everything still pending. If you are a Claude session picking this up
@@ -91,7 +91,7 @@ or photos, by design (privacy).
 
 Files:
 - `server.js` — all API routes + export generation + static serving.
-- `db.js` — pg pool, schema (users, user_areas, captures, groups,
+- `db.js` — pg pool, schema (users, user_areas, events, captures, groups,
   group_items, areas), first-boot admin seeding, legacy-data backfill to the
   admin user, and per-user default-area seeding (`seedUserAreas`).
 - `public/admin.html` — standalone admin page served at `/admin` (create
@@ -102,7 +102,7 @@ Files:
 - `public/index.html`, `public/manifest.json` — shell + PWA manifest
   (theme color also `#1d4ed8`).
 - `public/sw.js` — service worker (network-first; cache name bumped to bust
-  stale assets — currently `efc-shell-v6`).
+  stale assets — currently `efc-shell-v7`).
 - `scripts/gen-icons.js` — regenerates PNG icons at build (postinstall).
 - `railway.json` — NIXPACKS builder, `node server.js` start command.
 
@@ -112,7 +112,12 @@ Files:
   ('user'|'admin'), industry, active (bool), created_at, last_login_at.
 - `user_areas` — user_id, name, created_at, PK(user_id, name). Per-user area
   lists (each user edits their own; new users seeded with the defaults).
+- `events` — id, user_id, action, detail (JSONB), created_at. Activity log
+  powering the admin usage dashboard. Stores only WHAT was done (login,
+  export, rotate, note_edit, delete, group_create/add/reorder, fix_addresses),
+  never note text or photos. detail holds small facts like export format.
 - `captures` — id, user_id (owner), created_at, captured_by, photo_path,
+  photo_width, photo_height (oriented dims, for landscape/portrait stats),
   note, latitude,
   longitude, address, area_tags (text[]), kind ('note'|'task'), status,
   assignee, source. Raw lat/long is always stored so addresses can be
@@ -126,8 +131,10 @@ Files:
 ## 7. Features built (all live)
 
 - **Capture:** Take photo (camera) or Choose from library/files; note field
-  with a "Record note" dictation button (in-page speech where supported,
-  keyboard-mic hint otherwise); location captured at photo time and shown as
+  with a "Record note" dictation button. On iPhone/iPad, Safari's in-page
+  speech API starts but returns no words, so there the button routes to
+  Apple's reliable keyboard dictation mic instead; desktop Chrome/Android
+  still records in-page. Location captured at photo time and shown as
   GPS coordinates + Address; editable Area chips (add/delete, server-saved);
   Save.
 - **Library** (the saved items view; the tab was renamed from "Captures" to
@@ -150,11 +157,19 @@ Files:
   own captures, groups, and areas. Legacy pre-multi-user data was backfilled
   to the admin account on migration.
 - **Admin area (`/admin`, admins only):** create a login (name, email,
-  industry, starting password); per-user usage cards showing captures, last
-  7/30 days, with-photo, with-location, group count, first/latest capture,
-  join date and last login; reset a login's password; deactivate/activate a
-  login (data kept). Metadata only — the admin view never exposes note text
-  or photos.
+  industry, starting password); reset a login's password; deactivate/activate
+  a login (data kept). Per-user usage cards grouped into sections: Captures
+  (total, last 7/30 days, with-photo, with-location, tasks, first/latest);
+  Photos (landscape / portrait / square orientation counts); Notes (with-a-
+  note, avg / longest / total characters, edits — length only, text never
+  shown); Exports (total, PDF, Word, Claude .zip); Groups (groups, photos
+  grouped, add actions, reorders); Other activity (rotations, deletes, address
+  fixes); plus logins and last-active. Metadata only — the admin view never
+  exposes note text or photos. A one-time boot backfill filled photo
+  orientation for photos captured before dimensions were tracked.
+- **Admin password recovery:** setting env `ADMIN_PASSWORD_RESET=1` (with a new
+  `ADMIN_PASSWORD`) forces the admin account's password on next boot, then the
+  flag is cleared so ordinary redeploys never override a later change.
 
 ## 8. iOS Safari page zoom (support note)
 
@@ -178,7 +193,8 @@ the top — tap it (or the smaller "A") until it reads **100%**.
 6. **Board Hub integration** (embed into the Elm Creek Board Hub later).
 
 _(Done: multi-user / per-person logins with per-customer isolation and the
-admin area shipped 2026-08-17.)_
+admin area shipped 2026-08-17. Expanded admin analytics + iPhone dictation
+fix shipped 2026-08-18.)_
 
 ## 10. How to resume
 
