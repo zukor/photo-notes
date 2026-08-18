@@ -19,18 +19,18 @@ async function addArea() {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name }),
   });
-  if (r.ok) { state.areas = await r.json(); state.area = name; toast('Area added'); renderCapture(); }
-  else toast('Could not add area');
+  if (r.ok) { state.areas = await r.json(); state.area = name; toast('Topic added'); renderCapture(); }
+  else toast('Could not add topic');
 }
 
 async function deleteArea(name) {
-  if (!confirm(`Remove the "${name}" area? Photos already tagged keep their label.`)) return;
+  if (!confirm(`Remove the "${name}" topic? Photos already tagged keep their label.`)) return;
   const r = await api('/api/areas/delete', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name }),
   });
   if (r.ok) { state.areas = await r.json(); if (state.area === name) state.area = state.areas[0] || ''; renderCapture(); }
-  else toast('Could not remove area');
+  else toast('Could not remove topic');
 }
 
 function esc(s) {
@@ -82,14 +82,15 @@ async function boot() {
 function renderLogin() {
   el.innerHTML = `
     <div class="wrap">
-      <h1>Photo Notes</h1>
+      <div class="brand" style="margin-top:24px">Photo Notes</div>
       <p class="sub">Photo documentation, by voice</p>
       <label for="email">Email</label>
       <input id="email" type="email" autocomplete="username" inputmode="email" />
       <label for="pw">Password</label>
       <input id="pw" type="password" autocomplete="current-password" />
-      <button class="btn" id="loginBtn">Sign in</button>
+      <button class="btn" id="loginBtn">Sign In</button>
       <p class="status" id="loginErr"></p>
+      <div class="footer">&copy; ${new Date().getFullYear()} Zukor AI</div>
     </div>`;
   document.getElementById('loginBtn').onclick = doLogin;
   document.getElementById('pw').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
@@ -110,16 +111,15 @@ async function doLogin() {
 function renderApp() {
   el.innerHTML = `
     <div class="wrap">
-      <div class="topbar">
-        <strong>Photo Notes</strong>
-        <button class="link" id="logout">Log out</button>
-      </div>
+      <div class="logoutbar"><button class="link" id="logout">Log out</button></div>
+      <div class="brand">Photo Notes</div>
       <div class="tabs">
         <div class="tab ${state.view==='capture'?'on':''}" id="tabCapture">Capture</div>
         <div class="tab ${state.view==='list'?'on':''}" id="tabList">Library</div>
         <div class="tab ${state.view==='groups'?'on':''}" id="tabGroups">Groups</div>
       </div>
       <div id="body"></div>
+      <div class="footer">&copy; ${new Date().getFullYear()} Zukor AI</div>
     </div>`;
   document.getElementById('logout').onclick = async () => { await api('/api/logout', { method: 'POST' }); renderLogin(); };
   document.getElementById('tabCapture').onclick = () => { state.view='capture'; renderApp(); };
@@ -131,7 +131,7 @@ function renderApp() {
 }
 
 function areaChips() {
-  if (!state.areas.length) return '<p class="status">No areas yet. Add one below.</p>';
+  if (!state.areas.length) return '<p class="status">No topics yet. Add one below.</p>';
   return state.areas.map(a =>
     `<div class="pill ${state.area===a?'on':''}" data-area="${esc(a)}">${esc(a)} <span class="areax" data-del="${esc(a)}">&times;</span></div>`
   ).join('');
@@ -141,29 +141,28 @@ function renderCapture() {
   const body = document.getElementById('body');
   body.innerHTML = `
     <label>Photo</label>
-    <button type="button" class="btn" id="takephoto">Take photo</button>
+    <button type="button" class="btn" id="takephoto">Take Photo</button>
     <button type="button" class="btn secondary" id="choosephoto" style="margin-top:8px">Choose from library or files</button>
     <input type="file" accept="image/*" capture="environment" id="photoCam" style="display:none" />
     <input type="file" accept="image/*" id="photoLib" style="display:none" />
     <div class="photo-box" id="previewBox" style="display:none;margin-top:12px"><img id="preview" alt="preview" style="display:block" /></div>
 
     <div id="locwrap" style="display:none">
-      <label>GPS coordinates</label>
+      <label>GPS Coordinates</label>
       <div class="status" id="gps"></div>
       <label>Address</label>
       <div class="status" id="addr"></div>
-      <button type="button" class="link" id="relocate" style="margin-top:6px">Update location</button>
     </div>
 
     <label>Note</label>
-    <button type="button" class="btn secondary" id="dictate" style="margin-bottom:8px">🎤 Record note</button>
-    <textarea id="note" placeholder="Describe what you're looking at, or tap Record note..."></textarea>
+    <button type="button" class="btn secondary" id="dictate" style="margin-bottom:8px">Record Note</button>
+    <textarea id="note" placeholder="Describe what you're looking at, or tap Record Note..."></textarea>
 
-    <label>Area</label>
+    <label>Topic</label>
     <div class="pill-group" id="areas">${areaChips()}</div>
-    <div class="row" style="margin-top:10px">
-      <input type="text" id="newarea" placeholder="Add an area..." />
-      <button class="btn secondary" id="addarea" style="margin-top:0">Add</button>
+    <div class="row compact" style="margin-top:10px">
+      <input type="text" id="newarea" placeholder="Add a topic..." />
+      <button class="btn secondary" id="addarea">Add</button>
     </div>
 
     <button class="btn" id="save">Save</button>
@@ -173,7 +172,6 @@ function renderCapture() {
   document.getElementById('choosephoto').onclick = () => document.getElementById('photoLib').click();
   document.getElementById('photoCam').onchange = (e) => { if (e.target.files[0]) onPhotoChosen(e.target.files[0]); };
   document.getElementById('photoLib').onchange = (e) => { if (e.target.files[0]) onPhotoChosen(e.target.files[0]); };
-  document.getElementById('relocate').onclick = acquireLocation;
   document.getElementById('save').onclick = saveCapture;
   document.getElementById('addarea').onclick = addArea;
   document.getElementById('newarea').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addArea(); } });
@@ -241,7 +239,7 @@ function acquireLocation() {
 function cleanupDictation() {
   recognizer = null;
   const btn = document.getElementById('dictate');
-  if (btn) { btn.textContent = '🎤 Record note'; btn.classList.remove('on'); }
+  if (btn) { btn.textContent = 'Record Note'; btn.classList.remove('on'); }
 }
 
 function isIOS() {
@@ -257,7 +255,7 @@ function toggleDictation() {
     // Only when the browser has no speech recognition at all: fall back to the
     // keyboard's own mic key so the person can still dictate.
     if (noteEl) noteEl.focus();
-    toast('Tap the 🎤 on your keyboard, then talk');
+    toast('Tap the microphone key on your keyboard, then talk');
     return;
   }
   if (recognizer) { try { recognizer.stop(); } catch (e) {} return; }
@@ -271,7 +269,7 @@ function toggleDictation() {
   recognizer.interimResults = ios ? false : true;
   let base = noteEl ? noteEl.value : '';
   if (base && !base.endsWith(' ')) base += ' ';
-  if (btn) { btn.textContent = '⏺ Recording... tap to stop'; btn.classList.add('on'); }
+  if (btn) { btn.textContent = 'Recording... tap to stop'; btn.classList.add('on'); }
   recognizer.onresult = (ev) => {
     let finalText = '', interim = '';
     for (let i = ev.resultIndex; i < ev.results.length; i++) {
@@ -284,9 +282,9 @@ function toggleDictation() {
   recognizer.onerror = (e) => {
     const err = e && e.error;
     if (err === 'not-allowed' || err === 'service-not-allowed') {
-      toast('Allow microphone access for this site, then tap Record note again');
+      toast('Allow microphone access for this site, then tap Record Note again');
     } else if (err === 'no-speech') {
-      toast('Did not catch that. Tap Record note and speak again');
+      toast('Did not catch that. Tap Record Note and speak again');
     } else {
       toast('Recording could not start. Check that Dictation is on in Settings');
     }
@@ -358,27 +356,27 @@ async function saveNote(id, text, after) {
 async function renderList() {
   const body = document.getElementById('body');
   body.innerHTML = `
-    <label>Filter by area</label>
+    <label>Filter by Topic</label>
     <select id="filter">
-      <option value="">All areas</option>
+      <option value="">All topics</option>
       ${state.areas.map(a => `<option value="${esc(a)}">${esc(a)}</option>`).join('')}
     </select>
     <label>Select</label>
     <div class="row">
-      <button class="btn secondary" id="selall">Select all</button>
+      <button class="btn secondary" id="selall">Select All</button>
       <button class="btn secondary" id="selnone">Clear</button>
     </div>
 
-    <label>Export <span style="font-weight:normal">(pick one or more)</span></label>
+    <label>Export <span style="font-weight:normal;text-transform:none;letter-spacing:0">(pick one or more)</span></label>
     <div class="pill-group" id="fmts">
       <div class="pill" data-fmt="pdf">PDF</div>
       <div class="pill" data-fmt="docx">Word</div>
       <div class="pill" data-fmt="bundle">For Claude (.zip)</div>
     </div>
     ${qualityBlock('imgres', 'imgfmt')}
-    <button class="btn" id="exportbtn">Export selected</button>
+    <button class="btn" id="exportbtn">Export Selected</button>
 
-    <label style="margin-top:18px">Add selected to a group</label>
+    <label style="margin-top:18px">Add Selected to a Group</label>
     <div class="row">
       <select id="groupsel" style="flex:1"><option value="">Choose a group...</option></select>
       <button class="btn secondary" id="addtogroup">Add</button>
@@ -387,8 +385,8 @@ async function renderList() {
 
     <label style="margin-top:18px">Manage</label>
     <div class="row">
-      <button class="btn secondary" id="fixaddr">Fix addresses</button>
-      <button class="btn" id="delbtn" style="background:#b3261e">Delete selected</button>
+      <button class="btn secondary" id="fixaddr">Fix Addresses</button>
+      <button class="btn" id="delbtn" style="background:#b3261e">Delete Selected</button>
     </div>
 
     <div id="cards" style="margin-top:16px"></div>`;
@@ -464,7 +462,7 @@ async function doExportSelected() {
       await new Promise(res => setTimeout(res, 500));
     } catch (e) { toast('Export failed for ' + f); }
   }
-  btn.disabled = false; btn.textContent = 'Export selected';
+  btn.disabled = false; btn.textContent = 'Export Selected';
   toast('Exported');
 }
 
@@ -483,7 +481,7 @@ async function doDeleteSelected() {
     toast('Deleted');
     loadCards(document.getElementById('filter').value || '');
   } catch (e) { toast('Delete failed'); }
-  finally { btn.disabled = false; btn.textContent = 'Delete selected'; }
+  finally { btn.disabled = false; btn.textContent = 'Delete Selected'; }
 }
 
 async function doFixAddresses() {
@@ -501,7 +499,7 @@ async function doFixAddresses() {
     toast(`Updated ${d.updated} of ${d.total}`);
     loadCards(document.getElementById('filter').value || '');
   } catch (e) { toast('Fix addresses failed'); }
-  finally { btn.disabled = false; btn.textContent = 'Fix addresses'; }
+  finally { btn.disabled = false; btn.textContent = 'Fix Addresses'; }
 }
 
 async function loadCards(area) {
@@ -517,7 +515,7 @@ async function loadCards(area) {
     const tags = (c.area_tags || []).map(t => `<span class="badge">${esc(t)}</span>`).join('');
     const kind = c.kind === 'task' ? `<span class="badge task">Task</span>` : '';
     return `<div class="card">
-      <label style="display:flex;align-items:center;gap:8px;font-weight:bold;margin-bottom:8px">
+      <label style="display:flex;align-items:center;gap:8px;font-weight:bold;margin-bottom:8px;text-transform:none;letter-spacing:0;font-size:15px">
         <input type="checkbox" class="capchk" value="${c.id}" style="width:20px;height:20px"> Select
       </label>
       ${c.photo_path ? `<img src="${photoSrc(c.photo_path)}" alt="capture" />` : ''}
@@ -526,7 +524,7 @@ async function loadCards(area) {
       <div class="meta">${kind}${tags}</div>
       <div class="notewrap" data-id="${c.id}">
         <div class="notetext">${esc(c.note || '(no note)')}</div>
-        <button class="btn secondary editnote" data-id="${c.id}" style="margin-top:6px">Edit note</button>
+        <button class="btn secondary editnote" data-id="${c.id}" style="margin-top:6px">Edit Note</button>
       </div>
       <div class="meta">${when}</div>
     </div>`;
@@ -557,10 +555,10 @@ async function renderGroups() {
   if (state.groupId) { renderGroupDetail(state.groupId); return; }
   const body = document.getElementById('body');
   body.innerHTML = `
-    <label>New group</label>
+    <label>New Group</label>
     <input id="gtitle" placeholder="Group title (e.g. Front gate damage)" />
     <textarea id="gdesc" placeholder="Description (optional)"></textarea>
-    <button class="btn" id="gcreate">Create group</button>
+    <button class="btn" id="gcreate">Create Group</button>
     <div id="glist" style="margin-top:18px"></div>`;
   document.getElementById('gcreate').onclick = createGroup;
   loadGroups();
@@ -622,14 +620,14 @@ async function renderGroupDetail(id) {
   const group = data.group;
   currentGroupItems = data.items || [];
   body.innerHTML = `
-    <button class="link" id="gback">‹ All groups</button>
+    <button class="link" id="gback">‹ All Groups</button>
     <label style="margin-top:8px">Title</label>
     <input id="gdtitle" value="${esc(group.title || '')}" />
     <label>Description</label>
     <textarea id="gddesc">${esc(group.description || '')}</textarea>
-    <button class="btn secondary" id="gsave">Save title &amp; description</button>
+    <button class="btn secondary" id="gsave">Save Title &amp; Description</button>
 
-    <label style="margin-top:16px">Export this group <span style="font-weight:normal">(pick one or more)</span></label>
+    <label style="margin-top:16px">Export This Group <span style="font-weight:normal;text-transform:none;letter-spacing:0">(pick one or more)</span></label>
     <div class="pill-group" id="gfmts">
       <div class="pill" data-fmt="pdf">PDF</div>
       <div class="pill" data-fmt="docx">Word</div>
@@ -637,8 +635,8 @@ async function renderGroupDetail(id) {
     </div>
     ${qualityBlock('gimgres', 'gimgfmt')}
     <div class="row">
-      <button class="btn" id="gexport">Export group</button>
-      <button class="btn secondary" id="greverse">Reverse order</button>
+      <button class="btn" id="gexport">Export Group</button>
+      <button class="btn secondary" id="greverse">Reverse Order</button>
     </div>
 
     <div id="gitems" style="margin-top:16px"></div>`;
@@ -654,7 +652,7 @@ function renderGroupItems() {
   const box = document.getElementById('gitems');
   if (!box) return;
   const items = currentGroupItems;
-  if (!items.length) { box.innerHTML = '<p class="empty">No photos in this group yet. Go to Library, select some, and use "Add selected to a group".</p>'; return; }
+  if (!items.length) { box.innerHTML = '<p class="empty">No photos in this group yet. Go to Library, select some, and use "Add Selected to a Group".</p>'; return; }
   box.innerHTML = items.map((c, i) => `
     <div class="card">
       <div class="meta">#${i + 1}</div>
@@ -738,7 +736,7 @@ async function groupExport() {
       await new Promise(res => setTimeout(res, 500));
     } catch (e) { toast('Export failed for ' + f); }
   }
-  btn.disabled = false; btn.textContent = 'Export group';
+  btn.disabled = false; btn.textContent = 'Export Group';
   toast('Exported');
 }
 

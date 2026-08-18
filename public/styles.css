@@ -13,7 +13,9 @@ input[type=file] { max-width: 100%; }
 .wrap { width: 100%; max-width: 640px; margin: 0 auto; padding: 16px 16px 96px; }
 h1 { text-align: center; font-size: 22px; color: #000; margin: 12px 0 4px; }
 .sub { text-align: center; color: #000; font-size: 14px; margin: 0 0 18px; }
-label { display: block; font-weight: bold; color: #000; margin: 16px 0 6px; font-size: 15px; }
+label { display: block; font-weight: bold; color: #000; margin: 16px 0 4px; font-size: 13px; text-transform: uppercase; letter-spacing: .5px; }
+/* pull the first control up close to its label (labels followed by a button felt too far apart) */
+label + .btn { margin-top: 6px; }
 input[type=text], input[type=password], textarea, select {
   width: 100%; padding: 12px; font-size: 16px; color: #000; background: #fff;
   border: 1px solid #000; border-radius: 8px; font-family: inherit;
@@ -36,6 +38,12 @@ textarea { min-height: 96px; resize: vertical; }
 .status { font-size: 14px; color: #000; margin-top: 6px; }
 .toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--accent); color: #fff; padding: 12px 18px; border-radius: 10px; font-weight: bold; display: none; z-index: 10; }
 .topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+/* Product title. Temporarily red + uppercase + larger so it clearly reads as the app name, not a section heading. */
+.brand { text-align: center; text-transform: uppercase; color: #c1121f; font-size: 30px; font-weight: 800; letter-spacing: 1.5px; margin: 6px 0 4px; }
+.logoutbar { display: flex; justify-content: flex-end; }
+/* compact input+button row (e.g. add a topic) at about half the usual height */
+.row.compact input, .row.compact .btn { padding: 8px 10px; font-size: 15px; margin-top: 0; }
+.footer { text-align: center; color: #000; font-size: 13px; margin-top: 34px; }
 .link { background: none; border: none; color: #000; text-decoration: underline; font-size: 14px; }
 .tabs { display: flex; gap: 8px; margin: 8px 0 16px; }
 .tab { flex: 1; text-align: center; padding: 10px; border: 1px solid #000; border-radius: 8px; color: #000; background: #fff; font-weight: bold; }
