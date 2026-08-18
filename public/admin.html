@@ -30,6 +30,49 @@
     function fdatetime(d){ if(!d) return 'never'; try { return new Date(d).toLocaleString(); } catch { return 'never'; } }
     function toast(msg){ let t=document.querySelector('.toast'); if(!t){t=document.createElement('div');t.className='toast';document.body.appendChild(t);} t.textContent=msg; t.style.display='block'; setTimeout(()=>t.style.display='none',2400); }
     function st(n, l){ return `<span class="stat"><div class="n">${n}</div><div class="l">${l}</div></span>`; }
+    function num(v){ return Number(v) || 0; }
+    let allUsers = [];
+
+    function renderSummary(users){
+      const box = document.getElementById('summary');
+      if (!box) return;
+      const people = users.length;
+      const active = users.filter(u => u.active).length;
+      const sum = (k) => users.reduce((a, u) => a + num(u[k]), 0);
+      box.innerHTML = `
+        <div class="card">
+          <div class="statrow">
+            ${st(people, 'logins')}
+            ${st(active, 'active')}
+            ${st(sum('capture_count'), 'captures')}
+            ${st(sum('last_7d'), 'last 7 days')}
+            ${st(sum('with_photo'), 'with photo')}
+            ${st(sum('exports'), 'exports')}
+            ${st(sum('group_count'), 'groups')}
+          </div>
+        </div>`;
+    }
+
+    function sortUsers(mode){
+      const arr = allUsers.slice();
+      const t = (d) => d ? new Date(d).getTime() : 0;
+      if (mode === 'captures') arr.sort((a, b) => num(b.capture_count) - num(a.capture_count));
+      else if (mode === 'last7') arr.sort((a, b) => num(b.last_7d) - num(a.last_7d));
+      else if (mode === 'exports') arr.sort((a, b) => num(b.exports) - num(a.exports));
+      else if (mode === 'newest') arr.sort((a, b) => t(b.created_at) - t(a.created_at));
+      else if (mode === 'name') arr.sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+      else arr.sort((a, b) => t(b.last_activity) - t(a.last_activity)); // 'active' (default)
+      return arr;
+    }
+
+    function renderUserList(){
+      const box = document.getElementById('users');
+      if (!box) return;
+      const mode = (document.getElementById('sortsel') || {}).value || 'active';
+      box.innerHTML = sortUsers(mode).map(u => userCard(u)).join('');
+      box.querySelectorAll('[data-reset]').forEach(b => b.onclick = () => resetPassword(parseInt(b.getAttribute('data-reset'),10)));
+      box.querySelectorAll('[data-active]').forEach(b => b.onclick = () => setActive(parseInt(b.getAttribute('data-active'),10), b.getAttribute('data-to')==='1'));
+    }
 
     function userCard(u){
       const orientedKnown = u.dims_known || 0;
@@ -162,7 +205,20 @@
           <input id="cpass" type="text" placeholder="Starting password" style="margin-top:8px" />
           <button class="btn" id="createbtn">Create login</button>
 
-          <label style="margin-top:22px">People &amp; usage</label>
+          <label style="margin-top:22px">Totals across all logins</label>
+          <div id="summary"></div>
+
+          <div class="row" style="margin-top:18px; align-items:center; gap:10px">
+            <label style="margin:0">People &amp; usage</label>
+            <select id="sortsel" style="margin-left:auto; max-width:230px">
+              <option value="active">Sort: most recently active</option>
+              <option value="captures">Sort: most captures</option>
+              <option value="last7">Sort: most active (last 7 days)</option>
+              <option value="exports">Sort: most exports</option>
+              <option value="newest">Sort: newest login</option>
+              <option value="name">Sort: name (A–Z)</option>
+            </select>
+          </div>
           <div id="users"></div>
         </div>`;
       document.getElementById('logout').onclick = async () => { await api('/api/logout', { method:'POST' }); renderLogin(); };
@@ -196,10 +252,11 @@
       box.innerHTML = '<p class="status">Loading...</p>';
       const r = await api('/api/admin/users');
       if (!r.ok) { box.innerHTML = '<p class="status">Could not load.</p>'; return; }
-      const users = await r.json();
-      box.innerHTML = users.map(u => userCard(u)).join('');
-      box.querySelectorAll('[data-reset]').forEach(b => b.onclick = () => resetPassword(parseInt(b.getAttribute('data-reset'),10)));
-      box.querySelectorAll('[data-active]').forEach(b => b.onclick = () => setActive(parseInt(b.getAttribute('data-active'),10), b.getAttribute('data-to')==='1'));
+      allUsers = await r.json();
+      renderSummary(allUsers);
+      const sortsel = document.getElementById('sortsel');
+      if (sortsel && !sortsel._wired) { sortsel._wired = true; sortsel.onchange = renderUserList; }
+      renderUserList();
     }
 
     async function resetPassword(id){
