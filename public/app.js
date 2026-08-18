@@ -4,6 +4,18 @@ const IS_HANDHELD = (window.matchMedia && window.matchMedia('(pointer: coarse)')
 let state = { view: IS_HANDHELD ? 'capture' : 'list', location: null, address: null, photoFile: null, kind: 'note', area: '', areas: [], groupId: null, imgv: 0 };
 let recognizer = null;
 let currentGroupItems = [];
+let currentGroup = null;
+
+// Live title-case: capitalize the first letter of each word as the user types,
+// keeping the caret in place.
+function titleCaseInput(el) {
+  if (!el) return;
+  el.addEventListener('input', () => {
+    const pos = el.selectionStart;
+    const v = el.value.replace(/\b\w/g, ch => ch.toUpperCase());
+    if (v !== el.value) { el.value = v; try { el.setSelectionRange(pos, pos); } catch (e) {} }
+  });
+}
 
 async function loadAreas() {
   const r = await api('/api/areas');
@@ -553,12 +565,15 @@ async function renderGroups() {
   if (state.groupId) { renderGroupDetail(state.groupId); return; }
   const body = document.getElementById('body');
   body.innerHTML = `
-    <label>New Group</label>
-    <input id="gtitle" type="text" placeholder="Group title (e.g. Front gate damage)" />
-    <textarea id="gdesc" placeholder="Description (optional)"></textarea>
-    <button class="btn" id="gcreate">Create Group</button>
-    <div id="glist" style="margin-top:18px"></div>`;
+    <div class="formhead">Create New Group</div>
+    <input id="gtitle" type="text" placeholder="Group Title" style="font-size:18px;font-weight:bold" />
+    <textarea id="gdesc" placeholder="Description (optional)" style="min-height:60px;margin-top:8px"></textarea>
+    <button class="btn slim" id="gcreate">Create</button>
+
+    <div class="formhead" style="margin-top:30px">Current Groups</div>
+    <div id="glist"></div>`;
   document.getElementById('gcreate').onclick = createGroup;
+  titleCaseInput(document.getElementById('gtitle'));
   loadGroups();
 }
 
@@ -595,8 +610,8 @@ async function loadGroups() {
       ${g.description ? `<div style="margin:4px 0">${esc(g.description)}</div>` : ''}
       <div class="meta">${g.item_count} photo${g.item_count === 1 ? '' : 's'}</div>
       <div class="row" style="margin-top:8px">
-        <button class="btn secondary gopen" data-id="${g.id}">Open</button>
-        <button class="btn" data-id="${g.id}" data-del="1" style="background:#b3261e">Delete</button>
+        <button class="btn slim gopen" data-id="${g.id}">Open</button>
+        <button class="btn secondary slim" data-id="${g.id}" data-del="1" style="color:#c1121f">Delete</button>
       </div>
     </div>`).join('');
   list.querySelectorAll('.gopen').forEach(b => b.onclick = () => { state.groupId = parseInt(b.getAttribute('data-id'), 10); renderGroups(); });
@@ -615,15 +630,14 @@ async function renderGroupDetail(id) {
   const r = await api(`/api/groups/${id}`);
   if (!r.ok) { body.innerHTML = '<p class="status">Could not load group.</p>'; return; }
   const data = await r.json();
-  const group = data.group;
+  currentGroup = data.group;
   currentGroupItems = data.items || [];
   body.innerHTML = `
-    <button class="link" id="gback">‹ All Groups</button>
-    <label style="margin-top:8px">Title</label>
-    <input id="gdtitle" type="text" value="${esc(group.title || '')}" />
+    <button class="backlink" id="gback">‹ All Groups</button>
+    <label>Title</label>
+    <div id="titleview"></div>
     <label>Description</label>
-    <textarea id="gddesc">${esc(group.description || '')}</textarea>
-    <button class="btn secondary" id="gsave">Save Title &amp; Description</button>
+    <div id="descview"></div>
 
     <label style="margin-top:16px">Export This Group <span style="font-weight:normal;text-transform:none;letter-spacing:0">(pick one or more)</span></label>
     <div class="pill-group" id="gfmts">
@@ -639,11 +653,62 @@ async function renderGroupDetail(id) {
 
     <div id="gitems" style="margin-top:16px"></div>`;
   document.getElementById('gback').onclick = () => { state.groupId = null; renderGroups(); };
-  document.getElementById('gsave').onclick = saveGroupMeta;
   document.getElementById('greverse').onclick = reverseItems;
   document.getElementById('gexport').onclick = groupExport;
   document.getElementById('gfmts').onclick = (e) => { const p = e.target.closest('.pill'); if (p) p.classList.toggle('on'); };
+  renderTitleView();
+  renderDescView();
   renderGroupItems();
+}
+
+function renderTitleView() {
+  const box = document.getElementById('titleview');
+  if (!box) return;
+  box.innerHTML = `<span class="fieldval big">${esc(currentGroup.title || 'Untitled group')}</span><button class="editlink" id="editTitle">Edit</button>`;
+  document.getElementById('editTitle').onclick = editTitle;
+}
+function editTitle() {
+  const box = document.getElementById('titleview');
+  box.innerHTML = `
+    <input type="text" id="gdtitle" value="${esc(currentGroup.title || '')}" style="font-size:18px;font-weight:bold" />
+    <div style="margin-top:6px"><button class="btn slim" id="saveTitle">Save</button><button class="editlink" id="cancelTitle">Cancel</button></div>`;
+  const inp = document.getElementById('gdtitle');
+  titleCaseInput(inp); inp.focus();
+  document.getElementById('saveTitle').onclick = saveTitle;
+  document.getElementById('cancelTitle').onclick = renderTitleView;
+}
+async function saveTitle() {
+  const v = document.getElementById('gdtitle').value.trim() || 'Untitled group';
+  const r = await api(`/api/groups/${currentGroup.id}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title: v }),
+  });
+  if (r.ok) { currentGroup.title = v; toast('Saved'); renderTitleView(); } else toast('Save failed');
+}
+
+function renderDescView() {
+  const box = document.getElementById('descview');
+  if (!box) return;
+  const d = currentGroup.description;
+  box.innerHTML = `<span class="fieldval">${d ? esc(d) : 'No description'}</span><button class="editlink" id="editDesc">Edit</button>`;
+  document.getElementById('editDesc').onclick = editDesc;
+}
+function editDesc() {
+  const box = document.getElementById('descview');
+  box.innerHTML = `
+    <textarea id="gddesc" style="min-height:60px">${esc(currentGroup.description || '')}</textarea>
+    <div style="margin-top:6px"><button class="btn slim" id="saveDesc">Save</button><button class="editlink" id="cancelDesc">Cancel</button></div>`;
+  document.getElementById('gddesc').focus();
+  document.getElementById('saveDesc').onclick = saveDesc;
+  document.getElementById('cancelDesc').onclick = renderDescView;
+}
+async function saveDesc() {
+  const v = document.getElementById('gddesc').value.trim();
+  const r = await api(`/api/groups/${currentGroup.id}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ description: v }),
+  });
+  if (r.ok) { currentGroup.description = v; toast('Saved'); renderDescView(); } else toast('Save failed');
 }
 
 function renderGroupItems() {
@@ -702,16 +767,6 @@ async function removeItem(i) {
   });
   if (r.ok) { currentGroupItems.splice(i, 1); renderGroupItems(); toast('Removed'); }
   else toast('Remove failed');
-}
-
-async function saveGroupMeta() {
-  const title = document.getElementById('gdtitle').value.trim();
-  const description = document.getElementById('gddesc').value.trim();
-  const r = await api(`/api/groups/${state.groupId}`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title, description }),
-  });
-  if (r.ok) toast('Saved'); else toast('Save failed');
 }
 
 async function groupExport() {
