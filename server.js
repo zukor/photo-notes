@@ -55,6 +55,27 @@ function requireAdmin(req, res, next) {
   next();
 }
 
+// ---- activity log (admin usage metadata; never stores note text or photos) ----
+async function logEvent(userId, action, detail) {
+  try {
+    await pool.query(`INSERT INTO events (user_id, action, detail) VALUES ($1, $2, $3)`,
+      [userId, action, JSON.stringify(detail || {})]);
+  } catch (e) { /* analytics is best-effort; never block the real request */ }
+}
+
+// Oriented photo dimensions (accounts for EXIF orientation) so we can classify
+// landscape vs portrait the way the user actually sees the photo. Content is
+// never read or stored, only width/height.
+async function imageDims(localPath) {
+  try {
+    const m = await sharp(localPath).metadata();
+    let w = m.width, h = m.height;
+    if (m.orientation && m.orientation >= 5) { const t = w; w = h; h = t; }
+    if (!w || !h) return null;
+    return { w, h };
+  } catch (e) { return null; }
+}
+
 app.post('/api/login', async (req, res) => {
   try {
     const b = req.body || {};
@@ -68,6 +89,7 @@ app.post('/api/login', async (req, res) => {
     }
     await pool.query(`UPDATE users SET last_login_at = now() WHERE id = $1`, [user.id]);
     setSession(res, user);
+    logEvent(user.id, 'login', {});
     res.json({ ok: true, name: user.name, role: user.role });
   } catch (err) {
     console.error('[login]', err);
@@ -150,10 +172,13 @@ app.post('/api/captures', requireAuth, upload.single('photo'), async (req, res) 
     const kind = b.kind === 'task' ? 'task' : 'note';
     const photoPath = req.file ? `/uploads/${req.file.filename}` : null;
 
-    const q = `INSERT INTO captures (user_id, captured_by, photo_path, note, latitude, longitude, address, area_tags, kind, status)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`;
+    let pw = null, ph = null;
+    if (req.file) { const d = await imageDims(req.file.path); if (d) { pw = d.w; ph = d.h; } }
+
+    const q = `INSERT INTO captures (user_id, captured_by, photo_path, photo_width, photo_height, note, latitude, longitude, address, area_tags, kind, status)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`;
     const status = kind === 'task' ? 'open' : null;
-    const vals = [req.user.id, req.user.name, photoPath, b.note || null, lat, lng, address, areas, kind, status];
+    const vals = [req.user.id, req.user.name, photoPath, pw, ph, b.note || null, lat, lng, address, areas, kind, status];
     const { rows } = await pool.query(q, vals);
     res.json(rows[0]);
   } catch (err) {
@@ -231,6 +256,7 @@ app.post('/api/captures/delete', requireAuth, async (req, res) => {
       const p = localPhoto(r.photo_path);
       if (p) { try { fs.unlinkSync(p); } catch (e) {} }
     }
+    logEvent(req.user.id, 'delete', { count: rows.length });
     res.json({ ok: true, deleted: rows.length });
   } catch (err) {
     console.error('[captures.delete]', err);
@@ -257,6 +283,7 @@ app.post('/api/regeocode', requireAuth, async (req, res) => {
       const addr = await reverseGeocode(c.latitude, c.longitude);
       if (addr) { await pool.query(`UPDATE captures SET address = $1 WHERE id = $2 AND user_id = $3`, [addr, c.id, req.user.id]); updated++; }
     }
+    logEvent(req.user.id, 'fix_addresses', { updated, total: rows.length });
     res.json({ ok: true, updated, total: rows.length });
   } catch (err) {
     console.error('[regeocode]', err);
@@ -281,6 +308,7 @@ app.post('/api/captures/:id', requireAuth, async (req, res) => {
     const { rows } = await pool.query(
       `UPDATE captures SET ${sets.join(', ')} WHERE id = $${vals.length - 1} AND user_id = $${vals.length} RETURNING *`, vals);
     if (!rows.length) return res.status(404).json({ error: 'not found' });
+    if (typeof b.note === 'string') logEvent(req.user.id, 'note_edit', { chars: b.note.length });
     res.json(rows[0]);
   } catch (err) {
     console.error('[captures.update]', err);
@@ -308,6 +336,9 @@ app.post('/api/captures/:id/rotate', requireAuth, async (req, res) => {
     else if (ext === '.webp') out = await s.webp().toBuffer();
     else out = await s.jpeg({ quality: 92 }).toBuffer();
     fs.writeFileSync(p, out);
+    const d = await imageDims(p);
+    if (d) await pool.query(`UPDATE captures SET photo_width = $1, photo_height = $2 WHERE id = $3 AND user_id = $4`, [d.w, d.h, id, req.user.id]);
+    logEvent(req.user.id, 'rotate', { dir });
     res.json({ ok: true });
   } catch (err) {
     console.error('[captures.rotate]', err);
@@ -355,7 +386,9 @@ app.post('/api/groups', requireAuth, async (req, res) => {
     const ids = Array.isArray(b.ids) ? b.ids.map((n) => parseInt(n, 10)).filter(Number.isInteger) : [];
     const { rows } = await pool.query(`INSERT INTO groups (user_id, title, description) VALUES ($1,$2,$3) RETURNING *`, [req.user.id, title, description]);
     const group = rows[0];
-    if (ids.length) await addToGroup(group.id, req.user.id, ids);
+    let added = 0;
+    if (ids.length) added = await addToGroup(group.id, req.user.id, ids);
+    logEvent(req.user.id, 'group_create', { with_photos: added });
     res.json(group);
   } catch (err) { console.error('[groups.create]', err); res.status(500).json({ error: 'failed to create group' }); }
 });
@@ -406,6 +439,7 @@ app.post('/api/groups/:id/add', requireAuth, async (req, res) => {
     const ids = Array.isArray(req.body && req.body.ids) ? req.body.ids.map((n) => parseInt(n, 10)).filter(Number.isInteger) : [];
     if (!ids.length) return res.status(400).json({ error: 'no ids' });
     const added = await addToGroup(id, req.user.id, ids);
+    logEvent(req.user.id, 'group_add', { count: added });
     res.json({ ok: true, added });
   } catch (err) { console.error('[groups.add]', err); res.status(500).json({ error: 'add failed' }); }
 });
@@ -430,6 +464,7 @@ app.post('/api/groups/:id/reorder', requireAuth, async (req, res) => {
     for (let i = 0; i < order.length; i++) {
       await pool.query(`UPDATE group_items SET position = $1 WHERE group_id = $2 AND capture_id = $3`, [i, id, order[i]]);
     }
+    logEvent(req.user.id, 'group_reorder', {});
     res.json({ ok: true });
   } catch (err) { console.error('[groups.reorder]', err); res.status(500).json({ error: 'reorder failed' }); }
 });
@@ -445,17 +480,69 @@ app.get('/api/admin/users', requireAdmin, async (req, res) => {
         COALESCE(c.d30, 0)::int      AS last_30d,
         COALESCE(c.with_photo, 0)::int    AS with_photo,
         COALESCE(c.with_loc, 0)::int      AS with_location,
-        COALESCE(g.gcnt, 0)::int     AS group_count
+        COALESCE(c.with_note, 0)::int     AS with_note,
+        COALESCE(c.note_chars_total, 0)::int AS note_chars_total,
+        COALESCE(c.note_chars_avg, 0)::int   AS note_chars_avg,
+        COALESCE(c.note_chars_max, 0)::int   AS note_chars_max,
+        COALESCE(c.landscape, 0)::int     AS landscape,
+        COALESCE(c.portrait, 0)::int      AS portrait,
+        COALESCE(c.square, 0)::int        AS square,
+        COALESCE(c.dims_known, 0)::int    AS dims_known,
+        COALESCE(c.tasks, 0)::int         AS tasks,
+        COALESCE(g.gcnt, 0)::int     AS group_count,
+        COALESCE(gp.grouped_photos, 0)::int AS grouped_photos,
+        COALESCE(e.exports, 0)::int       AS exports,
+        COALESCE(e.export_pdf, 0)::int    AS export_pdf,
+        COALESCE(e.export_docx, 0)::int   AS export_docx,
+        COALESCE(e.export_bundle, 0)::int AS export_bundle,
+        COALESCE(e.rotates, 0)::int       AS rotates,
+        COALESCE(e.note_edits, 0)::int    AS note_edits,
+        COALESCE(e.deletes, 0)::int       AS deletes,
+        COALESCE(e.reorders, 0)::int      AS reorders,
+        COALESCE(e.group_adds, 0)::int    AS group_adds,
+        COALESCE(e.fixes, 0)::int         AS fixes,
+        COALESCE(e.logins, 0)::int        AS logins,
+        e.last_activity
       FROM users u
       LEFT JOIN (
         SELECT user_id, COUNT(*) cnt, MIN(created_at) first_capture, MAX(created_at) last_capture,
           COUNT(*) FILTER (WHERE created_at > now() - interval '7 days')  d7,
           COUNT(*) FILTER (WHERE created_at > now() - interval '30 days') d30,
           COUNT(*) FILTER (WHERE photo_path IS NOT NULL) with_photo,
-          COUNT(*) FILTER (WHERE latitude IS NOT NULL)   with_loc
+          COUNT(*) FILTER (WHERE latitude IS NOT NULL)   with_loc,
+          COUNT(*) FILTER (WHERE note IS NOT NULL AND btrim(note) <> '') with_note,
+          COALESCE(SUM(char_length(COALESCE(note, ''))), 0) note_chars_total,
+          COALESCE(ROUND(AVG(char_length(note)) FILTER (WHERE note IS NOT NULL AND btrim(note) <> '')), 0) note_chars_avg,
+          COALESCE(MAX(char_length(note)), 0) note_chars_max,
+          COUNT(*) FILTER (WHERE photo_width IS NOT NULL AND photo_height IS NOT NULL AND photo_width > photo_height)  landscape,
+          COUNT(*) FILTER (WHERE photo_width IS NOT NULL AND photo_height IS NOT NULL AND photo_height > photo_width)  portrait,
+          COUNT(*) FILTER (WHERE photo_width IS NOT NULL AND photo_height IS NOT NULL AND photo_width = photo_height)  square,
+          COUNT(*) FILTER (WHERE photo_width IS NOT NULL) dims_known,
+          COUNT(*) FILTER (WHERE kind = 'task') tasks
         FROM captures GROUP BY user_id
       ) c ON c.user_id = u.id
       LEFT JOIN (SELECT user_id, COUNT(*) gcnt FROM groups GROUP BY user_id) g ON g.user_id = u.id
+      LEFT JOIN (
+        SELECT g.user_id, COUNT(gi.*) grouped_photos
+        FROM groups g JOIN group_items gi ON gi.group_id = g.id
+        GROUP BY g.user_id
+      ) gp ON gp.user_id = u.id
+      LEFT JOIN (
+        SELECT user_id,
+          COUNT(*) FILTER (WHERE action = 'export') exports,
+          COUNT(*) FILTER (WHERE action = 'export' AND detail->>'format' = 'pdf') export_pdf,
+          COUNT(*) FILTER (WHERE action = 'export' AND detail->>'format' = 'docx') export_docx,
+          COUNT(*) FILTER (WHERE action = 'export' AND detail->>'format' = 'bundle') export_bundle,
+          COUNT(*) FILTER (WHERE action = 'rotate') rotates,
+          COUNT(*) FILTER (WHERE action = 'note_edit') note_edits,
+          COUNT(*) FILTER (WHERE action = 'delete') deletes,
+          COUNT(*) FILTER (WHERE action = 'group_reorder') reorders,
+          COUNT(*) FILTER (WHERE action = 'group_add') group_adds,
+          COUNT(*) FILTER (WHERE action = 'fix_addresses') fixes,
+          COUNT(*) FILTER (WHERE action = 'login') logins,
+          MAX(created_at) last_activity
+        FROM events GROUP BY user_id
+      ) e ON e.user_id = u.id
       ORDER BY u.created_at ASC`);
     res.json(rows);
   } catch (err) { console.error('[admin.users]', err); res.status(500).json({ error: 'failed to list users' }); }
@@ -568,7 +655,8 @@ async function resolveExport(req) {
     }
   }
   const rows = await getCaptures({ userId, area, ids, group: groupId });
-  return { imgRes, imgFmt, heading, desc, fnameBase, rows };
+  const scope = groupId ? 'group' : (ids ? 'selection' : (area ? 'area' : 'all'));
+  return { imgRes, imgFmt, heading, desc, fnameBase, rows, scope };
 }
 
 const RES_PRESETS = {
@@ -607,7 +695,8 @@ async function renderForEmbed(localPath, imgRes, imgFmt) {
 
 app.get('/api/export/pdf', requireAuth, async (req, res) => {
   try {
-    const { imgRes, imgFmt, heading, desc, fnameBase, rows } = await resolveExport(req);
+    const { imgRes, imgFmt, heading, desc, fnameBase, rows, scope } = await resolveExport(req);
+    logEvent(req.user.id, 'export', { format: 'pdf', scope, count: rows.length, res: imgRes, fmt: imgFmt });
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${fnameBase}.pdf"`);
     const doc = new PDFDocument({ size: 'LETTER', margin: 48 });
@@ -636,7 +725,8 @@ app.get('/api/export/pdf', requireAuth, async (req, res) => {
 
 app.get('/api/export/docx', requireAuth, async (req, res) => {
   try {
-    const { imgRes, imgFmt, heading, desc, fnameBase, rows } = await resolveExport(req);
+    const { imgRes, imgFmt, heading, desc, fnameBase, rows, scope } = await resolveExport(req);
+    logEvent(req.user.id, 'export', { format: 'docx', scope, count: rows.length, res: imgRes, fmt: imgFmt });
     const children = [new Paragraph({ heading: HeadingLevel.HEADING_1, children: [new TextRun({ text: heading, bold: true, color: '000000', font: 'Arial' })] })];
     if (desc) children.push(new Paragraph({ children: [new TextRun({ text: desc, color: '000000', font: 'Arial' })] }));
     for (const c of rows) {
@@ -661,7 +751,8 @@ app.get('/api/export/docx', requireAuth, async (req, res) => {
 
 app.get('/api/export/bundle', requireAuth, async (req, res) => {
   try {
-    const { imgRes, imgFmt, heading, desc, fnameBase, rows } = await resolveExport(req);
+    const { imgRes, imgFmt, heading, desc, fnameBase, rows, scope } = await resolveExport(req);
+    logEvent(req.user.id, 'export', { format: 'bundle', scope, count: rows.length, res: imgRes, fmt: imgFmt });
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Disposition', `attachment; filename="${fnameBase}-bundle.zip"`);
     const archive = archiver('zip', { zlib: { level: 9 } });
@@ -701,8 +792,27 @@ app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'public', 'adm
 // SPA fallback
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
+// One-time fill of photo width/height for photos captured before dimensions were
+// tracked, so orientation stats cover existing photos too. Best-effort per file.
+async function backfillPhotoDims() {
+  try {
+    const { rows } = await pool.query(`SELECT id, photo_path FROM captures WHERE photo_path IS NOT NULL AND photo_width IS NULL`);
+    let done = 0;
+    for (const r of rows) {
+      const p = localPhoto(r.photo_path);
+      if (!p) continue;
+      const d = await imageDims(p);
+      if (d) { await pool.query(`UPDATE captures SET photo_width = $1, photo_height = $2 WHERE id = $3`, [d.w, d.h, r.id]); done++; }
+    }
+    if (done) console.log(`[efc] backfilled photo dimensions for ${done} capture(s)`);
+  } catch (e) { console.error('[backfill dims]', e); }
+}
+
 init()
-  .then(() => app.listen(PORT, () => console.log(`[efc] listening on ${PORT}`)))
+  .then(() => {
+    app.listen(PORT, () => console.log(`[efc] listening on ${PORT}`));
+    backfillPhotoDims();
+  })
   .catch((err) => {
     console.error('[efc] failed to init db', err);
     app.listen(PORT, () => console.log(`[efc] listening on ${PORT} (db init failed)`));

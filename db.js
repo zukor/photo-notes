@@ -27,6 +27,8 @@ CREATE TABLE IF NOT EXISTS captures (
   created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
   captured_by  TEXT,
   photo_path   TEXT,
+  photo_width  INTEGER,
+  photo_height INTEGER,
   note         TEXT,
   latitude     DOUBLE PRECISION,
   longitude    DOUBLE PRECISION,
@@ -59,6 +61,18 @@ CREATE TABLE IF NOT EXISTS user_areas (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (user_id, name)
 );
+-- Activity log for admin usage metadata. Stores only WHAT was done, never the
+-- content: no note text, no photos. detail holds small non-sensitive facts like
+-- export format or a count.
+CREATE TABLE IF NOT EXISTS events (
+  id         SERIAL PRIMARY KEY,
+  user_id    INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  action     TEXT NOT NULL,
+  detail     JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS events_user_idx ON events (user_id);
+CREATE INDEX IF NOT EXISTS events_action_idx ON events (action);
 `;
 
 const DEFAULT_AREAS = ['Roads', 'Maintenance', 'Walls', 'Security', 'Landscaping', 'Other'];
@@ -110,6 +124,8 @@ async function init() {
   //    rows to the admin so nothing is orphaned.
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id)`);
   await pool.query(`UPDATE captures SET user_id = $1 WHERE user_id IS NULL`, [adminId]);
+  await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS photo_width INTEGER`);
+  await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS photo_height INTEGER`);
   await pool.query(`ALTER TABLE groups ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id)`);
   await pool.query(`UPDATE groups SET user_id = $1 WHERE user_id IS NULL`, [adminId]);
 

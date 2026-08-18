@@ -7,13 +7,17 @@
   <meta name="theme-color" content="#1d4ed8" />
   <link rel="stylesheet" href="/styles.css" />
   <style>
-    .stat { display:inline-block; min-width:92px; margin:4px 12px 4px 0; vertical-align:top; }
-    .stat .n { font-size:20px; font-weight:bold; color:#000; }
+    .stat { display:inline-block; min-width:84px; margin:4px 14px 4px 0; vertical-align:top; }
+    .stat .n { font-size:19px; font-weight:bold; color:#000; }
     .stat .l { font-size:12px; color:#000; }
     .userhead { font-weight:bold; font-size:17px; color:#000; }
     .muted { font-size:13px; color:#000; }
     .inactive { opacity:.55; }
     .pill.role { background:#000; color:#fff; border:none; }
+    .section { margin-top:14px; }
+    .section h4 { margin:0 0 4px; font-size:12px; font-weight:bold; text-transform:uppercase; letter-spacing:.04em; color:#000; border-bottom:1px solid #e3e6ea; padding-bottom:3px; }
+    .statrow { margin-top:6px; }
+    .privacy { font-size:12px; color:#000; margin-top:12px; padding-top:8px; border-top:1px solid #e3e6ea; }
   </style>
 </head>
 <body>
@@ -25,6 +29,85 @@
     function fdate(d){ if(!d) return '—'; try { return new Date(d).toLocaleDateString(); } catch { return '—'; } }
     function fdatetime(d){ if(!d) return 'never'; try { return new Date(d).toLocaleString(); } catch { return 'never'; } }
     function toast(msg){ let t=document.querySelector('.toast'); if(!t){t=document.createElement('div');t.className='toast';document.body.appendChild(t);} t.textContent=msg; t.style.display='block'; setTimeout(()=>t.style.display='none',2400); }
+    function st(n, l){ return `<span class="stat"><div class="n">${n}</div><div class="l">${l}</div></span>`; }
+
+    function userCard(u){
+      const orientedKnown = u.dims_known || 0;
+      const photoLine = orientedKnown
+        ? st(u.landscape, 'landscape') + st(u.portrait, 'portrait') + (u.square ? st(u.square, 'square') : '')
+        : '<div class="muted">Orientation will appear as new photos come in.</div>';
+      return `
+        <div class="card ${u.active ? '' : 'inactive'}">
+          <div class="userhead">${esc(u.name || '(no name)')} ${u.role==='admin' ? '<span class="pill role">admin</span>' : ''} ${u.active ? '' : '<span class="muted">(deactivated)</span>'}</div>
+          <div class="muted">${esc(u.email)}${u.industry ? ' · ' + esc(u.industry) : ''}</div>
+          <div class="muted">Joined ${fdate(u.created_at)} · Last login ${fdatetime(u.last_login_at)} · Logins ${u.logins} · Last active ${fdatetime(u.last_activity)}</div>
+
+          <div class="section">
+            <h4>Captures</h4>
+            <div class="statrow">
+              ${st(u.capture_count, 'total')}
+              ${st(u.last_7d, 'last 7 days')}
+              ${st(u.last_30d, 'last 30 days')}
+              ${st(u.with_photo, 'with photo')}
+              ${st(u.with_location, 'with location')}
+              ${st(u.tasks, 'tasks')}
+            </div>
+            <div class="muted" style="margin-top:6px">First ${fdate(u.first_capture)} · Latest ${fdate(u.last_capture)}</div>
+          </div>
+
+          <div class="section">
+            <h4>Photos (orientation)</h4>
+            <div class="statrow">${photoLine}</div>
+          </div>
+
+          <div class="section">
+            <h4>Notes (length only, text never shown)</h4>
+            <div class="statrow">
+              ${st(u.with_note, 'with a note')}
+              ${st(u.note_chars_avg, 'avg characters')}
+              ${st(u.note_chars_max, 'longest')}
+              ${st(u.note_chars_total, 'total characters')}
+              ${st(u.note_edits, 'edits')}
+            </div>
+          </div>
+
+          <div class="section">
+            <h4>Exports</h4>
+            <div class="statrow">
+              ${st(u.exports, 'total')}
+              ${st(u.export_pdf, 'PDF')}
+              ${st(u.export_docx, 'Word')}
+              ${st(u.export_bundle, 'Claude .zip')}
+            </div>
+          </div>
+
+          <div class="section">
+            <h4>Groups</h4>
+            <div class="statrow">
+              ${st(u.group_count, 'groups')}
+              ${st(u.grouped_photos, 'photos grouped')}
+              ${st(u.group_adds, 'add actions')}
+              ${st(u.reorders, 'reorders')}
+            </div>
+          </div>
+
+          <div class="section">
+            <h4>Other activity</h4>
+            <div class="statrow">
+              ${st(u.rotates, 'rotations')}
+              ${st(u.deletes, 'delete actions')}
+              ${st(u.fixes, 'address fixes')}
+            </div>
+          </div>
+
+          <div class="privacy">Metadata only. This dashboard never shows their photos or the words they wrote.</div>
+
+          <div class="row" style="margin-top:12px">
+            <button class="btn secondary" data-reset="${u.id}">Reset password</button>
+            <button class="btn secondary" data-active="${u.id}" data-to="${u.active ? '0' : '1'}">${u.active ? 'Deactivate' : 'Activate'}</button>
+          </div>
+        </div>`;
+    }
 
     async function boot(){
       const r = await api('/api/me');
@@ -114,25 +197,7 @@
       const r = await api('/api/admin/users');
       if (!r.ok) { box.innerHTML = '<p class="status">Could not load.</p>'; return; }
       const users = await r.json();
-      box.innerHTML = users.map(u => `
-        <div class="card ${u.active ? '' : 'inactive'}">
-          <div class="userhead">${esc(u.name || '(no name)')} ${u.role==='admin' ? '<span class="pill role">admin</span>' : ''} ${u.active ? '' : '<span class="muted">(deactivated)</span>'}</div>
-          <div class="muted">${esc(u.email)}${u.industry ? ' · ' + esc(u.industry) : ''}</div>
-          <div class="muted">Joined ${fdate(u.created_at)} · Last login ${fdatetime(u.last_login_at)}</div>
-          <div style="margin-top:10px">
-            <span class="stat"><div class="n">${u.capture_count}</div><div class="l">captures</div></span>
-            <span class="stat"><div class="n">${u.last_7d}</div><div class="l">last 7 days</div></span>
-            <span class="stat"><div class="n">${u.last_30d}</div><div class="l">last 30 days</div></span>
-            <span class="stat"><div class="n">${u.with_photo}</div><div class="l">with photo</div></span>
-            <span class="stat"><div class="n">${u.with_location}</div><div class="l">with location</div></span>
-            <span class="stat"><div class="n">${u.group_count}</div><div class="l">groups</div></span>
-          </div>
-          <div class="muted" style="margin-top:6px">First capture ${fdate(u.first_capture)} · Latest ${fdate(u.last_capture)}</div>
-          <div class="row" style="margin-top:10px">
-            <button class="btn secondary" data-reset="${u.id}">Reset password</button>
-            <button class="btn secondary" data-active="${u.id}" data-to="${u.active ? '0' : '1'}">${u.active ? 'Deactivate' : 'Activate'}</button>
-          </div>
-        </div>`).join('');
+      box.innerHTML = users.map(u => userCard(u)).join('');
       box.querySelectorAll('[data-reset]').forEach(b => b.onclick = () => resetPassword(parseInt(b.getAttribute('data-reset'),10)));
       box.querySelectorAll('[data-active]').forEach(b => b.onclick = () => setActive(parseInt(b.getAttribute('data-active'),10), b.getAttribute('data-to')==='1'));
     }
