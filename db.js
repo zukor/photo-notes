@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS users (
   name          TEXT,
   password_hash TEXT NOT NULL,
   role          TEXT NOT NULL DEFAULT 'user',
+  plan          TEXT NOT NULL DEFAULT 'free',
   industry      TEXT,
   active        BOOLEAN NOT NULL DEFAULT true,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -37,7 +38,19 @@ CREATE TABLE IF NOT EXISTS captures (
   kind         TEXT NOT NULL DEFAULT 'note',
   status       TEXT,
   assignee     TEXT,
-  source       TEXT NOT NULL DEFAULT 'elm-creek'
+  source       TEXT NOT NULL DEFAULT 'elm-creek',
+  -- Pro-tier dimension fields. length/width stored canonically in inches
+  -- (dim_length_in / dim_width_in) plus the display unit chosen by the user
+  -- (dim_length_unit / dim_width_unit = 'ft'|'in'); depth is inches only;
+  -- shape is 'rectangle'|'circle'|'irregular'; dim_area_sqft is the computed
+  -- (or user-overridden) area in square feet.
+  dim_length_in   DOUBLE PRECISION,
+  dim_length_unit TEXT,
+  dim_width_in    DOUBLE PRECISION,
+  dim_width_unit  TEXT,
+  dim_depth_in    DOUBLE PRECISION,
+  dim_shape       TEXT,
+  dim_area_sqft   DOUBLE PRECISION
 );
 CREATE TABLE IF NOT EXISTS groups (
   id          SERIAL PRIMARY KEY,
@@ -126,6 +139,16 @@ async function init() {
   await pool.query(`UPDATE captures SET user_id = $1 WHERE user_id IS NULL`, [adminId]);
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS photo_width INTEGER`);
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS photo_height INTEGER`);
+  // Pro-tier: user plan ('free'|'pro'), default 'free' for all existing users.
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS plan TEXT NOT NULL DEFAULT 'free'`);
+  // Pro-tier: capture dimension fields (see SCHEMA above for semantics).
+  await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS dim_length_in DOUBLE PRECISION`);
+  await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS dim_length_unit TEXT`);
+  await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS dim_width_in DOUBLE PRECISION`);
+  await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS dim_width_unit TEXT`);
+  await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS dim_depth_in DOUBLE PRECISION`);
+  await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS dim_shape TEXT`);
+  await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS dim_area_sqft DOUBLE PRECISION`);
   await pool.query(`ALTER TABLE groups ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id)`);
   await pool.query(`UPDATE groups SET user_id = $1 WHERE user_id IS NULL`, [adminId]);
 
