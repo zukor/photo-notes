@@ -253,19 +253,22 @@ function toggleDictation() {
   const noteEl = document.getElementById('note');
   const btn = document.getElementById('dictate');
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  // iPhone/iPad: Safari's in-page speech recognition "starts" but never returns
-  // any words, so never use it there. Apple's own keyboard dictation (the mic key
-  // on the on-screen keyboard) is reliable and types straight into the note.
-  if (isIOS() || !SR) {
+  if (!SR) {
+    // Only when the browser has no speech recognition at all: fall back to the
+    // keyboard's own mic key so the person can still dictate.
     if (noteEl) noteEl.focus();
-    toast('Now tap 🎤 on the keyboard, then talk');
+    toast('Tap the 🎤 on your keyboard, then talk');
     return;
   }
-  if (recognizer) { recognizer.stop(); return; }
+  if (recognizer) { try { recognizer.stop(); } catch (e) {} return; }
+  const ios = isIOS();
   recognizer = new SR();
   recognizer.lang = 'en-US';
-  recognizer.interimResults = true;
-  recognizer.continuous = true;
+  // iPhone/iPad Safari hangs with continuous or interim results on; it only
+  // reliably delivers one final transcript per start. Desktop/Android handle
+  // live continuous dictation, so keep that richer behavior there.
+  recognizer.continuous = ios ? false : true;
+  recognizer.interimResults = ios ? false : true;
   let base = noteEl ? noteEl.value : '';
   if (base && !base.endsWith(' ')) base += ' ';
   if (btn) { btn.textContent = '⏺ Recording... tap to stop'; btn.classList.add('on'); }
@@ -276,9 +279,19 @@ function toggleDictation() {
       if (ev.results[i].isFinal) finalText += t; else interim += t;
     }
     if (finalText) base += finalText + ' ';
-    if (noteEl) { noteEl.value = base + interim; state._note = noteEl.value; }
+    if (noteEl) { noteEl.value = (base + interim).trimStart(); state._note = noteEl.value; }
   };
-  recognizer.onerror = () => { toast('Could not access the mic'); cleanupDictation(); };
+  recognizer.onerror = (e) => {
+    const err = e && e.error;
+    if (err === 'not-allowed' || err === 'service-not-allowed') {
+      toast('Allow microphone access for this site, then tap Record note again');
+    } else if (err === 'no-speech') {
+      toast('Did not catch that. Tap Record note and speak again');
+    } else {
+      toast('Recording could not start. Check that Dictation is on in Settings');
+    }
+    cleanupDictation();
+  };
   recognizer.onend = () => { cleanupDictation(); };
   try { recognizer.start(); } catch (e) { cleanupDictation(); }
 }
