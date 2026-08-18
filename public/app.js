@@ -58,7 +58,7 @@ function qualityBlock(idres, idfmt) {
         <option value="webp">WebP, smallest, modern</option>
         <option value="original">Keep original file, no changes</option>
       </select>
-      <p class="status" style="color:#000;margin-top:6px">Your originals stay full-resolution on the server. These only change what gets exported. Standard JPEG is best for uploading to Claude.</p>
+      <p class="status" style="color:#000;margin-top:6px">Your originals stay full-resolution on the server. These only change what gets exported. Standard JPEG is best for uploading to an AI.</p>
     </details>`;
 }
 
@@ -335,8 +335,8 @@ async function rotatePhoto(id, dir) {
 
 function rotateButtons(id) {
   return `
-    <button class="btn secondary rotccw" data-id="${id}" title="Rotate left">⟲ Left</button>
-    <button class="btn secondary rotcw" data-id="${id}" title="Rotate right">⟳ Right</button>`;
+    <button class="iconbtn rotccw" data-id="${id}" title="Rotate left 90°">↺ 90°</button>
+    <button class="iconbtn rotcw" data-id="${id}" title="Rotate right 90°">↻ 90°</button>`;
 }
 function wireRotate(container) {
   container.querySelectorAll('.rotccw').forEach(b => b.onclick = () => rotatePhoto(parseInt(b.getAttribute('data-id'), 10), 'ccw'));
@@ -356,13 +356,12 @@ async function saveNote(id, text, after) {
 async function renderList() {
   const body = document.getElementById('body');
   body.innerHTML = `
-    <label>Filter by Topic</label>
+    <label>Filter</label>
     <select id="filter">
-      <option value="">All topics</option>
+      <option value="">All Topics</option>
       ${state.areas.map(a => `<option value="${esc(a)}">${esc(a)}</option>`).join('')}
     </select>
-    <label>Select</label>
-    <div class="row">
+    <div class="row" style="margin-top:10px">
       <button class="btn secondary" id="selall">Select All</button>
       <button class="btn secondary" id="selnone">Clear</button>
     </div>
@@ -371,20 +370,19 @@ async function renderList() {
     <div class="pill-group" id="fmts">
       <div class="pill" data-fmt="pdf">PDF</div>
       <div class="pill" data-fmt="docx">Word</div>
-      <div class="pill" data-fmt="bundle">For Claude (.zip)</div>
+      <div class="pill" data-fmt="bundle">For AI (.zip)</div>
     </div>
     ${qualityBlock('imgres', 'imgfmt')}
-    <button class="btn" id="exportbtn">Export Selected</button>
+    <button class="btn" id="exportbtn">Export</button>
 
     <label style="margin-top:18px">Add Selected to a Group</label>
-    <div class="row">
-      <select id="groupsel" style="flex:1"><option value="">Choose a group...</option></select>
+    <div class="row compact">
+      <select id="groupsel" style="flex:1"><option value="">Choose Group</option></select>
       <button class="btn secondary" id="addtogroup">Add</button>
     </div>
-    <input id="newgroupname" placeholder="...or type a new group name" style="margin-top:6px" />
+    <input id="newgroupname" type="text" placeholder="...or type a new group name" style="margin-top:8px" />
 
-    <label style="margin-top:18px">Manage</label>
-    <div class="row">
+    <div class="row" style="margin-top:22px">
       <button class="btn secondary" id="fixaddr">Fix Addresses</button>
       <button class="btn" id="delbtn" style="background:#b3261e">Delete Selected</button>
     </div>
@@ -407,7 +405,7 @@ async function loadGroupOptions() {
   if (!sel) return;
   const r = await api('/api/groups');
   const groups = r.ok ? await r.json() : [];
-  sel.innerHTML = '<option value="">Choose a group...</option>' +
+  sel.innerHTML = '<option value="">Choose Group</option>' +
     groups.map(g => `<option value="${g.id}">${esc(g.title || 'Untitled')} (${g.item_count})</option>`).join('');
 }
 
@@ -462,7 +460,7 @@ async function doExportSelected() {
       await new Promise(res => setTimeout(res, 500));
     } catch (e) { toast('Export failed for ' + f); }
   }
-  btn.disabled = false; btn.textContent = 'Export Selected';
+  btn.disabled = false; btn.textContent = 'Export';
   toast('Exported');
 }
 
@@ -511,7 +509,7 @@ async function loadCards(area) {
   const rows = await r.json();
   if (!rows.length) { cards.innerHTML = '<p class="empty">No captures yet. Go grab one.</p>'; return; }
   cards.innerHTML = rows.map(c => {
-    const when = new Date(c.created_at).toLocaleString();
+    const when = new Date(c.created_at).toLocaleString([], { year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' });
     const tags = (c.area_tags || []).map(t => `<span class="badge">${esc(t)}</span>`).join('');
     const kind = c.kind === 'task' ? `<span class="badge task">Task</span>` : '';
     return `<div class="card">
@@ -519,14 +517,14 @@ async function loadCards(area) {
         <input type="checkbox" class="capchk" value="${c.id}" style="width:20px;height:20px"> Select
       </label>
       ${c.photo_path ? `<img src="${photoSrc(c.photo_path)}" alt="capture" />` : ''}
-      <div class="row" style="margin-top:6px">${rotateButtons(c.id)}</div>
+      <div class="meta">${when}</div>
+      <div class="rotaterow">${rotateButtons(c.id)}</div>
       <div class="addr">${esc(c.address || (c.latitude ? c.latitude.toFixed(5)+', '+c.longitude.toFixed(5) : 'No location'))}</div>
       <div class="meta">${kind}${tags}</div>
       <div class="notewrap" data-id="${c.id}">
         <div class="notetext">${esc(c.note || '(no note)')}</div>
         <button class="btn secondary editnote" data-id="${c.id}" style="margin-top:6px">Edit Note</button>
       </div>
-      <div class="meta">${when}</div>
     </div>`;
   }).join('');
   wireRotate(cards);
@@ -556,7 +554,7 @@ async function renderGroups() {
   const body = document.getElementById('body');
   body.innerHTML = `
     <label>New Group</label>
-    <input id="gtitle" placeholder="Group title (e.g. Front gate damage)" />
+    <input id="gtitle" type="text" placeholder="Group title (e.g. Front gate damage)" />
     <textarea id="gdesc" placeholder="Description (optional)"></textarea>
     <button class="btn" id="gcreate">Create Group</button>
     <div id="glist" style="margin-top:18px"></div>`;
@@ -622,7 +620,7 @@ async function renderGroupDetail(id) {
   body.innerHTML = `
     <button class="link" id="gback">‹ All Groups</button>
     <label style="margin-top:8px">Title</label>
-    <input id="gdtitle" value="${esc(group.title || '')}" />
+    <input id="gdtitle" type="text" value="${esc(group.title || '')}" />
     <label>Description</label>
     <textarea id="gddesc">${esc(group.description || '')}</textarea>
     <button class="btn secondary" id="gsave">Save Title &amp; Description</button>
@@ -631,7 +629,7 @@ async function renderGroupDetail(id) {
     <div class="pill-group" id="gfmts">
       <div class="pill" data-fmt="pdf">PDF</div>
       <div class="pill" data-fmt="docx">Word</div>
-      <div class="pill" data-fmt="bundle">For Claude (.zip)</div>
+      <div class="pill" data-fmt="bundle">For AI (.zip)</div>
     </div>
     ${qualityBlock('gimgres', 'gimgfmt')}
     <div class="row">
@@ -657,7 +655,7 @@ function renderGroupItems() {
     <div class="card">
       <div class="meta">#${i + 1}</div>
       ${c.photo_path ? `<img src="${photoSrc(c.photo_path)}" alt="capture" />` : ''}
-      <div class="row" style="margin-top:6px">${rotateButtons(c.id)}</div>
+      <div class="rotaterow">${rotateButtons(c.id)}</div>
       <div class="addr">${esc(c.address || 'No location')}</div>
       <div>${esc(c.note || '(no note)')}</div>
       <div class="row" style="margin-top:8px">
