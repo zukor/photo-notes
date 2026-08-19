@@ -110,6 +110,74 @@ function trimNum(n) {
   return Number.isInteger(r) ? String(r) : String(r);
 }
 
+// ===================== Shared AI vision helper =====================
+// One place for all vision calls. Resizes the photo to a 1568px longest edge
+// JPEG (the app already depends on sharp), sends it base64 to the Anthropic
+// Messages API with a prompt, expects JSON-only back, strips markdown fences,
+// parses defensively, and returns null on ANY failure rather than throwing so
+// callers stay offline-tolerant. The API key lives only on the server.
+const VISION_MODEL = process.env.VISION_MODEL || 'claude-sonnet-4-6';
+function parseJSONLoose(text) {
+  if (text == null) return null;
+  let t = String(text).trim();
+  // strip a ```json ... ``` or ``` ... ``` fence if present
+  t = t.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+  // fall back to the first {...} block if there is surrounding prose
+  if (t[0] !== '{') { const m = t.match(/\{[\s\S]*\}/); if (m) t = m[0]; }
+  try { return JSON.parse(t); } catch { return null; }
+}
+async function visionJSON(localPath, prompt, opts = {}) {
+  const key = process.env.ANTHROPIC_API_KEY;
+  if (!key || !localPath) return null;
+  try {
+    const jpeg = await sharp(localPath).rotate()
+      .resize({ width: 1568, height: 1568, fit: 'inside', withoutEnlargement: true })
+      .jpeg({ quality: 85 }).toBuffer();
+    const b64 = jpeg.toString('base64');
+    const body = {
+      model: VISION_MODEL,
+      max_tokens: opts.maxTokens || 500,
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: b64 } },
+          { type: 'text', text: prompt },
+        ],
+      }],
+    };
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) { console.error('[vision] http ' + r.status); return null; }
+    const d = await r.json();
+    const text = (d && d.content && d.content[0] && d.content[0].text) || '';
+    return parseJSONLoose(text);
+  } catch (e) { console.error('[vision]', e && e.message); return null; }
+}
+
+// ---- defect classification vocabulary + severity presentation ----
+const DEFECT_TYPES = ['pothole', 'alligator_cracking', 'transverse_cracking', 'longitudinal_cracking', 'rutting', 'raveling', 'edge_cracking', 'other', 'none'];
+const SEVERITIES = ['low', 'medium', 'high'];
+const SEVERITY_COLOR = { low: '#1b7a3d', medium: '#b36b00', high: '#b3261e' };
+function defectLabel(t) {
+  const map = {
+    pothole: 'Pothole', alligator_cracking: 'Alligator Cracking', transverse_cracking: 'Transverse Cracking',
+    longitudinal_cracking: 'Longitudinal Cracking', rutting: 'Rutting', raveling: 'Raveling',
+    edge_cracking: 'Edge Cracking', other: 'Other', none: 'No Defect',
+  };
+  return map[t] || 'Other';
+}
+// Export line for a classified defect, e.g. "Pothole, high severity". Empty when
+// unclassified. 'none' still reports so a report can show "No Defect".
+function fmtDefect(c) {
+  if (!c || !c.defect_type) return '';
+  if (c.defect_type === 'none') return 'No Defect';
+  const sev = SEVERITIES.includes(c.defect_severity) ? `${c.defect_severity} severity` : '';
+  return sev ? `${defectLabel(c.defect_type)}, ${sev}` : defectLabel(c.defect_type);
+}
+
 // ---- activity log (admin usage metadata; never stores note text or photos) ----
 async function logEvent(userId, action, detail) {
   try {
@@ -207,13 +275,18 @@ async function reverseGeocode(lat, lng) {
       }
       return null;
     }
-    const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`;
+    // zoom=18 asks Nominatim for building-level detail and addressdetails=1
+    // guarantees the structured address object, so a house number is returned
+    // whenever OpenStreetMap has one for that point (the default reverse call
+    // often came back with only the street name).
+    const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=18&addressdetails=1&lat=${lat}&lon=${lng}`;
     const r = await fetch(url, { headers: { 'User-Agent': 'PhotoNotes/1.0 (turcotte@zukor.com)' } });
     if (!r.ok) return null;
     const data = await r.json();
     const a = data.address || {};
-    const line1 = [a.house_number, a.road].filter(Boolean).join(' ');
-    const city = a.city || a.town || a.village || a.hamlet || '';
+    const houseNo = a.house_number || a.house_name || '';
+    const line1 = [houseNo, a.road].filter(Boolean).join(' ');
+    const city = a.city || a.town || a.village || a.hamlet || a.suburb || a.county || '';
     const parts = [line1, city, [a.state, a.postcode].filter(Boolean).join(' ')].filter(Boolean);
     return parts.length ? parts.join(', ') : data.display_name || null;
   } catch {
@@ -242,7 +315,9 @@ app.post('/api/captures', requireAuth, upload.single('photo'), async (req, res) 
 
     // Pro-tier dimension fields. Only stored for Pro users; ignored otherwise.
     let dLenIn = null, dLenUnit = null, dWidIn = null, dWidUnit = null, dDepthIn = null, dShape = null, dArea = null;
-    if (await currentPlan(req.user.id) === 'pro') {
+    let dSource = null, dConf = null, dAi = null, dConfirmed = true;
+    const isProUser = await currentPlan(req.user.id) === 'pro';
+    if (isProUser) {
       const lenUnit = b.dim_length_unit === 'in' ? 'in' : 'ft';
       const widUnit = b.dim_width_unit === 'in' ? 'in' : 'ft';
       const li = toInches(b.dim_length, lenUnit);
@@ -257,14 +332,33 @@ app.post('/api/captures', requireAuth, upload.single('photo'), async (req, res) 
       const override = b.dim_area_sqft != null && b.dim_area_sqft !== '' ? Number(b.dim_area_sqft) : null;
       if (override != null && Number.isFinite(override) && override >= 0) dArea = override;
       else dArea = computeAreaSqft(dLenIn, dWidIn, dShape);
+
+      // Measure-from-photo provenance (voice/manual leave these at defaults).
+      if (b.dim_source === 'photo_ai' || b.dim_source === 'voice' || b.dim_source === 'manual') dSource = b.dim_source;
+      if (['high', 'medium', 'low'].includes(b.dim_confidence)) dConf = b.dim_confidence;
+      if (b.dim_ai) { try { dAi = typeof b.dim_ai === 'string' ? JSON.parse(b.dim_ai) : b.dim_ai; } catch { dAi = null; } }
+      // Low-confidence photo estimates are excluded from exports until the user
+      // confirms them. The client sends dim_confirmed=true once confirmed.
+      if (dSource === 'photo_ai' && dConf === 'low') dConfirmed = String(b.dim_confirmed) === 'true';
+      // Log the measurement for later accuracy tuning (metadata only, no note text).
+      if (dSource === 'photo_ai') {
+        logEvent(req.user.id, 'measure', {
+          reference: b.measure_reference || null,
+          ai: dAi || null,
+          final: { length_in: dLenIn, width_in: dWidIn, depth_in: dDepthIn, area_sqft: dArea, shape: dShape },
+          confidence: dConf, confirmed: dConfirmed,
+        });
+      }
     }
 
     const q = `INSERT INTO captures (user_id, captured_by, photo_path, photo_width, photo_height, note, latitude, longitude, address, area_tags, kind, status,
-                 dim_length_in, dim_length_unit, dim_width_in, dim_width_unit, dim_depth_in, dim_shape, dim_area_sqft)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING *`;
+                 dim_length_in, dim_length_unit, dim_width_in, dim_width_unit, dim_depth_in, dim_shape, dim_area_sqft,
+                 dim_source, dim_confidence, dim_ai, dim_confirmed)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23) RETURNING *`;
     const status = kind === 'task' ? 'open' : null;
     const vals = [req.user.id, req.user.name, photoPath, pw, ph, b.note || null, lat, lng, address, areas, kind, status,
-      dLenIn, dLenUnit, dWidIn, dWidUnit, dDepthIn, dShape, dArea];
+      dLenIn, dLenUnit, dWidIn, dWidUnit, dDepthIn, dShape, dArea,
+      dSource, dConf, dAi ? JSON.stringify(dAi) : null, dConfirmed];
     const { rows } = await pool.query(q, vals);
     res.json(rows[0]);
   } catch (err) {
@@ -291,6 +385,126 @@ app.get('/api/captures', requireAuth, async (req, res) => {
 });
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
+
+// ---- Measure from photo (Pro): estimate dimensions from a ruler reference ----
+// Accepts a photo upload during capture (before the record is saved) plus the
+// reference object and its exact known length. Returns AI-estimated dimensions
+// as JSON. Never throws to the client: a soft error lets the record save
+// without measurements.
+app.post('/api/measure', requireAuth, upload.single('photo'), async (req, res) => {
+  const cleanup = () => { if (req.file && req.file.path) { try { fs.unlinkSync(req.file.path); } catch (e) {} } };
+  try {
+    if (await currentPlan(req.user.id) !== 'pro') { cleanup(); return res.status(403).json({ error: 'pro only' }); }
+    if (!req.file) return res.status(400).json({ error: 'photo required' });
+    const refType = String((req.body && req.body.reference_type) || 'ruler_12in');
+    const refLenIn = Number((req.body && req.body.reference_length_in)) || (refType === 'tape_25ft' ? 300 : refType === 'ruler_12in' ? 12 : 0);
+    const refLabel = refType === 'ruler_12in' ? 'a standard 12-inch ruler'
+      : refType === 'tape_25ft' ? 'a tape measure extended to a known length'
+      : 'a reference object';
+    const prompt =
+`You are measuring a pavement defect for an asphalt contractor. The photo contains ${refLabel} placed in frame as a scale reference. Its exact real-world length is ${refLenIn} inches.
+Locate the reference object, use its known length to establish the image scale, then estimate the primary defect's length, width, and (only if judgeable from shadow/relief) depth, all in inches. Also give the defect's overall shape.
+Respond with ONLY a JSON object, no prose, no markdown, with exactly these keys:
+{"length_in": number, "width_in": number, "depth_in": number or null, "shape": "rectangle"|"circle"|"irregular", "confidence": "high"|"medium"|"low", "warning": string or null}
+Use "warning" to flag problems such as "no reference object found", "ruler appears angled", or "photo taken at an oblique angle". If you cannot find the reference object, set confidence to "low" and put "no reference object found" in warning.`;
+    const ai = await visionJSON(req.file.path, prompt, { maxTokens: 400 });
+    cleanup();
+    if (!ai) return res.status(200).json({ ok: false, error: 'measurement_unavailable' });
+    // normalize
+    const num = (v) => (v == null || v === '' || Number.isNaN(Number(v))) ? null : Number(v);
+    const shape = ['rectangle', 'circle', 'irregular'].includes(ai.shape) ? ai.shape : 'irregular';
+    const confidence = ['high', 'medium', 'low'].includes(ai.confidence) ? ai.confidence : 'low';
+    const out = {
+      ok: true,
+      length_in: num(ai.length_in),
+      width_in: num(ai.width_in),
+      depth_in: num(ai.depth_in),
+      shape,
+      confidence,
+      warning: (ai.warning == null || ai.warning === '') ? null : String(ai.warning),
+      raw: ai,
+    };
+    const noRef = out.warning && /no reference/i.test(out.warning);
+    if (noRef || (out.length_in == null && out.width_in == null)) {
+      return res.json({ ok: true, no_reference: !!noRef, length_in: null, width_in: null, depth_in: null, shape, confidence: 'low', warning: out.warning || 'No reference object found. Re-shoot with the ruler in frame.', raw: ai });
+    }
+    res.json(out);
+  } catch (err) {
+    cleanup();
+    console.error('[measure]', err);
+    res.status(200).json({ ok: false, error: 'measurement_unavailable' });
+  }
+});
+
+// ---- AI defect classification (Pro): classify one saved capture ----
+async function classifyCapture(userId, id) {
+  const row = (await pool.query(`SELECT * FROM captures WHERE id = $1 AND user_id = $2`, [id, userId])).rows[0];
+  if (!row) return { error: 'not_found' };
+  const local = localPhoto(row.photo_path);
+  if (!local) return { error: 'no_photo' };
+  const prompt =
+`You are analyzing a pavement photo for an asphalt contractor. Classify the primary defect as one of: pothole, alligator_cracking, transverse_cracking, longitudinal_cracking, rutting, raveling, edge_cracking, other, none.
+Rate severity as low, medium, or high using visible width, depth, and extent cues.
+Respond with ONLY a JSON object, no prose, no markdown, with exactly these keys:
+{"defect_type": one of the list above, "severity": "low"|"medium"|"high", "confidence": "high"|"medium"|"low", "rationale": "one sentence"}`;
+  const ai = await visionJSON(local, prompt, { maxTokens: 300 });
+  if (!ai) return { error: 'classify_unavailable' };
+  const defect_type = DEFECT_TYPES.includes(ai.defect_type) ? ai.defect_type : 'other';
+  const severity = SEVERITIES.includes(ai.severity) ? ai.severity : (defect_type === 'none' ? null : 'low');
+  const confidence = ['high', 'medium', 'low'].includes(ai.confidence) ? ai.confidence : 'low';
+  const upd = (await pool.query(
+    `UPDATE captures SET defect_type=$1, defect_severity=$2, defect_confidence=$3, defect_ai=$4, defect_user_confirmed=false
+     WHERE id=$5 AND user_id=$6 RETURNING *`,
+    [defect_type, severity, confidence, JSON.stringify(ai), id, userId])).rows[0];
+  logEvent(userId, 'classify', { defect_type, severity });
+  return { capture: upd };
+}
+
+app.post('/api/captures/:id/classify', requireAuth, async (req, res) => {
+  try {
+    if (await currentPlan(req.user.id) !== 'pro') return res.status(403).json({ error: 'pro only' });
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'bad id' });
+    const r = await classifyCapture(req.user.id, id);
+    if (r.error) return res.status(r.error === 'not_found' ? 404 : 200).json({ ok: false, error: r.error });
+    res.json({ ok: true, capture: r.capture });
+  } catch (err) { console.error('[classify]', err); res.status(200).json({ ok: false, error: 'classify_unavailable' }); }
+});
+
+app.post('/api/captures/classify-batch', requireAuth, async (req, res) => {
+  try {
+    if (await currentPlan(req.user.id) !== 'pro') return res.status(403).json({ error: 'pro only' });
+    const ids = Array.isArray(req.body && req.body.ids) ? req.body.ids.map(n => parseInt(n, 10)).filter(Number.isInteger) : [];
+    if (!ids.length) return res.status(400).json({ error: 'no ids' });
+    const results = [];
+    // sequential (not parallel) per spec so we never hammer the vision API
+    for (const id of ids) {
+      const r = await classifyCapture(req.user.id, id);
+      results.push({ id, ok: !r.error, error: r.error || null, capture: r.capture || null });
+    }
+    res.json({ ok: true, results });
+  } catch (err) { console.error('[classify-batch]', err); res.status(500).json({ error: 'batch failed' }); }
+});
+
+// Manual override of a classification. Sets defect_user_confirmed and never
+// touches defect_ai (the AI's original answer is kept for accuracy analysis).
+app.post('/api/captures/:id/classify-set', requireAuth, async (req, res) => {
+  try {
+    if (await currentPlan(req.user.id) !== 'pro') return res.status(403).json({ error: 'pro only' });
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'bad id' });
+    const b = req.body || {};
+    const defect_type = DEFECT_TYPES.includes(b.defect_type) ? b.defect_type : null;
+    if (!defect_type) return res.status(400).json({ error: 'bad defect_type' });
+    const severity = defect_type === 'none' ? null : (SEVERITIES.includes(b.severity) ? b.severity : 'low');
+    const upd = (await pool.query(
+      `UPDATE captures SET defect_type=$1, defect_severity=$2, defect_user_confirmed=true
+       WHERE id=$3 AND user_id=$4 RETURNING *`, [defect_type, severity, id, req.user.id])).rows[0];
+    if (!upd) return res.status(404).json({ error: 'not found' });
+    logEvent(req.user.id, 'classify_override', { defect_type, severity });
+    res.json({ ok: true, capture: upd });
+  } catch (err) { console.error('[classify-set]', err); res.status(500).json({ error: 'override failed' }); }
+});
 
 // ---- live address preview ----
 app.get('/api/geocode', requireAuth, async (req, res) => {
@@ -720,6 +934,9 @@ function localPhoto(photoPath) {
 function slug(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''); }
 function suffix(area) { return area ? '-' + slug(area) : ''; }
 function fmtWhen(d) { try { return new Date(d).toLocaleString(); } catch { return ''; } }
+// Dimensions for exports: shown unless they are a low-confidence photo estimate
+// the user has not yet confirmed (dim_confirmed = false).
+function exportDims(c) { if (c && c.dim_confirmed === false) return ''; return fmtDims(c); }
 
 async function resolveExport(req) {
   const userId = req.user.id;
@@ -802,7 +1019,8 @@ app.get('/api/export/pdf', requireAuth, async (req, res) => {
       }
       doc.fontSize(13).fillColor('#000').text((c.address || 'No location') + (c.kind === 'task' ? '   [TASK]' : ''));
       if (c.area_tags && c.area_tags.length) doc.fontSize(10).fillColor('#000').text('Area: ' + c.area_tags.join(', '));
-      if (pro) { const dm = fmtDims(c); if (dm) doc.fontSize(10).fillColor('#000').text('Dimensions: ' + dm); }
+      if (pro) { const df = fmtDefect(c); if (df) doc.fontSize(10).fillColor('#000').text('Defect: ' + df); }
+      if (pro) { const dm = exportDims(c); if (dm) doc.fontSize(10).fillColor('#000').text('Dimensions: ' + dm); }
       doc.fontSize(9).fillColor('#000').text(fmtWhen(c.created_at));
       doc.moveDown(0.4);
       doc.fontSize(12).fillColor('#000').text(c.note || '(no note)');
@@ -827,7 +1045,8 @@ app.get('/api/export/docx', requireAuth, async (req, res) => {
       }
       children.push(new Paragraph({ spacing: { before: 120 }, children: [new TextRun({ text: (c.address || 'No location') + (c.kind === 'task' ? '   [TASK]' : ''), bold: true, color: '000000', font: 'Arial' })] }));
       if (c.area_tags && c.area_tags.length) children.push(new Paragraph({ children: [new TextRun({ text: 'Area: ' + c.area_tags.join(', '), color: '000000', font: 'Arial' })] }));
-      if (pro) { const dm = fmtDims(c); if (dm) children.push(new Paragraph({ children: [new TextRun({ text: 'Dimensions: ' + dm, color: '000000', font: 'Arial' })] })); }
+      if (pro) { const df = fmtDefect(c); if (df) children.push(new Paragraph({ children: [new TextRun({ text: 'Defect: ' + df, color: '000000', font: 'Arial' })] })); }
+      if (pro) { const dm = exportDims(c); if (dm) children.push(new Paragraph({ children: [new TextRun({ text: 'Dimensions: ' + dm, color: '000000', font: 'Arial' })] })); }
       children.push(new Paragraph({ children: [new TextRun({ text: c.note || '(no note)', color: '000000', font: 'Arial' })] }));
       children.push(new Paragraph({ children: [new TextRun({ text: '' })] }));
     }
@@ -869,7 +1088,8 @@ app.get('/api/export/bundle', requireAuth, async (req, res) => {
       }
       md += `## ${i + 1}. ${c.address || 'No location'}${c.kind === 'task' ? ' [TASK]' : ''}\n`;
       if (c.area_tags && c.area_tags.length) md += `Area: ${c.area_tags.join(', ')}  \n`;
-      if (pro) { const dm = fmtDims(c); if (dm) md += `Dimensions: ${dm}  \n`; }
+      if (pro) { const df = fmtDefect(c); if (df) md += `Defect: ${df}  \n`; }
+      if (pro) { const dm = exportDims(c); if (dm) md += `Dimensions: ${dm}  \n`; }
       md += `Captured: ${fmtWhen(c.created_at)}\n\n`;
       if (imgRef) md += `![photo](${imgRef})\n\n`;
       md += `${c.note || '(no note)'}\n\n`;

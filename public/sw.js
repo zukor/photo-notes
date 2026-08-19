@@ -1,4 +1,4 @@
-const CACHE = 'efc-shell-v12';
+const CACHE = 'efc-shell-v13';
 const SHELL = ['/', '/index.html', '/app.js', '/styles.css', '/manifest.json'];
 
 self.addEventListener('install', (e) => {

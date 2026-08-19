@@ -80,6 +80,13 @@ input.dimfield.suggested {
   color: #000;
 }
 
+/* Defect classification badge (Pro). Colored by severity; white text always,
+   never gray text. Tap to override. */
+.defbadge {
+  display: inline-block; color: #fff; font-weight: bold; font-size: 13px;
+  padding: 4px 10px; border-radius: 12px; cursor: pointer;
+}
+
 /* small phones: tighten padding and controls so nothing crowds the edge */
 @media (max-width: 380px) {
   .wrap { padding: 12px 12px 96px; }

@@ -335,6 +335,12 @@ function dimBlockHtml() {
   const sug = (f) => d.suggested[f] ? ' suggested' : '';
   const anySug = d.suggested.length || d.suggested.width || d.suggested.depth;
   return `
+    <label>Measure From Photo</label>
+    <button type="button" class="btn secondary slim" id="measureBtn">Measure From Photo (AI)</button>
+    <div class="status" id="measureHint">Lay the ruler flat on the pavement next to the damage and shoot from directly above.</div>
+    <div id="measurePanel"></div>
+    <div id="measureResult"></div>
+
     <label>Dimensions</label>
     <div class="row compact">
       <input type="text" inputmode="decimal" id="dimLength" class="dimfield${sug('length')}" placeholder="Length" value="${esc(d.length)}" style="flex:2" />
@@ -385,6 +391,129 @@ function wireDims() {
   Sh.addEventListener('change', () => { d.shape = Sh.value; d.touched.shape = true; d.areaOverridden = false; recalcArea(); });
   Ar.addEventListener('input', () => { d.area = Ar.value; d.touched.area = true; d.areaOverridden = true; });
   recalcArea();
+  const mb = document.getElementById('measureBtn');
+  if (mb) mb.onclick = openMeasurePanel;
+  // if a measurement result is already in state (e.g. re-render), show it again
+  if (state._measure) renderMeasureResult();
+}
+
+// ---- Measure from photo (Pro) ----
+function openMeasurePanel() {
+  if (!state.photoFile) { toast('Take or choose a photo first'); return; }
+  const panel = document.getElementById('measurePanel');
+  if (!panel) return;
+  panel.innerHTML = `
+    <div class="formhead" style="margin-top:8px">What reference is in the photo?</div>
+    <div class="pill-group" id="refpills">
+      <div class="pill on" data-ref="ruler_12in">12-inch Ruler</div>
+      <div class="pill" data-ref="tape_25ft">25-foot Tape</div>
+      <div class="pill" data-ref="other">Other</div>
+    </div>
+    <div id="reflenwrap" style="display:none;margin-top:8px">
+      <div class="row compact">
+        <input type="text" inputmode="decimal" id="reflen" placeholder="Reference length" style="flex:2" />
+        <select id="reflenunit" style="flex:1"><option value="ft">ft</option><option value="in">in</option></select>
+      </div>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <button class="btn slim" id="doMeasure">Measure</button>
+      <button class="btn secondary slim" id="cancelMeasure">Cancel</button>
+    </div>`;
+  let ref = 'ruler_12in';
+  const lenWrap = document.getElementById('reflenwrap');
+  document.getElementById('refpills').onclick = (e) => {
+    const p = e.target.closest('[data-ref]'); if (!p) return;
+    ref = p.getAttribute('data-ref');
+    document.querySelectorAll('#refpills .pill').forEach(x => x.classList.remove('on'));
+    p.classList.add('on');
+    // 25-foot tape and Other need a manually entered length
+    if (ref === 'tape_25ft') { lenWrap.style.display = 'block'; const r = document.getElementById('reflen'); if (!r.value) r.value = '25'; document.getElementById('reflenunit').value = 'ft'; }
+    else if (ref === 'other') { lenWrap.style.display = 'block'; }
+    else { lenWrap.style.display = 'none'; }
+  };
+  document.getElementById('cancelMeasure').onclick = () => { panel.innerHTML = ''; };
+  document.getElementById('doMeasure').onclick = () => runMeasure(ref);
+}
+
+async function runMeasure(ref) {
+  const panel = document.getElementById('measurePanel');
+  const resEl = document.getElementById('measureResult');
+  let refLenIn = 12;
+  if (ref === 'ruler_12in') refLenIn = 12;
+  else {
+    const v = parseFloat((document.getElementById('reflen') || {}).value);
+    const unit = (document.getElementById('reflenunit') || {}).value || 'ft';
+    if (!isFinite(v) || v <= 0) { toast('Enter the reference length'); return; }
+    refLenIn = unit === 'ft' ? v * 12 : v;
+  }
+  const btn = document.getElementById('doMeasure');
+  if (btn) { btn.disabled = true; btn.textContent = 'Measuring...'; }
+  try {
+    const fd = new FormData();
+    fd.append('photo', state.photoFile);
+    fd.append('reference_type', ref);
+    fd.append('reference_length_in', String(refLenIn));
+    const r = await api('/api/measure', { method: 'POST', body: fd });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || d.ok === false) {
+      resEl.innerHTML = `<div class="status">Could not measure from this photo right now. You can enter the dimensions by hand, and the record still saves normally.</div>`;
+      if (panel) panel.innerHTML = '';
+      return;
+    }
+    if (d.no_reference || (d.length_in == null && d.width_in == null)) {
+      resEl.innerHTML = `<div class="status"><strong>No reference object found.</strong> ${esc(d.warning || 'Re-shoot with the ruler in frame.')}</div>`;
+      if (panel) panel.innerHTML = '';
+      return;
+    }
+    applyMeasurement(d, ref);
+    if (panel) panel.innerHTML = '';
+  } catch (e) {
+    resEl.innerHTML = `<div class="status">Measurement service is unavailable. Enter dimensions by hand; the record still saves.</div>`;
+    if (panel) panel.innerHTML = '';
+  } finally { if (btn) { btn.disabled = false; btn.textContent = 'Measure'; } }
+}
+
+// Prefill dimension fields from an AI measurement, marked AI-estimated, never
+// overwriting a value the user typed manually.
+function applyMeasurement(d, ref) {
+  const dm = getDims();
+  const setF = (field, valIn, unitField) => {
+    if (valIn == null || dm.touched[field]) return false;
+    dm[field] = String(Math.round(Number(valIn) * 10) / 10);
+    if (unitField) dm[unitField] = 'in';
+    dm.suggested[field] = true;
+    return true;
+  };
+  setF('length', d.length_in, 'lengthUnit');
+  setF('width', d.width_in, 'widthUnit');
+  setF('depth', d.depth_in, null);
+  if (['rectangle', 'circle', 'irregular'].includes(d.shape) && !dm.touched.shape) dm.shape = d.shape;
+  dm.areaOverridden = false;
+  // measurement provenance for save + export gating
+  state._measure = {
+    source: 'photo_ai', reference: ref, confidence: d.confidence || 'low',
+    warning: d.warning || null, raw: d.raw || d,
+    confirmed: (d.confidence === 'high' || d.confidence === 'medium'),
+  };
+  // re-render the dim inputs so the suggested highlight + values show
+  if (state.view === 'capture') { renderCapture(); }
+}
+
+function renderMeasureResult() {
+  const resEl = document.getElementById('measureResult');
+  const m = state._measure;
+  if (!resEl || !m) return;
+  const confColor = m.confidence === 'high' ? '#1b7a3d' : m.confidence === 'medium' ? '#b36b00' : '#b3261e';
+  let html = `<div class="status" style="margin-top:6px"><strong style="color:${confColor}">AI estimate, ${esc(m.confidence)} confidence.</strong>`;
+  if (m.warning) html += ` ${esc(m.warning)}`;
+  html += ` Values are marked as suggestions. Edit any field to confirm it.</div>`;
+  if (!m.confirmed) {
+    html += `<label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:14px;font-weight:bold">
+      <input type="checkbox" id="measureConfirm" style="width:20px;height:20px"> Confirm this low-confidence estimate for use in exports</label>`;
+  }
+  resEl.innerHTML = html;
+  const cb = document.getElementById('measureConfirm');
+  if (cb) cb.onchange = () => { if (state._measure) state._measure.confirmed = cb.checked; };
 }
 
 function refreshHint() {
@@ -526,13 +655,22 @@ async function saveCapture() {
   fd.append('kind', 'note');
   if (state.location) { fd.append('latitude', state.location.lat); fd.append('longitude', state.location.lng); }
   if (state.address) fd.append('address', state.address);
-  if (isProClient()) { const dm = collectDims(); Object.keys(dm).forEach(k => fd.append(k, dm[k])); }
+  if (isProClient()) {
+    const dm = collectDims(); Object.keys(dm).forEach(k => fd.append(k, dm[k]));
+    if (state._measure) {
+      fd.append('dim_source', 'photo_ai');
+      fd.append('dim_confidence', state._measure.confidence || 'low');
+      fd.append('dim_confirmed', String(!!state._measure.confirmed));
+      fd.append('measure_reference', state._measure.reference || '');
+      if (state._measure.raw) { try { fd.append('dim_ai', JSON.stringify(state._measure.raw)); } catch (e) {} }
+    }
+  }
   try {
     const r = await api('/api/captures', { method: 'POST', body: fd });
     if (!r.ok) throw new Error('save failed');
     toast('Saved');
     state.photoFile = null; state._note = ''; state.location = null; state.address = null;
-    state._dims = freshDims();
+    state._dims = freshDims(); state._measure = null;
     renderCapture();
   } catch (e) {
     toast('Save failed, try again');
@@ -587,6 +725,7 @@ async function renderList() {
       <button class="btn secondary" id="selall">Select All</button>
       <button class="btn secondary" id="selnone">Clear</button>
     </div>
+    ${isProClient() ? `<button class="btn secondary slim" id="classifybatch" style="margin-top:8px">Classify Selected (AI)</button><div class="status" id="classifyprog"></div>` : ''}
 
     <label>Export <span style="font-weight:normal;text-transform:none;letter-spacing:0">(pick one or more)</span></label>
     <div class="pill-group" id="fmts">
@@ -618,8 +757,86 @@ async function renderList() {
   document.getElementById('delbtn').onclick = doDeleteSelected;
   document.getElementById('fixaddr').onclick = doFixAddresses;
   document.getElementById('addtogroup').onclick = addSelectedToGroup;
+  const cb = document.getElementById('classifybatch');
+  if (cb) cb.onclick = classifySelected;
   loadGroupOptions();
   loadCards('');
+}
+
+// ---- AI defect classification (Pro) ----
+const DEFECT_OPTIONS = [
+  ['pothole', 'Pothole'], ['alligator_cracking', 'Alligator Cracking'],
+  ['transverse_cracking', 'Transverse Cracking'], ['longitudinal_cracking', 'Longitudinal Cracking'],
+  ['rutting', 'Rutting'], ['raveling', 'Raveling'], ['edge_cracking', 'Edge Cracking'],
+  ['other', 'Other'], ['none', 'No Defect'],
+];
+function defectLabelClient(t) { const f = DEFECT_OPTIONS.find(o => o[0] === t); return f ? f[1] : 'Other'; }
+function severityColorClient(s) { return s === 'high' ? '#b3261e' : s === 'medium' ? '#b36b00' : s === 'low' ? '#1b7a3d' : '#444444'; }
+function defectBadgeHtml(c) {
+  if (!c.defect_type) return '';
+  const label = defectLabelClient(c.defect_type);
+  if (c.defect_type === 'none') {
+    return `<span class="defbadge" data-id="${c.id}" style="background:#444444">${esc(label)}</span>`;
+  }
+  const color = severityColorClient(c.defect_severity);
+  const sev = c.defect_severity ? ' - ' + c.defect_severity : '';
+  return `<span class="defbadge" data-id="${c.id}" style="background:${color}">${esc(label)}${esc(sev)}</span>`;
+}
+
+async function classifyOne(id) {
+  const r = await api(`/api/captures/${id}/classify`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+  const d = await r.json().catch(() => ({}));
+  return d;
+}
+
+async function classifySelected() {
+  const ids = Array.from(document.querySelectorAll('.capchk:checked')).map(x => parseInt(x.value, 10));
+  if (!ids.length) { toast('Select at least one capture'); return; }
+  const prog = document.getElementById('classifyprog');
+  const btn = document.getElementById('classifybatch');
+  btn.disabled = true;
+  let done = 0, failed = 0;
+  for (const id of ids) {
+    if (prog) prog.textContent = `Classifying ${done + 1} of ${ids.length}...`;
+    try { const d = await classifyOne(id); if (d && d.ok) done++; else failed++; }
+    catch (e) { failed++; }
+  }
+  if (prog) prog.textContent = `Classified ${done} of ${ids.length}` + (failed ? `, ${failed} could not be classified` : '');
+  btn.disabled = false;
+  loadCards(document.getElementById('filter').value || '');
+}
+
+function startOverride(id, rows) {
+  const badge = document.querySelector(`.defbadge[data-id="${id}"]`) || document.querySelector(`.classifybtn[data-id="${id}"]`);
+  if (!badge) return;
+  const row = rows.find(r => r.id === id) || {};
+  const wrap = document.createElement('div');
+  wrap.style.marginTop = '6px';
+  wrap.innerHTML = `
+    <div class="row compact">
+      <select class="ovtype" style="flex:2">${DEFECT_OPTIONS.map(o => `<option value="${o[0]}"${row.defect_type === o[0] ? ' selected' : ''}>${o[1]}</option>`).join('')}</select>
+      <select class="ovsev" style="flex:1">
+        <option value="low"${row.defect_severity === 'low' ? ' selected' : ''}>Low</option>
+        <option value="medium"${row.defect_severity === 'medium' ? ' selected' : ''}>Medium</option>
+        <option value="high"${row.defect_severity === 'high' ? ' selected' : ''}>High</option>
+      </select>
+    </div>
+    <div class="row" style="margin-top:6px">
+      <button class="btn slim ovsave">Save</button>
+      <button class="btn secondary slim ovcancel">Cancel</button>
+    </div>`;
+  badge.parentNode.appendChild(wrap);
+  wrap.querySelector('.ovcancel').onclick = () => wrap.remove();
+  wrap.querySelector('.ovsave').onclick = async () => {
+    const defect_type = wrap.querySelector('.ovtype').value;
+    const severity = wrap.querySelector('.ovsev').value;
+    const r = await api(`/api/captures/${id}/classify-set`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ defect_type, severity }),
+    });
+    if (r.ok) { toast('Updated'); loadCards(document.getElementById('filter').value || ''); }
+    else toast('Update failed');
+  };
 }
 
 async function loadGroupOptions() {
@@ -735,6 +952,11 @@ async function loadCards(area) {
     const tags = (c.area_tags || []).map(t => `<span class="badge">${esc(t)}</span>`).join('');
     const kind = c.kind === 'task' ? `<span class="badge task">Task</span>` : '';
     const dims = isProClient() ? fmtDimsClient(c) : '';
+    const classifyRow = isProClient()
+      ? (c.defect_type
+          ? `<div class="defectrow" style="margin:6px 0">${defectBadgeHtml(c)} <button class="editlink overridebtn" data-id="${c.id}">Change</button></div>`
+          : `<div class="defectrow" style="margin:6px 0"><button class="btn secondary slim classifybtn" data-id="${c.id}">Classify (AI)</button></div>`)
+      : '';
     return `<div class="card">
       <label style="display:flex;align-items:center;gap:8px;font-weight:bold;margin-bottom:8px;text-transform:none;letter-spacing:0;font-size:15px">
         <input type="checkbox" class="capchk" value="${c.id}" style="width:20px;height:20px"> Select
@@ -744,6 +966,7 @@ async function loadCards(area) {
       <div class="rotaterow">${rotateButtons(c.id)}</div>
       <div class="addr">${esc(c.address || (c.latitude ? c.latitude.toFixed(5)+', '+c.longitude.toFixed(5) : 'No location'))}</div>
       <div class="meta">${kind}${tags}</div>
+      ${classifyRow}
       ${dims ? `<div class="meta"><strong>Dimensions:</strong> ${esc(dims)}</div>` : ''}
       <div class="notewrap" data-id="${c.id}">
         <div class="notetext">${esc(c.note || '(no note)')}</div>
@@ -753,6 +976,14 @@ async function loadCards(area) {
   }).join('');
   wireRotate(cards);
   cards.querySelectorAll('.editnote').forEach(b => b.onclick = () => startEditNote(parseInt(b.getAttribute('data-id'), 10), rows));
+  cards.querySelectorAll('.classifybtn').forEach(b => b.onclick = async () => {
+    b.disabled = true; b.textContent = 'Classifying...';
+    const d = await classifyOne(parseInt(b.getAttribute('data-id'), 10));
+    if (d && d.ok) loadCards(document.getElementById('filter').value || '');
+    else { b.disabled = false; b.textContent = 'Classify (AI)'; toast('Could not classify this photo'); }
+  });
+  cards.querySelectorAll('.overridebtn').forEach(b => b.onclick = () => startOverride(parseInt(b.getAttribute('data-id'), 10), rows));
+  cards.querySelectorAll('.defbadge').forEach(b => b.onclick = () => startOverride(parseInt(b.getAttribute('data-id'), 10), rows));
 }
 
 function startEditNote(id, rows) {
