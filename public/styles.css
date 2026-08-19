@@ -86,6 +86,12 @@ input.dimfield.suggested {
   display: inline-block; color: #fff; font-weight: bold; font-size: 13px;
   padding: 4px 10px; border-radius: 12px; cursor: pointer;
 }
+/* Per-site condition score chip on the group list. White text on a colored
+   pill; the color encodes the band. */
+.scorechip {
+  display: inline-block; color: #fff; font-weight: bold; font-size: 12px;
+  padding: 2px 8px; border-radius: 10px; margin-left: 6px;
+}
 
 /* small phones: tighten padding and controls so nothing crowds the edge */
 @media (max-width: 380px) {
