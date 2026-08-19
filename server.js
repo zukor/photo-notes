@@ -8,7 +8,7 @@ const multer = require('multer');
 const PDFDocument = require('pdfkit');
 const archiver = require('archiver');
 const sharp = require('sharp');
-const { Document, Packer, Paragraph, TextRun, ImageRun, HeadingLevel } = require('docx');
+const { Document, Packer, Paragraph, TextRun, ImageRun, HeadingLevel, Table, TableRow, TableCell, WidthType, BorderStyle } = require('docx');
 const { pool, init, seedUserAreas } = require('./db');
 
 const PORT = process.env.PORT || 3000;
@@ -176,6 +176,113 @@ function fmtDefect(c) {
   if (c.defect_type === 'none') return 'No Defect';
   const sev = SEVERITIES.includes(c.defect_severity) ? `${c.defect_severity} severity` : '';
   return sev ? `${defectLabel(c.defect_type)}, ${sev}` : defectLabel(c.defect_type);
+}
+
+// ===================== Per-site condition score (Feature 2) =====================
+// Deterministic (no AI). Tune these point deductions here. Each classified
+// capture in a group deducts points from a starting 100 based on its defect
+// type and severity. Unclassified captures deduct nothing but are counted for
+// coverage. 'other' and 'none' deduct nothing.
+const SCORE_DEDUCTIONS = {
+  pothole:              { high: 12, medium: 8, low: 5 },
+  alligator_cracking:   { high: 10, medium: 7, low: 4 },
+  rutting:              { high: 8,  medium: 5, low: 3 },
+  transverse_cracking:  { high: 5,  medium: 3, low: 2 },
+  longitudinal_cracking:{ high: 5,  medium: 3, low: 2 },
+  edge_cracking:        { high: 5,  medium: 3, low: 2 },
+  raveling:             { high: 4,  medium: 3, low: 2 },
+  other:                { high: 0,  medium: 0, low: 0 },
+  none:                 { high: 0,  medium: 0, low: 0 },
+};
+function scoreBand(score) {
+  if (score >= 86) return 'Good';
+  if (score >= 71) return 'Satisfactory';
+  if (score >= 56) return 'Fair';
+  if (score >= 41) return 'Poor';
+  if (score >= 26) return 'Very Poor';
+  return 'Failed';
+}
+// Returns { score, band, classified, unclassified, total }. score/band are null
+// when nothing in the group has been classified yet (so the UI shows no score
+// rather than a misleading 100).
+function scoreCaptures(caps) {
+  const total = caps.length;
+  let classified = 0, deduction = 0;
+  for (const c of caps) {
+    if (!c.defect_type) continue;
+    classified++;
+    const row = SCORE_DEDUCTIONS[c.defect_type];
+    if (row && c.defect_severity && row[c.defect_severity] != null) deduction += row[c.defect_severity];
+  }
+  const unclassified = total - classified;
+  if (classified === 0) return { score: null, band: null, classified: 0, unclassified, total };
+  const score = Math.max(0, 100 - deduction);
+  return { score, band: scoreBand(score), classified, unclassified, total };
+}
+
+// ===================== Proposal report (Feature 5) =====================
+// Recommended fix rules (tune here). Everything not matched is "Review Required".
+function recommendFix(type, sev) {
+  if (!type || type === 'other' || type === 'none') return 'Review Required';
+  const crack = ['transverse_cracking', 'longitudinal_cracking', 'edge_cracking'];
+  if (crack.includes(type) && (sev === 'low' || sev === 'medium')) return 'Crack Seal';
+  if (type === 'pothole') return 'Saw-Cut Patch';
+  if (type === 'alligator_cracking' && (sev === 'low' || sev === 'medium')) return 'Saw-Cut Patch';
+  if (type === 'alligator_cracking' && sev === 'high') return 'Mill and Overlay';
+  if (type === 'rutting' && (sev === 'medium' || sev === 'high')) return 'Mill and Overlay';
+  if (type === 'raveling' && sev === 'high') return 'Mill and Overlay';
+  return 'Review Required';
+}
+// Material quantity for one capture under its recommended fix. Never fabricates
+// numbers: missing dimensions yield "measure on site".
+function fixQuantity(fix, c) {
+  if (fix === 'Crack Seal') {
+    if (c.dim_length_in == null) return { unit: 'lf', value: null, text: 'measure on site', measureOnSite: true };
+    const lf = Number(c.dim_length_in) / 12;
+    return { unit: 'lf', value: lf, text: `${lf.toFixed(1)} lf` };
+  }
+  if (fix === 'Saw-Cut Patch') {
+    if (c.dim_area_sqft == null) return { unit: 'tons', value: null, text: 'measure on site', measureOnSite: true };
+    const depthDefaulted = c.dim_depth_in == null;
+    const depth = depthDefaulted ? 2 : Number(c.dim_depth_in);
+    let tons = Number(c.dim_area_sqft) * depth * 145 / 12 / 2000 * 1.10;
+    tons = Math.ceil(tons * 100) / 100;
+    return { unit: 'tons', value: tons, text: `${tons.toFixed(2)} tons${depthDefaulted ? ' (2 in depth assumed)' : ''}` };
+  }
+  if (fix === 'Mill and Overlay') {
+    if (c.dim_area_sqft == null) return { unit: 'sq ft', value: null, text: 'measure on site', measureOnSite: true };
+    const a = Number(c.dim_area_sqft);
+    return { unit: 'sq ft', value: a, text: `${a.toFixed(1)} sq ft (minimum, verify extent)` };
+  }
+  return { unit: '', value: null, text: 'review required' };
+}
+const PROPOSAL_DISCLAIMER = 'Recommendations and quantities are AI-assisted estimates prepared from field captures. An estimator must verify all items before this document is used in a bid or contract.';
+// Build the per-defect sections + summary rows for a proposal.
+function buildProposal(items) {
+  const sections = items.map((c) => {
+    const fix = recommendFix(c.defect_type, c.defect_severity);
+    const qty = fixQuantity(fix, c);
+    return { c, fix, qty };
+  });
+  const sumMap = {};
+  for (const s of sections) {
+    const k = s.fix;
+    if (!sumMap[k]) sumMap[k] = { fix: k, count: 0, total: 0, unit: s.qty.unit || '', measureOnSite: 0 };
+    sumMap[k].count++;
+    if (s.qty.value != null) sumMap[k].total += s.qty.value;
+    else sumMap[k].measureOnSite++;
+    if (s.qty.unit) sumMap[k].unit = s.qty.unit;
+  }
+  const order = ['Crack Seal', 'Saw-Cut Patch', 'Mill and Overlay', 'Review Required'];
+  const summary = Object.values(sumMap).sort((a, b) => order.indexOf(a.fix) - order.indexOf(b.fix));
+  return { sections, summary };
+}
+function fmtQtyTotal(row) {
+  if (row.fix === 'Review Required') return 'see notes';
+  const num = row.unit === 'tons' ? row.total.toFixed(2) : row.total.toFixed(1);
+  let t = `${num} ${row.unit}`.trim();
+  if (row.measureOnSite) t += ` (+${row.measureOnSite} to measure on site)`;
+  return t;
 }
 
 // ---- activity log (admin usage metadata; never stores note text or photos) ----
@@ -674,6 +781,14 @@ app.get('/api/groups', requireAuth, async (req, res) => {
       LEFT JOIN (SELECT group_id, COUNT(*) n FROM group_items GROUP BY group_id) cnt ON cnt.group_id = g.id
       WHERE g.user_id = $1
       ORDER BY g.created_at DESC`, [req.user.id]);
+    // Attach a condition score per group (defect data only; one extra query).
+    const defs = (await pool.query(`
+      SELECT gi.group_id, c.defect_type, c.defect_severity
+      FROM group_items gi JOIN captures c ON c.id = gi.capture_id
+      WHERE c.user_id = $1`, [req.user.id])).rows;
+    const byGroup = {};
+    for (const d of defs) { (byGroup[d.group_id] = byGroup[d.group_id] || []).push(d); }
+    for (const g of rows) { const s = scoreCaptures(byGroup[g.id] || []); g.score = s.score; g.band = s.band; }
     res.json(rows);
   } catch (err) { console.error('[groups.list]', err); res.status(500).json({ error: 'failed to list groups' }); }
 });
@@ -702,7 +817,8 @@ app.get('/api/groups/:id', requireAuth, async (req, res) => {
     const items = (await pool.query(`
       SELECT c.*, gi.position FROM group_items gi JOIN captures c ON c.id = gi.capture_id
       WHERE gi.group_id = $1 AND c.user_id = $2 ORDER BY gi.position ASC, c.created_at ASC`, [id, req.user.id])).rows;
-    res.json({ group: g, items });
+    const score = scoreCaptures(items);
+    res.json({ group: g, items, score });
   } catch (err) { console.error('[groups.get]', err); res.status(500).json({ error: 'failed' }); }
 });
 
@@ -1097,6 +1213,110 @@ app.get('/api/export/bundle', requireAuth, async (req, res) => {
     archive.append(md, { name: 'photonotes.md' });
     archive.finalize();
   } catch (err) { console.error('[export.bundle]', err); if (!res.headersSent) res.status(500).json({ error: 'bundle export failed' }); }
+});
+
+// ---- Proposal report (Pro, group only): PDF or Word ----
+app.get('/api/export/proposal', requireAuth, async (req, res) => {
+  try {
+    if (await currentPlan(req.user.id) !== 'pro') return res.status(403).json({ error: 'pro only' });
+    const groupId = req.query.group ? parseInt(req.query.group, 10) : null;
+    if (!Number.isInteger(groupId)) return res.status(400).json({ error: 'group required' });
+    const g = (await pool.query(`SELECT * FROM groups WHERE id = $1 AND user_id = $2`, [groupId, req.user.id])).rows[0];
+    if (!g) return res.status(404).json({ error: 'not found' });
+    const items = (await pool.query(`
+      SELECT c.* FROM group_items gi JOIN captures c ON c.id = gi.capture_id
+      WHERE gi.group_id = $1 AND c.user_id = $2 ORDER BY gi.position ASC, c.created_at ASC`, [groupId, req.user.id])).rows;
+    const score = scoreCaptures(items);
+    const { sections, summary } = buildProposal(items);
+    const doc = (req.query.doc === 'docx') ? 'docx' : 'pdf';
+    const imgRes = req.query.res || 'standard';
+    const imgFmt = req.query.fmt || 'jpeg';
+    const title = g.title || 'Pavement Proposal';
+    const fnameBase = 'proposal-' + (slug(g.title) || 'group');
+    const dateStr = new Date().toLocaleDateString();
+    const scoreLine = score.score == null
+      ? 'Site Condition Score: not yet scored (classify captures to generate a score)'
+      : `Site Condition Score: ${score.score} (${score.band}), based on ${score.classified} of ${score.total} captures classified`;
+    logEvent(req.user.id, 'proposal', { doc, count: items.length, scored: score.score });
+
+    if (doc === 'pdf') {
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${fnameBase}.pdf"`);
+      const pdf = new PDFDocument({ size: 'LETTER', margin: 48 });
+      pdf.pipe(res);
+      // cover block
+      pdf.fontSize(20).fillColor('#000').text(title, { align: 'center' });
+      if (g.description) { pdf.moveDown(0.3); pdf.fontSize(12).fillColor('#000').text(g.description, { align: 'center' }); }
+      pdf.moveDown(0.5);
+      pdf.fontSize(12).fillColor('#000').text(scoreLine, { align: 'center' });
+      pdf.fontSize(12).fillColor('#000').text('Date: ' + dateStr, { align: 'center' });
+      pdf.fontSize(12).fillColor('#000').text('Prepared with Photo Notes', { align: 'center' });
+      pdf.moveDown(1);
+      for (let i = 0; i < sections.length; i++) {
+        const { c, fix, qty } = sections[i];
+        pdf.addPage();
+        const img = localPhoto(c.photo_path);
+        if (img) { const r = await renderForEmbed(img, imgRes, imgFmt); if (r) { try { pdf.image(r.buffer, { fit: [480, 320], align: 'center' }); pdf.moveDown(0.5); } catch (e) {} } }
+        pdf.fontSize(13).fillColor('#000').text(`${i + 1}. ${c.address || 'No location'}`);
+        const df = fmtDefect(c); if (df) pdf.fontSize(12).fillColor('#000').text('Defect: ' + df);
+        const dm = exportDims(c); if (dm) pdf.fontSize(12).fillColor('#000').text('Dimensions: ' + dm);
+        pdf.fontSize(12).fillColor('#000').text('Recommended fix: ' + fix);
+        pdf.fontSize(12).fillColor('#000').text('Estimated quantity: ' + qty.text);
+      }
+      // summary table
+      pdf.addPage();
+      pdf.fontSize(15).fillColor('#000').text('Summary of Work', { underline: false });
+      pdf.moveDown(0.5);
+      const cols = ['Fix Type', 'Locations', 'Total Quantity', 'Unit Price', 'Total'];
+      const colX = [48, 200, 290, 420, 500];
+      pdf.fontSize(11).fillColor('#000');
+      cols.forEach((h, ci) => pdf.text(h, colX[ci], pdf.y, { continued: ci < cols.length - 1, width: (colX[ci + 1] || 560) - colX[ci] - 4 }));
+      pdf.moveDown(0.3);
+      for (const row of summary) {
+        const y = pdf.y;
+        pdf.text(row.fix, colX[0], y, { width: colX[1] - colX[0] - 4 });
+        pdf.text(String(row.count), colX[1], y, { width: colX[2] - colX[1] - 4 });
+        pdf.text(fmtQtyTotal(row), colX[2], y, { width: colX[3] - colX[2] - 4 });
+        pdf.text('', colX[3], y, { width: colX[4] - colX[3] - 4 });
+        pdf.text('', colX[4], y);
+        pdf.moveDown(0.2);
+      }
+      pdf.moveDown(1);
+      pdf.fontSize(11).fillColor('#000').text(PROPOSAL_DISCLAIMER, 48, pdf.y, { width: 515 });
+      pdf.end();
+      return;
+    }
+
+    // Word (docx)
+    const children = [];
+    children.push(new Paragraph({ heading: HeadingLevel.HEADING_1, children: [new TextRun({ text: title, bold: true, color: '000000', font: 'Arial' })] }));
+    if (g.description) children.push(new Paragraph({ children: [new TextRun({ text: g.description, color: '000000', font: 'Arial' })] }));
+    children.push(new Paragraph({ children: [new TextRun({ text: scoreLine, color: '000000', font: 'Arial' })] }));
+    children.push(new Paragraph({ children: [new TextRun({ text: 'Date: ' + dateStr, color: '000000', font: 'Arial' })] }));
+    children.push(new Paragraph({ children: [new TextRun({ text: 'Prepared with Photo Notes', color: '000000', font: 'Arial' })] }));
+    children.push(new Paragraph({ children: [new TextRun({ text: '' })] }));
+    for (let i = 0; i < sections.length; i++) {
+      const { c, fix, qty } = sections[i];
+      const img = localPhoto(c.photo_path);
+      if (img) { const r = await renderForEmbed(img, imgRes, imgFmt); if (r) { try { children.push(new Paragraph({ children: [new ImageRun({ type: r.ext === '.png' ? 'png' : 'jpg', data: r.buffer, transformation: { width: 400, height: 300 } })] })); } catch (e) {} } }
+      children.push(new Paragraph({ spacing: { before: 120 }, children: [new TextRun({ text: `${i + 1}. ${c.address || 'No location'}`, bold: true, color: '000000', font: 'Arial' })] }));
+      const df = fmtDefect(c); if (df) children.push(new Paragraph({ children: [new TextRun({ text: 'Defect: ' + df, color: '000000', font: 'Arial' })] }));
+      const dm = exportDims(c); if (dm) children.push(new Paragraph({ children: [new TextRun({ text: 'Dimensions: ' + dm, color: '000000', font: 'Arial' })] }));
+      children.push(new Paragraph({ children: [new TextRun({ text: 'Recommended fix: ' + fix, color: '000000', font: 'Arial' })] }));
+      children.push(new Paragraph({ children: [new TextRun({ text: 'Estimated quantity: ' + qty.text, color: '000000', font: 'Arial' })] }));
+    }
+    children.push(new Paragraph({ spacing: { before: 200 }, heading: HeadingLevel.HEADING_2, children: [new TextRun({ text: 'Summary of Work', bold: true, color: '000000', font: 'Arial' })] }));
+    const cell = (text, bold) => new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: String(text), bold: !!bold, color: '000000', font: 'Arial' })] })] });
+    const headRow = new TableRow({ children: ['Fix Type', 'Locations', 'Total Quantity', 'Unit Price', 'Total'].map(h => cell(h, true)) });
+    const bodyRows = summary.map(row => new TableRow({ children: [cell(row.fix), cell(row.count), cell(fmtQtyTotal(row)), cell(''), cell('')] }));
+    children.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: [headRow, ...bodyRows] }));
+    children.push(new Paragraph({ spacing: { before: 200 }, children: [new TextRun({ text: PROPOSAL_DISCLAIMER, color: '000000', font: 'Arial' })] }));
+    const docx = new Document({ sections: [{ children }] });
+    const buf = await Packer.toBuffer(docx);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    res.setHeader('Content-Disposition', `attachment; filename="${fnameBase}.docx"`);
+    res.send(buf);
+  } catch (err) { console.error('[export.proposal]', err); if (!res.headersSent) res.status(500).json({ error: 'proposal export failed' }); }
 });
 
 // ---- admin page (served only as a page; the data behind it is admin-guarded) ----
