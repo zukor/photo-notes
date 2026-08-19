@@ -1,7 +1,11 @@
 const el = document.getElementById('app');
 // Phones/tablets open to Capture (grab a photo fast); computers open to the Library (review the photos).
 const IS_HANDHELD = (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) || window.innerWidth < 768;
-let state = { view: IS_HANDHELD ? 'capture' : 'list', location: null, address: null, photoFile: null, kind: 'note', area: '', areas: [], groupId: null, imgv: 0 };
+let state = { view: IS_HANDHELD ? 'capture' : 'list', location: null, address: null, photoFile: null, kind: 'note', area: '', areas: [], groupId: null, imgv: 0, plan: 'free' };
+
+// Pro gating on the client. Mirrors isPro(user) on the server. Pro-only UI must
+// not render at all for free users (no disabled teaser).
+function isProClient() { return state.plan === 'pro'; }
 let recognizer = null;
 let currentGroupItems = [];
 let currentGroup = null;
@@ -88,7 +92,7 @@ async function api(path, opts = {}) {
 
 async function boot() {
   const r = await api('/api/me');
-  if (r.ok) { await loadAreas(); renderApp(); } else renderLogin();
+  if (r.ok) { try { const me = await r.json(); state.plan = me.plan || 'free'; } catch (e) {} await loadAreas(); renderApp(); } else renderLogin();
 }
 
 function renderLogin() {
@@ -116,7 +120,7 @@ async function doLogin() {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password: pw }),
   });
-  if (r.ok) { await loadAreas(); renderApp(); }
+  if (r.ok) { try { const d = await r.json(); state.plan = d.plan || 'free'; } catch (e) {} await loadAreas(); renderApp(); }
   else document.getElementById('loginErr').textContent = 'Wrong email or password. Try again.';
 }
 
@@ -170,6 +174,8 @@ function renderCapture() {
     <button type="button" class="btn secondary" id="dictate" style="margin-bottom:8px">Record Note</button>
     <textarea id="note" placeholder="Describe what you're looking at, or tap Record Note..."></textarea>
 
+    ${isProClient() ? dimBlockHtml() : ''}
+
     <label>Topic</label>
     <div class="pill-group" id="areas">${areaChips()}</div>
     <div class="row compact" style="margin-top:10px">
@@ -201,6 +207,9 @@ function renderCapture() {
   // preserve any typed note across re-renders
   if (state._note) document.getElementById('note').value = state._note;
   document.getElementById('note').addEventListener('input', e => state._note = e.target.value);
+
+  // Pro-only dimension fields
+  if (isProClient()) wireDims();
 
   // if a photo is already chosen (e.g. re-render after picking an area), keep it and its location visible
   if (state.photoFile) {
@@ -290,6 +299,8 @@ function toggleDictation() {
     }
     if (finalText) base += finalText + ' ';
     if (noteEl) { noteEl.value = (base + interim).trimStart(); state._note = noteEl.value; }
+    // Pro: pull dimension phrases out of the spoken text and prefill the fields.
+    if (finalText && isProClient()) applyExtraction(base);
   };
   recognizer.onerror = (e) => {
     const err = e && e.error;
@@ -306,6 +317,203 @@ function toggleDictation() {
   try { recognizer.start(); } catch (e) { cleanupDictation(); }
 }
 
+// ================= Pro dimension fields =================
+// dims state is kept on state._dims so it survives renderCapture re-renders
+// (e.g. after choosing a topic), just like state._note.
+function freshDims() {
+  return {
+    length: '', lengthUnit: 'ft', width: '', widthUnit: 'ft', depth: '', shape: 'rectangle', area: '',
+    areaOverridden: false,
+    touched: { length: false, width: false, depth: false, shape: false, area: false },
+    suggested: { length: false, width: false, depth: false },
+  };
+}
+function getDims() { if (!state._dims) state._dims = freshDims(); return state._dims; }
+
+function dimBlockHtml() {
+  const d = getDims();
+  const sug = (f) => d.suggested[f] ? ' suggested' : '';
+  const anySug = d.suggested.length || d.suggested.width || d.suggested.depth;
+  return `
+    <label>Dimensions</label>
+    <div class="row compact">
+      <input type="text" inputmode="decimal" id="dimLength" class="dimfield${sug('length')}" placeholder="Length" value="${esc(d.length)}" style="flex:2" />
+      <select id="dimLengthUnit" style="flex:1">
+        <option value="ft"${d.lengthUnit === 'ft' ? ' selected' : ''}>ft</option>
+        <option value="in"${d.lengthUnit === 'in' ? ' selected' : ''}>in</option>
+      </select>
+    </div>
+    <div class="row compact" style="margin-top:8px">
+      <input type="text" inputmode="decimal" id="dimWidth" class="dimfield${sug('width')}" placeholder="Width" value="${esc(d.width)}" style="flex:2" />
+      <select id="dimWidthUnit" style="flex:1">
+        <option value="ft"${d.widthUnit === 'ft' ? ' selected' : ''}>ft</option>
+        <option value="in"${d.widthUnit === 'in' ? ' selected' : ''}>in</option>
+      </select>
+    </div>
+    <div class="row compact" style="margin-top:8px">
+      <input type="text" inputmode="decimal" id="dimDepth" class="dimfield${sug('depth')}" placeholder="Depth" value="${esc(d.depth)}" style="flex:2" />
+      <span class="fieldval" style="flex:1;align-self:center">inches deep</span>
+    </div>
+    <label style="margin-top:10px">Shape</label>
+    <select id="dimShape">
+      <option value="rectangle"${d.shape === 'rectangle' ? ' selected' : ''}>Rectangle</option>
+      <option value="circle"${d.shape === 'circle' ? ' selected' : ''}>Circle</option>
+      <option value="irregular"${d.shape === 'irregular' ? ' selected' : ''}>Irregular</option>
+    </select>
+    <label style="margin-top:10px">Area (Sq Ft)</label>
+    <input type="text" inputmode="decimal" id="dimArea" placeholder="Auto-calculated" value="${esc(d.area)}" />
+    <div class="status" id="dimAreaHint" style="margin-top:4px">${anySug ? 'Highlighted values were filled in from your recording. Tap to confirm or edit.' : ''}</div>`;
+}
+
+function wireDims() {
+  const d = getDims();
+  const L = document.getElementById('dimLength');
+  const W = document.getElementById('dimWidth');
+  const Dp = document.getElementById('dimDepth');
+  const LU = document.getElementById('dimLengthUnit');
+  const WU = document.getElementById('dimWidthUnit');
+  const Sh = document.getElementById('dimShape');
+  const Ar = document.getElementById('dimArea');
+  if (!L) return;
+  // Manual edits mark a field as touched (never overwritten by extraction) and
+  // clear its AI-suggested highlight.
+  L.addEventListener('input', () => { d.length = L.value; d.touched.length = true; d.suggested.length = false; L.classList.remove('suggested'); d.areaOverridden = false; recalcArea(); refreshHint(); });
+  W.addEventListener('input', () => { d.width = W.value; d.touched.width = true; d.suggested.width = false; W.classList.remove('suggested'); d.areaOverridden = false; recalcArea(); refreshHint(); });
+  Dp.addEventListener('input', () => { d.depth = Dp.value; d.touched.depth = true; d.suggested.depth = false; Dp.classList.remove('suggested'); refreshHint(); });
+  LU.addEventListener('change', () => { d.lengthUnit = LU.value; d.areaOverridden = false; recalcArea(); });
+  WU.addEventListener('change', () => { d.widthUnit = WU.value; d.areaOverridden = false; recalcArea(); });
+  Sh.addEventListener('change', () => { d.shape = Sh.value; d.touched.shape = true; d.areaOverridden = false; recalcArea(); });
+  Ar.addEventListener('input', () => { d.area = Ar.value; d.touched.area = true; d.areaOverridden = true; });
+  recalcArea();
+}
+
+function refreshHint() {
+  const d = getDims();
+  const hint = document.getElementById('dimAreaHint');
+  if (!hint) return;
+  const anySug = d.suggested.length || d.suggested.width || d.suggested.depth;
+  hint.textContent = anySug ? 'Highlighted values were filled in from your recording. Tap to confirm or edit.' : '';
+}
+
+function clientToInches(value, unit) {
+  const v = parseFloat(value);
+  if (!isFinite(v) || v <= 0) return null;
+  return unit === 'ft' ? v * 12 : v;
+}
+function clientAreaSqft(lenIn, widIn, shape) {
+  if (lenIn == null || widIn == null) return null;
+  let f = 1;
+  if (shape === 'circle') f = 0.785;
+  else if (shape === 'irregular') f = 0.85;
+  return (lenIn * widIn * f) / 144;
+}
+// Live recompute of the area field from length x width x shape, unless the user
+// has manually overridden it (override persists until length/width/shape change).
+function recalcArea() {
+  const d = getDims();
+  const Ar = document.getElementById('dimArea');
+  if (d.areaOverridden) return;
+  const lenIn = clientToInches(d.length, d.lengthUnit);
+  const widIn = clientToInches(d.width, d.widthUnit);
+  const a = clientAreaSqft(lenIn, widIn, d.shape);
+  if (a == null) { d.area = ''; if (Ar) Ar.value = ''; return; }
+  const rounded = a.toFixed(1);
+  d.area = rounded;
+  if (Ar) Ar.value = (d.shape === 'irregular' ? 'approx. ' : '') + rounded;
+}
+
+// ---- voice extraction ----
+const DIM_NUMWORDS = { zero:0, one:1, two:2, three:3, four:4, five:5, six:6, seven:7, eight:8, nine:9, ten:10, eleven:11, twelve:12, thirteen:13, fourteen:14, fifteen:15, sixteen:16, seventeen:17, eighteen:18, nineteen:19, twenty:20, thirty:30, forty:40, fifty:50, sixty:60, seventy:70, eighty:80, ninety:90 };
+const DIM_NUM = '(\\d+(?:\\.\\d+)?|(?:(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)[\\s-]*)+)';
+const DIM_UNIT = '(feet|foot|ft|inches|inch|in)';
+function dimWordToNum(str) {
+  if (str == null) return null;
+  str = String(str).trim().toLowerCase();
+  if (/^\d+(\.\d+)?$/.test(str)) return parseFloat(str);
+  const parts = str.split(/[\s-]+/).filter(Boolean);
+  let total = 0, any = false;
+  for (const p of parts) {
+    if (DIM_NUMWORDS[p] != null) { total += DIM_NUMWORDS[p]; any = true; }
+    else if (p === 'and') { /* ignore */ }
+    else return null;
+  }
+  return any ? total : null;
+}
+function dimNormUnit(u) { if (!u) return null; u = u.toLowerCase(); return /^(in|inch|inches)$/.test(u) ? 'in' : 'ft'; }
+
+// Parse dimension phrases from a transcript. Returns { length, lengthUnit,
+// width, widthUnit, depth } where present. Depth is always inches.
+function extractDims(text) {
+  const out = {};
+  if (!text) return out;
+  const t = String(text).toLowerCase();
+  // "L by W (unit)" e.g. "three by two feet", "3x2 ft", "18 by 24 inches"
+  let m = new RegExp(DIM_NUM + '\\s*(?:x|by|\\u00d7)\\s*' + DIM_NUM + '\\s*' + DIM_UNIT + '?', 'i').exec(t);
+  if (m) {
+    const l = dimWordToNum(m[1]); const w = dimWordToNum(m[2]); const u = dimNormUnit(m[3]) || 'ft';
+    if (l != null) { out.length = l; out.lengthUnit = u; }
+    if (w != null) { out.width = w; out.widthUnit = u; }
+  }
+  // "N unit wide"
+  m = new RegExp(DIM_NUM + '\\s*' + DIM_UNIT + '?\\s*(?:wide|in width|width)', 'i').exec(t);
+  if (m && out.width == null) { const v = dimWordToNum(m[1]); if (v != null) { out.width = v; out.widthUnit = dimNormUnit(m[2]) || 'ft'; } }
+  // "N unit long"
+  m = new RegExp(DIM_NUM + '\\s*' + DIM_UNIT + '?\\s*(?:long|in length|length)', 'i').exec(t);
+  if (m && out.length == null) { const v = dimWordToNum(m[1]); if (v != null) { out.length = v; out.lengthUnit = dimNormUnit(m[2]) || 'ft'; } }
+  // "N (unit) deep / thick" -> depth in inches (feet converted)
+  m = new RegExp(DIM_NUM + '\\s*' + DIM_UNIT + '?\\s*(?:deep|in depth|depth|thick)', 'i').exec(t);
+  if (m) { const v = dimWordToNum(m[1]); if (v != null) { const u = dimNormUnit(m[2]); out.depth = u === 'ft' ? v * 12 : v; } }
+  return out;
+}
+
+// Apply extraction results to the dim fields. Never overwrites a manually-typed
+// field; marks filled fields as AI-suggested.
+function applyExtraction(text) {
+  if (!isProClient()) return;
+  const found = extractDims(text);
+  const d = getDims();
+  let changed = false;
+  if (found.length != null && !d.touched.length) { d.length = String(found.length); d.lengthUnit = found.lengthUnit || d.lengthUnit; d.suggested.length = true; changed = true; }
+  if (found.width != null && !d.touched.width) { d.width = String(found.width); d.widthUnit = found.widthUnit || d.widthUnit; d.suggested.width = true; changed = true; }
+  if (found.depth != null && !d.touched.depth) { d.depth = String(found.depth); d.suggested.depth = true; changed = true; }
+  if (!changed) return;
+  d.areaOverridden = false;
+  // reflect into the DOM if the fields are on screen
+  const L = document.getElementById('dimLength'); if (L) { L.value = d.length; if (d.suggested.length) L.classList.add('suggested'); }
+  const W = document.getElementById('dimWidth'); if (W) { W.value = d.width; if (d.suggested.width) W.classList.add('suggested'); }
+  const Dp = document.getElementById('dimDepth'); if (Dp) { Dp.value = d.depth; if (d.suggested.depth) Dp.classList.add('suggested'); }
+  const LU = document.getElementById('dimLengthUnit'); if (LU) LU.value = d.lengthUnit;
+  const WU = document.getElementById('dimWidthUnit'); if (WU) WU.value = d.widthUnit;
+  recalcArea();
+  refreshHint();
+}
+
+function collectDims() {
+  const d = getDims();
+  return {
+    dim_length: d.length || '', dim_length_unit: d.lengthUnit || 'ft',
+    dim_width: d.width || '', dim_width_unit: d.widthUnit || 'ft',
+    dim_depth: d.depth || '',
+    dim_shape: d.shape || 'rectangle',
+    // strip any "approx. " prefix so the server stores a clean number
+    dim_area_sqft: String(d.area || '').replace(/[^0-9.]/g, ''),
+  };
+}
+
+// Read-only formatting of stored dims for saved cards (mirrors server fmtDims).
+function trimNumC(n) { const r = Math.round(n * 100) / 100; return String(r); }
+function fmtDimsClient(c) {
+  if (c.dim_area_sqft == null && c.dim_length_in == null && c.dim_width_in == null) return '';
+  const disp = (vin, unit) => { const v = Number(vin); if (!isFinite(v) || v <= 0) return ''; return unit === 'in' ? `${trimNumC(v)} in` : `${(v / 12).toFixed(1)} ft`; };
+  const l = disp(c.dim_length_in, c.dim_length_unit); const w = disp(c.dim_width_in, c.dim_width_unit);
+  const lw = [l, w].filter(Boolean);
+  let line = lw.length ? lw.join(' x ') : '';
+  if (c.dim_depth_in != null && isFinite(Number(c.dim_depth_in))) line = line ? `${line} x ${trimNumC(Number(c.dim_depth_in))} in deep` : `${trimNumC(Number(c.dim_depth_in))} in deep`;
+  if (c.dim_area_sqft != null && isFinite(Number(c.dim_area_sqft))) { const a = `${Number(c.dim_area_sqft).toFixed(1)} sq ft`; const al = c.dim_shape === 'irregular' ? `approx. ${a}` : a; line = line ? `${line}, ${al}` : al; }
+  return line;
+}
+// ================= end Pro dimension fields =================
+
 async function saveCapture() {
   const btn = document.getElementById('save');
   const note = document.getElementById('note').value.trim();
@@ -318,11 +526,13 @@ async function saveCapture() {
   fd.append('kind', 'note');
   if (state.location) { fd.append('latitude', state.location.lat); fd.append('longitude', state.location.lng); }
   if (state.address) fd.append('address', state.address);
+  if (isProClient()) { const dm = collectDims(); Object.keys(dm).forEach(k => fd.append(k, dm[k])); }
   try {
     const r = await api('/api/captures', { method: 'POST', body: fd });
     if (!r.ok) throw new Error('save failed');
     toast('Saved');
     state.photoFile = null; state._note = ''; state.location = null; state.address = null;
+    state._dims = freshDims();
     renderCapture();
   } catch (e) {
     toast('Save failed, try again');
@@ -524,6 +734,7 @@ async function loadCards(area) {
     const when = new Date(c.created_at).toLocaleString([], { year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' });
     const tags = (c.area_tags || []).map(t => `<span class="badge">${esc(t)}</span>`).join('');
     const kind = c.kind === 'task' ? `<span class="badge task">Task</span>` : '';
+    const dims = isProClient() ? fmtDimsClient(c) : '';
     return `<div class="card">
       <label style="display:flex;align-items:center;gap:8px;font-weight:bold;margin-bottom:8px;text-transform:none;letter-spacing:0;font-size:15px">
         <input type="checkbox" class="capchk" value="${c.id}" style="width:20px;height:20px"> Select
@@ -533,6 +744,7 @@ async function loadCards(area) {
       <div class="rotaterow">${rotateButtons(c.id)}</div>
       <div class="addr">${esc(c.address || (c.latitude ? c.latitude.toFixed(5)+', '+c.longitude.toFixed(5) : 'No location'))}</div>
       <div class="meta">${kind}${tags}</div>
+      ${dims ? `<div class="meta"><strong>Dimensions:</strong> ${esc(dims)}</div>` : ''}
       <div class="notewrap" data-id="${c.id}">
         <div class="notetext">${esc(c.note || '(no note)')}</div>
         <button class="btn secondary editnote" data-id="${c.id}" style="margin-top:6px">Edit Note</button>
@@ -722,6 +934,7 @@ function renderGroupItems() {
       ${c.photo_path ? `<img src="${photoSrc(c.photo_path)}" alt="capture" />` : ''}
       <div class="rotaterow">${rotateButtons(c.id)}</div>
       <div class="addr">${esc(c.address || 'No location')}</div>
+      ${isProClient() && fmtDimsClient(c) ? `<div class="meta"><strong>Dimensions:</strong> ${esc(fmtDimsClient(c))}</div>` : ''}
       <div>${esc(c.note || '(no note)')}</div>
       <div class="row" style="margin-top:8px">
         <button class="btn secondary gup" data-i="${i}">↑ Up</button>
