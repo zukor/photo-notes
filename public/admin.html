@@ -14,6 +14,7 @@
     .muted { font-size:13px; color:#000; }
     .inactive { opacity:.55; }
     .pill.role { background:#000; color:#fff; border:none; }
+    .pill.pro { background:#1d4ed8; color:#fff; border:none; }
     .section { margin-top:14px; }
     .section h4 { margin:0 0 4px; font-size:12px; font-weight:bold; text-transform:uppercase; letter-spacing:.04em; color:#000; border-bottom:1px solid #e3e6ea; padding-bottom:3px; }
     .statrow { margin-top:6px; }
@@ -72,6 +73,7 @@
       box.innerHTML = sortUsers(mode).map(u => userCard(u)).join('');
       box.querySelectorAll('[data-reset]').forEach(b => b.onclick = () => resetPassword(parseInt(b.getAttribute('data-reset'),10)));
       box.querySelectorAll('[data-active]').forEach(b => b.onclick = () => setActive(parseInt(b.getAttribute('data-active'),10), b.getAttribute('data-to')==='1'));
+      box.querySelectorAll('[data-plan]').forEach(b => b.onclick = () => setPlan(parseInt(b.getAttribute('data-plan'),10), b.getAttribute('data-planto')));
     }
 
     function userCard(u){
@@ -81,7 +83,7 @@
         : '<div class="muted">Orientation will appear as new photos come in.</div>';
       return `
         <div class="card ${u.active ? '' : 'inactive'}">
-          <div class="userhead">${esc(u.name || '(no name)')} ${u.role==='admin' ? '<span class="pill role">admin</span>' : ''} ${u.active ? '' : '<span class="muted">(deactivated)</span>'}</div>
+          <div class="userhead">${esc(u.name || '(no name)')} ${u.role==='admin' ? '<span class="pill role">admin</span>' : ''} ${u.plan==='pro' ? '<span class="pill pro">Pro</span>' : ''} ${u.active ? '' : '<span class="muted">(deactivated)</span>'}</div>
           <div class="muted">${esc(u.email)}${u.industry ? ' · ' + esc(u.industry) : ''}</div>
           <div class="muted">Joined ${fdate(u.created_at)} · Last login ${fdatetime(u.last_login_at)} · Logins ${u.logins} · Last active ${fdatetime(u.last_activity)}</div>
 
@@ -147,6 +149,7 @@
 
           <div class="row" style="margin-top:12px">
             <button class="btn secondary" data-reset="${u.id}">Reset password</button>
+            <button class="btn secondary" data-plan="${u.id}" data-planto="${u.plan==='pro' ? 'free' : 'pro'}">${u.plan==='pro' ? 'Set Free' : 'Set Pro'}</button>
             <button class="btn secondary" data-active="${u.id}" data-to="${u.active ? '0' : '1'}">${u.active ? 'Deactivate' : 'Activate'}</button>
           </div>
         </div>`;
@@ -270,6 +273,10 @@
       if (!active && !confirm('Deactivate this login? They will not be able to sign in. Their data is kept.')) return;
       const r = await api(`/api/admin/users/${id}`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ active }) });
       if (r.ok) { toast(active ? 'Activated' : 'Deactivated'); loadUsers(); } else toast('Update failed');
+    }
+    async function setPlan(id, plan){
+      const r = await api(`/api/admin/users/${id}`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ plan }) });
+      if (r.ok) { toast(plan === 'pro' ? 'Upgraded to Pro' : 'Set to Free'); loadUsers(); } else toast('Update failed');
     }
 
     boot();
