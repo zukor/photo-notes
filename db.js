@@ -100,6 +100,16 @@ CREATE TABLE IF NOT EXISTS events (
 );
 CREATE INDEX IF NOT EXISTS events_user_idx ON events (user_id);
 CREATE INDEX IF NOT EXISTS events_action_idx ON events (action);
+-- Before/after pairing of two of a user's captures (Feature 4).
+CREATE TABLE IF NOT EXISTS capture_pairs (
+  id         SERIAL PRIMARY KEY,
+  user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  before_id  INTEGER NOT NULL REFERENCES captures(id) ON DELETE CASCADE,
+  after_id   INTEGER NOT NULL REFERENCES captures(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (before_id, after_id)
+);
+CREATE INDEX IF NOT EXISTS capture_pairs_user_idx ON capture_pairs (user_id);
 `;
 
 const DEFAULT_AREAS = ['Roads', 'Maintenance', 'Walls', 'Security', 'Landscaping', 'Other'];
