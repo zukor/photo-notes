@@ -50,7 +50,21 @@ CREATE TABLE IF NOT EXISTS captures (
   dim_width_unit  TEXT,
   dim_depth_in    DOUBLE PRECISION,
   dim_shape       TEXT,
-  dim_area_sqft   DOUBLE PRECISION
+  dim_area_sqft   DOUBLE PRECISION,
+  -- Measure-from-photo (Pro): how the dimensions were produced, the AI's
+  -- confidence, the raw AI response (for later accuracy tuning), and whether
+  -- low-confidence AI values have been confirmed for use in exports.
+  dim_source      TEXT,
+  dim_confidence  TEXT,
+  dim_ai          JSONB,
+  dim_confirmed   BOOLEAN NOT NULL DEFAULT true,
+  -- AI defect classification (Pro): the classified defect, severity, the AI's
+  -- confidence, the raw AI response, and whether a human overrode/confirmed it.
+  defect_type     TEXT,
+  defect_severity TEXT,
+  defect_confidence TEXT,
+  defect_ai       JSONB,
+  defect_user_confirmed BOOLEAN NOT NULL DEFAULT false
 );
 CREATE TABLE IF NOT EXISTS groups (
   id          SERIAL PRIMARY KEY,
@@ -149,6 +163,17 @@ async function init() {
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS dim_depth_in DOUBLE PRECISION`);
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS dim_shape TEXT`);
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS dim_area_sqft DOUBLE PRECISION`);
+  // Measure-from-photo provenance + confirmation.
+  await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS dim_source TEXT`);
+  await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS dim_confidence TEXT`);
+  await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS dim_ai JSONB`);
+  await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS dim_confirmed BOOLEAN NOT NULL DEFAULT true`);
+  // AI defect classification.
+  await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS defect_type TEXT`);
+  await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS defect_severity TEXT`);
+  await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS defect_confidence TEXT`);
+  await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS defect_ai JSONB`);
+  await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS defect_user_confirmed BOOLEAN NOT NULL DEFAULT false`);
   await pool.query(`ALTER TABLE groups ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id)`);
   await pool.query(`UPDATE groups SET user_id = $1 WHERE user_id IS NULL`, [adminId]);
 
