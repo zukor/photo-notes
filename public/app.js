@@ -1051,7 +1051,7 @@ async function loadGroups() {
     <div class="card">
       <div style="font-weight:bold;font-size:17px">${esc(g.title || 'Untitled group')}</div>
       ${g.description ? `<div style="margin:4px 0">${esc(g.description)}</div>` : ''}
-      <div class="meta">${g.item_count} photo${g.item_count === 1 ? '' : 's'}</div>
+      <div class="meta">${g.item_count} photo${g.item_count === 1 ? '' : 's'}${(isProClient() && g.score != null) ? ` <span class="scorechip" style="background:${scoreColor(g.score)}">Score ${g.score} · ${esc(g.band)}</span>` : ''}</div>
       <div class="row" style="margin-top:8px">
         <button class="btn slim gopen" data-id="${g.id}">Open</button>
         <button class="btn secondary slim" data-id="${g.id}" data-del="1" style="color:#c1121f">Delete</button>
@@ -1059,6 +1059,17 @@ async function loadGroups() {
     </div>`).join('');
   list.querySelectorAll('.gopen').forEach(b => b.onclick = () => { state.groupId = parseInt(b.getAttribute('data-id'), 10); renderGroups(); });
   list.querySelectorAll('[data-del]').forEach(b => b.onclick = () => deleteGroup(parseInt(b.getAttribute('data-id'), 10)));
+}
+
+// Condition-score color: green good -> red failed (pins/badges only, never text).
+function scoreColor(score) {
+  if (score == null) return '#444444';
+  if (score >= 86) return '#1b7a3d';
+  if (score >= 71) return '#2f7d32';
+  if (score >= 56) return '#b36b00';
+  if (score >= 41) return '#c1121f';
+  if (score >= 26) return '#8a1a12';
+  return '#5a0f0a';
 }
 
 async function deleteGroup(id) {
@@ -1075,12 +1086,27 @@ async function renderGroupDetail(id) {
   const data = await r.json();
   currentGroup = data.group;
   currentGroupItems = data.items || [];
+  const score = data.score || null;
+  let scoreHtml = '';
+  if (isProClient() && score) {
+    if (score.score == null) {
+      scoreHtml = `<div class="card" style="text-align:center"><div class="fieldval">Not yet scored</div><div class="meta">Classify captures in this site to generate a condition score.</div></div>`;
+    } else {
+      scoreHtml = `<div class="card" style="text-align:center">
+        <div style="font-size:40px;font-weight:800;color:${scoreColor(score.score)}">${score.score}</div>
+        <div style="font-size:18px;font-weight:bold">${esc(score.band)}</div>
+        <div class="meta">Score based on ${score.classified} of ${score.total} captures classified${score.unclassified ? ` (${score.unclassified} not yet classified)` : ''}.</div>
+      </div>`;
+    }
+  }
   body.innerHTML = `
     <button class="backlink" id="gback">‹ All Groups</button>
     <label>Title</label>
     <div id="titleview"></div>
     <label>Description</label>
     <div id="descview"></div>
+
+    ${scoreHtml}
 
     <label style="margin-top:16px">Export This Group <span style="font-weight:normal;text-transform:none;letter-spacing:0">(pick one or more)</span></label>
     <div class="pill-group" id="gfmts">
@@ -1093,12 +1119,19 @@ async function renderGroupDetail(id) {
       <button class="btn" id="gexport">Export Group</button>
       <button class="btn secondary" id="greverse">Reverse Order</button>
     </div>
+    ${isProClient() ? `<label style="margin-top:16px">Proposal Report</label>
+    <div class="row">
+      <button class="btn secondary slim" id="proppdf">Proposal PDF</button>
+      <button class="btn secondary slim" id="propdocx">Proposal Word</button>
+    </div>` : ''}
 
     <div id="gitems" style="margin-top:16px"></div>`;
   document.getElementById('gback').onclick = () => { state.groupId = null; renderGroups(); };
   document.getElementById('greverse').onclick = reverseItems;
   document.getElementById('gexport').onclick = groupExport;
   document.getElementById('gfmts').onclick = (e) => { const p = e.target.closest('.pill'); if (p) p.classList.toggle('on'); };
+  const pp = document.getElementById('proppdf'); if (pp) pp.onclick = () => exportProposal('pdf');
+  const pw = document.getElementById('propdocx'); if (pw) pw.onclick = () => exportProposal('docx');
   renderTitleView();
   renderDescView();
   renderGroupItems();
@@ -1235,6 +1268,24 @@ async function groupExport() {
   }
   btn.disabled = false; btn.textContent = 'Export Group';
   toast('Exported');
+}
+
+async function exportProposal(doc) {
+  const imgRes = (document.getElementById('gimgres') || {}).value || 'standard';
+  const imgFmt = (document.getElementById('gimgfmt') || {}).value || 'jpeg';
+  const btn = document.getElementById(doc === 'pdf' ? 'proppdf' : 'propdocx');
+  if (btn) { btn.disabled = true; btn.textContent = 'Building...'; }
+  try {
+    const r = await api(`/api/export/proposal?group=${state.groupId}&doc=${doc}&res=${imgRes}&fmt=${imgFmt}`);
+    if (!r.ok) throw new Error('bad');
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = doc === 'pdf' ? 'proposal.pdf' : 'proposal.docx';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+    toast('Proposal ready');
+  } catch (e) { toast('Proposal export failed'); }
+  finally { if (btn) { btn.disabled = false; btn.textContent = doc === 'pdf' ? 'Proposal PDF' : 'Proposal Word'; } }
 }
 
 if ('serviceWorker' in navigator) {
