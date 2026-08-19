@@ -28,7 +28,7 @@ app.use('/uploads', express.static(UPLOAD_DIR));
 
 // ---- auth ----
 function setSession(res, user) {
-  const token = jwt.sign({ id: user.id, email: user.email, name: user.name, role: user.role }, SESSION_SECRET, { expiresIn: '30d' });
+  const token = jwt.sign({ id: user.id, email: user.email, name: user.name, role: user.role, plan: user.plan || 'free' }, SESSION_SECRET, { expiresIn: '30d' });
   res.cookie(COOKIE, token, {
     httpOnly: true,
     sameSite: 'lax',
@@ -53,6 +53,61 @@ function requireAdmin(req, res, next) {
   if (u.role !== 'admin') return res.status(403).json({ error: 'admin only' });
   req.user = u;
   next();
+}
+// Single source of truth for Pro gating. Pro features must not render or store
+// for free users.
+function isPro(user) { return !!(user && user.plan === 'pro'); }
+
+// ---- Pro dimension helpers ----
+// Compute area in square feet from canonical inch measurements and shape.
+// rectangle: L x W; circle: L x W x 0.785; irregular: L x W x 0.85. Result is
+// square inches / 144. Returns null when length or width is missing.
+function computeAreaSqft(lengthIn, widthIn, shape) {
+  const L = Number(lengthIn), W = Number(widthIn);
+  if (!Number.isFinite(L) || !Number.isFinite(W) || L <= 0 || W <= 0) return null;
+  let factor = 1;
+  if (shape === 'circle') factor = 0.785;
+  else if (shape === 'irregular') factor = 0.85;
+  const sqin = L * W * factor;
+  return sqin / 144;
+}
+// Normalize a raw dimension value + unit ('ft'|'in') to inches.
+function toInches(value, unit) {
+  const v = Number(value);
+  if (!Number.isFinite(v) || v <= 0) return null;
+  return unit === 'ft' ? v * 12 : v;
+}
+// Build the export string, e.g. "3.0 ft x 2.0 ft x 4 in deep, 6.0 sq ft".
+// Irregular shapes prepend "approx." to the area. Returns '' when no dims.
+function fmtDims(c) {
+  if (!c || c.dim_area_sqft == null && c.dim_length_in == null && c.dim_width_in == null) return '';
+  const parts = [];
+  const dispLen = dispDim(c.dim_length_in, c.dim_length_unit);
+  const dispWid = dispDim(c.dim_width_in, c.dim_width_unit);
+  const lw = [dispLen, dispWid].filter(Boolean);
+  if (lw.length) parts.push(lw.join(' x '));
+  if (c.dim_depth_in != null && Number.isFinite(Number(c.dim_depth_in))) {
+    parts.push(`${trimNum(Number(c.dim_depth_in))} in deep`);
+  }
+  let line = parts.join(' x ');
+  if (c.dim_area_sqft != null && Number.isFinite(Number(c.dim_area_sqft))) {
+    const areaStr = `${Number(c.dim_area_sqft).toFixed(1)} sq ft`;
+    const areaLabel = c.dim_shape === 'irregular' ? `approx. ${areaStr}` : areaStr;
+    line = line ? `${line}, ${areaLabel}` : areaLabel;
+  }
+  return line;
+}
+// One length/width value formatted in its chosen display unit, e.g. "3.0 ft".
+function dispDim(valueIn, unit) {
+  const v = Number(valueIn);
+  if (!Number.isFinite(v) || v <= 0) return '';
+  if (unit === 'in') return `${trimNum(v)} in`;
+  // default display in feet, one decimal
+  return `${(v / 12).toFixed(1)} ft`;
+}
+function trimNum(n) {
+  const r = Math.round(n * 100) / 100;
+  return Number.isInteger(r) ? String(r) : String(r);
 }
 
 // ---- activity log (admin usage metadata; never stores note text or photos) ----
@@ -90,7 +145,7 @@ app.post('/api/login', async (req, res) => {
     await pool.query(`UPDATE users SET last_login_at = now() WHERE id = $1`, [user.id]);
     setSession(res, user);
     logEvent(user.id, 'login', {});
-    res.json({ ok: true, name: user.name, role: user.role });
+    res.json({ ok: true, name: user.name, role: user.role, plan: user.plan || 'free' });
   } catch (err) {
     console.error('[login]', err);
     res.status(500).json({ error: 'login failed' });
@@ -102,8 +157,18 @@ app.post('/api/logout', (req, res) => {
   res.json({ ok: true });
 });
 
-app.get('/api/me', requireAuth, (req, res) => {
-  res.json({ authed: true, name: req.user.name, role: req.user.role, email: req.user.email });
+// Current plan straight from the DB, so an admin plan change takes effect on the
+// user's next page load without needing them to sign out and back in.
+async function currentPlan(userId) {
+  try {
+    const { rows } = await pool.query(`SELECT plan FROM users WHERE id = $1`, [userId]);
+    return rows.length && rows[0].plan === 'pro' ? 'pro' : 'free';
+  } catch { return 'free'; }
+}
+
+app.get('/api/me', requireAuth, async (req, res) => {
+  const plan = await currentPlan(req.user.id);
+  res.json({ authed: true, name: req.user.name, role: req.user.role, email: req.user.email, plan });
 });
 
 // ---- photo upload ----
@@ -175,10 +240,31 @@ app.post('/api/captures', requireAuth, upload.single('photo'), async (req, res) 
     let pw = null, ph = null;
     if (req.file) { const d = await imageDims(req.file.path); if (d) { pw = d.w; ph = d.h; } }
 
-    const q = `INSERT INTO captures (user_id, captured_by, photo_path, photo_width, photo_height, note, latitude, longitude, address, area_tags, kind, status)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`;
+    // Pro-tier dimension fields. Only stored for Pro users; ignored otherwise.
+    let dLenIn = null, dLenUnit = null, dWidIn = null, dWidUnit = null, dDepthIn = null, dShape = null, dArea = null;
+    if (await currentPlan(req.user.id) === 'pro') {
+      const lenUnit = b.dim_length_unit === 'in' ? 'in' : 'ft';
+      const widUnit = b.dim_width_unit === 'in' ? 'in' : 'ft';
+      const li = toInches(b.dim_length, lenUnit);
+      const wi = toInches(b.dim_width, widUnit);
+      const di = b.dim_depth != null && b.dim_depth !== '' ? Number(b.dim_depth) : null;
+      const shape = ['rectangle', 'circle', 'irregular'].includes(b.dim_shape) ? b.dim_shape : (li || wi ? 'rectangle' : null);
+      if (li != null) { dLenIn = li; dLenUnit = lenUnit; }
+      if (wi != null) { dWidIn = wi; dWidUnit = widUnit; }
+      if (di != null && Number.isFinite(di) && di > 0) dDepthIn = di;
+      if (li != null || wi != null) dShape = shape;
+      // Area: honor a user-supplied override, else compute from L x W x shape.
+      const override = b.dim_area_sqft != null && b.dim_area_sqft !== '' ? Number(b.dim_area_sqft) : null;
+      if (override != null && Number.isFinite(override) && override >= 0) dArea = override;
+      else dArea = computeAreaSqft(dLenIn, dWidIn, dShape);
+    }
+
+    const q = `INSERT INTO captures (user_id, captured_by, photo_path, photo_width, photo_height, note, latitude, longitude, address, area_tags, kind, status,
+                 dim_length_in, dim_length_unit, dim_width_in, dim_width_unit, dim_depth_in, dim_shape, dim_area_sqft)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING *`;
     const status = kind === 'task' ? 'open' : null;
-    const vals = [req.user.id, req.user.name, photoPath, pw, ph, b.note || null, lat, lng, address, areas, kind, status];
+    const vals = [req.user.id, req.user.name, photoPath, pw, ph, b.note || null, lat, lng, address, areas, kind, status,
+      dLenIn, dLenUnit, dWidIn, dWidUnit, dDepthIn, dShape, dArea];
     const { rows } = await pool.query(q, vals);
     res.json(rows[0]);
   } catch (err) {
@@ -473,7 +559,7 @@ app.post('/api/groups/:id/reorder', requireAuth, async (req, res) => {
 app.get('/api/admin/users', requireAdmin, async (req, res) => {
   try {
     const { rows } = await pool.query(`
-      SELECT u.id, u.email, u.name, u.industry, u.role, u.active, u.created_at, u.last_login_at,
+      SELECT u.id, u.email, u.name, u.industry, u.role, u.plan, u.active, u.created_at, u.last_login_at,
         COALESCE(c.cnt, 0)::int      AS capture_count,
         c.first_capture, c.last_capture,
         COALESCE(c.d7, 0)::int       AS last_7d,
@@ -560,7 +646,7 @@ app.post('/api/admin/users', requireAdmin, async (req, res) => {
     const { rows } = await pool.query(
       `INSERT INTO users (email, name, password_hash, role, industry, active)
        VALUES ($1,$2,$3,'user',$4,true)
-       RETURNING id, email, name, industry, role, active, created_at`,
+       RETURNING id, email, name, industry, role, plan, active, created_at`,
       [email, name, hash, industry]);
     await seedUserAreas(rows[0].id);
     res.json(rows[0]);
@@ -582,10 +668,11 @@ app.post('/api/admin/users/:id', requireAdmin, async (req, res) => {
     if (typeof b.industry === 'string') { vals.push(b.industry.trim()); sets.push(`industry = $${vals.length}`); }
     if (typeof b.active === 'boolean') { vals.push(b.active); sets.push(`active = $${vals.length}`); }
     if (b.role === 'admin' || b.role === 'user') { vals.push(b.role); sets.push(`role = $${vals.length}`); }
+    if (b.plan === 'pro' || b.plan === 'free') { vals.push(b.plan); sets.push(`plan = $${vals.length}`); }
     if (!sets.length) return res.status(400).json({ error: 'nothing to update' });
     vals.push(id);
     const { rows } = await pool.query(
-      `UPDATE users SET ${sets.join(', ')} WHERE id = $${vals.length} RETURNING id, email, name, industry, role, active, created_at, last_login_at`, vals);
+      `UPDATE users SET ${sets.join(', ')} WHERE id = $${vals.length} RETURNING id, email, name, industry, role, plan, active, created_at, last_login_at`, vals);
     if (!rows.length) return res.status(404).json({ error: 'not found' });
     res.json(rows[0]);
   } catch (err) { console.error('[admin.update]', err); res.status(500).json({ error: 'update failed' }); }
@@ -696,6 +783,7 @@ async function renderForEmbed(localPath, imgRes, imgFmt) {
 app.get('/api/export/pdf', requireAuth, async (req, res) => {
   try {
     const { imgRes, imgFmt, heading, desc, fnameBase, rows, scope } = await resolveExport(req);
+    const pro = await currentPlan(req.user.id) === 'pro';
     logEvent(req.user.id, 'export', { format: 'pdf', scope, count: rows.length, res: imgRes, fmt: imgFmt });
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${fnameBase}.pdf"`);
@@ -714,6 +802,7 @@ app.get('/api/export/pdf', requireAuth, async (req, res) => {
       }
       doc.fontSize(13).fillColor('#000').text((c.address || 'No location') + (c.kind === 'task' ? '   [TASK]' : ''));
       if (c.area_tags && c.area_tags.length) doc.fontSize(10).fillColor('#000').text('Area: ' + c.area_tags.join(', '));
+      if (pro) { const dm = fmtDims(c); if (dm) doc.fontSize(10).fillColor('#000').text('Dimensions: ' + dm); }
       doc.fontSize(9).fillColor('#000').text(fmtWhen(c.created_at));
       doc.moveDown(0.4);
       doc.fontSize(12).fillColor('#000').text(c.note || '(no note)');
@@ -726,6 +815,7 @@ app.get('/api/export/pdf', requireAuth, async (req, res) => {
 app.get('/api/export/docx', requireAuth, async (req, res) => {
   try {
     const { imgRes, imgFmt, heading, desc, fnameBase, rows, scope } = await resolveExport(req);
+    const pro = await currentPlan(req.user.id) === 'pro';
     logEvent(req.user.id, 'export', { format: 'docx', scope, count: rows.length, res: imgRes, fmt: imgFmt });
     const children = [new Paragraph({ heading: HeadingLevel.HEADING_1, children: [new TextRun({ text: heading, bold: true, color: '000000', font: 'Arial' })] })];
     if (desc) children.push(new Paragraph({ children: [new TextRun({ text: desc, color: '000000', font: 'Arial' })] }));
@@ -737,6 +827,7 @@ app.get('/api/export/docx', requireAuth, async (req, res) => {
       }
       children.push(new Paragraph({ spacing: { before: 120 }, children: [new TextRun({ text: (c.address || 'No location') + (c.kind === 'task' ? '   [TASK]' : ''), bold: true, color: '000000', font: 'Arial' })] }));
       if (c.area_tags && c.area_tags.length) children.push(new Paragraph({ children: [new TextRun({ text: 'Area: ' + c.area_tags.join(', '), color: '000000', font: 'Arial' })] }));
+      if (pro) { const dm = fmtDims(c); if (dm) children.push(new Paragraph({ children: [new TextRun({ text: 'Dimensions: ' + dm, color: '000000', font: 'Arial' })] })); }
       children.push(new Paragraph({ children: [new TextRun({ text: c.note || '(no note)', color: '000000', font: 'Arial' })] }));
       children.push(new Paragraph({ children: [new TextRun({ text: '' })] }));
     }
@@ -752,6 +843,7 @@ app.get('/api/export/docx', requireAuth, async (req, res) => {
 app.get('/api/export/bundle', requireAuth, async (req, res) => {
   try {
     const { imgRes, imgFmt, heading, desc, fnameBase, rows, scope } = await resolveExport(req);
+    const pro = await currentPlan(req.user.id) === 'pro';
     logEvent(req.user.id, 'export', { format: 'bundle', scope, count: rows.length, res: imgRes, fmt: imgFmt });
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Disposition', `attachment; filename="${fnameBase}-bundle.zip"`);
@@ -777,6 +869,7 @@ app.get('/api/export/bundle', requireAuth, async (req, res) => {
       }
       md += `## ${i + 1}. ${c.address || 'No location'}${c.kind === 'task' ? ' [TASK]' : ''}\n`;
       if (c.area_tags && c.area_tags.length) md += `Area: ${c.area_tags.join(', ')}  \n`;
+      if (pro) { const dm = fmtDims(c); if (dm) md += `Dimensions: ${dm}  \n`; }
       md += `Captured: ${fmtWhen(c.created_at)}\n\n`;
       if (imgRef) md += `![photo](${imgRef})\n\n`;
       md += `${c.note || '(no note)'}\n\n`;
