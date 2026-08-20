@@ -126,6 +126,45 @@ CREATE TABLE IF NOT EXISTS measure_zones (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS measure_zones_user_idx ON measure_zones (user_id);
+-- Extra Work Record (Asphalt Pro): job-site documentation of out-of-scope work.
+-- Kept in its own tables (not captures) so it never mixes into the Library,
+-- map, pairing, zones, or normal exports.
+CREATE TABLE IF NOT EXISTS extra_work_records (
+  id          SERIAL PRIMARY KEY,
+  user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  group_id    INTEGER REFERENCES groups(id) ON DELETE SET NULL,
+  created_by  TEXT,
+  customer    TEXT,
+  status      TEXT NOT NULL DEFAULT 'documented',
+  reason_category   TEXT,
+  reason_other_text TEXT,
+  description_text  TEXT,
+  latitude    DOUBLE PRECISION,
+  longitude   DOUBLE PRECISION,
+  address     TEXT,
+  notified_person_name    TEXT,
+  notified_person_company TEXT,
+  notification_method     TEXT,
+  notified_at TIMESTAMPTZ,
+  notification_notes      TEXT,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS ewr_photos (
+  id           SERIAL PRIMARY KEY,
+  ewr_id       INTEGER NOT NULL REFERENCES extra_work_records(id) ON DELETE CASCADE,
+  user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  photo_path   TEXT,
+  photo_width  INTEGER,
+  photo_height INTEGER,
+  caption      TEXT,
+  latitude     DOUBLE PRECISION,
+  longitude    DOUBLE PRECISION,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS ewr_user_idx ON extra_work_records (user_id);
+CREATE INDEX IF NOT EXISTS ewr_group_idx ON extra_work_records (group_id);
+CREATE INDEX IF NOT EXISTS ewr_photos_ewr_idx ON ewr_photos (ewr_id);
 `;
 
 const DEFAULT_AREAS = ['Roads', 'Maintenance', 'Walls', 'Security', 'Landscaping', 'Other'];
