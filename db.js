@@ -110,6 +110,22 @@ CREATE TABLE IF NOT EXISTS capture_pairs (
   UNIQUE (before_id, after_id)
 );
 CREATE INDEX IF NOT EXISTS capture_pairs_user_idx ON capture_pairs (user_id);
+-- Satellite takeoff / measurement zones (Pro). points holds ordered [{lat,lng}]:
+-- polygon vertices, or centerline points for a span. length_ft/area_sqft are
+-- computed server-side and never trusted from the client.
+CREATE TABLE IF NOT EXISTS measure_zones (
+  id         SERIAL PRIMARY KEY,
+  user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  group_id   INTEGER REFERENCES groups(id) ON DELETE SET NULL,
+  name       TEXT NOT NULL,
+  zone_type  TEXT NOT NULL,
+  points     JSONB NOT NULL,
+  width_ft   DOUBLE PRECISION,
+  length_ft  DOUBLE PRECISION,
+  area_sqft  DOUBLE PRECISION,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS measure_zones_user_idx ON measure_zones (user_id);
 `;
 
 const DEFAULT_AREAS = ['Roads', 'Maintenance', 'Walls', 'Security', 'Landscaping', 'Other'];
