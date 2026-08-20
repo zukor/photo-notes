@@ -297,6 +297,145 @@ function haversineMeters(lat1, lng1, lat2, lng2) {
 }
 function metersToFeet(m) { return m == null ? null : m * 3.28084; }
 
+// Project lat/lng points to local planar meters using an equirectangular
+// projection centered on the polygon centroid. Accurate to well under 1% at
+// parcel/road scale.
+function projectPlanar(points) {
+  const n = points.length;
+  let latSum = 0, lngSum = 0;
+  for (const p of points) { latSum += Number(p.lat); lngSum += Number(p.lng); }
+  const lat0 = latSum / n, lng0 = lngSum / n;
+  const R = 6371000, toRad = (d) => d * Math.PI / 180;
+  return points.map((p) => ({
+    x: R * toRad(Number(p.lng) - lng0) * Math.cos(toRad(lat0)),
+    y: R * toRad(Number(p.lat) - lat0),
+  }));
+}
+// Shoelace area of a projected polygon, returned in square feet.
+function polygonAreaSqft(points) {
+  if (!Array.isArray(points) || points.length < 3) return null;
+  const pl = projectPlanar(points);
+  let a = 0;
+  for (let i = 0; i < pl.length; i++) {
+    const j = (i + 1) % pl.length;
+    a += pl[i].x * pl[j].y - pl[j].x * pl[i].y;
+  }
+  const sqMeters = Math.abs(a) / 2;
+  return sqMeters * 10.7639; // m^2 -> ft^2
+}
+// Longest axis of a polygon (max distance between any two vertices), in feet.
+// Reported as an approximate length.
+function polygonLongestAxisFeet(points) {
+  if (!Array.isArray(points) || points.length < 2) return null;
+  let max = 0;
+  for (let i = 0; i < points.length; i++) {
+    for (let j = i + 1; j < points.length; j++) {
+      const m = haversineMeters(points[i].lat, points[i].lng, points[j].lat, points[j].lng);
+      if (m != null && m > max) max = m;
+    }
+  }
+  return metersToFeet(max);
+}
+// Sum of haversine distances along a centerline, in feet.
+function spanLengthFeet(points) {
+  if (!Array.isArray(points) || points.length < 2) return null;
+  let m = 0;
+  for (let i = 0; i < points.length - 1; i++) {
+    const d = haversineMeters(points[i].lat, points[i].lng, points[i + 1].lat, points[i + 1].lng);
+    if (d != null) m += d;
+  }
+  return metersToFeet(m);
+}
+// Segment intersection test (planar), used to reject self-intersecting polygons.
+function segmentsIntersect(p1, p2, p3, p4) {
+  const ccw = (a, b, c) => (c.y - a.y) * (b.x - a.x) > (b.y - a.y) * (c.x - a.x);
+  return ccw(p1, p3, p4) !== ccw(p2, p3, p4) && ccw(p1, p2, p3) !== ccw(p1, p2, p4);
+}
+function polygonSelfIntersects(points) {
+  if (!Array.isArray(points) || points.length < 4) return false;
+  const pl = projectPlanar(points);
+  const n = pl.length;
+  for (let i = 0; i < n; i++) {
+    const a1 = pl[i], a2 = pl[(i + 1) % n];
+    for (let j = i + 1; j < n; j++) {
+      // skip adjacent/shared-vertex segments
+      if (Math.abs(i - j) <= 1 || (i === 0 && j === n - 1)) continue;
+      const b1 = pl[j], b2 = pl[(j + 1) % n];
+      if (segmentsIntersect(a1, a2, b1, b2)) return true;
+    }
+  }
+  return false;
+}
+// Ray-casting point-in-polygon on projected coordinates.
+function pointInPolygon(lat, lng, points) {
+  if (!Array.isArray(points) || points.length < 3) return false;
+  const projected = projectPlanar(points.concat([{ lat, lng }]));
+  const pt = projected[projected.length - 1];
+  const poly = projected.slice(0, projected.length - 1);
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const xi = poly[i].x, yi = poly[i].y, xj = poly[j].x, yj = poly[j].y;
+    const intersect = ((yi > pt.y) !== (yj > pt.y)) && (pt.x < (xj - xi) * (pt.y - yi) / (yj - yi) + xi);
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+// Perpendicular distance (feet) from a point to the nearest segment of a
+// centerline.
+function distToCenterlineFeet(lat, lng, points) {
+  if (!Array.isArray(points) || points.length < 2) return null;
+  const projected = projectPlanar(points.concat([{ lat, lng }]));
+  const pt = projected[projected.length - 1];
+  const line = projected.slice(0, projected.length - 1);
+  let min = Infinity;
+  for (let i = 0; i < line.length - 1; i++) {
+    const a = line[i], b = line[i + 1];
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const len2 = dx * dx + dy * dy;
+    let t = len2 === 0 ? 0 : ((pt.x - a.x) * dx + (pt.y - a.y) * dy) / len2;
+    t = Math.max(0, Math.min(1, t));
+    const px = a.x + t * dx, py = a.y + t * dy;
+    const d = Math.hypot(pt.x - px, pt.y - py);
+    if (d < min) min = d;
+  }
+  return min === Infinity ? null : min * 3.28084;
+}
+// Validate + compute a zone's length_ft and area_sqft from its points/width.
+// Returns { ok, error, length_ft, area_sqft }.
+function computeZone(zoneType, points, widthFt) {
+  if (!Array.isArray(points)) return { ok: false, error: 'points required' };
+  const pts = points.filter(p => p && p.lat != null && p.lng != null).map(p => ({ lat: Number(p.lat), lng: Number(p.lng) }));
+  if (zoneType === 'polygon') {
+    if (pts.length < 3) return { ok: false, error: 'a polygon needs at least 3 points' };
+    if (polygonSelfIntersects(pts)) return { ok: false, error: 'the polygon crosses itself; redraw without crossing lines' };
+    return { ok: true, length_ft: polygonLongestAxisFeet(pts), area_sqft: polygonAreaSqft(pts) };
+  }
+  if (zoneType === 'span') {
+    if (pts.length < 2) return { ok: false, error: 'a span needs at least 2 points' };
+    const w = Number(widthFt);
+    if (!Number.isFinite(w) || w <= 0) return { ok: false, error: 'a span needs a positive width' };
+    const len = spanLengthFeet(pts);
+    return { ok: true, length_ft: len, area_sqft: len != null ? len * w : null };
+  }
+  return { ok: false, error: 'zone_type must be polygon or span' };
+}
+// Which of a user's captures fall inside a zone (computed live).
+function capturesInZone(zone, caps) {
+  const pts = zone.points || [];
+  const out = [];
+  for (const c of caps) {
+    if (c.latitude == null || c.longitude == null) continue;
+    if (zone.zone_type === 'polygon') {
+      if (pointInPolygon(Number(c.latitude), Number(c.longitude), pts)) out.push(c.id);
+    } else if (zone.zone_type === 'span') {
+      const d = distToCenterlineFeet(Number(c.latitude), Number(c.longitude), pts);
+      const tol = (Number(zone.width_ft) || 0) / 2 + 25; // GPS scatter tolerance
+      if (d != null && d <= tol) out.push(c.id);
+    }
+  }
+  return out;
+}
+
 // ---- activity log (admin usage metadata; never stores note text or photos) ----
 async function logEvent(userId, action, detail) {
   try {
@@ -504,6 +643,13 @@ app.get('/api/captures', requireAuth, async (req, res) => {
 });
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
+
+// ---- client config: which map imagery to use ----
+// Mapbox public tokens (pk....) are safe to expose to the browser, so we pass
+// the token through. When absent, the client falls back to Esri World Imagery.
+app.get('/api/config', requireAuth, (req, res) => {
+  res.json({ mapbox_token: process.env.MAPBOX_TOKEN || null });
+});
 
 // ---- Measure from photo (Pro): estimate dimensions from a ruler reference ----
 // Accepts a photo upload during capture (before the record is saved) plus the
@@ -830,7 +976,9 @@ app.get('/api/groups/:id', requireAuth, async (req, res) => {
       SELECT c.*, gi.position FROM group_items gi JOIN captures c ON c.id = gi.capture_id
       WHERE gi.group_id = $1 AND c.user_id = $2 ORDER BY gi.position ASC, c.created_at ASC`, [id, req.user.id])).rows;
     const score = scoreCaptures(items);
-    res.json({ group: g, items, score });
+    let zones = null;
+    if (await currentPlan(req.user.id) === 'pro') zones = await groupZoneSummary(req.user.id, id);
+    res.json({ group: g, items, score, zones });
   } catch (err) { console.error('[groups.get]', err); res.status(500).json({ error: 'failed' }); }
 });
 
@@ -982,6 +1130,101 @@ app.get('/api/pairs/suggestions', requireAuth, async (req, res) => {
     res.json(out);
   } catch (err) { console.error('[pairs.suggestions]', err); res.status(500).json({ error: 'failed' }); }
 });
+
+// ---- measurement zones (Pro) ----
+app.get('/api/zones', requireAuth, async (req, res) => {
+  try {
+    if (await currentPlan(req.user.id) !== 'pro') return res.json([]);
+    const groupId = req.query.group ? parseInt(req.query.group, 10) : null;
+    let rows;
+    if (Number.isInteger(groupId)) rows = (await pool.query(`SELECT * FROM measure_zones WHERE user_id=$1 AND group_id=$2 ORDER BY created_at DESC`, [req.user.id, groupId])).rows;
+    else rows = (await pool.query(`SELECT * FROM measure_zones WHERE user_id=$1 ORDER BY created_at DESC`, [req.user.id])).rows;
+    res.json(rows);
+  } catch (err) { console.error('[zones.list]', err); res.status(500).json({ error: 'failed' }); }
+});
+
+app.post('/api/zones', requireAuth, async (req, res) => {
+  try {
+    if (await currentPlan(req.user.id) !== 'pro') return res.status(403).json({ error: 'pro only' });
+    const b = req.body || {};
+    const name = b.name ? String(b.name).trim() : '';
+    const zoneType = b.zone_type === 'span' ? 'span' : (b.zone_type === 'polygon' ? 'polygon' : null);
+    if (!name) return res.status(400).json({ error: 'name required' });
+    if (!zoneType) return res.status(400).json({ error: 'zone_type must be polygon or span' });
+    const points = Array.isArray(b.points) ? b.points : null;
+    if (!points) return res.status(400).json({ error: 'points required' });
+    const widthFt = b.width_ft != null ? Number(b.width_ft) : null;
+    const comp = computeZone(zoneType, points, widthFt);
+    if (!comp.ok) return res.status(400).json({ error: comp.error });
+    let groupId = b.group_id != null && b.group_id !== '' ? parseInt(b.group_id, 10) : null;
+    if (groupId != null && !(await ownsGroup(groupId, req.user.id))) groupId = null;
+    const row = (await pool.query(
+      `INSERT INTO measure_zones (user_id, group_id, name, zone_type, points, width_ft, length_ft, area_sqft)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+      [req.user.id, groupId, name, zoneType, JSON.stringify(points), zoneType === 'span' ? widthFt : null, comp.length_ft, comp.area_sqft])).rows[0];
+    logEvent(req.user.id, 'zone_create', { zone_type: zoneType, area_sqft: comp.area_sqft != null ? Math.round(comp.area_sqft) : null });
+    res.json({ ok: true, zone: row });
+  } catch (err) { console.error('[zones.create]', err); res.status(500).json({ error: 'create failed' }); }
+});
+
+app.post('/api/zones/:id', requireAuth, async (req, res) => {
+  try {
+    if (await currentPlan(req.user.id) !== 'pro') return res.status(403).json({ error: 'pro only' });
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'bad id' });
+    const z = (await pool.query(`SELECT * FROM measure_zones WHERE id=$1 AND user_id=$2`, [id, req.user.id])).rows[0];
+    if (!z) return res.status(404).json({ error: 'not found' });
+    const b = req.body || {};
+    const name = typeof b.name === 'string' && b.name.trim() ? b.name.trim() : z.name;
+    const points = Array.isArray(b.points) ? b.points : z.points;
+    const widthFt = b.width_ft != null && b.width_ft !== '' ? Number(b.width_ft) : z.width_ft;
+    const comp = computeZone(z.zone_type, points, widthFt);
+    if (!comp.ok) return res.status(400).json({ error: comp.error });
+    let groupId = z.group_id;
+    if (b.group_id !== undefined) { groupId = (b.group_id === null || b.group_id === '') ? null : parseInt(b.group_id, 10); if (groupId != null && !(await ownsGroup(groupId, req.user.id))) groupId = null; }
+    const row = (await pool.query(
+      `UPDATE measure_zones SET name=$1, points=$2, width_ft=$3, length_ft=$4, area_sqft=$5, group_id=$6 WHERE id=$7 AND user_id=$8 RETURNING *`,
+      [name, JSON.stringify(points), z.zone_type === 'span' ? widthFt : null, comp.length_ft, comp.area_sqft, groupId, id, req.user.id])).rows[0];
+    logEvent(req.user.id, 'zone_edit', { zone_type: z.zone_type, area_sqft: comp.area_sqft != null ? Math.round(comp.area_sqft) : null });
+    res.json({ ok: true, zone: row });
+  } catch (err) { console.error('[zones.edit]', err); res.status(500).json({ error: 'edit failed' }); }
+});
+
+app.post('/api/zones/:id/delete', requireAuth, async (req, res) => {
+  try {
+    if (await currentPlan(req.user.id) !== 'pro') return res.status(403).json({ error: 'pro only' });
+    const id = parseInt(req.params.id, 10);
+    await pool.query(`DELETE FROM measure_zones WHERE id=$1 AND user_id=$2`, [id, req.user.id]);
+    logEvent(req.user.id, 'zone_delete', {});
+    res.json({ ok: true });
+  } catch (err) { console.error('[zones.delete]', err); res.status(500).json({ error: 'delete failed' }); }
+});
+
+app.get('/api/zones/:id/defects', requireAuth, async (req, res) => {
+  try {
+    if (await currentPlan(req.user.id) !== 'pro') return res.status(403).json({ error: 'pro only' });
+    const id = parseInt(req.params.id, 10);
+    const z = (await pool.query(`SELECT * FROM measure_zones WHERE id=$1 AND user_id=$2`, [id, req.user.id])).rows[0];
+    if (!z) return res.status(404).json({ error: 'not found' });
+    const caps = (await pool.query(`SELECT id, latitude, longitude FROM captures WHERE user_id=$1 AND latitude IS NOT NULL AND longitude IS NOT NULL`, [req.user.id])).rows;
+    const ids = capturesInZone(z, caps);
+    res.json({ ids, count: ids.length });
+  } catch (err) { console.error('[zones.defects]', err); res.status(500).json({ error: 'failed' }); }
+});
+
+// Zone summary for a group: total length, area, and matched defect count.
+async function groupZoneSummary(userId, groupId) {
+  const zones = (await pool.query(`SELECT * FROM measure_zones WHERE user_id=$1 AND group_id=$2`, [userId, groupId])).rows;
+  if (!zones.length) return { zones: 0, length_ft: 0, area_sqft: 0, defects: 0 };
+  const caps = (await pool.query(`SELECT id, latitude, longitude FROM captures WHERE user_id=$1 AND latitude IS NOT NULL AND longitude IS NOT NULL`, [userId])).rows;
+  let length = 0, area = 0; const matched = new Set();
+  for (const z of zones) {
+    if (z.length_ft) length += Number(z.length_ft);
+    if (z.area_sqft) area += Number(z.area_sqft);
+    capturesInZone(z, caps).forEach(id => matched.add(id));
+  }
+  return { zones: zones.length, length_ft: length, area_sqft: area, defects: matched.size };
+}
 
 // ---- admin: manage logins + usage metadata (no photos/notes exposed) ----
 app.get('/api/admin/users', requireAdmin, async (req, res) => {
@@ -1399,6 +1642,7 @@ app.get('/api/export/proposal', requireAuth, async (req, res) => {
       WHERE gi.group_id = $1 AND c.user_id = $2 ORDER BY gi.position ASC, c.created_at ASC`, [groupId, req.user.id])).rows;
     const score = scoreCaptures(items);
     const { sections, summary } = buildProposal(items);
+    const zones = await groupZoneSummary(req.user.id, groupId);
     const doc = (req.query.doc === 'docx') ? 'docx' : 'pdf';
     const imgRes = req.query.res || 'standard';
     const imgFmt = req.query.fmt || 'jpeg';
@@ -1408,7 +1652,27 @@ app.get('/api/export/proposal', requireAuth, async (req, res) => {
     const scoreLine = score.score == null
       ? 'Site Condition Score: not yet scored (classify captures to generate a score)'
       : `Site Condition Score: ${score.score} (${score.band}), based on ${score.classified} of ${score.total} captures classified`;
-    logEvent(req.user.id, 'proposal', { doc, count: items.length, scored: score.score });
+    const coverZoneLine = (zones && zones.zones > 0)
+      ? `${Math.round(zones.length_ft).toLocaleString()} ft of pavement, ${Math.round(zones.area_sqft).toLocaleString()} sq ft, ${zones.defects} documented defects.`
+      : '';
+    // Mill and Overlay: prefer measured zone area, else summed defect area.
+    const millRow = summary.find(s => s.fix === 'Mill and Overlay');
+    let millInfo = null;
+    if (millRow) {
+      let sqft, source;
+      if (zones && zones.area_sqft > 0) { sqft = zones.area_sqft; source = 'measured from aerial'; }
+      else { sqft = millRow.total; source = 'minimum, verify extent'; }
+      const tons = Math.ceil(sqft * 1.5 * 145 / 12 / 2000 * 1.10 * 100) / 100;
+      millInfo = { sqft, source, tons };
+    }
+    // Total-quantity text for a summary row, with the zone-aware mill override.
+    const summaryTotalText = (row) => {
+      if (row.fix === 'Mill and Overlay' && millInfo) {
+        return `${millInfo.sqft.toFixed(0)} sq ft (${millInfo.source}); ${millInfo.tons.toFixed(2)} tons (1.5 in overlay assumed)`;
+      }
+      return fmtQtyTotal(row);
+    };
+    logEvent(req.user.id, 'proposal', { doc, count: items.length, scored: score.score, zones: zones ? zones.zones : 0 });
 
     if (doc === 'pdf') {
       res.setHeader('Content-Type', 'application/pdf');
@@ -1420,6 +1684,7 @@ app.get('/api/export/proposal', requireAuth, async (req, res) => {
       if (g.description) { pdf.moveDown(0.3); pdf.fontSize(12).fillColor('#000').text(g.description, { align: 'center' }); }
       pdf.moveDown(0.5);
       pdf.fontSize(12).fillColor('#000').text(scoreLine, { align: 'center' });
+      if (coverZoneLine) pdf.fontSize(12).fillColor('#000').text(coverZoneLine, { align: 'center' });
       pdf.fontSize(12).fillColor('#000').text('Date: ' + dateStr, { align: 'center' });
       pdf.fontSize(12).fillColor('#000').text('Prepared with Photo Notes', { align: 'center' });
       pdf.moveDown(1);
@@ -1447,7 +1712,7 @@ app.get('/api/export/proposal', requireAuth, async (req, res) => {
         const y = pdf.y;
         pdf.text(row.fix, colX[0], y, { width: colX[1] - colX[0] - 4 });
         pdf.text(String(row.count), colX[1], y, { width: colX[2] - colX[1] - 4 });
-        pdf.text(fmtQtyTotal(row), colX[2], y, { width: colX[3] - colX[2] - 4 });
+        pdf.text(summaryTotalText(row), colX[2], y, { width: colX[3] - colX[2] - 4 });
         pdf.text('', colX[3], y, { width: colX[4] - colX[3] - 4 });
         pdf.text('', colX[4], y);
         pdf.moveDown(0.2);
@@ -1463,6 +1728,7 @@ app.get('/api/export/proposal', requireAuth, async (req, res) => {
     children.push(new Paragraph({ heading: HeadingLevel.HEADING_1, children: [new TextRun({ text: title, bold: true, color: '000000', font: 'Arial' })] }));
     if (g.description) children.push(new Paragraph({ children: [new TextRun({ text: g.description, color: '000000', font: 'Arial' })] }));
     children.push(new Paragraph({ children: [new TextRun({ text: scoreLine, color: '000000', font: 'Arial' })] }));
+    if (coverZoneLine) children.push(new Paragraph({ children: [new TextRun({ text: coverZoneLine, color: '000000', font: 'Arial' })] }));
     children.push(new Paragraph({ children: [new TextRun({ text: 'Date: ' + dateStr, color: '000000', font: 'Arial' })] }));
     children.push(new Paragraph({ children: [new TextRun({ text: 'Prepared with Photo Notes', color: '000000', font: 'Arial' })] }));
     children.push(new Paragraph({ children: [new TextRun({ text: '' })] }));
@@ -1479,7 +1745,7 @@ app.get('/api/export/proposal', requireAuth, async (req, res) => {
     children.push(new Paragraph({ spacing: { before: 200 }, heading: HeadingLevel.HEADING_2, children: [new TextRun({ text: 'Summary of Work', bold: true, color: '000000', font: 'Arial' })] }));
     const cell = (text, bold) => new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: String(text), bold: !!bold, color: '000000', font: 'Arial' })] })] });
     const headRow = new TableRow({ children: ['Fix Type', 'Locations', 'Total Quantity', 'Unit Price', 'Total'].map(h => cell(h, true)) });
-    const bodyRows = summary.map(row => new TableRow({ children: [cell(row.fix), cell(row.count), cell(fmtQtyTotal(row)), cell(''), cell('')] }));
+    const bodyRows = summary.map(row => new TableRow({ children: [cell(row.fix), cell(row.count), cell(summaryTotalText(row)), cell(''), cell('')] }));
     children.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: [headRow, ...bodyRows] }));
     children.push(new Paragraph({ spacing: { before: 200 }, children: [new TextRun({ text: PROPOSAL_DISCLAIMER, color: '000000', font: 'Arial' })] }));
     const docx = new Document({ sections: [{ children }] });
