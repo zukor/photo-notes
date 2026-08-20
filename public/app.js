@@ -133,6 +133,7 @@ function renderApp() {
         <div class="tab ${state.view==='capture'?'on':''}" id="tabCapture">Capture</div>
         <div class="tab ${state.view==='list'?'on':''}" id="tabList">Library</div>
         <div class="tab ${state.view==='groups'?'on':''}" id="tabGroups">Groups</div>
+        ${isProClient() ? `<div class="tab ${state.view==='map'?'on':''}" id="tabMap">Map</div>` : ''}
       </div>
       <div id="body"></div>
       <div class="footer">&copy; ${new Date().getFullYear()} Zukor AI</div>
@@ -141,8 +142,11 @@ function renderApp() {
   document.getElementById('tabCapture').onclick = () => { state.view='capture'; renderApp(); };
   document.getElementById('tabList').onclick = () => { state.view='list'; renderApp(); };
   document.getElementById('tabGroups').onclick = () => { state.view='groups'; state.groupId=null; renderApp(); };
+  const tm = document.getElementById('tabMap');
+  if (tm) tm.onclick = () => { state.view='map'; renderApp(); };
   if (state.view === 'capture') renderCapture();
   else if (state.view === 'groups') renderGroups();
+  else if (state.view === 'map') renderMap();
   else renderList();
 }
 
@@ -1012,6 +1016,11 @@ async function loadCards(area) {
   }
   cards.innerHTML = banner + html.join('');
   wireCards(cards, rows);
+  if (state._focusCapture) {
+    const chk = cards.querySelector(`.capchk[value="${state._focusCapture}"]`);
+    state._focusCapture = null;
+    if (chk) { const card = chk.closest('.card'); if (card) { card.scrollIntoView({ behavior: 'smooth', block: 'center' }); card.style.outline = '3px solid #1d4ed8'; setTimeout(() => { card.style.outline = ''; }, 2500); } }
+  }
 }
 
 function captureCardHtml(c) {
@@ -1102,6 +1111,249 @@ function startEditNote(id, rows) {
   wrap.querySelector('.savenote').onclick = () => saveNote(id, ta.value, () => loadCards(document.getElementById('filter').value || ''));
 }
 
+// ---- Map (Pro): satellite view of captures + measurement zones ----
+let mapObj = null, mapMarkers = [], mapZoneLayers = [];
+function loadLeaflet() {
+  return new Promise((resolve) => {
+    if (window.L) return resolve();
+    if (!document.getElementById('leafletcss')) {
+      const css = document.createElement('link'); css.id = 'leafletcss'; css.rel = 'stylesheet';
+      css.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'; document.head.appendChild(css);
+    }
+    const s = document.createElement('script'); s.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+    s.onload = () => resolve(); s.onerror = () => resolve(); document.head.appendChild(s);
+  });
+}
+async function renderMap() {
+  const body = document.getElementById('body');
+  body.innerHTML = `
+    <div class="row compact">
+      <select id="mapTopic" style="flex:1"><option value="">All Topics</option>${state.areas.map(a => `<option value="${esc(a)}">${esc(a)}</option>`).join('')}</select>
+      <select id="mapGroup" style="flex:1"><option value="">All Groups</option></select>
+    </div>
+    <div class="status" style="margin-top:4px">Satellite imagery can be one or more years old. Verify recent construction on site.</div>
+    <div id="mapMeasureBar" style="margin-top:6px"></div>
+    <div id="mapdiv" style="height:68vh;min-height:340px;margin-top:8px;border:1px solid #000;border-radius:8px"></div>`;
+  await loadLeaflet();
+  if (!window.L) { document.getElementById('mapdiv').innerHTML = '<p class="status">Map library could not load. Check your connection.</p>'; return; }
+  mapObj = null; mapMarkers = []; mapZoneLayers = [];
+  let cfg = {}; try { const c = await api('/api/config'); if (c.ok) cfg = await c.json(); } catch (e) {}
+  window._mapCfg = cfg;
+  const gsel = document.getElementById('mapGroup');
+  try { const gr = await api('/api/groups'); if (gr.ok) { const gs = await gr.json(); gsel.innerHTML = '<option value="">All Groups</option>' + gs.map(g => `<option value="${g.id}">${esc(g.title || 'Untitled')}</option>`).join(''); } } catch (e) {}
+  const div = document.getElementById('mapdiv');
+  mapObj = L.map(div).setView([29.5, -98.5], 12);
+  if (cfg.mapbox_token) {
+    L.tileLayer(`https://api.mapbox.com/styles/v1/mapbox/satellite-v9/tiles/512/{z}/{x}/{y}@2x?access_token=${cfg.mapbox_token}`, { tileSize: 512, zoomOffset: -1, maxZoom: 22, attribution: '&copy; Mapbox &copy; Maxar' }).addTo(mapObj);
+  } else {
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 21, attribution: 'Tiles &copy; Esri, Maxar, Earthstar Geographics' }).addTo(mapObj);
+  }
+  mapObj.on('popupopen', (e) => {
+    const btn = e.popup.getElement().querySelector('.mapopen');
+    if (btn) btn.onclick = () => openCaptureInLibrary(parseInt(btn.getAttribute('data-id'), 10));
+  });
+  document.getElementById('mapTopic').onchange = refreshPins;
+  gsel.onchange = refreshPins;
+  if (typeof initMeasureUI === 'function') initMeasureUI();
+  await refreshPins();
+  if (typeof loadZones === 'function') await loadZones();
+}
+async function refreshPins() {
+  if (!mapObj) return;
+  mapMarkers.forEach(m => mapObj.removeLayer(m)); mapMarkers = [];
+  const topic = document.getElementById('mapTopic').value;
+  const groupId = document.getElementById('mapGroup').value;
+  let caps = [];
+  if (groupId) { try { const r = await api(`/api/groups/${groupId}`); if (r.ok) { const d = await r.json(); caps = d.items || []; } } catch (e) {} if (topic) caps = caps.filter(c => (c.area_tags || []).includes(topic)); }
+  else { try { const r = await api('/api/captures' + (topic ? `?area=${encodeURIComponent(topic)}` : '')); if (r.ok) caps = await r.json(); } catch (e) {} }
+  const pts = [];
+  for (const c of caps) {
+    if (c.latitude == null || c.longitude == null) continue;
+    const color = c.defect_type ? severityColorClient(c.defect_severity) : '#444444';
+    const m = L.circleMarker([c.latitude, c.longitude], { radius: 8, color: '#000', weight: 1, fillColor: color, fillOpacity: 0.9 });
+    m.bindPopup(mapPopupHtml(c));
+    m.addTo(mapObj); mapMarkers.push(m); pts.push([c.latitude, c.longitude]);
+  }
+  if (pts.length) { try { mapObj.fitBounds(pts, { padding: [30, 30], maxZoom: 19 }); } catch (e) {} }
+}
+function mapPopupHtml(c) {
+  const note = (c.note || '').slice(0, 120);
+  const badge = (isProClient() && c.defect_type) ? defectBadgeHtml(c) : '';
+  return `<div style="max-width:210px">
+    ${c.photo_path ? `<img src="${photoSrc(c.photo_path)}" style="width:100%;border-radius:4px" />` : ''}
+    ${badge ? `<div style="margin:4px 0">${badge}</div>` : ''}
+    <div style="font-weight:bold;font-size:13px;color:#000">${esc(c.address || 'No location')}</div>
+    <div style="font-size:12px;color:#000">${esc(note)}${(c.note || '').length > 120 ? '…' : ''}</div>
+    <button class="mapopen" data-id="${c.id}" style="margin-top:6px">Open in Library</button>
+  </div>`;
+}
+function openCaptureInLibrary(id) {
+  state._focusCapture = id;
+  state.view = 'list';
+  renderApp();
+}
+
+// ---- Measurement zones (Pro): draw + save on the Map ----
+function clientProject(points) {
+  const n = points.length; let la = 0, lo = 0;
+  points.forEach(p => { la += p.lat; lo += p.lng; });
+  const lat0 = la / n, lng0 = lo / n, R = 6371000, rad = d => d * Math.PI / 180;
+  return points.map(p => ({ x: R * rad(p.lng - lng0) * Math.cos(rad(lat0)), y: R * rad(p.lat - lat0) }));
+}
+function clientPolygonAreaSqft(points) {
+  if (points.length < 3) return null;
+  const pl = clientProject(points); let a = 0;
+  for (let i = 0; i < pl.length; i++) { const j = (i + 1) % pl.length; a += pl[i].x * pl[j].y - pl[j].x * pl[i].y; }
+  return Math.abs(a) / 2 * 10.7639;
+}
+function clientHaversineFt(a, b) {
+  const R = 6371000, rad = d => d * Math.PI / 180;
+  const dLat = rad(b.lat - a.lat), dLng = rad(b.lng - a.lng);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h))) * 3.28084;
+}
+function clientSpanLengthFeet(points) {
+  if (points.length < 2) return null;
+  let ft = 0; for (let i = 0; i < points.length - 1; i++) ft += clientHaversineFt(points[i], points[i + 1]);
+  return ft;
+}
+function initMeasureUI() {
+  const bar = document.getElementById('mapMeasureBar');
+  if (!bar) return;
+  bar.innerHTML = `<div class="row compact">
+      <button class="btn secondary slim" id="drawArea">Trace Area</button>
+      <button class="btn secondary slim" id="drawSpan">Measure Span</button>
+      <button class="btn secondary slim" id="drawCancel" style="display:none">Cancel</button>
+      <button class="btn slim" id="drawFinish" style="display:none">Finish</button>
+    </div>
+    <div class="status" id="drawReadout"></div>`;
+  document.getElementById('drawArea').onclick = () => startDraw('polygon');
+  document.getElementById('drawSpan').onclick = () => startDraw('span');
+  document.getElementById('drawCancel').onclick = cancelDraw;
+  document.getElementById('drawFinish').onclick = finishDraw;
+}
+function startDraw(mode, existing) {
+  cancelDraw();
+  window._draw = { mode, points: [], markers: [], poly: null, line: null, editId: (existing && existing.id) || null };
+  document.getElementById('drawCancel').style.display = '';
+  document.getElementById('drawFinish').style.display = '';
+  document.getElementById('drawArea').style.display = 'none';
+  document.getElementById('drawSpan').style.display = 'none';
+  document.getElementById('drawReadout').textContent = mode === 'polygon'
+    ? 'Tap the map to drop area corners. Drag a corner to adjust. Tap Finish to close.'
+    : 'Tap points along the road centerline, then Finish and enter width.';
+  mapObj.on('click', onDrawClick);
+  if (existing && Array.isArray(existing.points)) { existing.points.forEach(p => addVertex(L.latLng(p.lat, p.lng))); }
+}
+function addVertex(latlng) {
+  const d = window._draw; if (!d) return;
+  d.points.push({ lat: latlng.lat, lng: latlng.lng });
+  const mk = L.marker(latlng, { draggable: true }); mk.addTo(mapObj);
+  mk.on('drag', (ev) => { const idx = d.markers.indexOf(mk); const ll = ev.target.getLatLng(); d.points[idx] = { lat: ll.lat, lng: ll.lng }; redrawDraw(); });
+  d.markers.push(mk);
+  redrawDraw();
+}
+function onDrawClick(e) { addVertex(e.latlng); }
+function redrawDraw() {
+  const d = window._draw; if (!d) return;
+  const latlngs = d.points.map(p => [p.lat, p.lng]);
+  const ro = document.getElementById('drawReadout');
+  if (d.mode === 'polygon') {
+    if (d.poly) mapObj.removeLayer(d.poly);
+    d.poly = L.polygon(latlngs, { color: '#1f4d2e', weight: 2, fillColor: '#1f4d2e', fillOpacity: 0.25 }).addTo(mapObj);
+    const a = clientPolygonAreaSqft(d.points);
+    if (ro) ro.textContent = d.points.length < 3 ? `${d.points.length} corner(s)` : `Area: ${a ? Math.round(a).toLocaleString() : '—'} sq ft (${d.points.length} corners)`;
+  } else {
+    if (d.line) mapObj.removeLayer(d.line);
+    d.line = L.polyline(latlngs, { color: '#1f4d2e', weight: 3 }).addTo(mapObj);
+    const len = clientSpanLengthFeet(d.points);
+    if (ro) ro.textContent = d.points.length < 2 ? `${d.points.length} point(s)` : `Length: ${len ? Math.round(len).toLocaleString() : '—'} ft`;
+  }
+}
+async function finishDraw() {
+  const d = window._draw; if (!d) return;
+  if (d.mode === 'polygon' && d.points.length < 3) { toast('Add at least 3 corners'); return; }
+  if (d.mode === 'span' && d.points.length < 2) { toast('Add at least 2 points'); return; }
+  let width = null;
+  if (d.mode === 'span') { const w = prompt('Pavement width in feet (a standard two-lane residential road is 24):', '24'); if (w == null) return; width = parseFloat(w); if (!isFinite(width) || width <= 0) { toast('Enter a valid width'); return; } }
+  const gsel = document.getElementById('mapGroup'); const groupId = gsel ? gsel.value : '';
+  let name, url, body;
+  if (d.editId) {
+    url = `/api/zones/${d.editId}`;
+    body = { points: d.points }; if (width != null) body.width_ft = width;
+  } else {
+    name = prompt('Name this zone:', d.mode === 'polygon' ? 'Area' : 'Roadway'); if (name == null) return;
+    url = '/api/zones';
+    body = { name: name.trim() || 'Zone', zone_type: d.mode, points: d.points, width_ft: width, group_id: groupId || null };
+  }
+  const r = await api(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const res = await r.json().catch(() => ({}));
+  if (r.ok) { toast('Zone saved'); cancelDraw(); await loadZones(); } else { toast(res.error || 'Could not save zone'); }
+}
+function cancelDraw() {
+  const d = window._draw;
+  if (d && mapObj) { d.markers.forEach(m => mapObj.removeLayer(m)); if (d.poly) mapObj.removeLayer(d.poly); if (d.line) mapObj.removeLayer(d.line); }
+  window._draw = null;
+  if (mapObj) mapObj.off('click', onDrawClick);
+  ['drawCancel', 'drawFinish'].forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
+  ['drawArea', 'drawSpan'].forEach(id => { const el = document.getElementById(id); if (el) el.style.display = ''; });
+  const ro = document.getElementById('drawReadout'); if (ro) ro.textContent = '';
+}
+async function loadZones() {
+  if (!mapObj) return;
+  mapZoneLayers.forEach(l => mapObj.removeLayer(l)); mapZoneLayers = [];
+  const gsel = document.getElementById('mapGroup'); const groupId = gsel ? gsel.value : '';
+  let zones = [];
+  try { const r = await api('/api/zones' + (groupId ? `?group=${groupId}` : '')); if (r.ok) zones = await r.json(); } catch (e) {}
+  for (const z of zones) {
+    const pts = (z.points || []).map(p => [p.lat, p.lng]);
+    if (!pts.length) continue;
+    const layer = z.zone_type === 'polygon'
+      ? L.polygon(pts, { color: '#1f4d2e', weight: 2, fillColor: '#1f4d2e', fillOpacity: 0.25 })
+      : L.polyline(pts, { color: '#1f4d2e', weight: 4, opacity: 0.75 });
+    layer.addTo(mapObj); mapZoneLayers.push(layer);
+    let defc = '—';
+    try { const dr = await api(`/api/zones/${z.id}/defects`); if (dr.ok) { const dd = await dr.json(); defc = dd.count; } } catch (e) {}
+    layer.bindPopup(zonePopupHtml(z, defc));
+    layer.on('popupopen', (e) => wireZonePopup(e, z));
+  }
+}
+function zonePopupHtml(z, defc) {
+  const len = z.length_ft != null ? Math.round(z.length_ft).toLocaleString() + ' ft' : '—';
+  const area = z.area_sqft != null ? Math.round(z.area_sqft).toLocaleString() + ' sq ft' : '—';
+  return `<div style="min-width:190px">
+    <div style="font-weight:bold;color:#000">${esc(z.name)}</div>
+    <div style="font-size:12px;color:#000">${z.zone_type === 'polygon' ? 'approx length ' : ''}${len}, ${area}, ${defc} defects</div>
+    <div class="row" style="margin-top:6px;gap:6px;flex-wrap:wrap">
+      <button class="zn-edit" data-id="${z.id}">Edit points</button>
+      <button class="zn-rename" data-id="${z.id}">Rename</button>
+      <button class="zn-attach" data-id="${z.id}">Attach to group</button>
+      <button class="zn-del" data-id="${z.id}">Delete</button>
+    </div>
+  </div>`;
+}
+function wireZonePopup(e, z) {
+  const root = e.popup.getElement(); if (!root) return;
+  const q = (c) => root.querySelector(c);
+  const ed = q('.zn-edit'); if (ed) ed.onclick = () => { mapObj.closePopup(); startDraw(z.zone_type, z); };
+  const rn = q('.zn-rename'); if (rn) rn.onclick = async () => {
+    const name = prompt('Rename zone:', z.name); if (name == null) return;
+    const r = await api(`/api/zones/${z.id}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
+    if (r.ok) { toast('Renamed'); loadZones(); } else toast('Rename failed');
+  };
+  const at = q('.zn-attach'); if (at) at.onclick = async () => {
+    const gsel = document.getElementById('mapGroup'); const gid = gsel ? gsel.value : '';
+    if (!gid) { toast('Pick a group in the filter above first, then Attach'); return; }
+    const r = await api(`/api/zones/${z.id}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ group_id: gid }) });
+    if (r.ok) { toast('Attached to group'); loadZones(); } else toast('Attach failed');
+  };
+  const dl = q('.zn-del'); if (dl) dl.onclick = async () => {
+    if (!confirm('Delete this zone?')) return;
+    const r = await api(`/api/zones/${z.id}/delete`, { method: 'POST' });
+    if (r.ok) { toast('Zone deleted'); loadZones(); } else toast('Delete failed');
+  };
+}
+
 // ---- Groups ----
 async function renderGroups() {
   if (state.groupId) { renderGroupDetail(state.groupId); return; }
@@ -1186,6 +1438,7 @@ async function renderGroupDetail(id) {
   currentGroup = data.group;
   currentGroupItems = data.items || [];
   const score = data.score || null;
+  const zsum = data.zones || null;
   let scoreHtml = '';
   if (isProClient() && score) {
     if (score.score == null) {
@@ -1195,6 +1448,9 @@ async function renderGroupDetail(id) {
         <div style="font-size:40px;font-weight:800;color:${scoreColor(score.score)}">${score.score}</div>
         <div style="font-size:18px;font-weight:bold">${esc(score.band)}</div>
         <div class="meta">Score based on ${score.classified} of ${score.total} captures classified${score.unclassified ? ` (${score.unclassified} not yet classified)` : ''}.</div>
+        ${zsum && zsum.zones > 0
+          ? `<div class="meta" style="margin-top:6px"><strong>Measured:</strong> ${Math.round(zsum.length_ft).toLocaleString()} ft, ${Math.round(zsum.area_sqft).toLocaleString()} sq ft, ${zsum.defects} matched defects</div>`
+          : `<div class="meta" style="margin-top:6px"><button class="editlink" id="gotoMap">Measure this site on the Map</button></div>`}
       </div>`;
     }
   }
@@ -1231,6 +1487,7 @@ async function renderGroupDetail(id) {
   document.getElementById('gfmts').onclick = (e) => { const p = e.target.closest('.pill'); if (p) p.classList.toggle('on'); };
   const pp = document.getElementById('proppdf'); if (pp) pp.onclick = () => exportProposal('pdf');
   const pw = document.getElementById('propdocx'); if (pw) pw.onclick = () => exportProposal('docx');
+  const gm = document.getElementById('gotoMap'); if (gm) gm.onclick = () => { state.view = 'map'; state.groupId = null; renderApp(); };
   renderTitleView();
   renderDescView();
   renderGroupItems();
