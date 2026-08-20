@@ -725,7 +725,8 @@ async function renderList() {
       <button class="btn secondary" id="selall">Select All</button>
       <button class="btn secondary" id="selnone">Clear</button>
     </div>
-    ${isProClient() ? `<button class="btn secondary slim" id="classifybatch" style="margin-top:8px">Classify Selected (AI)</button><div class="status" id="classifyprog"></div>` : ''}
+    ${isProClient() ? `<button class="btn secondary slim" id="classifybatch" style="margin-top:8px">Classify Selected (AI)</button><div class="status" id="classifyprog"></div>
+    <button class="btn secondary slim" id="pairbtn" style="margin-top:8px">Pair as Before/After (select 2)</button>` : ''}
 
     <label>Export <span style="font-weight:normal;text-transform:none;letter-spacing:0">(pick one or more)</span></label>
     <div class="pill-group" id="fmts">
@@ -759,8 +760,38 @@ async function renderList() {
   document.getElementById('addtogroup').onclick = addSelectedToGroup;
   const cb = document.getElementById('classifybatch');
   if (cb) cb.onclick = classifySelected;
+  const pb = document.getElementById('pairbtn');
+  if (pb) pb.onclick = pairSelected;
   loadGroupOptions();
   loadCards('');
+}
+
+async function pairSelected() {
+  const ids = Array.from(document.querySelectorAll('.capchk:checked')).map(x => parseInt(x.value, 10));
+  if (ids.length !== 2) { toast('Select exactly two captures to pair'); return; }
+  const rows = window._lastCards || [];
+  const a = rows.find(r => r.id === ids[0]) || { id: ids[0] };
+  const b = rows.find(r => r.id === ids[1]) || { id: ids[1] };
+  // older capture defaults to Before
+  const at = new Date(a.created_at || 0).getTime(), bt = new Date(b.created_at || 0).getTime();
+  let before = at <= bt ? a : b, after = at <= bt ? b : a;
+  const swap = confirm(`Before = capture #${before.id} (older), After = capture #${after.id}.\n\nOK to keep this order, or Cancel to swap Before/After.`);
+  if (!swap) { const t = before; before = after; after = t; }
+  const r = await api('/api/pairs', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ before_id: before.id, after_id: after.id }),
+  });
+  if (r.ok) { toast('Paired'); loadCards(document.getElementById('filter').value || ''); }
+  else { const d = await r.json().catch(() => ({})); toast(d.error || 'Pairing failed'); }
+}
+
+async function unpair(captureId) {
+  const r = await api('/api/pairs/unpair', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ capture_id: captureId }),
+  });
+  if (r.ok) { toast('Unpaired'); loadCards(document.getElementById('filter').value || ''); }
+  else toast('Unpair failed');
 }
 
 // ---- AI defect classification (Pro) ----
@@ -947,33 +978,95 @@ async function loadCards(area) {
   if (!r.ok) { cards.innerHTML = '<p class="status">Could not load.</p>'; return; }
   const rows = await r.json();
   if (!rows.length) { cards.innerHTML = '<p class="empty">No captures yet. Go grab one.</p>'; return; }
-  cards.innerHTML = rows.map(c => {
-    const when = new Date(c.created_at).toLocaleString([], { year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' });
-    const tags = (c.area_tags || []).map(t => `<span class="badge">${esc(t)}</span>`).join('');
-    const kind = c.kind === 'task' ? `<span class="badge task">Task</span>` : '';
+  window._lastCards = rows;
+  // Pro: pull pairs + proximity suggestions so we can render combined cards.
+  let pairs = [], suggestions = [];
+  if (isProClient()) {
+    try { const pr = await api('/api/pairs'); if (pr.ok) pairs = await pr.json(); } catch (e) {}
+    try { const sr = await api('/api/pairs/suggestions'); if (sr.ok) suggestions = await sr.json(); } catch (e) {}
+  }
+  const byId = {}; rows.forEach(c => { byId[c.id] = c; });
+  const beforeOf = {}, afterOf = {};
+  pairs.forEach(p => { beforeOf[p.before_id] = p; afterOf[p.after_id] = p; });
+  if (!window._dismissedSug) window._dismissedSug = new Set();
+  const visSug = suggestions.filter(s => byId[s.before_id] && byId[s.after_id] && !window._dismissedSug.has(s.before_id + '-' + s.after_id));
+  let banner = '';
+  if (visSug.length) {
+    banner = `<div class="card" style="border-color:#1d4ed8"><div style="font-weight:bold">Possible before/after matches nearby</div>` +
+      visSug.map(s => `<div class="row" style="margin-top:6px;align-items:center">
+        <div class="meta" style="flex:2">#${s.before_id} and #${s.after_id}, ${s.meters} m apart</div>
+        <button class="btn slim sugpair" data-b="${s.before_id}" data-a="${s.after_id}" style="flex:1">Pair</button>
+        <button class="editlink sugdismiss" data-b="${s.before_id}" data-a="${s.after_id}">Dismiss</button>
+      </div>`).join('') + `</div>`;
+  }
+  const consumed = new Set();
+  const html = [];
+  for (const c of rows) {
+    if (consumed.has(c.id)) continue;
+    const ab = beforeOf[c.id];
+    if (ab && byId[ab.after_id] && !consumed.has(ab.after_id)) { html.push(pairCardHtml(c, byId[ab.after_id])); consumed.add(c.id); consumed.add(ab.after_id); continue; }
+    const aa = afterOf[c.id];
+    if (aa && byId[aa.before_id] && !consumed.has(aa.before_id)) { html.push(pairCardHtml(byId[aa.before_id], c)); consumed.add(c.id); consumed.add(aa.before_id); continue; }
+    html.push(captureCardHtml(c));
+    consumed.add(c.id);
+  }
+  cards.innerHTML = banner + html.join('');
+  wireCards(cards, rows);
+}
+
+function captureCardHtml(c) {
+  const when = new Date(c.created_at).toLocaleString([], { year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' });
+  const tags = (c.area_tags || []).map(t => `<span class="badge">${esc(t)}</span>`).join('');
+  const kind = c.kind === 'task' ? `<span class="badge task">Task</span>` : '';
+  const dims = isProClient() ? fmtDimsClient(c) : '';
+  const classifyRow = isProClient()
+    ? (c.defect_type
+        ? `<div class="defectrow" style="margin:6px 0">${defectBadgeHtml(c)} <button class="editlink overridebtn" data-id="${c.id}">Change</button></div>`
+        : `<div class="defectrow" style="margin:6px 0"><button class="btn secondary slim classifybtn" data-id="${c.id}">Classify (AI)</button></div>`)
+    : '';
+  return `<div class="card">
+    <label style="display:flex;align-items:center;gap:8px;font-weight:bold;margin-bottom:8px;text-transform:none;letter-spacing:0;font-size:15px">
+      <input type="checkbox" class="capchk" value="${c.id}" style="width:20px;height:20px"> Select
+    </label>
+    ${c.photo_path ? `<img src="${photoSrc(c.photo_path)}" alt="capture" />` : ''}
+    <div class="meta">${when}</div>
+    <div class="rotaterow">${rotateButtons(c.id)}</div>
+    <div class="addr">${esc(c.address || (c.latitude ? c.latitude.toFixed(5)+', '+c.longitude.toFixed(5) : 'No location'))}</div>
+    <div class="meta">${kind}${tags}</div>
+    ${classifyRow}
+    ${dims ? `<div class="meta"><strong>Dimensions:</strong> ${esc(dims)}</div>` : ''}
+    <div class="notewrap" data-id="${c.id}">
+      <div class="notetext">${esc(c.note || '(no note)')}</div>
+      <button class="btn secondary editnote" data-id="${c.id}" style="margin-top:6px">Edit Note</button>
+    </div>
+  </div>`;
+}
+
+// A combined before/after card: two photos side by side with labels + Unpair.
+function pairCardHtml(before, after) {
+  const side = (c, label) => {
     const dims = isProClient() ? fmtDimsClient(c) : '';
-    const classifyRow = isProClient()
-      ? (c.defect_type
-          ? `<div class="defectrow" style="margin:6px 0">${defectBadgeHtml(c)} <button class="editlink overridebtn" data-id="${c.id}">Change</button></div>`
-          : `<div class="defectrow" style="margin:6px 0"><button class="btn secondary slim classifybtn" data-id="${c.id}">Classify (AI)</button></div>`)
-      : '';
-    return `<div class="card">
-      <label style="display:flex;align-items:center;gap:8px;font-weight:bold;margin-bottom:8px;text-transform:none;letter-spacing:0;font-size:15px">
-        <input type="checkbox" class="capchk" value="${c.id}" style="width:20px;height:20px"> Select
+    const badge = isProClient() && c.defect_type ? defectBadgeHtml(c) : '';
+    return `<div style="flex:1;min-width:0">
+      <div style="font-weight:bold;font-size:13px">${label}</div>
+      <label style="display:flex;align-items:center;gap:6px;text-transform:none;letter-spacing:0;font-size:13px;font-weight:bold">
+        <input type="checkbox" class="capchk" value="${c.id}" style="width:18px;height:18px"> Select
       </label>
-      ${c.photo_path ? `<img src="${photoSrc(c.photo_path)}" alt="capture" />` : ''}
-      <div class="meta">${when}</div>
+      ${c.photo_path ? `<img src="${photoSrc(c.photo_path)}" alt="${label}" />` : ''}
       <div class="rotaterow">${rotateButtons(c.id)}</div>
-      <div class="addr">${esc(c.address || (c.latitude ? c.latitude.toFixed(5)+', '+c.longitude.toFixed(5) : 'No location'))}</div>
-      <div class="meta">${kind}${tags}</div>
-      ${classifyRow}
+      ${badge ? `<div style="margin:4px 0">${badge}</div>` : ''}
       ${dims ? `<div class="meta"><strong>Dimensions:</strong> ${esc(dims)}</div>` : ''}
-      <div class="notewrap" data-id="${c.id}">
-        <div class="notetext">${esc(c.note || '(no note)')}</div>
-        <button class="btn secondary editnote" data-id="${c.id}" style="margin-top:6px">Edit Note</button>
-      </div>
+      <div class="meta">${esc(c.note || '(no note)')}</div>
     </div>`;
-  }).join('');
+  };
+  return `<div class="card">
+    <div style="font-weight:bold;margin-bottom:6px">${esc(before.address || after.address || 'No location')} <span class="badge">Before / After</span></div>
+    <div class="row" style="gap:12px;align-items:flex-start">${side(before, 'BEFORE')}${side(after, 'AFTER')}</div>
+    <button class="btn secondary slim unpairbtn" data-id="${before.id}" style="margin-top:8px">Unpair</button>
+  </div>`;
+}
+
+function wireCards(cards, rows) {
   wireRotate(cards);
   cards.querySelectorAll('.editnote').forEach(b => b.onclick = () => startEditNote(parseInt(b.getAttribute('data-id'), 10), rows));
   cards.querySelectorAll('.classifybtn').forEach(b => b.onclick = async () => {
@@ -984,6 +1077,12 @@ async function loadCards(area) {
   });
   cards.querySelectorAll('.overridebtn').forEach(b => b.onclick = () => startOverride(parseInt(b.getAttribute('data-id'), 10), rows));
   cards.querySelectorAll('.defbadge').forEach(b => b.onclick = () => startOverride(parseInt(b.getAttribute('data-id'), 10), rows));
+  cards.querySelectorAll('.unpairbtn').forEach(b => b.onclick = () => unpair(parseInt(b.getAttribute('data-id'), 10)));
+  cards.querySelectorAll('.sugpair').forEach(b => b.onclick = async () => {
+    const r = await api('/api/pairs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ before_id: parseInt(b.getAttribute('data-b'), 10), after_id: parseInt(b.getAttribute('data-a'), 10) }) });
+    if (r.ok) { toast('Paired'); loadCards(document.getElementById('filter').value || ''); } else toast('Pairing failed');
+  });
+  cards.querySelectorAll('.sugdismiss').forEach(b => b.onclick = () => { window._dismissedSug.add(b.getAttribute('data-b') + '-' + b.getAttribute('data-a')); loadCards(document.getElementById('filter').value || ''); });
 }
 
 function startEditNote(id, rows) {
