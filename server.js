@@ -436,6 +436,26 @@ function capturesInZone(zone, caps) {
   return out;
 }
 
+// ===================== Extra Work Record vocabulary (Feature) =====================
+const EWR_STATUSES = ['documented', 'sent_for_review', 'approved', 'declined', 'completed', 'closed_no_action'];
+const EWR_REASONS = ['unforeseen_site_condition', 'failed_base_or_subbase', 'additional_damaged_area', 'drainage_or_water_issue', 'customer_requested_addition', 'additional_repair_or_patching', 'access_obstruction_or_site_prep', 'safety_issue', 'other'];
+const EWR_METHODS = ['in_person', 'phone', 'text', 'email', 'other'];
+function ewrStatusLabel(s) {
+  return ({ documented: 'Documented', sent_for_review: 'Sent for review', approved: 'Approved', declined: 'Declined', completed: 'Completed', closed_no_action: 'Closed / no action' })[s] || 'Documented';
+}
+function ewrReasonLabel(r) {
+  return ({
+    unforeseen_site_condition: 'Unforeseen site condition', failed_base_or_subbase: 'Failed base or sub-base',
+    additional_damaged_area: 'Additional damaged area found', drainage_or_water_issue: 'Drainage or water issue',
+    customer_requested_addition: 'Customer-requested addition', additional_repair_or_patching: 'Additional repair or patching',
+    access_obstruction_or_site_prep: 'Access, obstruction, or site-preparation issue', safety_issue: 'Safety issue', other: 'Other',
+  })[r] || '';
+}
+function ewrMethodLabel(m) {
+  return ({ in_person: 'In person', phone: 'Phone call', text: 'Text message', email: 'Email', other: 'Other' })[m] || '';
+}
+const EWR_DISCLAIMER = 'This record is job-site documentation intended to support the contractor’s existing communication and change-order process. It does not itself constitute a contract, estimate, invoice, or legally binding approval.';
+
 // ---- activity log (admin usage metadata; never stores note text or photos) ----
 async function logEvent(userId, action, detail) {
   try {
@@ -1225,6 +1245,211 @@ async function groupZoneSummary(userId, groupId) {
   }
   return { zones: zones.length, length_ft: length, area_sqft: area, defects: matched.size };
 }
+
+// ---- Extra Work Record (Pro): job-site documentation of out-of-scope work ----
+async function ewrProGuard(req, res) {
+  if (await currentPlan(req.user.id) !== 'pro') { res.status(403).json({ error: 'pro only' }); return false; }
+  return true;
+}
+function ewrPhotoCount(ewrId) {
+  return pool.query(`SELECT COUNT(*)::int AS n FROM ewr_photos WHERE ewr_id=$1`, [ewrId]).then(r => r.rows[0].n);
+}
+
+app.post('/api/ewr', requireAuth, async (req, res) => {
+  try {
+    if (!(await ewrProGuard(req, res))) return;
+    const b = req.body || {};
+    const reason = EWR_REASONS.includes(b.reason_category) ? b.reason_category : null;
+    if (!reason) return res.status(400).json({ error: 'reason_category required' });
+    if (reason === 'other' && !(b.reason_other_text && String(b.reason_other_text).trim())) return res.status(400).json({ error: 'describe the "other" reason' });
+    let groupId = b.group_id != null && b.group_id !== '' ? parseInt(b.group_id, 10) : null;
+    if (groupId != null && !(await ownsGroup(groupId, req.user.id))) groupId = null;
+    const lat = b.latitude != null && b.latitude !== '' ? parseFloat(b.latitude) : null;
+    const lng = b.longitude != null && b.longitude !== '' ? parseFloat(b.longitude) : null;
+    let address = b.address || null;
+    if (!address && lat != null && lng != null) address = await reverseGeocode(lat, lng);
+    const method = EWR_METHODS.includes(b.notification_method) ? b.notification_method : null;
+    const notifiedAt = b.notified_at ? new Date(b.notified_at) : null;
+    const row = (await pool.query(
+      `INSERT INTO extra_work_records
+        (user_id, group_id, created_by, customer, status, reason_category, reason_other_text, description_text,
+         latitude, longitude, address, notified_person_name, notified_person_company, notification_method, notified_at, notification_notes)
+       VALUES ($1,$2,$3,$4,'documented',$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
+      [req.user.id, groupId, req.user.name, b.customer || null, reason, b.reason_other_text || null, b.description_text || null,
+       lat, lng, address, b.notified_person_name || null, b.notified_person_company || null, method, notifiedAt, b.notification_notes || null])).rows[0];
+    logEvent(req.user.id, 'ewr_create', { reason, group: groupId });
+    res.json({ ok: true, record: row });
+  } catch (err) { console.error('[ewr.create]', err); res.status(500).json({ error: 'create failed' }); }
+});
+
+app.get('/api/ewr', requireAuth, async (req, res) => {
+  try {
+    if (await currentPlan(req.user.id) !== 'pro') return res.json([]);
+    const groupId = req.query.group ? parseInt(req.query.group, 10) : null;
+    const params = [req.user.id];
+    let where = 'e.user_id = $1';
+    if (Number.isInteger(groupId)) { params.push(groupId); where += ` AND e.group_id = $2`; }
+    const rows = (await pool.query(`
+      SELECT e.*, COALESCE(p.n, 0)::int AS photo_count
+      FROM extra_work_records e
+      LEFT JOIN (SELECT ewr_id, COUNT(*) n FROM ewr_photos GROUP BY ewr_id) p ON p.ewr_id = e.id
+      WHERE ${where} ORDER BY e.created_at DESC`, params)).rows;
+    res.json(rows);
+  } catch (err) { console.error('[ewr.list]', err); res.status(500).json({ error: 'failed' }); }
+});
+
+app.get('/api/ewr/:id', requireAuth, async (req, res) => {
+  try {
+    if (!(await ewrProGuard(req, res))) return;
+    const id = parseInt(req.params.id, 10);
+    const e = (await pool.query(`SELECT * FROM extra_work_records WHERE id=$1 AND user_id=$2`, [id, req.user.id])).rows[0];
+    if (!e) return res.status(404).json({ error: 'not found' });
+    const photos = (await pool.query(`SELECT * FROM ewr_photos WHERE ewr_id=$1 ORDER BY created_at ASC`, [id])).rows;
+    let group = null;
+    if (e.group_id) group = (await pool.query(`SELECT id, title, description FROM groups WHERE id=$1 AND user_id=$2`, [e.group_id, req.user.id])).rows[0] || null;
+    res.json({ record: e, photos, group });
+  } catch (err) { console.error('[ewr.get]', err); res.status(500).json({ error: 'failed' }); }
+});
+
+app.post('/api/ewr/:id', requireAuth, async (req, res) => {
+  try {
+    if (!(await ewrProGuard(req, res))) return;
+    const id = parseInt(req.params.id, 10);
+    const e = (await pool.query(`SELECT * FROM extra_work_records WHERE id=$1 AND user_id=$2`, [id, req.user.id])).rows[0];
+    if (!e) return res.status(404).json({ error: 'not found' });
+    const b = req.body || {};
+    const sets = [], vals = [];
+    const add = (col, val) => { vals.push(val); sets.push(`${col} = $${vals.length}`); };
+    if (typeof b.customer === 'string') add('customer', b.customer.trim() || null);
+    if (b.status !== undefined && EWR_STATUSES.includes(b.status)) add('status', b.status);
+    if (b.reason_category !== undefined && EWR_REASONS.includes(b.reason_category)) add('reason_category', b.reason_category);
+    if (typeof b.reason_other_text === 'string') add('reason_other_text', b.reason_other_text);
+    if (typeof b.description_text === 'string') add('description_text', b.description_text);
+    if (typeof b.notified_person_name === 'string') add('notified_person_name', b.notified_person_name.trim() || null);
+    if (typeof b.notified_person_company === 'string') add('notified_person_company', b.notified_person_company.trim() || null);
+    if (b.notification_method !== undefined) add('notification_method', EWR_METHODS.includes(b.notification_method) ? b.notification_method : null);
+    if (b.notified_at !== undefined) add('notified_at', b.notified_at ? new Date(b.notified_at) : null);
+    if (typeof b.notification_notes === 'string') add('notification_notes', b.notification_notes);
+    if (b.group_id !== undefined) { let gid = (b.group_id === null || b.group_id === '') ? null : parseInt(b.group_id, 10); if (gid != null && !(await ownsGroup(gid, req.user.id))) gid = null; add('group_id', gid); }
+    if (!sets.length) return res.status(400).json({ error: 'nothing to update' });
+    vals.push(id); vals.push(req.user.id);
+    const row = (await pool.query(`UPDATE extra_work_records SET ${sets.join(', ')}, updated_at = now() WHERE id = $${vals.length - 1} AND user_id = $${vals.length} RETURNING *`, vals)).rows[0];
+    logEvent(req.user.id, 'ewr_update', { status: row.status });
+    res.json({ ok: true, record: row });
+  } catch (err) { console.error('[ewr.update]', err); res.status(500).json({ error: 'update failed' }); }
+});
+
+app.post('/api/ewr/:id/photo', requireAuth, upload.single('photo'), async (req, res) => {
+  try {
+    if (await currentPlan(req.user.id) !== 'pro') { if (req.file) { try { fs.unlinkSync(req.file.path); } catch (e) {} } return res.status(403).json({ error: 'pro only' }); }
+    const id = parseInt(req.params.id, 10);
+    const e = (await pool.query(`SELECT id FROM extra_work_records WHERE id=$1 AND user_id=$2`, [id, req.user.id])).rows[0];
+    if (!e) { if (req.file) { try { fs.unlinkSync(req.file.path); } catch (er) {} } return res.status(404).json({ error: 'not found' }); }
+    if (!req.file) return res.status(400).json({ error: 'photo required' });
+    const b = req.body || {};
+    const lat = b.latitude != null && b.latitude !== '' ? parseFloat(b.latitude) : null;
+    const lng = b.longitude != null && b.longitude !== '' ? parseFloat(b.longitude) : null;
+    let pw = null, ph = null; const d = await imageDims(req.file.path); if (d) { pw = d.w; ph = d.h; }
+    const row = (await pool.query(
+      `INSERT INTO ewr_photos (ewr_id, user_id, photo_path, photo_width, photo_height, caption, latitude, longitude)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+      [id, req.user.id, `/uploads/${req.file.filename}`, pw, ph, b.caption || null, lat, lng])).rows[0];
+    await pool.query(`UPDATE extra_work_records SET updated_at = now() WHERE id=$1`, [id]);
+    logEvent(req.user.id, 'ewr_photo', {});
+    res.json({ ok: true, photo: row });
+  } catch (err) { console.error('[ewr.photo]', err); res.status(500).json({ error: 'photo upload failed' }); }
+});
+
+app.post('/api/ewr/:id/photo/:pid/caption', requireAuth, async (req, res) => {
+  try {
+    if (!(await ewrProGuard(req, res))) return;
+    const id = parseInt(req.params.id, 10), pid = parseInt(req.params.pid, 10);
+    const cap = (req.body && typeof req.body.caption === 'string') ? req.body.caption : '';
+    const { rowCount } = await pool.query(`UPDATE ewr_photos SET caption=$1 WHERE id=$2 AND ewr_id=$3 AND user_id=$4`, [cap || null, pid, id, req.user.id]);
+    if (!rowCount) return res.status(404).json({ error: 'not found' });
+    res.json({ ok: true });
+  } catch (err) { console.error('[ewr.photo.caption]', err); res.status(500).json({ error: 'caption failed' }); }
+});
+
+app.post('/api/ewr/:id/photo/:pid/delete', requireAuth, async (req, res) => {
+  try {
+    if (!(await ewrProGuard(req, res))) return;
+    const id = parseInt(req.params.id, 10), pid = parseInt(req.params.pid, 10);
+    const row = (await pool.query(`SELECT photo_path FROM ewr_photos WHERE id=$1 AND ewr_id=$2 AND user_id=$3`, [pid, id, req.user.id])).rows[0];
+    if (!row) return res.status(404).json({ error: 'not found' });
+    await pool.query(`DELETE FROM ewr_photos WHERE id=$1 AND user_id=$2`, [pid, req.user.id]);
+    const p = localPhoto(row.photo_path); if (p) { try { fs.unlinkSync(p); } catch (e) {} }
+    res.json({ ok: true });
+  } catch (err) { console.error('[ewr.photo.delete]', err); res.status(500).json({ error: 'delete failed' }); }
+});
+
+app.post('/api/ewr/:id/delete', requireAuth, async (req, res) => {
+  try {
+    if (!(await ewrProGuard(req, res))) return;
+    const id = parseInt(req.params.id, 10);
+    const photos = (await pool.query(`SELECT photo_path FROM ewr_photos WHERE ewr_id=$1 AND user_id=$2`, [id, req.user.id])).rows;
+    await pool.query(`DELETE FROM extra_work_records WHERE id=$1 AND user_id=$2`, [id, req.user.id]);
+    for (const p of photos) { const lp = localPhoto(p.photo_path); if (lp) { try { fs.unlinkSync(lp); } catch (e) {} } }
+    logEvent(req.user.id, 'ewr_delete', {});
+    res.json({ ok: true });
+  } catch (err) { console.error('[ewr.delete]', err); res.status(500).json({ error: 'delete failed' }); }
+});
+
+// Professional PDF report for an Extra Work Record.
+app.get('/api/ewr/:id/export', requireAuth, async (req, res) => {
+  try {
+    if (!(await ewrProGuard(req, res))) return;
+    const id = parseInt(req.params.id, 10);
+    const e = (await pool.query(`SELECT * FROM extra_work_records WHERE id=$1 AND user_id=$2`, [id, req.user.id])).rows[0];
+    if (!e) return res.status(404).json({ error: 'not found' });
+    const photos = (await pool.query(`SELECT * FROM ewr_photos WHERE ewr_id=$1 ORDER BY created_at ASC`, [id])).rows;
+    let group = null;
+    if (e.group_id) group = (await pool.query(`SELECT title, description FROM groups WHERE id=$1`, [e.group_id])).rows[0] || null;
+    const imgRes = req.query.res || 'standard';
+    const imgFmt = req.query.fmt || 'jpeg';
+    logEvent(req.user.id, 'ewr_export', { photos: photos.length, status: e.status });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="extra-work-record-${id}.pdf"`);
+    const pdf = new PDFDocument({ size: 'LETTER', margin: 48 });
+    pdf.pipe(res);
+    pdf.fontSize(11).fillColor('#000').text('Photo Notes — Asphalt Pro');
+    pdf.moveDown(0.2);
+    pdf.fontSize(20).fillColor('#000').text('Extra Work Record', { align: 'left' });
+    pdf.fontSize(11).fillColor('#000').text(`Record No: EWR-${String(id).padStart(4, '0')}`);
+    pdf.moveDown(0.5);
+    const line = (label, val) => { if (val == null || val === '') return; pdf.fontSize(12).fillColor('#000').text(`${label}: ${val}`); };
+    line('Job', group ? (group.title || '') : '');
+    line('Customer / client', e.customer);
+    line('Job address', e.address);
+    line('Created', fmtWhen(e.created_at));
+    line('Created by', e.created_by);
+    line('Status', ewrStatusLabel(e.status));
+    line('Reason', ewrReasonLabel(e.reason_category) + (e.reason_category === 'other' && e.reason_other_text ? `: ${e.reason_other_text}` : ''));
+    if (e.latitude != null && e.longitude != null) line('GPS', `${Number(e.latitude).toFixed(5)}, ${Number(e.longitude).toFixed(5)}`);
+    pdf.moveDown(0.5);
+    pdf.fontSize(13).fillColor('#000').text('Description of condition / added work');
+    pdf.fontSize(12).fillColor('#000').text(e.description_text || '(none provided)');
+    if (e.notified_person_name || e.notification_method || e.notification_notes) {
+      pdf.moveDown(0.5);
+      pdf.fontSize(13).fillColor('#000').text('Notification');
+      line('Notified', [e.notified_person_name, e.notified_person_company].filter(Boolean).join(', '));
+      line('Method', ewrMethodLabel(e.notification_method));
+      if (e.notified_at) line('When', fmtWhen(e.notified_at));
+      line('Notes', e.notification_notes);
+    }
+    for (let i = 0; i < photos.length; i++) {
+      const p = photos[i];
+      pdf.addPage();
+      const img = localPhoto(p.photo_path);
+      if (img) { const r = await renderForEmbed(img, imgRes, imgFmt); if (r) { try { pdf.image(r.buffer, { fit: [480, 340], align: 'center' }); pdf.moveDown(0.4); } catch (er) {} } }
+      pdf.fontSize(12).fillColor('#000').text(`Photo ${i + 1}${p.caption ? ': ' + p.caption : ''}`);
+      pdf.fontSize(10).fillColor('#000').text(fmtWhen(p.created_at) + (p.latitude != null ? `   GPS ${Number(p.latitude).toFixed(5)}, ${Number(p.longitude).toFixed(5)}` : ''));
+    }
+    pdf.moveDown(1);
+    pdf.fontSize(9).fillColor('#000').text(EWR_DISCLAIMER, 48, pdf.y, { width: 515 });
+    pdf.end();
+  } catch (err) { console.error('[ewr.export]', err); if (!res.headersSent) res.status(500).json({ error: 'export failed' }); }
+});
 
 // ---- admin: manage logins + usage metadata (no photos/notes exposed) ----
 app.get('/api/admin/users', requireAdmin, async (req, res) => {
