@@ -40,6 +40,9 @@ textarea { min-height: 96px; resize: vertical; }
 .topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
 /* Product title. Temporarily red + uppercase + larger so it clearly reads as the app name, not a section heading. */
 .brand { text-align: center; text-transform: uppercase; color: #c1121f; font-size: 30px; font-weight: 800; letter-spacing: 1.5px; margin: 6px 0 4px; }
+/* Brand logo (outlined wordmark). Centered; scales down on small phones. */
+.brandlogo { display: block; height: 46px; width: auto; max-width: 90%; margin: 8px auto 6px; }
+@media (max-width: 380px) { .brandlogo { height: 38px; } }
 .logoutbar { display: flex; justify-content: flex-end; }
 /* compact input+button row (e.g. add a topic) at about half the usual height.
    font-size stays 16px so iOS Safari does not auto-zoom the page on focus. */
