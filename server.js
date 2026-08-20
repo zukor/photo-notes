@@ -285,6 +285,18 @@ function fmtQtyTotal(row) {
   return t;
 }
 
+// ===================== Geometry helpers (no AI, no external services) =====================
+// Great-circle distance between two lat/lng points, in meters, via haversine.
+function haversineMeters(lat1, lng1, lat2, lng2) {
+  if ([lat1, lng1, lat2, lng2].some(v => v == null || Number.isNaN(Number(v)))) return null;
+  const R = 6371000; // earth radius in meters
+  const toRad = (d) => Number(d) * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1), dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
+}
+function metersToFeet(m) { return m == null ? null : m * 3.28084; }
+
 // ---- activity log (admin usage metadata; never stores note text or photos) ----
 async function logEvent(userId, action, detail) {
   try {
@@ -885,6 +897,92 @@ app.post('/api/groups/:id/reorder', requireAuth, async (req, res) => {
   } catch (err) { console.error('[groups.reorder]', err); res.status(500).json({ error: 'reorder failed' }); }
 });
 
+// ---- before/after pairing (Pro) ----
+async function ownsCaptures(userId, ids) {
+  const owned = (await pool.query(`SELECT id FROM captures WHERE id = ANY($1) AND user_id = $2`, [ids, userId])).rows.map(r => r.id);
+  return ids.every(id => owned.includes(id));
+}
+// Map of capture_id -> pair record, for the user. Used to render combined cards.
+async function pairsForUser(userId) {
+  return (await pool.query(`SELECT * FROM capture_pairs WHERE user_id = $1`, [userId])).rows;
+}
+
+app.get('/api/pairs', requireAuth, async (req, res) => {
+  try {
+    if (await currentPlan(req.user.id) !== 'pro') return res.json([]);
+    const rows = await pairsForUser(req.user.id);
+    res.json(rows);
+  } catch (err) { console.error('[pairs.list]', err); res.status(500).json({ error: 'failed' }); }
+});
+
+app.post('/api/pairs', requireAuth, async (req, res) => {
+  try {
+    if (await currentPlan(req.user.id) !== 'pro') return res.status(403).json({ error: 'pro only' });
+    const b = req.body || {};
+    const beforeId = parseInt(b.before_id, 10), afterId = parseInt(b.after_id, 10);
+    if (!Number.isInteger(beforeId) || !Number.isInteger(afterId) || beforeId === afterId) return res.status(400).json({ error: 'two distinct captures required' });
+    if (!(await ownsCaptures(req.user.id, [beforeId, afterId]))) return res.status(403).json({ error: 'not your captures' });
+    // reject if either is already in a pair
+    const existing = (await pool.query(
+      `SELECT 1 FROM capture_pairs WHERE user_id=$1 AND (before_id IN ($2,$3) OR after_id IN ($2,$3)) LIMIT 1`,
+      [req.user.id, beforeId, afterId])).rows;
+    if (existing.length) return res.status(409).json({ error: 'one of these is already paired' });
+    const row = (await pool.query(
+      `INSERT INTO capture_pairs (user_id, before_id, after_id) VALUES ($1,$2,$3) RETURNING *`,
+      [req.user.id, beforeId, afterId])).rows[0];
+    logEvent(req.user.id, 'pair_create', {});
+    res.json({ ok: true, pair: row });
+  } catch (err) {
+    if (err && err.code === '23505') return res.status(409).json({ error: 'already paired' });
+    console.error('[pairs.create]', err); res.status(500).json({ error: 'pair failed' });
+  }
+});
+
+app.post('/api/pairs/unpair', requireAuth, async (req, res) => {
+  try {
+    if (await currentPlan(req.user.id) !== 'pro') return res.status(403).json({ error: 'pro only' });
+    const b = req.body || {};
+    if (b.id != null) {
+      await pool.query(`DELETE FROM capture_pairs WHERE id=$1 AND user_id=$2`, [parseInt(b.id, 10), req.user.id]);
+    } else {
+      const cid = parseInt(b.capture_id, 10);
+      if (!Number.isInteger(cid)) return res.status(400).json({ error: 'id or capture_id required' });
+      await pool.query(`DELETE FROM capture_pairs WHERE user_id=$1 AND (before_id=$2 OR after_id=$2)`, [req.user.id, cid]);
+    }
+    logEvent(req.user.id, 'unpair', {});
+    res.json({ ok: true });
+  } catch (err) { console.error('[pairs.unpair]', err); res.status(500).json({ error: 'unpair failed' }); }
+});
+
+// Proximity suggestions: unpaired captures of the user within 15 m of each other.
+app.get('/api/pairs/suggestions', requireAuth, async (req, res) => {
+  try {
+    if (await currentPlan(req.user.id) !== 'pro') return res.json([]);
+    const caps = (await pool.query(
+      `SELECT id, latitude, longitude, created_at FROM captures WHERE user_id=$1 AND latitude IS NOT NULL AND longitude IS NOT NULL ORDER BY created_at ASC`,
+      [req.user.id])).rows;
+    const pairs = await pairsForUser(req.user.id);
+    const paired = new Set();
+    pairs.forEach(p => { paired.add(p.before_id); paired.add(p.after_id); });
+    const free = caps.filter(c => !paired.has(c.id));
+    const out = [];
+    const used = new Set();
+    for (let i = 0; i < free.length; i++) {
+      if (used.has(free[i].id)) continue;
+      for (let j = i + 1; j < free.length; j++) {
+        if (used.has(free[j].id)) continue;
+        const m = haversineMeters(free[i].latitude, free[i].longitude, free[j].latitude, free[j].longitude);
+        if (m != null && m <= 15) {
+          out.push({ before_id: free[i].id, after_id: free[j].id, meters: Math.round(m * 10) / 10 });
+          used.add(free[i].id); used.add(free[j].id);
+          break;
+        }
+      }
+    }
+    res.json(out);
+  } catch (err) { console.error('[pairs.suggestions]', err); res.status(500).json({ error: 'failed' }); }
+});
+
 // ---- admin: manage logins + usage metadata (no photos/notes exposed) ----
 app.get('/api/admin/users', requireAdmin, async (req, res) => {
   try {
@@ -1054,6 +1152,36 @@ function fmtWhen(d) { try { return new Date(d).toLocaleString(); } catch { retur
 // the user has not yet confirmed (dim_confirmed = false).
 function exportDims(c) { if (c && c.dim_confirmed === false) return ''; return fmtDims(c); }
 
+// Group export rows into render units: a single capture, or a before/after pair
+// when both members are present in the row set. Order follows the row order.
+function buildRenderUnits(rows, pairs) {
+  const byId = {}; rows.forEach(r => { byId[r.id] = r; });
+  const beforeOf = {}, afterOf = {};
+  (pairs || []).forEach(p => { beforeOf[p.before_id] = p; afterOf[p.after_id] = p; });
+  const consumed = new Set();
+  const units = [];
+  for (const r of rows) {
+    if (consumed.has(r.id)) continue;
+    const asBefore = beforeOf[r.id];
+    if (asBefore && byId[asBefore.after_id] && !consumed.has(asBefore.after_id)) {
+      units.push({ pair: { before: r, after: byId[asBefore.after_id] } });
+      consumed.add(r.id); consumed.add(asBefore.after_id); continue;
+    }
+    const asAfter = afterOf[r.id];
+    if (asAfter && byId[asAfter.before_id] && !consumed.has(asAfter.before_id)) {
+      units.push({ pair: { before: byId[asAfter.before_id], after: r } });
+      consumed.add(r.id); consumed.add(asAfter.before_id); continue;
+    }
+    units.push({ single: r });
+    consumed.add(r.id);
+  }
+  return units;
+}
+async function userPairs(userId) {
+  try { return (await pool.query(`SELECT * FROM capture_pairs WHERE user_id = $1`, [userId])).rows; }
+  catch (e) { return []; }
+}
+
 async function resolveExport(req) {
   const userId = req.user.id;
   const area = req.query.area || '';
@@ -1125,9 +1253,30 @@ app.get('/api/export/pdf', requireAuth, async (req, res) => {
     doc.fontSize(20).fillColor('#000').text(heading, { align: 'center' });
     if (desc) { doc.moveDown(0.3); doc.fontSize(12).fillColor('#000').text(desc, { align: 'center' }); }
     doc.moveDown(1);
-    for (let i = 0; i < rows.length; i++) {
-      const c = rows[i];
+    const pairs = pro ? await userPairs(req.user.id) : [];
+    const units = buildRenderUnits(rows, pairs);
+    for (let i = 0; i < units.length; i++) {
+      const u = units[i];
       if (i > 0) doc.addPage();
+      if (u.pair) {
+        const { before, after } = u.pair;
+        doc.fontSize(13).fillColor('#000').text(before.address || after.address || 'No location');
+        doc.moveDown(0.3);
+        const top = doc.y;
+        doc.fontSize(11).fillColor('#000').text('BEFORE', 48, top, { width: 240 });
+        doc.fontSize(11).fillColor('#000').text('AFTER', 310, top, { width: 240 });
+        const imgTop = top + 16;
+        const bImg = localPhoto(before.photo_path), aImg = localPhoto(after.photo_path);
+        if (bImg) { const r = await renderForEmbed(bImg, imgRes, imgFmt); if (r) { try { doc.image(r.buffer, 48, imgTop, { fit: [240, 180] }); } catch (e) {} } }
+        if (aImg) { const r = await renderForEmbed(aImg, imgRes, imgFmt); if (r) { try { doc.image(r.buffer, 310, imgTop, { fit: [240, 180] }); } catch (e) {} } }
+        doc.y = imgTop + 190; doc.x = 48;
+        for (const [lbl, c] of [['Before', before], ['After', after]]) {
+          const df = pro ? fmtDefect(c) : ''; const dm = pro ? exportDims(c) : '';
+          doc.fontSize(10).fillColor('#000').text(`${lbl}: ${(df ? df + '. ' : '')}${(dm ? dm + '. ' : '')}${c.note || '(no note)'}`, 48, doc.y, { width: 500 });
+        }
+        continue;
+      }
+      const c = u.single;
       const img = localPhoto(c.photo_path);
       if (img) {
         const r = await renderForEmbed(img, imgRes, imgFmt);
@@ -1153,7 +1302,29 @@ app.get('/api/export/docx', requireAuth, async (req, res) => {
     logEvent(req.user.id, 'export', { format: 'docx', scope, count: rows.length, res: imgRes, fmt: imgFmt });
     const children = [new Paragraph({ heading: HeadingLevel.HEADING_1, children: [new TextRun({ text: heading, bold: true, color: '000000', font: 'Arial' })] })];
     if (desc) children.push(new Paragraph({ children: [new TextRun({ text: desc, color: '000000', font: 'Arial' })] }));
-    for (const c of rows) {
+    const pairsD = pro ? await userPairs(req.user.id) : [];
+    const unitsD = buildRenderUnits(rows, pairsD);
+    const arialCell = (runs) => new TableCell({ children: runs });
+    for (const u of unitsD) {
+      if (u.pair) {
+        const { before, after } = u.pair;
+        children.push(new Paragraph({ spacing: { before: 160 }, children: [new TextRun({ text: before.address || after.address || 'No location', bold: true, color: '000000', font: 'Arial' })] }));
+        const cellFor = async (lbl, c) => {
+          const kids = [new Paragraph({ children: [new TextRun({ text: lbl, bold: true, color: '000000', font: 'Arial' })] })];
+          const img = localPhoto(c.photo_path);
+          if (img) { const r = await renderForEmbed(img, imgRes, imgFmt); if (r) { try { kids.push(new Paragraph({ children: [new ImageRun({ type: r.ext === '.png' ? 'png' : 'jpg', data: r.buffer, transformation: { width: 250, height: 188 } })] })); } catch (e) {} } }
+          const df = pro ? fmtDefect(c) : ''; const dm = pro ? exportDims(c) : '';
+          if (df) kids.push(new Paragraph({ children: [new TextRun({ text: 'Defect: ' + df, color: '000000', font: 'Arial' })] }));
+          if (dm) kids.push(new Paragraph({ children: [new TextRun({ text: 'Dimensions: ' + dm, color: '000000', font: 'Arial' })] }));
+          kids.push(new Paragraph({ children: [new TextRun({ text: c.note || '(no note)', color: '000000', font: 'Arial' })] }));
+          return arialCell(kids);
+        };
+        const row = new TableRow({ children: [await cellFor('BEFORE', before), await cellFor('AFTER', after)] });
+        children.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: [row] }));
+        children.push(new Paragraph({ children: [new TextRun({ text: '' })] }));
+        continue;
+      }
+      const c = u.single;
       const img = localPhoto(c.photo_path);
       if (img) {
         const r = await renderForEmbed(img, imgRes, imgFmt);
