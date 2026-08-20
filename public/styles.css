@@ -38,11 +38,19 @@ textarea { min-height: 96px; resize: vertical; }
 .status { font-size: 14px; color: #000; margin-top: 6px; }
 .toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--accent); color: #fff; padding: 12px 18px; border-radius: 10px; font-weight: bold; display: none; z-index: 10; }
 .topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
-/* Product title. Temporarily red + uppercase + larger so it clearly reads as the app name, not a section heading. */
+/* Product title base style (kept for the Extra Work Record heading, which
+   carries an inline font-size and is excluded from the logo swap below). */
 .brand { text-align: center; text-transform: uppercase; color: #c1121f; font-size: 30px; font-weight: 800; letter-spacing: 1.5px; margin: 6px 0 4px; }
-/* Brand logo (outlined wordmark). Centered; scales down on small phones. */
-.brandlogo { display: block; height: 46px; width: auto; max-width: 90%; margin: 8px auto 6px; }
-@media (max-width: 380px) { .brandlogo { height: 38px; } }
+/* Login + header brand: show the outlined Photo Notes logo. font-size:0 hides
+   the literal "Photo Notes" text (still present for screen readers) and the
+   wordmark renders as a centered background image. The :not() excludes the
+   Extra Work Record heading (it has an inline font-size). */
+.brand:not([style*="font-size"]) {
+  font-size: 0; line-height: 0; height: 46px;
+  background: url('/logo.svg') center center / contain no-repeat;
+  margin: 10px auto 6px;
+}
+@media (max-width: 380px) { .brand:not([style*="font-size"]) { height: 38px; } }
 .logoutbar { display: flex; justify-content: flex-end; }
 /* compact input+button row (e.g. add a topic) at about half the usual height.
    font-size stays 16px so iOS Safari does not auto-zoom the page on focus. */
