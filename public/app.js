@@ -1,7 +1,7 @@
 const el = document.getElementById('app');
 // Phones/tablets open to Capture (grab a photo fast); computers open to the Library (review the photos).
 const IS_HANDHELD = (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) || window.innerWidth < 768;
-let state = { view: IS_HANDHELD ? 'capture' : 'list', location: null, address: null, photoFile: null, kind: 'note', area: '', areas: [], groupId: null, imgv: 0, plan: 'free' };
+let state = { view: IS_HANDHELD ? 'capture' : 'list', location: null, address: null, photoFile: null, kind: 'note', area: '', areas: [], groupId: null, imgv: 0, plan: 'free', ewrId: null };
 
 // Pro gating on the client. Mirrors isPro(user) on the server. Pro-only UI must
 // not render at all for free users (no disabled teaser).
@@ -1356,6 +1356,7 @@ function wireZonePopup(e, z) {
 
 // ---- Groups ----
 async function renderGroups() {
+  if (state.ewrId != null) { renderEwrDetail(); return; }
   if (state.groupId) { renderGroupDetail(state.groupId); return; }
   const body = document.getElementById('body');
   body.innerHTML = `
@@ -1480,6 +1481,11 @@ async function renderGroupDetail(id) {
       <button class="btn secondary slim" id="propdocx">Proposal Word</button>
     </div>` : ''}
 
+    ${isProClient() ? `<label style="margin-top:16px">Extra Work Records</label>
+    <div class="status">Document added scope, unexpected conditions, or customer-requested work.</div>
+    <button class="btn slim" id="ewrNew" style="margin-top:6px">+ Extra Work Record</button>
+    <div id="ewrList" style="margin-top:8px"></div>` : ''}
+
     <div id="gitems" style="margin-top:16px"></div>`;
   document.getElementById('gback').onclick = () => { state.groupId = null; renderGroups(); };
   document.getElementById('greverse').onclick = reverseItems;
@@ -1488,9 +1494,296 @@ async function renderGroupDetail(id) {
   const pp = document.getElementById('proppdf'); if (pp) pp.onclick = () => exportProposal('pdf');
   const pw = document.getElementById('propdocx'); if (pw) pw.onclick = () => exportProposal('docx');
   const gm = document.getElementById('gotoMap'); if (gm) gm.onclick = () => { state.view = 'map'; state.groupId = null; renderApp(); };
+  const en = document.getElementById('ewrNew'); if (en) en.onclick = () => { state.ewrId = 'new'; renderGroups(); };
   renderTitleView();
   renderDescView();
   renderGroupItems();
+  if (isProClient()) loadEwrList();
+}
+
+// ---- Extra Work Records (Pro) ----
+const EWR_REASON_OPTS = [
+  ['unforeseen_site_condition', 'Unforeseen site condition'], ['failed_base_or_subbase', 'Failed base or sub-base'],
+  ['additional_damaged_area', 'Additional damaged area found'], ['drainage_or_water_issue', 'Drainage or water issue'],
+  ['customer_requested_addition', 'Customer-requested addition'], ['additional_repair_or_patching', 'Additional repair or patching'],
+  ['access_obstruction_or_site_prep', 'Access, obstruction, or site-preparation issue'], ['safety_issue', 'Safety issue'], ['other', 'Other'],
+];
+const EWR_STATUS_OPTS = [
+  ['documented', 'Documented'], ['sent_for_review', 'Sent for review'], ['approved', 'Approved'],
+  ['declined', 'Declined'], ['completed', 'Completed'], ['closed_no_action', 'Closed / no action'],
+];
+const EWR_METHOD_OPTS = [['', '(method)'], ['in_person', 'In person'], ['phone', 'Phone call'], ['text', 'Text message'], ['email', 'Email'], ['other', 'Other']];
+function ewrReasonLabelC(r) { const f = EWR_REASON_OPTS.find(o => o[0] === r); return f ? f[1] : ''; }
+function ewrStatusLabelC(s) { const f = EWR_STATUS_OPTS.find(o => o[0] === s); return f ? f[1] : 'Documented'; }
+function ewrStatusColor(s) { return s === 'approved' || s === 'completed' ? '#1b7a3d' : s === 'declined' ? '#b3261e' : s === 'sent_for_review' ? '#b36b00' : '#444444'; }
+
+async function loadEwrList() {
+  const box = document.getElementById('ewrList');
+  if (!box) return;
+  let rows = [];
+  try { const r = await api(`/api/ewr?group=${state.groupId}`); if (r.ok) rows = await r.json(); } catch (e) {}
+  if (!rows.length) { box.innerHTML = '<p class="status">No extra work records yet for this job.</p>'; return; }
+  box.innerHTML = rows.map(e => `
+    <div class="card" style="padding:10px">
+      <div style="font-weight:bold">EWR-${String(e.id).padStart(4, '0')} <span class="defbadge" style="background:${ewrStatusColor(e.status)};cursor:default">${esc(ewrStatusLabelC(e.status))}</span></div>
+      <div class="meta">${esc(ewrReasonLabelC(e.reason_category))} · ${e.photo_count} photo${e.photo_count === 1 ? '' : 's'} · ${new Date(e.created_at).toLocaleDateString()}</div>
+      <button class="btn secondary slim ewropen" data-id="${e.id}" style="margin-top:6px">Open</button>
+    </div>`).join('');
+  box.querySelectorAll('.ewropen').forEach(b => b.onclick = () => { state.ewrId = parseInt(b.getAttribute('data-id'), 10); renderGroups(); });
+}
+
+let ewrRecognizer = null;
+function cleanupEwrDict(btn) { ewrRecognizer = null; if (btn) { btn.textContent = 'Record Voice Note'; btn.classList.remove('on'); } }
+function dictateInto(el, btn) {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { el.focus(); toast('Tap the microphone key on your keyboard, then talk'); return; }
+  if (ewrRecognizer) { try { ewrRecognizer.stop(); } catch (e) {} return; }
+  const ios = isIOS(); ewrRecognizer = new SR(); ewrRecognizer.lang = 'en-US';
+  ewrRecognizer.continuous = ios ? false : true; ewrRecognizer.interimResults = ios ? false : true;
+  let base = el.value; if (base && !base.endsWith(' ')) base += ' ';
+  if (btn) { btn.textContent = 'Recording... tap to stop'; btn.classList.add('on'); }
+  ewrRecognizer.onresult = (ev) => { let fin = '', intr = ''; for (let i = ev.resultIndex; i < ev.results.length; i++) { const t = ev.results[i][0].transcript; if (ev.results[i].isFinal) fin += t; else intr += t; } if (fin) base += fin + ' '; el.value = (base + intr).trimStart(); };
+  ewrRecognizer.onerror = () => cleanupEwrDict(btn);
+  ewrRecognizer.onend = () => cleanupEwrDict(btn);
+  try { ewrRecognizer.start(); } catch (e) { cleanupEwrDict(btn); }
+}
+function getLocationOnce() {
+  return new Promise((resolve) => {
+    if (!navigator.geolocation) return resolve(null);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      () => resolve(null), { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 });
+  });
+}
+
+async function renderEwrDetail() {
+  const body = document.getElementById('body');
+  if (state.ewrId === 'new') { renderEwrCreate(body); return; }
+  body.innerHTML = '<p class="status">Loading...</p>';
+  let data;
+  try { const r = await api(`/api/ewr/${state.ewrId}`); if (!r.ok) { body.innerHTML = '<p class="status">Could not load record.</p>'; return; } data = await r.json(); }
+  catch (e) { body.innerHTML = '<p class="status">Could not load record.</p>'; return; }
+  renderEwrView(body, data);
+}
+
+function reasonSelectHtml(id, val) {
+  return `<select id="${id}">${EWR_REASON_OPTS.map(o => `<option value="${o[0]}"${val === o[0] ? ' selected' : ''}>${o[1]}</option>`).join('')}</select>`;
+}
+function methodSelectHtml(id, val) {
+  return `<select id="${id}">${EWR_METHOD_OPTS.map(o => `<option value="${o[0]}"${(val || '') === o[0] ? ' selected' : ''}>${o[1]}</option>`).join('')}</select>`;
+}
+
+function renderEwrCreate(body) {
+  window._ewrNewPhotos = window._ewrNewPhotos || [];
+  body.innerHTML = `
+    <button class="backlink" id="ewrBack">‹ Back to Job</button>
+    <div class="brand" style="font-size:20px">Extra Work Record</div>
+
+    <label>Reason For Extra Work</label>
+    ${reasonSelectHtml('ewrReason', 'unforeseen_site_condition')}
+    <div id="ewrOtherWrap" style="display:none;margin-top:8px">
+      <input type="text" id="ewrOther" placeholder="Describe the reason" />
+    </div>
+
+    <label>Customer / Client (optional)</label>
+    <input type="text" id="ewrCustomer" placeholder="Customer or client name" />
+
+    <label>What Was Found, What Is Needed, And Why?</label>
+    <button type="button" class="btn secondary" id="ewrDictate" style="margin-bottom:8px">Record Voice Note</button>
+    <textarea id="ewrDesc" placeholder="Describe the condition and the added work..."></textarea>
+
+    <label>Photos <span style="font-weight:normal;text-transform:none;letter-spacing:0">(at least one required)</span></label>
+    <div class="status">Capture wide shots for context and close-ups for detail.</div>
+    <div class="row" style="margin-top:6px">
+      <button type="button" class="btn secondary slim" id="ewrTake">Take Photo</button>
+      <button type="button" class="btn secondary slim" id="ewrChoose">Choose Photo</button>
+    </div>
+    <input type="file" accept="image/*" capture="environment" id="ewrCam" style="display:none" />
+    <input type="file" accept="image/*" id="ewrLib" style="display:none" />
+    <div id="ewrThumbs" class="row" style="flex-wrap:wrap;gap:8px;margin-top:8px"></div>
+
+    <label>Customer / GC Notification (optional)</label>
+    <input type="text" id="ewrNname" placeholder="Name of person notified" />
+    <input type="text" id="ewrNcompany" placeholder="Company or role" style="margin-top:8px" />
+    <div class="row compact" style="margin-top:8px">${methodSelectHtml('ewrNmethod', '')}</div>
+    <textarea id="ewrNnotes" placeholder="What was communicated" style="min-height:60px;margin-top:8px"></textarea>
+
+    <button class="btn" id="ewrSave" style="margin-top:16px">Save Record</button>
+    <div class="status">Track the record’s status according to your company’s normal approval process.</div>`;
+  document.getElementById('ewrBack').onclick = () => { state.ewrId = null; window._ewrNewPhotos = []; renderGroups(); };
+  const reason = document.getElementById('ewrReason');
+  const otherWrap = document.getElementById('ewrOtherWrap');
+  reason.onchange = () => { otherWrap.style.display = reason.value === 'other' ? 'block' : 'none'; };
+  document.getElementById('ewrDictate').onclick = (e) => dictateInto(document.getElementById('ewrDesc'), e.currentTarget);
+  document.getElementById('ewrTake').onclick = () => document.getElementById('ewrCam').click();
+  document.getElementById('ewrChoose').onclick = () => document.getElementById('ewrLib').click();
+  const onPick = (e) => { if (e.target.files[0]) { window._ewrNewPhotos.push(e.target.files[0]); renderEwrThumbs(); } e.target.value = ''; };
+  document.getElementById('ewrCam').onchange = onPick;
+  document.getElementById('ewrLib').onchange = onPick;
+  document.getElementById('ewrSave').onclick = saveNewEwr;
+  renderEwrThumbs();
+}
+function renderEwrThumbs() {
+  const box = document.getElementById('ewrThumbs'); if (!box) return;
+  const ph = window._ewrNewPhotos || [];
+  box.innerHTML = ph.map((f, i) => `<div style="position:relative"><img src="${URL.createObjectURL(f)}" style="width:90px;height:90px;object-fit:cover;border-radius:6px;border:1px solid #000" /><button class="ewrrm" data-i="${i}" style="position:absolute;top:-6px;right:-6px;background:#b3261e;color:#fff;border:none;border-radius:50%;width:22px;height:22px;font-weight:bold">×</button></div>`).join('');
+  box.querySelectorAll('.ewrrm').forEach(b => b.onclick = () => { window._ewrNewPhotos.splice(parseInt(b.getAttribute('data-i'), 10), 1); renderEwrThumbs(); });
+}
+async function saveNewEwr() {
+  const reason = document.getElementById('ewrReason').value;
+  const otherText = document.getElementById('ewrOther') ? document.getElementById('ewrOther').value.trim() : '';
+  if (reason === 'other' && !otherText) { toast('Describe the "other" reason'); return; }
+  const photos = window._ewrNewPhotos || [];
+  if (!photos.length) { toast('Add at least one photo before saving'); return; }
+  const btn = document.getElementById('ewrSave'); btn.disabled = true; btn.textContent = 'Saving...';
+  const loc = await getLocationOnce();
+  const bodyData = {
+    group_id: state.groupId,
+    reason_category: reason,
+    reason_other_text: otherText || null,
+    customer: document.getElementById('ewrCustomer').value.trim() || null,
+    description_text: document.getElementById('ewrDesc').value.trim() || null,
+    notified_person_name: document.getElementById('ewrNname').value.trim() || null,
+    notified_person_company: document.getElementById('ewrNcompany').value.trim() || null,
+    notification_method: document.getElementById('ewrNmethod').value || null,
+    notification_notes: document.getElementById('ewrNnotes').value.trim() || null,
+  };
+  if (loc) { bodyData.latitude = loc.lat; bodyData.longitude = loc.lng; }
+  try {
+    const r = await api('/api/ewr', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(bodyData) });
+    const d = await r.json();
+    if (!r.ok || !d.record) throw new Error(d.error || 'save failed');
+    const id = d.record.id;
+    for (const f of photos) {
+      const fd = new FormData(); fd.append('photo', f);
+      if (loc) { fd.append('latitude', loc.lat); fd.append('longitude', loc.lng); }
+      try { await api(`/api/ewr/${id}/photo`, { method: 'POST', body: fd }); } catch (e) {}
+    }
+    window._ewrNewPhotos = [];
+    toast('Extra Work Record saved to this job');
+    state.ewrId = id; renderGroups();
+  } catch (e) { toast(e.message || 'Save failed'); btn.disabled = false; btn.textContent = 'Save Record'; }
+}
+
+function renderEwrView(body, data) {
+  const e = data.record, photos = data.photos || [], group = data.group;
+  body.innerHTML = `
+    <button class="backlink" id="ewrBack">‹ Back to Job</button>
+    <div class="brand" style="font-size:20px">Extra Work Record</div>
+    <div style="font-weight:bold">EWR-${String(e.id).padStart(4, '0')}</div>
+    <div class="meta">${group ? 'Job: ' + esc(group.title || 'Untitled') + ' · ' : ''}${esc(e.address || '')}</div>
+    <div class="meta">Created ${new Date(e.created_at).toLocaleString()} by ${esc(e.created_by || '')}</div>
+
+    <label>Status</label>
+    <select id="ewrStatus">${EWR_STATUS_OPTS.map(o => `<option value="${o[0]}"${e.status === o[0] ? ' selected' : ''}>${o[1]}</option>`).join('')}</select>
+    <div class="status">Record approval status according to your company’s existing process. This does not replace required written approvals or contract procedures.</div>
+
+    <label>Reason For Extra Work</label>
+    ${reasonSelectHtml('ewrReason', e.reason_category)}
+    <div id="ewrOtherWrap" style="display:${e.reason_category === 'other' ? 'block' : 'none'};margin-top:8px">
+      <input type="text" id="ewrOther" placeholder="Describe the reason" value="${esc(e.reason_other_text || '')}" />
+    </div>
+
+    <label>Customer / Client</label>
+    <input type="text" id="ewrCustomer" value="${esc(e.customer || '')}" placeholder="Customer or client name" />
+
+    <label>Description</label>
+    <button type="button" class="btn secondary" id="ewrDictate" style="margin-bottom:8px">Record Voice Note</button>
+    <textarea id="ewrDesc" placeholder="Describe the condition and the added work...">${esc(e.description_text || '')}</textarea>
+
+    <label>Customer / GC Notification</label>
+    <input type="text" id="ewrNname" value="${esc(e.notified_person_name || '')}" placeholder="Name of person notified" />
+    <input type="text" id="ewrNcompany" value="${esc(e.notified_person_company || '')}" placeholder="Company or role" style="margin-top:8px" />
+    <div class="row compact" style="margin-top:8px">${methodSelectHtml('ewrNmethod', e.notification_method)}</div>
+    <textarea id="ewrNnotes" placeholder="What was communicated" style="min-height:60px;margin-top:8px">${esc(e.notification_notes || '')}</textarea>
+
+    <button class="btn" id="ewrSaveEdit" style="margin-top:14px">Save Changes</button>
+
+    <label style="margin-top:16px">Photos</label>
+    <div class="row" style="margin-top:6px">
+      <button type="button" class="btn secondary slim" id="ewrTake">Take Photo</button>
+      <button type="button" class="btn secondary slim" id="ewrChoose">Choose Photo</button>
+    </div>
+    <input type="file" accept="image/*" capture="environment" id="ewrCam" style="display:none" />
+    <input type="file" accept="image/*" id="ewrLib" style="display:none" />
+    <div id="ewrPhotos" style="margin-top:8px"></div>
+
+    <div class="row" style="margin-top:18px">
+      <button class="btn secondary" id="ewrExport">Export PDF</button>
+      <button class="btn" id="ewrDelete" style="background:#b3261e">Delete Record</button>
+    </div>`;
+  document.getElementById('ewrBack').onclick = () => { state.ewrId = null; renderGroups(); };
+  const reason = document.getElementById('ewrReason');
+  const otherWrap = document.getElementById('ewrOtherWrap');
+  reason.onchange = () => { otherWrap.style.display = reason.value === 'other' ? 'block' : 'none'; };
+  document.getElementById('ewrDictate').onclick = (ev) => dictateInto(document.getElementById('ewrDesc'), ev.currentTarget);
+  document.getElementById('ewrStatus').onchange = async (ev) => {
+    const r = await api(`/api/ewr/${e.id}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: ev.target.value }) });
+    toast(r.ok ? 'Status updated' : 'Update failed');
+  };
+  document.getElementById('ewrSaveEdit').onclick = async () => {
+    const b = {
+      reason_category: reason.value,
+      reason_other_text: document.getElementById('ewrOther') ? document.getElementById('ewrOther').value : '',
+      customer: document.getElementById('ewrCustomer').value,
+      description_text: document.getElementById('ewrDesc').value,
+      notified_person_name: document.getElementById('ewrNname').value,
+      notified_person_company: document.getElementById('ewrNcompany').value,
+      notification_method: document.getElementById('ewrNmethod').value,
+      notification_notes: document.getElementById('ewrNnotes').value,
+    };
+    const r = await api(`/api/ewr/${e.id}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) });
+    toast(r.ok ? 'Saved' : 'Save failed');
+  };
+  const addPhoto = async (file) => {
+    const fd = new FormData(); fd.append('photo', file);
+    const loc = await getLocationOnce(); if (loc) { fd.append('latitude', loc.lat); fd.append('longitude', loc.lng); }
+    const r = await api(`/api/ewr/${e.id}/photo`, { method: 'POST', body: fd });
+    if (r.ok) { toast('Photo added'); renderEwrDetail(); } else toast('Upload failed');
+  };
+  document.getElementById('ewrTake').onclick = () => document.getElementById('ewrCam').click();
+  document.getElementById('ewrChoose').onclick = () => document.getElementById('ewrLib').click();
+  document.getElementById('ewrCam').onchange = (ev) => { if (ev.target.files[0]) addPhoto(ev.target.files[0]); };
+  document.getElementById('ewrLib').onchange = (ev) => { if (ev.target.files[0]) addPhoto(ev.target.files[0]); };
+  document.getElementById('ewrExport').onclick = async () => {
+    try {
+      const r = await api(`/api/ewr/${e.id}/export`);
+      if (!r.ok) throw new Error('bad');
+      const blob = await r.blob(); const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = `extra-work-record-${e.id}.pdf`;
+      document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 1500);
+      toast('PDF ready');
+    } catch (er) { toast('Export failed'); }
+  };
+  document.getElementById('ewrDelete').onclick = async () => {
+    if (!confirm('Delete this Extra Work Record and its photos? This cannot be undone.')) return;
+    const r = await api(`/api/ewr/${e.id}/delete`, { method: 'POST' });
+    if (r.ok) { toast('Record deleted'); state.ewrId = null; renderGroups(); } else toast('Delete failed');
+  };
+  // photo grid
+  const pbox = document.getElementById('ewrPhotos');
+  if (!photos.length) pbox.innerHTML = '<p class="status">No photos yet. Add at least one.</p>';
+  else pbox.innerHTML = photos.map(p => `
+    <div class="card" style="padding:8px">
+      <img src="${photoSrc(p.photo_path)}" alt="photo" />
+      <input type="text" class="ewrcap" data-pid="${p.id}" value="${esc(p.caption || '')}" placeholder="Caption (optional)" style="margin-top:6px" />
+      <div class="row" style="margin-top:6px">
+        <button class="btn secondary slim ewrcapsave" data-pid="${p.id}">Save Caption</button>
+        <button class="btn secondary slim ewrphotodel" data-pid="${p.id}" style="color:#c1121f">Remove</button>
+      </div>
+    </div>`).join('');
+  pbox.querySelectorAll('.ewrcapsave').forEach(b => b.onclick = async () => {
+    const pid = b.getAttribute('data-pid');
+    const cap = pbox.querySelector(`.ewrcap[data-pid="${pid}"]`).value;
+    // caption lives on the photo; update via a dedicated tiny endpoint reusing photo table
+    const r = await api(`/api/ewr/${e.id}/photo/${pid}/caption`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ caption: cap }) });
+    toast(r.ok ? 'Caption saved' : 'Save failed');
+  });
+  pbox.querySelectorAll('.ewrphotodel').forEach(b => b.onclick = async () => {
+    if (!confirm('Remove this photo?')) return;
+    const r = await api(`/api/ewr/${e.id}/photo/${b.getAttribute('data-pid')}/delete`, { method: 'POST' });
+    if (r.ok) renderEwrDetail(); else toast('Remove failed');
+  });
 }
 
 function renderTitleView() {
