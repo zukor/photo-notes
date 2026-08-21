@@ -257,12 +257,17 @@ function fixQuantity(fix, c) {
   return { unit: '', value: null, text: 'review required' };
 }
 const PROPOSAL_DISCLAIMER = 'Recommendations and quantities are AI-assisted estimates prepared from field captures. An estimator must verify all items before this document is used in a bid or contract.';
-// Build the per-defect sections + summary rows for a proposal.
-function buildProposal(items) {
-  const sections = items.map((c) => {
+// Build the per-defect sections + summary rows for a proposal. When a before/
+// after pair is present, the two captures collapse into one section that shows
+// both photos; the recommended fix + quantity come from the "before" (the
+// documented problem), so the pair counts once in the summary.
+function buildProposal(items, pairs) {
+  const units = buildRenderUnits(items, pairs || []);
+  const sections = units.map((u) => {
+    const c = u.pair ? u.pair.before : u.single;
     const fix = recommendFix(c.defect_type, c.defect_severity);
     const qty = fixQuantity(fix, c);
-    return { c, fix, qty };
+    return { c, fix, qty, pair: u.pair || null };
   });
   const sumMap = {};
   for (const s of sections) {
@@ -1866,7 +1871,8 @@ app.get('/api/export/proposal', requireAuth, async (req, res) => {
       SELECT c.* FROM group_items gi JOIN captures c ON c.id = gi.capture_id
       WHERE gi.group_id = $1 AND c.user_id = $2 ORDER BY gi.position ASC, c.created_at ASC`, [groupId, req.user.id])).rows;
     const score = scoreCaptures(items);
-    const { sections, summary } = buildProposal(items);
+    const proposalPairs = await userPairs(req.user.id);
+    const { sections, summary } = buildProposal(items, proposalPairs);
     const zones = await groupZoneSummary(req.user.id, groupId);
     const doc = (req.query.doc === 'docx') ? 'docx' : 'pdf';
     const imgRes = req.query.res || 'standard';
@@ -1914,10 +1920,22 @@ app.get('/api/export/proposal', requireAuth, async (req, res) => {
       pdf.fontSize(12).fillColor('#000').text('Prepared with Photo Notes', { align: 'center' });
       pdf.moveDown(1);
       for (let i = 0; i < sections.length; i++) {
-        const { c, fix, qty } = sections[i];
+        const { c, fix, qty, pair } = sections[i];
         pdf.addPage();
-        const img = localPhoto(c.photo_path);
-        if (img) { const r = await renderForEmbed(img, imgRes, imgFmt); if (r) { try { pdf.image(r.buffer, { fit: [480, 320], align: 'center' }); pdf.moveDown(0.5); } catch (e) {} } }
+        if (pair) {
+          // before/after photos side by side
+          const top = pdf.y;
+          pdf.fontSize(11).fillColor('#000').text('BEFORE', 48, top, { width: 240 });
+          pdf.fontSize(11).fillColor('#000').text('AFTER', 310, top, { width: 240 });
+          const imgTop = top + 16;
+          const bImg = localPhoto(pair.before.photo_path), aImg = localPhoto(pair.after.photo_path);
+          if (bImg) { const r = await renderForEmbed(bImg, imgRes, imgFmt); if (r) { try { pdf.image(r.buffer, 48, imgTop, { fit: [240, 180] }); } catch (e) {} } }
+          if (aImg) { const r = await renderForEmbed(aImg, imgRes, imgFmt); if (r) { try { pdf.image(r.buffer, 310, imgTop, { fit: [240, 180] }); } catch (e) {} } }
+          pdf.y = imgTop + 190; pdf.x = 48;
+        } else {
+          const img = localPhoto(c.photo_path);
+          if (img) { const r = await renderForEmbed(img, imgRes, imgFmt); if (r) { try { pdf.image(r.buffer, { fit: [480, 320], align: 'center' }); pdf.moveDown(0.5); } catch (e) {} } }
+        }
         pdf.fontSize(13).fillColor('#000').text(`${i + 1}. ${c.address || 'No location'}`);
         const df = fmtDefect(c); if (df) pdf.fontSize(12).fillColor('#000').text('Defect: ' + df);
         const dm = exportDims(c); if (dm) pdf.fontSize(12).fillColor('#000').text('Dimensions: ' + dm);
@@ -1958,9 +1976,19 @@ app.get('/api/export/proposal', requireAuth, async (req, res) => {
     children.push(new Paragraph({ children: [new TextRun({ text: 'Prepared with Photo Notes', color: '000000', font: 'Arial' })] }));
     children.push(new Paragraph({ children: [new TextRun({ text: '' })] }));
     for (let i = 0; i < sections.length; i++) {
-      const { c, fix, qty } = sections[i];
-      const img = localPhoto(c.photo_path);
-      if (img) { const r = await renderForEmbed(img, imgRes, imgFmt); if (r) { try { children.push(new Paragraph({ children: [new ImageRun({ type: r.ext === '.png' ? 'png' : 'jpg', data: r.buffer, transformation: { width: 400, height: 300 } })] })); } catch (e) {} } }
+      const { c, fix, qty, pair } = sections[i];
+      if (pair) {
+        const imgCell = async (lbl, cc) => {
+          const kids = [new Paragraph({ children: [new TextRun({ text: lbl, bold: true, color: '000000', font: 'Arial' })] })];
+          const im = localPhoto(cc.photo_path);
+          if (im) { const r = await renderForEmbed(im, imgRes, imgFmt); if (r) { try { kids.push(new Paragraph({ children: [new ImageRun({ type: r.ext === '.png' ? 'png' : 'jpg', data: r.buffer, transformation: { width: 250, height: 188 } })] })); } catch (e) {} } }
+          return new TableCell({ children: kids });
+        };
+        children.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: [new TableRow({ children: [await imgCell('BEFORE', pair.before), await imgCell('AFTER', pair.after)] })] }));
+      } else {
+        const img = localPhoto(c.photo_path);
+        if (img) { const r = await renderForEmbed(img, imgRes, imgFmt); if (r) { try { children.push(new Paragraph({ children: [new ImageRun({ type: r.ext === '.png' ? 'png' : 'jpg', data: r.buffer, transformation: { width: 400, height: 300 } })] })); } catch (e) {} } }
+      }
       children.push(new Paragraph({ spacing: { before: 120 }, children: [new TextRun({ text: `${i + 1}. ${c.address || 'No location'}`, bold: true, color: '000000', font: 'Arial' })] }));
       const df = fmtDefect(c); if (df) children.push(new Paragraph({ children: [new TextRun({ text: 'Defect: ' + df, color: '000000', font: 'Arial' })] }));
       const dm = exportDims(c); if (dm) children.push(new Paragraph({ children: [new TextRun({ text: 'Dimensions: ' + dm, color: '000000', font: 'Arial' })] }));
