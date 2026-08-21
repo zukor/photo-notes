@@ -257,17 +257,12 @@ function fixQuantity(fix, c) {
   return { unit: '', value: null, text: 'review required' };
 }
 const PROPOSAL_DISCLAIMER = 'Recommendations and quantities are AI-assisted estimates prepared from field captures. An estimator must verify all items before this document is used in a bid or contract.';
-// Build the per-defect sections + summary rows for a proposal. When a before/
-// after pair is present, the two captures collapse into one section that shows
-// both photos; the recommended fix + quantity come from the "before" (the
-// documented problem), so the pair counts once in the summary.
-function buildProposal(items, pairs) {
-  const units = buildRenderUnits(items, pairs || []);
-  const sections = units.map((u) => {
-    const c = u.pair ? u.pair.before : u.single;
+// Build the per-defect sections + summary rows for a proposal.
+function buildProposal(items) {
+  const sections = items.map((c) => {
     const fix = recommendFix(c.defect_type, c.defect_severity);
     const qty = fixQuantity(fix, c);
-    return { c, fix, qty, pair: u.pair || null };
+    return { c, fix, qty };
   });
   const sumMap = {};
   for (const s of sections) {
@@ -892,6 +887,10 @@ app.post('/api/captures/:id', requireAuth, async (req, res) => {
     if (typeof b.note === 'string') { vals.push(b.note); sets.push(`note = $${vals.length}`); }
     if (Array.isArray(b.area_tags)) { vals.push(b.area_tags); sets.push(`area_tags = $${vals.length}`); }
     if (b.kind === 'note' || b.kind === 'task') { vals.push(b.kind); sets.push(`kind = $${vals.length}`); }
+    if (b.overlays !== undefined) {
+      const ov = Array.isArray(b.overlays) ? b.overlays.slice(0, 20) : null; // cap to keep JSON small
+      vals.push(ov ? JSON.stringify(ov) : null); sets.push(`overlays = $${vals.length}`);
+    }
     if (!sets.length) return res.status(400).json({ error: 'nothing to update' });
     vals.push(id);
     vals.push(req.user.id);
@@ -904,6 +903,28 @@ app.post('/api/captures/:id', requireAuth, async (req, res) => {
     console.error('[captures.update]', err);
     res.status(500).json({ error: 'update failed' });
   }
+});
+
+// ---- flattened stamped copy (overlays burned into a downloadable JPEG) ----
+app.get('/api/captures/:id/stamped', requireAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'bad id' });
+    const c = (await pool.query(`SELECT * FROM captures WHERE id = $1 AND user_id = $2`, [id, req.user.id])).rows[0];
+    if (!c) return res.status(404).json({ error: 'not found' });
+    const local = localPhoto(c.photo_path);
+    if (!local) return res.status(400).json({ error: 'no photo' });
+    const r = await renderImage(local, req.query.res || 'print', 'jpeg');
+    let buf = r.buffer;
+    if (Array.isArray(c.overlays) && c.overlays.length) {
+      const m = await sharp(buf).metadata();
+      buf = await burnOverlays(buf, m.width, m.height, c.overlays, c);
+    }
+    logEvent(req.user.id, 'stamp_export', { items: (c.overlays || []).length });
+    res.setHeader('Content-Type', 'image/jpeg');
+    res.setHeader('Content-Disposition', `attachment; filename="photo-${id}-stamped.jpg"`);
+    res.send(buf);
+  } catch (err) { console.error('[stamped]', err); if (!res.headersSent) res.status(500).json({ error: 'stamp failed' }); }
 });
 
 // ---- rotate a capture's photo (own only) ----
@@ -1714,6 +1735,62 @@ async function renderForEmbed(localPath, imgRes, imgFmt) {
   try { return await renderImage(localPath, imgRes, f); } catch (e) { return null; }
 }
 
+// ===================== Photo overlays / stamps =====================
+function escXml(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+const OVERLAY_FONTS = {
+  sans: 'Liberation Sans, Arial, Helvetica, sans-serif',
+  serif: 'Liberation Serif, Georgia, Times New Roman, serif',
+  mono: 'Liberation Mono, Courier New, monospace',
+  heavy: 'Liberation Sans, Arial Black, sans-serif',
+};
+// Resolve the text for one overlay item from the capture's live data.
+function overlayItemText(item, c) {
+  switch (item.t) {
+    case 'datetime': return fmtWhen(c.created_at);
+    case 'address': return c.address || '';
+    case 'gps': return (c.latitude != null && c.longitude != null) ? `${Number(c.latitude).toFixed(5)}, ${Number(c.longitude).toFixed(5)}` : '';
+    case 'topic': return (c.area_tags || []).join(', ');
+    case 'dims': return fmtDims(c);
+    case 'defect': return fmtDefect(c);
+    case 'copyright': return item.text || `© ${new Date().getFullYear()}`;
+    default: return item.text || '';
+  }
+}
+// Burn overlays onto an image buffer of known pixel size via an SVG composite.
+async function burnOverlays(buffer, width, height, overlays, c) {
+  if (!Array.isArray(overlays) || !overlays.length || !width || !height) return buffer;
+  const parts = [];
+  for (const it of overlays) {
+    const text = overlayItemText(it, c);
+    if (!text) continue;
+    const fs = Math.max(9, Math.round((Number(it.size) || 4) / 100 * height)); // size = % of height
+    const x = Math.round((Number(it.x) || 3) / 100 * width);
+    const y = Math.round((Number(it.y) || 90) / 100 * height) + fs; // y% is the item top; add fs for baseline
+    const fill = /^#[0-9a-fA-F]{3,8}$/.test(it.color || '') ? it.color : '#ffffff';
+    const font = OVERLAY_FONTS[it.font] || OVERLAY_FONTS.sans;
+    const weight = it.font === 'heavy' ? '800' : 'normal';
+    const stroke = it.outline ? ` stroke="#000000" stroke-width="${Math.max(1, Math.round(fs * 0.09))}" paint-order="stroke"` : '';
+    parts.push(`<text x="${x}" y="${y}" font-family="${font}" font-size="${fs}" font-weight="${weight}" fill="${fill}"${stroke} xml:space="preserve">${escXml(text)}</text>`);
+  }
+  if (!parts.length) return buffer;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">${parts.join('')}</svg>`;
+  try { return await sharp(buffer).composite([{ input: Buffer.from(svg), top: 0, left: 0 }]).toBuffer(); }
+  catch (e) { console.error('[overlays]', e && e.message); return buffer; }
+}
+// Render an export image and burn the capture's overlays into it (if any).
+async function renderForEmbedStamped(localPath, imgRes, imgFmt, c) {
+  const r = await renderForEmbed(localPath, imgRes, imgFmt);
+  if (!r || !c || !Array.isArray(c.overlays) || !c.overlays.length) return r;
+  try { const m = await sharp(r.buffer).metadata(); r.buffer = await burnOverlays(r.buffer, m.width, m.height, c.overlays, c); } catch (e) {}
+  return r;
+}
+async function renderImageStamped(localPath, imgRes, imgFmt, c) {
+  const r = await renderImage(localPath, imgRes, imgFmt);
+  if (!r || !c || !Array.isArray(c.overlays) || !c.overlays.length) return r;
+  try { const m = await sharp(r.buffer).metadata(); r.buffer = await burnOverlays(r.buffer, m.width, m.height, c.overlays, c); } catch (e) {}
+  return r;
+}
+
 app.get('/api/export/pdf', requireAuth, async (req, res) => {
   try {
     const { imgRes, imgFmt, heading, desc, fnameBase, rows, scope } = await resolveExport(req);
@@ -1740,8 +1817,8 @@ app.get('/api/export/pdf', requireAuth, async (req, res) => {
         doc.fontSize(11).fillColor('#000').text('AFTER', 310, top, { width: 240 });
         const imgTop = top + 16;
         const bImg = localPhoto(before.photo_path), aImg = localPhoto(after.photo_path);
-        if (bImg) { const r = await renderForEmbed(bImg, imgRes, imgFmt); if (r) { try { doc.image(r.buffer, 48, imgTop, { fit: [240, 180] }); } catch (e) {} } }
-        if (aImg) { const r = await renderForEmbed(aImg, imgRes, imgFmt); if (r) { try { doc.image(r.buffer, 310, imgTop, { fit: [240, 180] }); } catch (e) {} } }
+        if (bImg) { const r = await renderForEmbedStamped(bImg, imgRes, imgFmt, before); if (r) { try { doc.image(r.buffer, 48, imgTop, { fit: [240, 180] }); } catch (e) {} } }
+        if (aImg) { const r = await renderForEmbedStamped(aImg, imgRes, imgFmt, after); if (r) { try { doc.image(r.buffer, 310, imgTop, { fit: [240, 180] }); } catch (e) {} } }
         doc.y = imgTop + 190; doc.x = 48;
         for (const [lbl, c] of [['Before', before], ['After', after]]) {
           const df = pro ? fmtDefect(c) : ''; const dm = pro ? exportDims(c) : '';
@@ -1752,7 +1829,7 @@ app.get('/api/export/pdf', requireAuth, async (req, res) => {
       const c = u.single;
       const img = localPhoto(c.photo_path);
       if (img) {
-        const r = await renderForEmbed(img, imgRes, imgFmt);
+        const r = await renderForEmbedStamped(img, imgRes, imgFmt, c);
         if (r) { try { doc.image(r.buffer, { fit: [480, 340], align: 'center' }); doc.moveDown(0.6); } catch (e) {} }
       }
       doc.fontSize(13).fillColor('#000').text((c.address || 'No location') + (c.kind === 'task' ? '   [TASK]' : ''));
@@ -1785,7 +1862,7 @@ app.get('/api/export/docx', requireAuth, async (req, res) => {
         const cellFor = async (lbl, c) => {
           const kids = [new Paragraph({ children: [new TextRun({ text: lbl, bold: true, color: '000000', font: 'Arial' })] })];
           const img = localPhoto(c.photo_path);
-          if (img) { const r = await renderForEmbed(img, imgRes, imgFmt); if (r) { try { kids.push(new Paragraph({ children: [new ImageRun({ type: r.ext === '.png' ? 'png' : 'jpg', data: r.buffer, transformation: { width: 250, height: 188 } })] })); } catch (e) {} } }
+          if (img) { const r = await renderForEmbedStamped(img, imgRes, imgFmt, c); if (r) { try { kids.push(new Paragraph({ children: [new ImageRun({ type: r.ext === '.png' ? 'png' : 'jpg', data: r.buffer, transformation: { width: 250, height: 188 } })] })); } catch (e) {} } }
           const df = pro ? fmtDefect(c) : ''; const dm = pro ? exportDims(c) : '';
           if (df) kids.push(new Paragraph({ children: [new TextRun({ text: 'Defect: ' + df, color: '000000', font: 'Arial' })] }));
           if (dm) kids.push(new Paragraph({ children: [new TextRun({ text: 'Dimensions: ' + dm, color: '000000', font: 'Arial' })] }));
@@ -1800,7 +1877,7 @@ app.get('/api/export/docx', requireAuth, async (req, res) => {
       const c = u.single;
       const img = localPhoto(c.photo_path);
       if (img) {
-        const r = await renderForEmbed(img, imgRes, imgFmt);
+        const r = await renderForEmbedStamped(img, imgRes, imgFmt, c);
         if (r) { try { children.push(new Paragraph({ children: [new ImageRun({ type: r.ext === '.png' ? 'png' : 'jpg', data: r.buffer, transformation: { width: 420, height: 315 } })] })); } catch (e) {} }
       }
       children.push(new Paragraph({ spacing: { before: 120 }, children: [new TextRun({ text: (c.address || 'No location') + (c.kind === 'task' ? '   [TASK]' : ''), bold: true, color: '000000', font: 'Arial' })] }));
@@ -1838,7 +1915,7 @@ app.get('/api/export/bundle', requireAuth, async (req, res) => {
       const img = localPhoto(c.photo_path);
       let imgRef = '';
       if (img) {
-        const r = await renderImage(img, imgRes, imgFmt);
+        const r = await renderImageStamped(img, imgRes, imgFmt, c);
         if (r) {
           const base = path.basename(img).replace(/\.[a-zA-Z0-9]+$/, '');
           const name = `photos/${n}_${base}${r.ext}`;
@@ -1871,8 +1948,7 @@ app.get('/api/export/proposal', requireAuth, async (req, res) => {
       SELECT c.* FROM group_items gi JOIN captures c ON c.id = gi.capture_id
       WHERE gi.group_id = $1 AND c.user_id = $2 ORDER BY gi.position ASC, c.created_at ASC`, [groupId, req.user.id])).rows;
     const score = scoreCaptures(items);
-    const proposalPairs = await userPairs(req.user.id);
-    const { sections, summary } = buildProposal(items, proposalPairs);
+    const { sections, summary } = buildProposal(items);
     const zones = await groupZoneSummary(req.user.id, groupId);
     const doc = (req.query.doc === 'docx') ? 'docx' : 'pdf';
     const imgRes = req.query.res || 'standard';
@@ -1920,22 +1996,10 @@ app.get('/api/export/proposal', requireAuth, async (req, res) => {
       pdf.fontSize(12).fillColor('#000').text('Prepared with Photo Notes', { align: 'center' });
       pdf.moveDown(1);
       for (let i = 0; i < sections.length; i++) {
-        const { c, fix, qty, pair } = sections[i];
+        const { c, fix, qty } = sections[i];
         pdf.addPage();
-        if (pair) {
-          // before/after photos side by side
-          const top = pdf.y;
-          pdf.fontSize(11).fillColor('#000').text('BEFORE', 48, top, { width: 240 });
-          pdf.fontSize(11).fillColor('#000').text('AFTER', 310, top, { width: 240 });
-          const imgTop = top + 16;
-          const bImg = localPhoto(pair.before.photo_path), aImg = localPhoto(pair.after.photo_path);
-          if (bImg) { const r = await renderForEmbed(bImg, imgRes, imgFmt); if (r) { try { pdf.image(r.buffer, 48, imgTop, { fit: [240, 180] }); } catch (e) {} } }
-          if (aImg) { const r = await renderForEmbed(aImg, imgRes, imgFmt); if (r) { try { pdf.image(r.buffer, 310, imgTop, { fit: [240, 180] }); } catch (e) {} } }
-          pdf.y = imgTop + 190; pdf.x = 48;
-        } else {
-          const img = localPhoto(c.photo_path);
-          if (img) { const r = await renderForEmbed(img, imgRes, imgFmt); if (r) { try { pdf.image(r.buffer, { fit: [480, 320], align: 'center' }); pdf.moveDown(0.5); } catch (e) {} } }
-        }
+        const img = localPhoto(c.photo_path);
+        if (img) { const r = await renderForEmbedStamped(img, imgRes, imgFmt, c); if (r) { try { pdf.image(r.buffer, { fit: [480, 320], align: 'center' }); pdf.moveDown(0.5); } catch (e) {} } }
         pdf.fontSize(13).fillColor('#000').text(`${i + 1}. ${c.address || 'No location'}`);
         const df = fmtDefect(c); if (df) pdf.fontSize(12).fillColor('#000').text('Defect: ' + df);
         const dm = exportDims(c); if (dm) pdf.fontSize(12).fillColor('#000').text('Dimensions: ' + dm);
@@ -1976,19 +2040,9 @@ app.get('/api/export/proposal', requireAuth, async (req, res) => {
     children.push(new Paragraph({ children: [new TextRun({ text: 'Prepared with Photo Notes', color: '000000', font: 'Arial' })] }));
     children.push(new Paragraph({ children: [new TextRun({ text: '' })] }));
     for (let i = 0; i < sections.length; i++) {
-      const { c, fix, qty, pair } = sections[i];
-      if (pair) {
-        const imgCell = async (lbl, cc) => {
-          const kids = [new Paragraph({ children: [new TextRun({ text: lbl, bold: true, color: '000000', font: 'Arial' })] })];
-          const im = localPhoto(cc.photo_path);
-          if (im) { const r = await renderForEmbed(im, imgRes, imgFmt); if (r) { try { kids.push(new Paragraph({ children: [new ImageRun({ type: r.ext === '.png' ? 'png' : 'jpg', data: r.buffer, transformation: { width: 250, height: 188 } })] })); } catch (e) {} } }
-          return new TableCell({ children: kids });
-        };
-        children.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: [new TableRow({ children: [await imgCell('BEFORE', pair.before), await imgCell('AFTER', pair.after)] })] }));
-      } else {
-        const img = localPhoto(c.photo_path);
-        if (img) { const r = await renderForEmbed(img, imgRes, imgFmt); if (r) { try { children.push(new Paragraph({ children: [new ImageRun({ type: r.ext === '.png' ? 'png' : 'jpg', data: r.buffer, transformation: { width: 400, height: 300 } })] })); } catch (e) {} } }
-      }
+      const { c, fix, qty } = sections[i];
+      const img = localPhoto(c.photo_path);
+      if (img) { const r = await renderForEmbedStamped(img, imgRes, imgFmt, c); if (r) { try { children.push(new Paragraph({ children: [new ImageRun({ type: r.ext === '.png' ? 'png' : 'jpg', data: r.buffer, transformation: { width: 400, height: 300 } })] })); } catch (e) {} } }
       children.push(new Paragraph({ spacing: { before: 120 }, children: [new TextRun({ text: `${i + 1}. ${c.address || 'No location'}`, bold: true, color: '000000', font: 'Arial' })] }));
       const df = fmtDefect(c); if (df) children.push(new Paragraph({ children: [new TextRun({ text: 'Defect: ' + df, color: '000000', font: 'Arial' })] }));
       const dm = exportDims(c); if (dm) children.push(new Paragraph({ children: [new TextRun({ text: 'Dimensions: ' + dm, color: '000000', font: 'Arial' })] }));
