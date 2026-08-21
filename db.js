@@ -64,7 +64,10 @@ CREATE TABLE IF NOT EXISTS captures (
   defect_severity TEXT,
   defect_confidence TEXT,
   defect_ai       JSONB,
-  defect_user_confirmed BOOLEAN NOT NULL DEFAULT false
+  defect_user_confirmed BOOLEAN NOT NULL DEFAULT false,
+  -- Photo overlays (stamps): array of {t,text,x,y,size,color,font,outline}.
+  -- Non-destructive; rendered on cards, burned into exports, and flattenable.
+  overlays        JSONB
 );
 CREATE TABLE IF NOT EXISTS groups (
   id          SERIAL PRIMARY KEY,
@@ -239,6 +242,7 @@ async function init() {
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS defect_confidence TEXT`);
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS defect_ai JSONB`);
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS defect_user_confirmed BOOLEAN NOT NULL DEFAULT false`);
+  await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS overlays JSONB`);
   await pool.query(`ALTER TABLE groups ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id)`);
   await pool.query(`UPDATE groups SET user_id = $1 WHERE user_id IS NULL`, [adminId]);
 
