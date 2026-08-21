@@ -1747,6 +1747,7 @@ function renderEwrCreate(body) {
   body.innerHTML = `
     <button class="backlink" id="ewrBack">‹ Back to Job</button>
     <div class="brand" style="font-size:20px">Extra Work Record</div>
+
     <label>Reason For Extra Work</label>
     ${reasonSelectHtml('ewrReason', 'unforeseen_site_condition')}
     <div id="ewrOtherWrap" style="display:none;margin-top:8px">
