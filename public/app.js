@@ -1044,6 +1044,7 @@ function captureCardHtml(c) {
     <div class="meta">${kind}${tags}</div>
     ${classifyRow}
     ${dims ? `<div class="meta"><strong>Dimensions:</strong> ${esc(dims)}</div>` : ''}
+    ${c.photo_path ? `<button class="btn secondary slim stampbtn" data-id="${c.id}">Add Stamps to Photo${(c.overlays && c.overlays.length) ? ' (' + c.overlays.length + ')' : ''}</button>` : ''}
     <div class="notewrap" data-id="${c.id}">
       <div class="notetext">${esc(c.note || '(no note)')}</div>
       <button class="btn secondary editnote" data-id="${c.id}" style="margin-top:6px">Edit Note</button>
@@ -1092,6 +1093,174 @@ function wireCards(cards, rows) {
     if (r.ok) { toast('Paired'); loadCards(document.getElementById('filter').value || ''); } else toast('Pairing failed');
   });
   cards.querySelectorAll('.sugdismiss').forEach(b => b.onclick = () => { window._dismissedSug.add(b.getAttribute('data-b') + '-' + b.getAttribute('data-a')); loadCards(document.getElementById('filter').value || ''); });
+  cards.querySelectorAll('.stampbtn').forEach(b => b.onclick = () => { const c = rows.find(r => r.id === parseInt(b.getAttribute('data-id'), 10)); if (c) renderStampEditor(c); });
+}
+
+// ================= Photo overlays / stamps editor =================
+let editorCapture = null, editorOverlays = [], editorSel = -1;
+const OVERLAY_FIELD_LABELS = { datetime: 'Date / Time', address: 'Address', gps: 'GPS', copyright: 'Copyright', topic: 'Topic', dims: 'Dimensions', defect: 'Defect', custom: 'Custom Text' };
+const OVERLAY_FONT_CSS = { sans: 'Arial, Helvetica, sans-serif', serif: 'Georgia, "Times New Roman", serif', mono: '"Courier New", monospace', heavy: 'Impact, "Arial Black", sans-serif' };
+function overlayTextClient(item, c) {
+  switch (item.t) {
+    case 'datetime': return new Date(c.created_at).toLocaleString();
+    case 'address': return c.address || '';
+    case 'gps': return (c.latitude != null && c.longitude != null) ? `${Number(c.latitude).toFixed(5)}, ${Number(c.longitude).toFixed(5)}` : '';
+    case 'topic': return (c.area_tags || []).join(', ');
+    case 'dims': return fmtDimsClient(c);
+    case 'defect': return c.defect_type ? (defectLabelClient(c.defect_type) + (c.defect_severity ? ', ' + c.defect_severity : '')) : '';
+    case 'copyright': return item.text || ('© ' + new Date().getFullYear());
+    default: return item.text || '';
+  }
+}
+function renderStampEditor(c) {
+  editorCapture = c;
+  editorOverlays = Array.isArray(c.overlays) ? JSON.parse(JSON.stringify(c.overlays)) : [];
+  editorSel = editorOverlays.length ? 0 : -1;
+  const body = document.getElementById('body');
+  const addOpts = ['datetime', 'address', 'gps', 'copyright', 'topic', 'custom'];
+  if (isProClient()) { addOpts.push('dims', 'defect'); }
+  body.innerHTML = `
+    <button class="backlink" id="stampBack">‹ Back to Library</button>
+    <div class="formhead">Add Stamps to Photo</div>
+    <div class="status">Tap Add, then drag each item on the photo or use a corner button. Style it below.</div>
+    <div id="stampStage" style="position:relative;display:inline-block;max-width:100%;border:1px solid #000;border-radius:8px;overflow:hidden;touch-action:none">
+      <img id="stampImg" src="${photoSrc(c.photo_path)}" alt="photo" style="display:block;max-width:100%;height:auto" />
+    </div>
+    <label style="margin-top:10px">Add Item</label>
+    <div class="pill-group" id="stampAdd">
+      ${addOpts.map(t => `<div class="pill" data-add="${t}">${OVERLAY_FIELD_LABELS[t]}</div>`).join('')}
+    </div>
+    <div id="stampCtl"></div>
+    <div class="row" style="margin-top:14px">
+      <button class="btn" id="stampSave">Save Stamps</button>
+      <button class="btn secondary" id="stampCopy">Save Stamped Copy</button>
+    </div>`;
+  document.getElementById('stampBack').onclick = () => loadCards(document.getElementById('filter') ? (document.getElementById('filter').value || '') : '');
+  document.getElementById('stampAdd').onclick = (e) => { const p = e.target.closest('[data-add]'); if (p) addOverlayItem(p.getAttribute('data-add')); };
+  document.getElementById('stampSave').onclick = saveOverlays;
+  document.getElementById('stampCopy').onclick = saveStampedCopy;
+  const img = document.getElementById('stampImg');
+  if (img.complete) drawOverlayItems(); else img.onload = drawOverlayItems;
+  renderStampCtl();
+}
+function stageSize() {
+  const st = document.getElementById('stampStage');
+  return st ? { w: st.clientWidth, h: st.clientHeight } : { w: 1, h: 1 };
+}
+function addOverlayItem(t) {
+  const item = { t, text: t === 'copyright' ? ('© ' + new Date().getFullYear() + ' Zukor AI') : (t === 'custom' ? 'Text' : ''), x: 4, y: 84, size: 5, color: '#ffffff', font: 'sans', outline: true };
+  editorOverlays.push(item);
+  editorSel = editorOverlays.length - 1;
+  drawOverlayItems();
+  renderStampCtl();
+}
+function drawOverlayItems() {
+  const st = document.getElementById('stampStage');
+  if (!st) return;
+  st.querySelectorAll('.ovitem').forEach(n => n.remove());
+  const { h } = stageSize();
+  editorOverlays.forEach((it, i) => {
+    const txt = overlayTextClient(it, editorCapture) || OVERLAY_FIELD_LABELS[it.t] || 'Text';
+    const d = document.createElement('div');
+    d.className = 'ovitem' + (i === editorSel ? ' sel' : '');
+    d.style.cssText = `position:absolute;left:${it.x}%;top:${it.y}%;font-size:${Math.max(9, it.size / 100 * h)}px;color:${it.color};font-family:${OVERLAY_FONT_CSS[it.font] || OVERLAY_FONT_CSS.sans};font-weight:${it.font === 'heavy' ? '800' : 'normal'};white-space:nowrap;cursor:move;user-select:none;line-height:1;${it.outline ? 'text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000;' : ''}${i === editorSel ? 'outline:2px dashed #1d4ed8;outline-offset:2px;' : ''}`;
+    d.textContent = txt;
+    d.dataset.i = i;
+    startDrag(d, i);
+    st.appendChild(d);
+  });
+}
+function startDrag(el, i) {
+  el.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    editorSel = i; renderStampCtl(); drawOverlayItems();
+    const st = document.getElementById('stampStage');
+    const move = (ev) => {
+      const rect = st.getBoundingClientRect();
+      let x = (ev.clientX - rect.left) / rect.width * 100;
+      let y = (ev.clientY - rect.top) / rect.height * 100;
+      editorOverlays[i].x = Math.max(0, Math.min(96, x));
+      editorOverlays[i].y = Math.max(0, Math.min(96, y));
+      const node = st.querySelector(`.ovitem[data-i="${i}"]`);
+      if (node) { node.style.left = editorOverlays[i].x + '%'; node.style.top = editorOverlays[i].y + '%'; }
+    };
+    const up = () => { document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); };
+    document.addEventListener('pointermove', move);
+    document.addEventListener('pointerup', up);
+  });
+}
+function renderStampCtl() {
+  const box = document.getElementById('stampCtl');
+  if (!box) return;
+  if (editorSel < 0 || !editorOverlays[editorSel]) { box.innerHTML = '<div class="status">No item selected. Add one above.</div>'; return; }
+  const it = editorOverlays[editorSel];
+  const colors = ['#ffffff', '#000000', '#c1121f', '#1d4ed8', '#f2c200', '#1b7a3d'];
+  box.innerHTML = `
+    <label style="margin-top:12px">Selected: ${OVERLAY_FIELD_LABELS[it.t]}</label>
+    ${(it.t === 'custom' || it.t === 'copyright') ? `<input type="text" id="ovText" value="${esc(it.text || '')}" placeholder="Text" />` : ''}
+    <label style="margin-top:8px">Position (corners)</label>
+    <div class="row compact">
+      <button class="btn secondary slim" data-pos="tl">Top L</button>
+      <button class="btn secondary slim" data-pos="tr">Top R</button>
+      <button class="btn secondary slim" data-pos="bl">Bot L</button>
+      <button class="btn secondary slim" data-pos="br">Bot R</button>
+    </div>
+    <label style="margin-top:8px">Font</label>
+    <select id="ovFont">
+      <option value="sans"${it.font === 'sans' ? ' selected' : ''}>Sans (Arial)</option>
+      <option value="serif"${it.font === 'serif' ? ' selected' : ''}>Serif (Georgia)</option>
+      <option value="mono"${it.font === 'mono' ? ' selected' : ''}>Mono (Courier)</option>
+      <option value="heavy"${it.font === 'heavy' ? ' selected' : ''}>Heavy (Impact)</option>
+    </select>
+    <label style="margin-top:8px">Color</label>
+    <div class="pill-group" id="ovColors">${colors.map(col => `<div class="pill" data-col="${col}" style="background:${col};width:34px;height:28px;${it.color === col ? 'outline:3px solid #1d4ed8;' : ''}"></div>`).join('')}
+      <input type="color" id="ovColorPick" value="${/^#[0-9a-fA-F]{6}$/.test(it.color) ? it.color : '#ffffff'}" style="width:44px;height:32px;padding:0;border:1px solid #000;border-radius:6px" />
+    </div>
+    <label style="margin-top:8px">Size</label>
+    <input type="range" id="ovSize" min="2" max="14" step="0.5" value="${it.size}" style="width:100%" />
+    <label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-weight:bold;font-size:14px;margin-top:8px">
+      <input type="checkbox" id="ovOutline" ${it.outline ? 'checked' : ''} style="width:20px;height:20px"> Outline for legibility
+    </label>
+    <button class="btn secondary slim" id="ovDelete" style="color:#c1121f;margin-top:8px">Delete This Item</button>`;
+  const t = q => box.querySelector(q);
+  if (t('#ovText')) t('#ovText').addEventListener('input', () => { it.text = t('#ovText').value; drawOverlayItems(); });
+  box.querySelectorAll('[data-pos]').forEach(b => b.onclick = () => {
+    const p = b.getAttribute('data-pos');
+    it.x = (p === 'tl' || p === 'bl') ? 4 : 55;
+    it.y = (p === 'tl' || p === 'tr') ? 4 : 86;
+    drawOverlayItems();
+  });
+  t('#ovFont').onchange = () => { it.font = t('#ovFont').value; drawOverlayItems(); };
+  box.querySelectorAll('[data-col]').forEach(b => b.onclick = () => { it.color = b.getAttribute('data-col'); renderStampCtl(); drawOverlayItems(); });
+  t('#ovColorPick').oninput = () => { it.color = t('#ovColorPick').value; drawOverlayItems(); };
+  t('#ovSize').oninput = () => { it.size = parseFloat(t('#ovSize').value); drawOverlayItems(); };
+  t('#ovOutline').onchange = () => { it.outline = t('#ovOutline').checked; drawOverlayItems(); };
+  t('#ovDelete').onclick = () => { editorOverlays.splice(editorSel, 1); editorSel = editorOverlays.length ? 0 : -1; drawOverlayItems(); renderStampCtl(); };
+}
+async function saveOverlays() {
+  const btn = document.getElementById('stampSave'); btn.disabled = true; btn.textContent = 'Saving...';
+  const r = await api(`/api/captures/${editorCapture.id}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ overlays: editorOverlays }),
+  });
+  btn.disabled = false; btn.textContent = 'Save Stamps';
+  if (r.ok) { editorCapture.overlays = editorOverlays; toast('Stamps saved'); }
+  else toast('Save failed');
+}
+async function saveStampedCopy() {
+  const btn = document.getElementById('stampCopy'); btn.disabled = true; btn.textContent = 'Building...';
+  // save first so the server has the latest overlays
+  await api(`/api/captures/${editorCapture.id}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ overlays: editorOverlays }) });
+  editorCapture.overlays = editorOverlays;
+  try {
+    const r = await api(`/api/captures/${editorCapture.id}/stamped?res=print`);
+    if (!r.ok) throw new Error('bad');
+    const blob = await r.blob(); const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = `photo-${editorCapture.id}-stamped.jpg`;
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 1500);
+    toast('Stamped copy ready');
+  } catch (e) { toast('Could not build stamped copy'); }
+  finally { btn.disabled = false; btn.textContent = 'Save Stamped Copy'; }
 }
 
 function startEditNote(id, rows) {
@@ -1578,7 +1747,6 @@ function renderEwrCreate(body) {
   body.innerHTML = `
     <button class="backlink" id="ewrBack">‹ Back to Job</button>
     <div class="brand" style="font-size:20px">Extra Work Record</div>
-
     <label>Reason For Extra Work</label>
     ${reasonSelectHtml('ewrReason', 'unforeseen_site_condition')}
     <div id="ewrOtherWrap" style="display:none;margin-top:8px">
