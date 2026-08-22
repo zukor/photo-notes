@@ -975,6 +975,89 @@ app.post('/api/captures/:id/rotate', requireAuth, async (req, res) => {
   }
 });
 
+// ---- crop a capture's photo, keeping the original (own only) ----
+// Body: { x, y, w, h } as percentages (0-100) of the CURRENTLY displayed image.
+// The pristine pre-crop image is backed up to photo_original_path the first time
+// a photo is cropped, so it can always be restored.
+app.post('/api/captures/:id/crop', requireAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'bad id' });
+    const b = req.body || {};
+    const x = Number(b.x), y = Number(b.y), w = Number(b.w), h = Number(b.h);
+    if (![x, y, w, h].every(Number.isFinite) || w <= 0 || h <= 0) return res.status(400).json({ error: 'bad crop rect' });
+    const row = (await pool.query(`SELECT photo_path, photo_original_path FROM captures WHERE id = $1 AND user_id = $2`, [id, req.user.id])).rows[0];
+    if (!row) return res.status(404).json({ error: 'not found' });
+    const p = localPhoto(row.photo_path);
+    if (!p) return res.status(400).json({ error: 'no photo file to crop' });
+    const ext = path.extname(p).toLowerCase();
+
+    // Back up the pristine original the first time this photo is cropped.
+    let originalPath = row.photo_original_path;
+    if (!originalPath) {
+      const base = path.basename(p, ext);
+      const backupName = `${base}-orig${ext}`;
+      fs.copyFileSync(p, path.join(UPLOAD_DIR, backupName));
+      originalPath = `/uploads/${backupName}`;
+    }
+
+    // Bake EXIF orientation first so the crop rect matches what the user saw.
+    const oriented = await sharp(fs.readFileSync(p)).rotate().toBuffer();
+    const meta = await sharp(oriented).metadata();
+    const W = meta.width, H = meta.height;
+    let left = Math.round(x / 100 * W);
+    let top = Math.round(y / 100 * H);
+    let cw = Math.round(w / 100 * W);
+    let ch = Math.round(h / 100 * H);
+    left = Math.max(0, Math.min(W - 1, left));
+    top = Math.max(0, Math.min(H - 1, top));
+    cw = Math.max(1, Math.min(W - left, cw));
+    ch = Math.max(1, Math.min(H - top, ch));
+
+    const s = sharp(oriented).extract({ left, top, width: cw, height: ch });
+    let out;
+    if (ext === '.png') out = await s.png().toBuffer();
+    else if (ext === '.webp') out = await s.webp().toBuffer();
+    else out = await s.jpeg({ quality: 92 }).toBuffer();
+    fs.writeFileSync(p, out);
+
+    const d = await imageDims(p);
+    await pool.query(
+      `UPDATE captures SET photo_original_path = $1, photo_width = $2, photo_height = $3 WHERE id = $4 AND user_id = $5`,
+      [originalPath, d ? d.w : null, d ? d.h : null, id, req.user.id]);
+    logEvent(req.user.id, 'crop', {});
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[captures.crop]', err);
+    res.status(500).json({ error: 'crop failed' });
+  }
+});
+
+// ---- restore a capture's original (pre-crop) photo (own only) ----
+app.post('/api/captures/:id/restore-original', requireAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'bad id' });
+    const row = (await pool.query(`SELECT photo_path, photo_original_path FROM captures WHERE id = $1 AND user_id = $2`, [id, req.user.id])).rows[0];
+    if (!row) return res.status(404).json({ error: 'not found' });
+    if (!row.photo_original_path) return res.status(400).json({ error: 'no original to restore' });
+    const orig = localPhoto(row.photo_original_path);
+    const cur = localPhoto(row.photo_path);
+    if (!orig || !cur) return res.status(400).json({ error: 'original file missing' });
+    fs.copyFileSync(orig, cur);              // put the original back in place
+    try { fs.unlinkSync(orig); } catch (e) {} // drop the backup; photo_path is now the original
+    const d = await imageDims(cur);
+    await pool.query(
+      `UPDATE captures SET photo_original_path = NULL, photo_width = $1, photo_height = $2 WHERE id = $3 AND user_id = $4`,
+      [d ? d.w : null, d ? d.h : null, id, req.user.id]);
+    logEvent(req.user.id, 'restore_original', {});
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[captures.restore]', err);
+    res.status(500).json({ error: 'restore failed' });
+  }
+});
+
 // ---- groups (per-user) ----
 async function ownsGroup(groupId, userId) {
   const g = (await pool.query(`SELECT id FROM groups WHERE id = $1 AND user_id = $2`, [groupId, userId])).rows[0];
