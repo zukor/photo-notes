@@ -90,7 +90,7 @@
   function fixLogo() {
     var img = document.querySelector('img[src="/zukor-logo.svg"]');
     if (!img) return;
-    img.style.height = '6px'; // ~75% smaller than the original 22px
+    img.style.height = '12px'; // corner logo height
     img.style.width = 'auto';
     var p = img.parentElement;
     if (!p) return;
