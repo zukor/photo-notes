@@ -647,16 +647,88 @@ function fmtDimsClient(c) {
 }
 // ================= end Pro dimension fields =================
 
-async function saveCapture() {
-  const btn = document.getElementById('save');
+// ---- background upload manager ----
+// The record commits from the user's point of view the instant they tap Save:
+// the form clears immediately and the photo finishes uploading behind the
+// scenes. Uploads run one at a time (kind to slow connections), auto-retry with
+// backoff, and resume when the device comes back online.
+let bgQueue = [];      // [{ fd, hadCoords, tries }]
+let bgActive = 0;      // 1 while an upload is in flight, else 0
+let bgDraining = false;
+let bgOnlineHooked = false;
+
+function bgIndicator() {
+  let el = document.getElementById('bgstatus');
+  const total = bgActive + bgQueue.length;
+  if (!el) {
+    if (total === 0) return;
+    el = document.createElement('div');
+    el.id = 'bgstatus';
+    el.style.cssText = 'position:fixed;left:50%;bottom:64px;transform:translateX(-50%);background:#111;color:#fff;padding:9px 16px;border-radius:20px;font-weight:bold;font-size:14px;z-index:20;box-shadow:0 2px 8px rgba(0,0,0,.3)';
+    document.body.appendChild(el);
+  }
+  if (total > 0) {
+    el.textContent = total === 1 ? 'Uploading photo…' : `Uploading ${total} photos…`;
+    el.style.background = '#111';
+    el.style.display = 'block';
+  } else {
+    el.textContent = 'All photos uploaded';
+    el.style.background = '#1b7a3d';
+    setTimeout(() => { if (el && bgActive + bgQueue.length === 0) el.style.display = 'none'; }, 1600);
+  }
+}
+
+function enqueueUpload(fd, hadCoords) {
+  bgQueue.push({ fd, hadCoords: !!hadCoords, tries: 0 });
+  if (!bgOnlineHooked) { window.addEventListener('online', drainQueue); bgOnlineHooked = true; }
+  bgIndicator();
+  drainQueue();
+}
+
+async function drainQueue() {
+  if (bgDraining) return;
+  bgDraining = true;
+  try {
+    while (bgQueue.length) {
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) break; // wait for 'online'
+      const item = bgQueue.shift();
+      bgActive = 1; bgIndicator();
+      try {
+        const r = await fetch('/api/captures', { method: 'POST', credentials: 'same-origin', body: item.fd });
+        if (!r.ok) throw new Error('http ' + r.status);
+        bgActive = 0;
+        // Refresh the Library if it is open so the new card appears...
+        if (state.view === 'list') {
+          const flt = document.getElementById('filter');
+          loadCards(flt ? (flt.value || '') : '');
+          // ...and again shortly after, to pick up the background-filled address.
+          if (item.hadCoords) setTimeout(() => { if (state.view === 'list') { const f = document.getElementById('filter'); loadCards(f ? (f.value || '') : ''); } }, 3000);
+        }
+      } catch (e) {
+        bgActive = 0;
+        item.tries++;
+        if (item.tries < 6) {
+          const delay = Math.min(45000, 2000 * Math.pow(2, item.tries - 1));
+          setTimeout(() => { bgQueue.push(item); drainQueue(); }, delay);
+        } else {
+          toast('A photo could not upload. Check your connection.');
+        }
+      }
+      bgIndicator();
+    }
+  } finally { bgDraining = false; }
+}
+
+function saveCapture() {
   const note = document.getElementById('note').value.trim();
   if (!state.photoFile && !note) { toast('Take a photo or add a note first'); return; }
-  btn.disabled = true; btn.textContent = 'Saving...';
+  // Build the payload from the CURRENT state before we clear the form.
   const fd = new FormData();
   if (state.photoFile) fd.append('photo', state.photoFile);
   fd.append('note', note);
   fd.append('area_tags', JSON.stringify(state.area ? [state.area] : []));
   fd.append('kind', 'note');
+  const hadCoords = !!state.location;
   if (state.location) { fd.append('latitude', state.location.lat); fd.append('longitude', state.location.lng); }
   if (state.address) fd.append('address', state.address);
   if (isProClient()) {
@@ -669,18 +741,12 @@ async function saveCapture() {
       if (state._measure.raw) { try { fd.append('dim_ai', JSON.stringify(state._measure.raw)); } catch (e) {} }
     }
   }
-  try {
-    const r = await api('/api/captures', { method: 'POST', body: fd });
-    if (!r.ok) throw new Error('save failed');
-    toast('Saved');
-    state.photoFile = null; state._note = ''; state.location = null; state.address = null;
-    state._dims = freshDims(); state._measure = null;
-    renderCapture();
-  } catch (e) {
-    toast('Save failed, try again');
-  } finally {
-    btn.disabled = false; btn.textContent = 'Save';
-  }
+  // Commit instantly: clear the form and hand the upload to the background.
+  state.photoFile = null; state._note = ''; state.location = null; state.address = null;
+  state._dims = freshDims(); state._measure = null;
+  renderCapture();
+  toast('Saved');
+  enqueueUpload(fd, hadCoords);
 }
 
 // ---- rotate + note editing (shared) ----
@@ -1098,7 +1164,7 @@ function wireCards(cards, rows) {
 
 // ================= Photo overlays / stamps editor =================
 let editorCapture = null, editorOverlays = [], editorSel = -1;
-const OVERLAY_FIELD_LABELS = { datetime: 'Date / Time', address: 'Address', gps: 'GPS', copyright: 'Copyright', topic: 'Topic', dims: 'Dimensions', defect: 'Defect', custom: 'Custom Text' };
+const OVERLAY_FIELD_LABELS = { datetime: 'Date / Time', address: 'Address', gps: 'GPS', copyright: 'Copyright', topic: 'Topic', dims: 'Dimensions', defect: 'Defect', custom: 'Custom Text', rect: 'Box / Rectangle' };
 const OVERLAY_FONT_CSS = { sans: 'Arial, Helvetica, sans-serif', serif: 'Georgia, "Times New Roman", serif', mono: '"Courier New", monospace', heavy: 'Impact, "Arial Black", sans-serif' };
 function overlayTextClient(item, c) {
   switch (item.t) {
@@ -1117,7 +1183,7 @@ function renderStampEditor(c) {
   editorOverlays = Array.isArray(c.overlays) ? JSON.parse(JSON.stringify(c.overlays)) : [];
   editorSel = editorOverlays.length ? 0 : -1;
   const body = document.getElementById('body');
-  const addOpts = ['datetime', 'address', 'gps', 'copyright', 'topic', 'custom'];
+  const addOpts = ['datetime', 'address', 'gps', 'copyright', 'topic', 'custom', 'rect'];
   if (isProClient()) { addOpts.push('dims', 'defect'); }
   body.innerHTML = `
     <button class="backlink" id="stampBack">‹ Back to Library</button>
@@ -1148,7 +1214,13 @@ function stageSize() {
   return st ? { w: st.clientWidth, h: st.clientHeight } : { w: 1, h: 1 };
 }
 function addOverlayItem(t) {
-  const item = { t, text: t === 'copyright' ? ('© ' + new Date().getFullYear() + ' Zukor AI. All Rights Reserved.') : (t === 'custom' ? 'Text' : ''), x: 4, y: 84, size: 5, color: '#ffffff', font: 'sans', outline: true };
+  let item;
+  if (t === 'rect') {
+    // Box annotation. Geometry + thickness in percent so preview == burn.
+    item = { t: 'rect', x: 30, y: 30, w: 40, h: 30, color: '#ff0000', thickness: 0.6 };
+  } else {
+    item = { t, text: t === 'copyright' ? ('© ' + new Date().getFullYear() + ' Zukor AI. All Rights Reserved.') : (t === 'custom' ? 'Text' : ''), x: 4, y: 84, size: 5, color: '#ffffff', font: 'sans', outline: true };
+  }
   editorOverlays.push(item);
   editorSel = editorOverlays.length - 1;
   drawOverlayItems();
@@ -1158,8 +1230,25 @@ function drawOverlayItems() {
   const st = document.getElementById('stampStage');
   if (!st) return;
   st.querySelectorAll('.ovitem').forEach(n => n.remove());
-  const { h } = stageSize();
+  const { w: stW, h } = stageSize();
   editorOverlays.forEach((it, i) => {
+    if (it.t === 'rect') {
+      const box = document.createElement('div');
+      box.className = 'ovitem ovrect' + (i === editorSel ? ' sel' : '');
+      const bw = Math.max(1, (Number(it.thickness) || 0.6) / 100 * stW);
+      box.style.cssText = `position:absolute;left:${it.x}%;top:${it.y}%;width:${it.w}%;height:${it.h}%;border:${bw}px solid ${it.color};box-sizing:border-box;cursor:move;touch-action:none;${i === editorSel ? 'outline:2px dashed #1d4ed8;outline-offset:2px;' : ''}`;
+      box.dataset.i = i;
+      startDrag(box, i);
+      if (i === editorSel) {
+        const handle = document.createElement('div');
+        handle.className = 'ovhandle';
+        handle.style.cssText = 'position:absolute;right:-9px;bottom:-9px;width:20px;height:20px;background:#1d4ed8;border:2px solid #fff;border-radius:50%;cursor:nwse-resize;touch-action:none';
+        startResize(handle, i);
+        box.appendChild(handle);
+      }
+      st.appendChild(box);
+      return;
+    }
     const txt = overlayTextClient(it, editorCapture) || OVERLAY_FIELD_LABELS[it.t] || 'Text';
     const d = document.createElement('div');
     d.className = 'ovitem' + (i === editorSel ? ' sel' : '');
@@ -1172,17 +1261,46 @@ function drawOverlayItems() {
 }
 function startDrag(el, i) {
   el.addEventListener('pointerdown', (e) => {
+    if (e.target && e.target.classList && e.target.classList.contains('ovhandle')) return; // resize handle owns this
     e.preventDefault();
     editorSel = i; renderStampCtl(); drawOverlayItems();
     const st = document.getElementById('stampStage');
+    const rect0 = st.getBoundingClientRect();
+    const it = editorOverlays[i];
+    // Preserve where inside the item the user grabbed, so it doesn't jump.
+    const grabX = (e.clientX - rect0.left) / rect0.width * 100 - (Number(it.x) || 0);
+    const grabY = (e.clientY - rect0.top) / rect0.height * 100 - (Number(it.y) || 0);
+    const isRect = it.t === 'rect';
     const move = (ev) => {
       const rect = st.getBoundingClientRect();
-      let x = (ev.clientX - rect.left) / rect.width * 100;
-      let y = (ev.clientY - rect.top) / rect.height * 100;
-      editorOverlays[i].x = Math.max(0, Math.min(96, x));
-      editorOverlays[i].y = Math.max(0, Math.min(96, y));
+      let x = (ev.clientX - rect.left) / rect.width * 100 - grabX;
+      let y = (ev.clientY - rect.top) / rect.height * 100 - grabY;
+      const maxX = isRect ? Math.max(0, 100 - (Number(it.w) || 0)) : 96;
+      const maxY = isRect ? Math.max(0, 100 - (Number(it.h) || 0)) : 96;
+      it.x = Math.max(0, Math.min(maxX, x));
+      it.y = Math.max(0, Math.min(maxY, y));
       const node = st.querySelector(`.ovitem[data-i="${i}"]`);
-      if (node) { node.style.left = editorOverlays[i].x + '%'; node.style.top = editorOverlays[i].y + '%'; }
+      if (node) { node.style.left = it.x + '%'; node.style.top = it.y + '%'; }
+    };
+    const up = () => { document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); };
+    document.addEventListener('pointermove', move);
+    document.addEventListener('pointerup', up);
+  });
+}
+// Corner-resize for rectangle items: drag the bottom-right handle to set w/h.
+function startResize(handle, i) {
+  handle.addEventListener('pointerdown', (e) => {
+    e.preventDefault(); e.stopPropagation();
+    const st = document.getElementById('stampStage');
+    const it = editorOverlays[i];
+    const move = (ev) => {
+      const rect = st.getBoundingClientRect();
+      const px = (ev.clientX - rect.left) / rect.width * 100;
+      const py = (ev.clientY - rect.top) / rect.height * 100;
+      it.w = Math.max(3, Math.min(100 - it.x, px - it.x));
+      it.h = Math.max(3, Math.min(100 - it.y, py - it.y));
+      const node = st.querySelector(`.ovitem[data-i="${i}"]`);
+      if (node) { node.style.width = it.w + '%'; node.style.height = it.h + '%'; }
     };
     const up = () => { document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); };
     document.addEventListener('pointermove', move);
@@ -1194,7 +1312,25 @@ function renderStampCtl() {
   if (!box) return;
   if (editorSel < 0 || !editorOverlays[editorSel]) { box.innerHTML = '<div class="status">No item selected. Add one above.</div>'; return; }
   const it = editorOverlays[editorSel];
-  const colors = ['#ffffff', '#000000', '#c1121f', '#1d4ed8', '#f2c200', '#1b7a3d'];
+  const colors = ['#ffffff', '#000000', '#ff0000', '#c1121f', '#1d4ed8', '#f2c200', '#1b7a3d'];
+  if (it.t === 'rect') {
+    box.innerHTML = `
+      <label style="margin-top:12px">Selected: Box / Rectangle</label>
+      <div class="status">Drag the box to move it. Drag the blue corner dot to resize.</div>
+      <label style="margin-top:8px">Color</label>
+      <div class="pill-group" id="ovColors">${colors.map(col => `<div class="pill" data-col="${col}" style="background:${col};width:34px;height:28px;${it.color === col ? 'outline:3px solid #1d4ed8;' : ''}"></div>`).join('')}
+        <input type="color" id="ovColorPick" value="${/^#[0-9a-fA-F]{6}$/.test(it.color) ? it.color : '#ff0000'}" style="width:44px;height:32px;padding:0;border:1px solid #000;border-radius:6px" />
+      </div>
+      <label style="margin-top:8px">Line Thickness</label>
+      <input type="range" id="ovThick" min="0.2" max="3" step="0.1" value="${it.thickness || 0.6}" style="width:100%" />
+      <button class="btn secondary slim" id="ovDelete" style="color:#c1121f;margin-top:8px">Delete This Box</button>`;
+    const tq = q => box.querySelector(q);
+    box.querySelectorAll('[data-col]').forEach(b => b.onclick = () => { it.color = b.getAttribute('data-col'); renderStampCtl(); drawOverlayItems(); });
+    tq('#ovColorPick').oninput = () => { it.color = tq('#ovColorPick').value; drawOverlayItems(); };
+    tq('#ovThick').oninput = () => { it.thickness = parseFloat(tq('#ovThick').value); drawOverlayItems(); };
+    tq('#ovDelete').onclick = () => { editorOverlays.splice(editorSel, 1); editorSel = editorOverlays.length ? 0 : -1; drawOverlayItems(); renderStampCtl(); };
+    return;
+  }
   box.innerHTML = `
     <label style="margin-top:12px">Selected: ${OVERLAY_FIELD_LABELS[it.t]}</label>
     ${(it.t === 'custom' || it.t === 'copyright') ? `<input type="text" id="ovText" value="${esc(it.text || '')}" placeholder="Text" />` : ''}
