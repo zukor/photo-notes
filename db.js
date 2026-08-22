@@ -243,6 +243,9 @@ async function init() {
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS defect_ai JSONB`);
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS defect_user_confirmed BOOLEAN NOT NULL DEFAULT false`);
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS overlays JSONB`);
+  // Non-destructive crop: when a photo is first cropped, the pre-crop image is
+  // backed up here so the original can always be restored.
+  await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS photo_original_path TEXT`);
   await pool.query(`ALTER TABLE groups ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id)`);
   await pool.query(`UPDATE groups SET user_id = $1 WHERE user_id IS NULL`, [adminId]);
 
