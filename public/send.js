@@ -105,37 +105,53 @@
     }
   }
 
-  // Slim the Topic area: keep the chips on one scrollable row and hide the
-  // "add a topic" field behind a small "+ New topic" button so it only appears
-  // when needed. Purely presentational — the app's own handlers still run.
+  // Collapse the Topic area behind a single tappable line. Collapsed it shows
+  // "Topic" plus the current selection and a chevron; tapping expands to the
+  // chips (one scrollable row) and the add-a-topic field. Purely presentational.
+  var topicExpanded = false;
+  var topicCollapseHooked = false;
   function fixTopics() {
     var areas = q('areas');
     if (!areas) return; // capture screen only
+    var label = areas.previousElementSibling;                 // the "Topic" <label>
+    if (!label || label.tagName !== 'LABEL') return;
+    var input = q('newarea');
+    var addRow = input ? input.parentElement : null;          // add-a-topic row
+
+    // chips on one scrollable row; hide the "No topics yet" hint
     areas.style.flexWrap = 'nowrap';
     areas.style.overflowX = 'auto';
     areas.style.webkitOverflowScrolling = 'touch';
-    areas.style.marginTop = '2px';
+    areas.style.marginTop = '4px';
     for (var i = 0; i < areas.children.length; i++) areas.children[i].style.flex = '0 0 auto';
-    // tighten the "Topic" label
-    var labels = document.querySelectorAll('label');
-    for (var j = 0; j < labels.length; j++) {
-      if (labels[j].textContent.trim().toLowerCase() === 'topic') { labels[j].style.margin = '10px 0 2px'; break; }
-    }
-    // hide the "No topics yet" hint (the + button below conveys it)
     var hint = areas.querySelector('.status');
     if (hint) hint.style.display = 'none';
-    // collapse the add-topic row behind a compact toggle
-    var input = q('newarea');
-    var addRow = input ? input.parentElement : null;
-    if (addRow && !q('topicAddToggle')) {
-      addRow.style.display = 'none';
-      var tog = document.createElement('button');
-      tog.id = 'topicAddToggle'; tog.type = 'button'; tog.className = 'pill';
-      tog.textContent = '+ New topic'; tog.style.marginTop = '6px'; tog.style.cursor = 'pointer';
-      tog.addEventListener('click', function () {
-        addRow.style.display = ''; tog.style.display = 'none'; if (input) input.focus();
-      });
-      areas.insertAdjacentElement('afterend', tog);
+
+    // the label becomes the toggle, showing the current selection when collapsed
+    var onPill = areas.querySelector('.pill.on');
+    var sel = onPill ? (onPill.getAttribute('data-area') || '') : '';
+    label.style.cursor = 'pointer';
+    label.style.textTransform = 'none';
+    label.style.margin = '12px 0 0';
+    label.style.userSelect = 'none';
+    var want = 'Topic' + (sel ? ': ' + sel : '') + '  ' + (topicExpanded ? '▴' : '▾');
+    if (label.textContent !== want) label.textContent = want; // guard: avoid observer loop
+    label.onclick = function () { topicExpanded = !topicExpanded; fixTopics(); };
+
+    // show/hide the expandable parts
+    areas.style.display = topicExpanded ? 'flex' : 'none';
+    if (addRow) addRow.style.display = topicExpanded ? '' : 'none';
+
+    // tapping a chip selects it and re-collapses (the new selection then shows)
+    if (!topicCollapseHooked) {
+      topicCollapseHooked = true;
+      document.addEventListener('click', function (e) {
+        var t = e.target;
+        if (t && t.closest) {
+          var pill = t.closest('#areas [data-area]');
+          if (pill && !t.getAttribute('data-del')) topicExpanded = false;
+        }
+      }, true);
     }
   }
 
