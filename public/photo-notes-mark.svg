@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-10 -23 132 132" role="img" aria-label="Photo Notes mark">
+  <rect x="0" y="0" width="112" height="64" rx="10" fill="#ff0000"/>
+  <path d="M 16 62 L 16 86 L 38 62 Z" fill="#ff0000"/>
+  <rect x="18" y="13" width="74" height="8" rx="4" fill="#ffffff"/>
+  <rect x="18" y="28" width="74" height="8" rx="4" fill="#ffffff"/>
+  <rect x="18" y="43" width="46" height="8" rx="4" fill="#ffffff"/>
+</svg>
