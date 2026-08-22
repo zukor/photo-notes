@@ -106,7 +106,7 @@ function renderLogin() {
       <input id="pw" type="password" autocomplete="current-password" />
       <button class="btn" id="loginBtn">Sign In</button>
       <p class="status" id="loginErr"></p>
-      <div class="footer">&copy; ${new Date().getFullYear()} Zukor AI</div>
+      <div class="footer">&copy; ${new Date().getFullYear()} Zukor AI. All Rights Reserved.</div>
     </div>`;
   document.getElementById('loginBtn').onclick = doLogin;
   document.getElementById('pw').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
@@ -136,7 +136,7 @@ function renderApp() {
         ${isProClient() ? `<div class="tab ${state.view==='map'?'on':''}" id="tabMap">Map</div>` : ''}
       </div>
       <div id="body"></div>
-      <div class="footer">&copy; ${new Date().getFullYear()} Zukor AI</div>
+      <div class="footer">&copy; ${new Date().getFullYear()} Zukor AI. All Rights Reserved.</div>
     </div>`;
   document.getElementById('logout').onclick = async () => { await api('/api/logout', { method: 'POST' }); renderLogin(); };
   document.getElementById('tabCapture').onclick = () => { state.view='capture'; renderApp(); };
@@ -176,7 +176,7 @@ function renderCapture() {
 
     <label>Note</label>
     <button type="button" class="btn secondary" id="dictate" style="margin-bottom:8px">Record Note</button>
-    <textarea id="note" placeholder="Describe what you're looking at, or tap Record Note..."></textarea>
+    <textarea id="note" placeholder="Type what you're looking at, or tap Record Note"></textarea>
 
     ${isProClient() ? dimBlockHtml() : ''}
 
@@ -1148,7 +1148,7 @@ function stageSize() {
   return st ? { w: st.clientWidth, h: st.clientHeight } : { w: 1, h: 1 };
 }
 function addOverlayItem(t) {
-  const item = { t, text: t === 'copyright' ? ('© ' + new Date().getFullYear() + ' Zukor AI') : (t === 'custom' ? 'Text' : ''), x: 4, y: 84, size: 5, color: '#ffffff', font: 'sans', outline: true };
+  const item = { t, text: t === 'copyright' ? ('© ' + new Date().getFullYear() + ' Zukor AI. All Rights Reserved.') : (t === 'custom' ? 'Text' : ''), x: 4, y: 84, size: 5, color: '#ffffff', font: 'sans', outline: true };
   editorOverlays.push(item);
   editorSel = editorOverlays.length - 1;
   drawOverlayItems();
