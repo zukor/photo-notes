@@ -578,8 +578,11 @@ app.post('/api/captures', requireAuth, upload.single('photo'), async (req, res) 
     const b = req.body || {};
     const lat = b.latitude ? parseFloat(b.latitude) : null;
     const lng = b.longitude ? parseFloat(b.longitude) : null;
+    // Address geocoding is kept OFF the save path so the record commits
+    // instantly. If the client already resolved the address (its live preview),
+    // we store it now; otherwise we leave it null and fill it in the background
+    // right after responding (see the fire-and-forget block below).
     let address = b.address || null;
-    if (!address && lat != null && lng != null) address = await reverseGeocode(lat, lng);
 
     let areas = [];
     if (b.area_tags) {
@@ -638,7 +641,22 @@ app.post('/api/captures', requireAuth, upload.single('photo'), async (req, res) 
       dLenIn, dLenUnit, dWidIn, dWidUnit, dDepthIn, dShape, dArea,
       dSource, dConf, dAi ? JSON.stringify(dAi) : null, dConfirmed];
     const { rows } = await pool.query(q, vals);
-    res.json(rows[0]);
+    const saved = rows[0];
+    res.json(saved);
+
+    // Background address fill: if we have coordinates but no address yet, geocode
+    // AFTER responding and patch the row. The save is already committed and the
+    // client already has its response, so this never delays the user. The client
+    // picks up the address on its next Library refresh.
+    if (!address && lat != null && lng != null) {
+      reverseGeocode(lat, lng)
+        .then(addr => {
+          if (addr) return pool.query(
+            `UPDATE captures SET address = $1 WHERE id = $2 AND (address IS NULL OR address = '')`,
+            [addr, saved.id]);
+        })
+        .catch(e => console.error('[captures.bg-geocode]', e && e.message));
+    }
   } catch (err) {
     console.error('[captures.create]', err);
     res.status(500).json({ error: 'failed to save capture' });
@@ -1761,6 +1779,18 @@ async function burnOverlays(buffer, width, height, overlays, c) {
   if (!Array.isArray(overlays) || !overlays.length || !width || !height) return buffer;
   const parts = [];
   for (const it of overlays) {
+    // Rectangle / box annotation: stroked outline, no fill. Geometry and line
+    // thickness are stored as percentages so they map 1:1 to the editor preview.
+    if (it.t === 'rect') {
+      const rx = Math.round((Number(it.x) || 0) / 100 * width);
+      const ry = Math.round((Number(it.y) || 0) / 100 * height);
+      const rw = Math.max(1, Math.round((Number(it.w) || 10) / 100 * width));
+      const rh = Math.max(1, Math.round((Number(it.h) || 10) / 100 * height));
+      const rcol = /^#[0-9a-fA-F]{3,8}$/.test(it.color || '') ? it.color : '#ff0000';
+      const sw = Math.max(1, Math.round((Number(it.thickness) || 0.6) / 100 * width));
+      parts.push(`<rect x="${rx}" y="${ry}" width="${rw}" height="${rh}" fill="none" stroke="${rcol}" stroke-width="${sw}"/>`);
+      continue;
+    }
     const text = overlayItemText(it, c);
     if (!text) continue;
     const fs = Math.max(9, Math.round((Number(it.size) || 4) / 100 * height)); // size = % of height
