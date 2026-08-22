@@ -105,7 +105,41 @@
     }
   }
 
-  function apply() { injectButtons(); fixLogo(); }
+  // Slim the Topic area: keep the chips on one scrollable row and hide the
+  // "add a topic" field behind a small "+ New topic" button so it only appears
+  // when needed. Purely presentational — the app's own handlers still run.
+  function fixTopics() {
+    var areas = q('areas');
+    if (!areas) return; // capture screen only
+    areas.style.flexWrap = 'nowrap';
+    areas.style.overflowX = 'auto';
+    areas.style.webkitOverflowScrolling = 'touch';
+    areas.style.marginTop = '2px';
+    for (var i = 0; i < areas.children.length; i++) areas.children[i].style.flex = '0 0 auto';
+    // tighten the "Topic" label
+    var labels = document.querySelectorAll('label');
+    for (var j = 0; j < labels.length; j++) {
+      if (labels[j].textContent.trim().toLowerCase() === 'topic') { labels[j].style.margin = '10px 0 2px'; break; }
+    }
+    // hide the "No topics yet" hint (the + button below conveys it)
+    var hint = areas.querySelector('.status');
+    if (hint) hint.style.display = 'none';
+    // collapse the add-topic row behind a compact toggle
+    var input = q('newarea');
+    var addRow = input ? input.parentElement : null;
+    if (addRow && !q('topicAddToggle')) {
+      addRow.style.display = 'none';
+      var tog = document.createElement('button');
+      tog.id = 'topicAddToggle'; tog.type = 'button'; tog.className = 'pill';
+      tog.textContent = '+ New topic'; tog.style.marginTop = '6px'; tog.style.cursor = 'pointer';
+      tog.addEventListener('click', function () {
+        addRow.style.display = ''; tog.style.display = 'none'; if (input) input.focus();
+      });
+      areas.insertAdjacentElement('afterend', tog);
+    }
+  }
+
+  function apply() { injectButtons(); fixLogo(); fixTopics(); }
   var mo = new MutationObserver(apply);
   mo.observe(document.documentElement, { childList: true, subtree: true });
   document.addEventListener('DOMContentLoaded', apply);
