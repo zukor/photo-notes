@@ -1111,6 +1111,8 @@ function captureCardHtml(c) {
     ${classifyRow}
     ${dims ? `<div class="meta"><strong>Dimensions:</strong> ${esc(dims)}</div>` : ''}
     ${c.photo_path ? `<button class="btn secondary slim stampbtn" data-id="${c.id}">Add Stamps to Photo${(c.overlays && c.overlays.length) ? ' (' + c.overlays.length + ')' : ''}</button>` : ''}
+    ${c.photo_path ? `<button class="btn secondary slim cropbtn" data-id="${c.id}">Crop Photo</button>` : ''}
+    ${c.photo_original_path ? `<button class="btn secondary slim restorebtn" data-id="${c.id}">Restore Original Photo</button>` : ''}
     <div class="notewrap" data-id="${c.id}">
       <div class="notetext">${esc(c.note || '(no note)')}</div>
       <button class="btn secondary editnote" data-id="${c.id}" style="margin-top:6px">Edit Note</button>
@@ -1160,6 +1162,8 @@ function wireCards(cards, rows) {
   });
   cards.querySelectorAll('.sugdismiss').forEach(b => b.onclick = () => { window._dismissedSug.add(b.getAttribute('data-b') + '-' + b.getAttribute('data-a')); loadCards(document.getElementById('filter').value || ''); });
   cards.querySelectorAll('.stampbtn').forEach(b => b.onclick = () => { const c = rows.find(r => r.id === parseInt(b.getAttribute('data-id'), 10)); if (c) renderStampEditor(c); });
+  cards.querySelectorAll('.cropbtn').forEach(b => b.onclick = () => { const c = rows.find(r => r.id === parseInt(b.getAttribute('data-id'), 10)); if (c) renderCropEditor(c); });
+  cards.querySelectorAll('.restorebtn').forEach(b => b.onclick = () => restoreOriginal(parseInt(b.getAttribute('data-id'), 10)));
 }
 
 // ================= Photo overlays / stamps editor =================
@@ -1201,7 +1205,7 @@ function renderStampEditor(c) {
       <button class="btn" id="stampSave">Save Stamps</button>
       <button class="btn secondary" id="stampCopy">Save Stamped Copy</button>
     </div>`;
-  document.getElementById('stampBack').onclick = () => loadCards(document.getElementById('filter') ? (document.getElementById('filter').value || '') : '');
+  document.getElementById('stampBack').onclick = () => { state.view = 'list'; renderList(); };
   document.getElementById('stampAdd').onclick = (e) => { const p = e.target.closest('[data-add]'); if (p) addOverlayItem(p.getAttribute('data-add')); };
   document.getElementById('stampSave').onclick = saveOverlays;
   document.getElementById('stampCopy').onclick = saveStampedCopy;
@@ -1397,6 +1401,142 @@ async function saveStampedCopy() {
     toast('Stamped copy ready');
   } catch (e) { toast('Could not build stamped copy'); }
   finally { btn.disabled = false; btn.textContent = 'Save Stamped Copy'; }
+}
+
+// ================= Photo crop editor =================
+// Non-destructive: applying a crop keeps the original so it can be restored.
+let cropCapture = null, cropBox = null; // cropBox = {x,y,w,h} in % of the image
+function renderCropEditor(c) {
+  cropCapture = c;
+  cropBox = { x: 10, y: 10, w: 80, h: 80 };
+  const body = document.getElementById('body');
+  body.innerHTML = `
+    <button class="backlink" id="cropBack">‹ Back to Library</button>
+    <div class="formhead">Crop Photo</div>
+    <div class="status">Drag the box to move it. Drag any corner to resize. Everything outside the box is trimmed off. Your original is kept and can be restored.</div>
+    <div id="cropStage" style="position:relative;display:inline-block;max-width:100%;border:1px solid #000;border-radius:8px;overflow:hidden;touch-action:none">
+      <img id="cropImg" src="${photoSrc(c.photo_path)}" alt="photo" style="display:block;max-width:100%;height:auto" />
+    </div>
+    <div class="row" style="margin-top:14px">
+      <button class="btn" id="cropApply">Apply Crop</button>
+      <button class="btn secondary" id="cropCancel">Cancel</button>
+    </div>`;
+  document.getElementById('cropBack').onclick = () => { state.view = 'list'; renderList(); };
+  document.getElementById('cropCancel').onclick = () => { state.view = 'list'; renderList(); };
+  document.getElementById('cropApply').onclick = applyCrop;
+  const img = document.getElementById('cropImg');
+  if (img.complete) drawCropBox(); else img.onload = drawCropBox;
+}
+function drawCropBox() {
+  const st = document.getElementById('cropStage');
+  if (!st) return;
+  st.querySelectorAll('.cropui').forEach(n => n.remove());
+  // Dark mask outside the crop box (four bands) so the kept area stands out.
+  const b = cropBox;
+  const bands = [
+    { left: 0, top: 0, width: 100, height: b.y },
+    { left: 0, top: b.y + b.h, width: 100, height: Math.max(0, 100 - b.y - b.h) },
+    { left: 0, top: b.y, width: b.x, height: b.h },
+    { left: b.x + b.w, top: b.y, width: Math.max(0, 100 - b.x - b.w), height: b.h },
+  ];
+  bands.forEach(bd => {
+    const m = document.createElement('div');
+    m.className = 'cropui cropmask';
+    m.style.cssText = `position:absolute;left:${bd.left}%;top:${bd.top}%;width:${bd.width}%;height:${bd.height}%;background:rgba(0,0,0,0.5);pointer-events:none`;
+    st.appendChild(m);
+  });
+  const box = document.createElement('div');
+  box.className = 'cropui cropbox';
+  box.style.cssText = `position:absolute;left:${b.x}%;top:${b.y}%;width:${b.w}%;height:${b.h}%;border:2px solid #fff;box-shadow:0 0 0 1px #000;box-sizing:border-box;cursor:move;touch-action:none`;
+  startCropDrag(box);
+  ['tl', 'tr', 'bl', 'br'].forEach(corner => {
+    const hd = document.createElement('div');
+    hd.className = 'cropui crophandle';
+    const pos = {
+      tl: 'left:-11px;top:-11px', tr: 'right:-11px;top:-11px',
+      bl: 'left:-11px;bottom:-11px', br: 'right:-11px;bottom:-11px',
+    }[corner];
+    hd.style.cssText = `position:absolute;${pos};width:22px;height:22px;background:#1d4ed8;border:2px solid #fff;border-radius:50%;cursor:nwse-resize;touch-action:none`;
+    startCropResize(hd, corner);
+    box.appendChild(hd);
+  });
+  st.appendChild(box);
+}
+function startCropDrag(el) {
+  el.addEventListener('pointerdown', (e) => {
+    if (e.target && e.target.classList && e.target.classList.contains('crophandle')) return;
+    e.preventDefault();
+    const st = document.getElementById('cropStage');
+    const r0 = st.getBoundingClientRect();
+    const grabX = (e.clientX - r0.left) / r0.width * 100 - cropBox.x;
+    const grabY = (e.clientY - r0.top) / r0.height * 100 - cropBox.y;
+    const move = (ev) => {
+      const r = st.getBoundingClientRect();
+      let x = (ev.clientX - r.left) / r.width * 100 - grabX;
+      let y = (ev.clientY - r.top) / r.height * 100 - grabY;
+      cropBox.x = Math.max(0, Math.min(100 - cropBox.w, x));
+      cropBox.y = Math.max(0, Math.min(100 - cropBox.h, y));
+      drawCropBox();
+    };
+    const up = () => { document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); };
+    document.addEventListener('pointermove', move);
+    document.addEventListener('pointerup', up);
+  });
+}
+function startCropResize(handle, corner) {
+  handle.addEventListener('pointerdown', (e) => {
+    e.preventDefault(); e.stopPropagation();
+    const st = document.getElementById('cropStage');
+    const MIN = 8; // smallest crop, percent
+    const move = (ev) => {
+      const r = st.getBoundingClientRect();
+      const px = Math.max(0, Math.min(100, (ev.clientX - r.left) / r.width * 100));
+      const py = Math.max(0, Math.min(100, (ev.clientY - r.top) / r.height * 100));
+      const x2 = cropBox.x + cropBox.w, y2 = cropBox.y + cropBox.h;
+      if (corner === 'tl') {
+        const nx = Math.min(px, x2 - MIN), ny = Math.min(py, y2 - MIN);
+        cropBox.x = nx; cropBox.y = ny; cropBox.w = x2 - nx; cropBox.h = y2 - ny;
+      } else if (corner === 'tr') {
+        const ny = Math.min(py, y2 - MIN), nx2 = Math.max(px, cropBox.x + MIN);
+        cropBox.y = ny; cropBox.h = y2 - ny; cropBox.w = nx2 - cropBox.x;
+      } else if (corner === 'bl') {
+        const nx = Math.min(px, x2 - MIN), ny2 = Math.max(py, cropBox.y + MIN);
+        cropBox.x = nx; cropBox.w = x2 - nx; cropBox.h = ny2 - cropBox.y;
+      } else { // br
+        cropBox.w = Math.max(MIN, px - cropBox.x); cropBox.h = Math.max(MIN, py - cropBox.y);
+      }
+      drawCropBox();
+    };
+    const up = () => { document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); };
+    document.addEventListener('pointermove', move);
+    document.addEventListener('pointerup', up);
+  });
+}
+async function applyCrop() {
+  const btn = document.getElementById('cropApply');
+  btn.disabled = true; btn.textContent = 'Cropping...';
+  try {
+    const r = await api(`/api/captures/${cropCapture.id}/crop`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(cropBox),
+    });
+    if (!r.ok) throw new Error('crop failed');
+    state.imgv++; // bust the image cache so the cropped photo shows
+    toast('Photo cropped. Original saved.');
+    state.view = 'list'; renderList();
+  } catch (e) {
+    btn.disabled = false; btn.textContent = 'Apply Crop';
+    toast('Crop failed, try again');
+  }
+}
+async function restoreOriginal(id) {
+  try {
+    const r = await api(`/api/captures/${id}/restore-original`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    if (!r.ok) throw new Error('bad');
+    state.imgv++;
+    toast('Original photo restored');
+    loadCards(document.getElementById('filter') ? (document.getElementById('filter').value || '') : '');
+  } catch (e) { toast('Restore failed'); }
 }
 
 function startEditNote(id, rows) {
