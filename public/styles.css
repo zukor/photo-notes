@@ -47,7 +47,10 @@ textarea { min-height: 96px; resize: vertical; }
    Extra Work Record heading (it has an inline font-size). */
 .brand:not([style*="font-size"]) {
   font-size: 0; line-height: 0; height: 46px;
-  background: url('/logo.svg') center center / contain no-repeat;
+  background-image: url('/logo-animated.svg'), url('/logo.svg');
+  background-position: center, center;
+  background-size: contain, contain;
+  background-repeat: no-repeat, no-repeat;
   margin: 10px auto 6px;
 }
 @media (max-width: 380px) { .brand:not([style*="font-size"]) { height: 38px; } }
