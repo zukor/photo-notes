@@ -78,13 +78,15 @@
     var save = q('save');
     if (!save || q('send')) return; // capture screen only, once
     var b1 = document.createElement('button');
-    b1.id = 'send'; b1.className = 'btn secondary'; b1.type = 'button'; b1.textContent = 'Send';
+    b1.id = 'send'; b1.className = 'btn secondary slim'; b1.type = 'button'; b1.textContent = 'Send';
     b1.addEventListener('click', onSend);
     var b2 = document.createElement('button');
-    b2.id = 'sendsave'; b2.className = 'btn secondary'; b2.type = 'button'; b2.textContent = 'Send & Save';
+    b2.id = 'sendsave'; b2.className = 'btn secondary slim'; b2.type = 'button'; b2.textContent = 'Send & Save';
     b2.addEventListener('click', onSendSave);
-    save.insertAdjacentElement('afterend', b1);
-    b1.insertAdjacentElement('afterend', b2);
+    var row = document.createElement('div');
+    row.className = 'send-row';
+    row.appendChild(b1); row.appendChild(b2);
+    save.insertAdjacentElement('afterend', row);
   }
 
   function fixLogo() {
@@ -134,7 +136,7 @@
     label.style.textTransform = 'none';
     label.style.margin = '12px 0 0';
     label.style.userSelect = 'none';
-    var want = 'Topic' + (sel ? ': ' + sel : '') + '  ' + (topicExpanded ? '▴' : '▾');
+    var want = 'Select Topic' + (sel ? ': ' + sel : '') + '  ' + (topicExpanded ? '▴' : '▾');
     if (label.textContent !== want) label.textContent = want; // guard: avoid observer loop
     label.onclick = function () { topicExpanded = !topicExpanded; fixTopics(); };
 

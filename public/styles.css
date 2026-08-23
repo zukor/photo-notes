@@ -10,7 +10,7 @@ body {
 }
 img { max-width: 100%; height: auto; }
 input[type=file] { max-width: 100%; }
-.wrap { width: 100%; max-width: 640px; margin: 0 auto; padding: 16px 16px 96px; }
+.wrap { position: relative; width: 100%; max-width: 640px; margin: 0 auto; padding: 16px 16px 96px; }
 h1 { text-align: center; font-size: 22px; color: #000; margin: 12px 0 4px; }
 .sub { text-align: center; color: #000; font-size: 14px; margin: 0 0 18px; }
 label { display: block; font-weight: bold; color: #000; margin: 16px 0 4px; font-size: 13px; text-transform: uppercase; letter-spacing: .5px; }
@@ -51,7 +51,12 @@ textarea { min-height: 96px; resize: vertical; }
   margin: 10px auto 6px;
 }
 @media (max-width: 380px) { .brand:not([style*="font-size"]) { height: 38px; } }
-.logoutbar { display: flex; justify-content: flex-end; }
+.logoutbar {
+  position: absolute; top: 32px; left: 16px; right: 16px; z-index: 1;
+  display: flex; justify-content: space-between;
+}
+.send-row { display: flex; gap: 10px; margin-top: 8px; }
+.send-row .btn { flex: 1 1 50%; width: 50%; margin-top: 0; }
 /* compact input+button row (e.g. add a topic) at about half the usual height.
    font-size stays 16px so iOS Safari does not auto-zoom the page on focus. */
 .row.compact input, .row.compact select, .row.compact .btn { padding: 8px 10px; font-size: 16px; margin-top: 0; }
@@ -107,6 +112,7 @@ input.dimfield.suggested {
 /* small phones: tighten padding and controls so nothing crowds the edge */
 @media (max-width: 380px) {
   .wrap { padding: 12px 12px 96px; }
+  .logoutbar { top: 28px; left: 12px; right: 12px; }
   .pill { padding: 7px 11px; font-size: 14px; }
   .btn { padding: 13px; font-size: 16px; }
   .tab { padding: 9px 6px; font-size: 15px; }

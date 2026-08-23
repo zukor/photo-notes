@@ -1,4 +1,4 @@
-const CACHE = 'efc-shell-v25';
+const CACHE = 'efc-shell-v26';
 const SHELL = ['/', '/index.html', '/app.js', '/styles.css', '/manifest.json', '/logo.svg', '/icon.svg', '/zukor-logo.svg', '/send.js'];
 
 self.addEventListener('install', (e) => {

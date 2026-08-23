@@ -184,7 +184,7 @@ function renderCapture() {
 
     ${isProClient() ? dimBlockHtml() : ''}
 
-    <label>Topic</label>
+    <label>Select Topic</label>
     <div class="pill-group" id="areas">${areaChips()}</div>
     <div class="row compact" style="margin-top:10px">
       <input type="text" id="newarea" placeholder="Add a topic..." />
