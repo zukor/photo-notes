@@ -179,7 +179,7 @@ function renderCapture() {
     </div>
 
     <label>Note</label>
-    <button type="button" class="btn secondary" id="dictate" style="margin-bottom:8px">Record Note</button>
+    <button type="button" class="btn" id="dictate" style="margin-bottom:8px">Record Note</button>
     <textarea id="note" placeholder="Type what you're looking at, or tap Record Note"></textarea>
 
     ${isProClient() ? dimBlockHtml() : ''}
