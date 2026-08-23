@@ -19,6 +19,24 @@
     .section h4 { margin:0 0 4px; font-size:12px; font-weight:bold; text-transform:uppercase; letter-spacing:.04em; color:#000; border-bottom:1px solid #e3e6ea; padding-bottom:3px; }
     .statrow { margin-top:6px; }
     .privacy { font-size:12px; color:#000; margin-top:12px; padding-top:8px; border-top:1px solid #e3e6ea; }
+    .helper { margin:4px 0 10px; font-size:13px; line-height:1.35; color:#000; }
+    .user-title-row { display:flex; align-items:center; gap:7px; flex-wrap:wrap; }
+    .user-title-row .userhead { margin-right:3px; }
+    .account-badges { display:flex; align-items:center; gap:7px; flex-wrap:wrap; margin:5px 0; }
+    .pill.basic { background:#fff; color:#000; border:1px solid #000; }
+    .capture-stats { display:grid; grid-template-columns:repeat(6, minmax(0, 1fr)); gap:8px; }
+    .capture-stats .stat { min-width:0; margin:4px 0; }
+    .password-row { display:grid; grid-template-columns:minmax(0, 1fr) auto auto; gap:8px; margin-top:8px; }
+    .password-row .btn { width:auto; margin:0; padding:10px 14px; font-size:14px; }
+    .account-actions { margin-top:14px; padding-top:10px; border-top:1px solid #e3e6ea; }
+    .account-actions .row { margin-top:8px; }
+    .account-actions .btn { margin-top:0; padding:11px 8px; font-size:14px; }
+    @media (max-width:520px) {
+      .capture-stats { grid-template-columns:repeat(3, minmax(0, 1fr)); }
+      .password-row { grid-template-columns:1fr 1fr; }
+      .password-row input { grid-column:1 / -1; }
+      .account-actions .row { flex-direction:column; }
+    }
   </style>
 </head>
 <body>
@@ -28,7 +46,7 @@
     async function api(path, opts = {}) { return fetch(path, { credentials: 'same-origin', ...opts }); }
     function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
     function fdate(d){ if(!d) return '—'; try { return new Date(d).toLocaleDateString(); } catch { return '—'; } }
-    function fdatetime(d){ if(!d) return 'never'; try { return new Date(d).toLocaleString(); } catch { return 'never'; } }
+    function fdatetime(d){ if(!d) return 'never'; try { return new Date(d).toLocaleString([], { year:'numeric', month:'numeric', day:'numeric', hour:'numeric', minute:'2-digit' }); } catch { return 'never'; } }
     function toast(msg){ let t=document.querySelector('.toast'); if(!t){t=document.createElement('div');t.className='toast';document.body.appendChild(t);} t.textContent=msg; t.style.display='block'; setTimeout(()=>t.style.display='none',2400); }
     function st(n, l){ return `<span class="stat"><div class="n">${n}</div><div class="l">${l}</div></span>`; }
     function num(v){ return Number(v) || 0; }
@@ -43,13 +61,13 @@
       box.innerHTML = `
         <div class="card">
           <div class="statrow">
-            ${st(people, 'logins')}
-            ${st(active, 'active')}
-            ${st(sum('capture_count'), 'captures')}
-            ${st(sum('last_7d'), 'last 7 days')}
-            ${st(sum('with_photo'), 'with photo')}
-            ${st(sum('exports'), 'exports')}
-            ${st(sum('group_count'), 'groups')}
+            ${st(people, 'users')}
+            ${st(active, 'active users')}
+            ${st(sum('capture_count'), 'total captures')}
+            ${st(sum('last_7d'), 'captures, last 7 days')}
+            ${st(sum('with_photo'), 'captures with photo')}
+            ${st(sum('exports'), 'total exports')}
+            ${st(sum('group_count'), 'total groups')}
           </div>
         </div>`;
     }
@@ -83,13 +101,17 @@
         : '<div class="muted">Orientation will appear as new photos come in.</div>';
       return `
         <div class="card ${u.active ? '' : 'inactive'}">
-          <div class="userhead">${esc(u.name || '(no name)')} ${u.role==='admin' ? '<span class="pill role">admin</span>' : ''} ${u.plan==='pro' ? '<span class="pill pro">Pro</span>' : ''} ${u.active ? '' : '<span class="muted">(deactivated)</span>'}</div>
-          <div class="muted">${esc(u.email)}${u.industry ? ' · ' + esc(u.industry) : ''}</div>
-          <div class="muted">Joined ${fdate(u.created_at)} · Last login ${fdatetime(u.last_login_at)} · Logins ${u.logins} · Last active ${fdatetime(u.last_activity)}</div>
+          <div class="user-title-row"><div class="userhead">${esc(u.name || u.email || '(unnamed user)')}</div>${u.active ? '' : '<span class="pill basic">Inactive</span>'}</div>
+          <div class="account-badges">
+            ${u.role==='admin' ? '<span class="pill role">Administrator Access</span>' : '<span class="pill basic">Standard Access</span>'}
+            ${u.plan==='pro' ? '<span class="pill pro">Pro Plan</span>' : '<span class="pill basic">Basic Plan</span>'}
+          </div>
+          <div class="muted">${esc(u.email)}${u.industry ? ' · Industry: ' + esc(u.industry) : ''}</div>
+          <div class="muted">Joined ${fdate(u.created_at)} · Last login ${fdatetime(u.last_login_at)} · Login count ${u.logins} · Last active ${fdatetime(u.last_activity)}</div>
 
           <div class="section">
             <h4>Captures</h4>
-            <div class="statrow">
+            <div class="statrow capture-stats">
               ${st(u.capture_count, 'total')}
               ${st(u.last_7d, 'last 7 days')}
               ${st(u.last_30d, 'last 30 days')}
@@ -97,11 +119,12 @@
               ${st(u.with_location, 'with location')}
               ${st(u.tasks, 'tasks')}
             </div>
-            <div class="muted" style="margin-top:6px">First ${fdate(u.first_capture)} · Latest ${fdate(u.last_capture)}</div>
+            <div class="muted" style="margin-top:6px">${u.first_capture ? `First capture ${fdate(u.first_capture)} · Latest capture ${fdate(u.last_capture)}` : 'No captures yet.'}</div>
           </div>
 
           <div class="section">
             <h4>Photos (orientation)</h4>
+            <div class="helper">Shows whether uploaded photos are landscape, portrait, or square. This helps identify device-use and report-format trends.</div>
             <div class="statrow">${photoLine}</div>
           </div>
 
@@ -147,10 +170,14 @@
 
           <div class="privacy">Metadata only. This dashboard never shows their photos or the words they wrote.</div>
 
-          <div class="row" style="margin-top:12px">
-            <button class="btn secondary" data-reset="${u.id}">Reset password</button>
-            <button class="btn secondary" data-plan="${u.id}" data-planto="${u.plan==='pro' ? 'free' : 'pro'}">${u.plan==='pro' ? 'Set Free' : 'Set Pro'}</button>
-            <button class="btn secondary" data-active="${u.id}" data-to="${u.active ? '0' : '1'}">${u.active ? 'Deactivate' : 'Activate'}</button>
+          <div class="account-actions">
+            <h4>Account settings</h4>
+            <div class="helper">Reset login credentials, change feature access, or prevent sign-in without deleting this user's data.</div>
+            <div class="row">
+              <button class="btn secondary" data-reset="${u.id}">Reset Password</button>
+              <button class="btn secondary" data-plan="${u.id}" data-planto="${u.plan==='pro' ? 'free' : 'pro'}">${u.plan==='pro' ? 'Switch to Basic' : 'Upgrade to Pro'}</button>
+              <button class="btn secondary" data-active="${u.id}" data-to="${u.active ? '0' : '1'}">${u.active ? 'Deactivate Login' : 'Reactivate Login'}</button>
+            </div>
           </div>
         </div>`;
     }
@@ -201,18 +228,25 @@
             <span><a class="link" href="/">Open app</a> &nbsp; <button class="link" id="logout">Log out</button></span>
           </div>
 
-          <label style="margin-top:8px">Create a login</label>
-          <input id="cname" type="text" placeholder="Name (e.g. Diamond Paving)" />
-          <input id="cemail" type="email" placeholder="Email" inputmode="email" style="margin-top:8px" />
-          <input id="cindustry" type="text" placeholder="Industry (e.g. Asphalt paving)" style="margin-top:8px" />
-          <input id="cpass" type="text" placeholder="Starting password" style="margin-top:8px" />
-          <button class="btn" id="createbtn">Create login</button>
+          <label style="margin-top:8px">Create a Login</label>
+          <div class="helper">Create access for a person or company. Email and password are required; industry is optional.</div>
+          <input id="cname" type="text" placeholder="User or company name" autocomplete="name" />
+          <input id="cemail" type="email" placeholder="Email" inputmode="email" autocomplete="email" style="margin-top:8px" />
+          <input id="cindustry" type="text" placeholder="Industry (optional)" style="margin-top:8px" />
+          <div class="password-row">
+            <input id="cpass" type="text" placeholder="Create Password" autocomplete="new-password" />
+            <button class="btn secondary" type="button" id="generatepass">Generate</button>
+            <button class="btn secondary" type="button" id="copypass">Copy Password</button>
+          </div>
+          <div class="helper" id="passhelp">Use Generate for a strong 20-character password, then copy it before creating the login.</div>
+          <button class="btn" id="createbtn">Create Login</button>
 
-          <label style="margin-top:22px">Totals across all logins</label>
+          <label style="margin-top:22px">Totals Across All Users</label>
+          <div class="helper">Combined account and activity counts for every user listed below.</div>
           <div id="summary"></div>
 
           <div class="row" style="margin-top:18px; align-items:center; gap:10px">
-            <label style="margin:0">People &amp; usage</label>
+            <label style="margin:0">Users &amp; Usage</label>
             <select id="sortsel" style="margin-left:auto; max-width:230px">
               <option value="active">Sort: most recently active</option>
               <option value="captures">Sort: most captures</option>
@@ -226,7 +260,27 @@
         </div>`;
       document.getElementById('logout').onclick = async () => { await api('/api/logout', { method:'POST' }); renderLogin(); };
       document.getElementById('createbtn').onclick = createUser;
+      document.getElementById('generatepass').onclick = generatePassword;
+      document.getElementById('copypass').onclick = copyPassword;
       loadUsers();
+    }
+
+    function generatePassword(){
+      const upper='ABCDEFGHJKLMNPQRSTUVWXYZ', lower='abcdefghijkmnopqrstuvwxyz', digits='23456789', symbols='!@#$%*-_';
+      const all=upper+lower+digits+symbols;
+      const pick=(chars) => chars[crypto.getRandomValues(new Uint32Array(1))[0] % chars.length];
+      const chars=[pick(upper),pick(lower),pick(digits),pick(symbols)];
+      while(chars.length<20) chars.push(pick(all));
+      for(let i=chars.length-1;i>0;i--){ const j=crypto.getRandomValues(new Uint32Array(1))[0]%(i+1); [chars[i],chars[j]]=[chars[j],chars[i]]; }
+      document.getElementById('cpass').value=chars.join('');
+      document.getElementById('passhelp').textContent='Strong password generated. Copy it before creating the login.';
+    }
+
+    async function copyPassword(){
+      const input=document.getElementById('cpass');
+      if(!input.value){ toast('Generate or enter a password first'); return; }
+      try { await navigator.clipboard.writeText(input.value); toast('Password copied'); }
+      catch(e){ input.select(); document.execCommand('copy'); toast('Password copied'); }
     }
 
     async function createUser(){
@@ -234,7 +288,7 @@
       const email = document.getElementById('cemail').value.trim();
       const industry = document.getElementById('cindustry').value.trim();
       const password = document.getElementById('cpass').value;
-      if (!email || !password) { toast('Email and starting password are required'); return; }
+      if (!email || !password) { toast('Email and password are required'); return; }
       const btn = document.getElementById('createbtn'); btn.disabled = true; btn.textContent = 'Creating...';
       try {
         const r = await api('/api/admin/users', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name, email, industry, password }) });
@@ -247,7 +301,7 @@
           loadUsers();
         }
       } catch(e){ toast('Could not create login'); }
-      finally { btn.disabled = false; btn.textContent = 'Create login'; }
+      finally { btn.disabled = false; btn.textContent = 'Create Login'; }
     }
 
     async function loadUsers(){
@@ -267,7 +321,7 @@
       if (pw == null) return;
       if (pw.length < 4) { toast('Password too short'); return; }
       const r = await api(`/api/admin/users/${id}/password`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ password: pw }) });
-      toast(r.ok ? 'Password reset' : 'Reset failed');
+      toast(r.ok ? 'Password reset' : 'Password reset failed');
     }
     async function setActive(id, active){
       if (!active && !confirm('Deactivate this login? They will not be able to sign in. Their data is kept.')) return;
@@ -276,7 +330,7 @@
     }
     async function setPlan(id, plan){
       const r = await api(`/api/admin/users/${id}`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ plan }) });
-      if (r.ok) { toast(plan === 'pro' ? 'Upgraded to Pro' : 'Set to Free'); loadUsers(); } else toast('Update failed');
+      if (r.ok) { toast(plan === 'pro' ? 'Upgraded to Pro' : 'Switched to Basic'); loadUsers(); } else toast('Update failed');
     }
 
     boot();
