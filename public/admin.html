@@ -31,6 +31,7 @@
     .account-actions { margin-top:14px; padding-top:10px; border-top:1px solid #e3e6ea; }
     .account-actions .row { margin-top:8px; }
     .account-actions .btn { margin-top:0; padding:11px 8px; font-size:14px; }
+    .admin-top-actions { display:flex; align-items:center; gap:14px; }
     @media (max-width:520px) {
       .capture-stats { grid-template-columns:repeat(3, minmax(0, 1fr)); }
       .password-row { grid-template-columns:1fr 1fr; }
@@ -51,6 +52,12 @@
     function st(n, l){ return `<span class="stat"><div class="n">${n}</div><div class="l">${l}</div></span>`; }
     function num(v){ return Number(v) || 0; }
     let allUsers = [];
+    let currentUser = null;
+    function userInitials(user){
+      const source=String((user && (user.name || user.email)) || 'User').trim();
+      const words=source.split(/\s+/).filter(Boolean);
+      return (words.length>1 ? words[0][0]+words[words.length-1][0] : source.slice(0,2)).toUpperCase();
+    }
 
     function renderSummary(users){
       const box = document.getElementById('summary');
@@ -187,6 +194,7 @@
       if (!r.ok) return renderLogin();
       const me = await r.json();
       if (me.role !== 'admin') return renderDenied();
+      currentUser = me;
       renderAdmin();
     }
 
@@ -225,7 +233,19 @@
         <div class="wrap">
           <div class="topbar">
             <strong>Photo Notes — Admin</strong>
-            <span><a class="link" href="/">Open app</a> &nbsp; <button class="link" id="logout">Log out</button></span>
+            <div class="admin-top-actions">
+              <a class="link" href="/">Open App</a>
+              <div class="account-menu-wrap">
+                <button class="profile-button" id="profileButton" type="button" aria-label="Account menu" aria-expanded="false">${esc(userInitials(currentUser))}</button>
+                <div class="profile-menu" id="profileMenu" hidden>
+                  <div class="profile-name">${esc((currentUser && currentUser.name) || 'Administrator')}</div>
+                  <div class="profile-email">${esc((currentUser && currentUser.email) || '')}</div>
+                  <div class="profile-plan">${currentUser && currentUser.plan === 'pro' ? 'Asphalt Pro Plan' : 'Basic Plan'} · Administrator</div>
+                  <a href="/">Open Photo Notes</a>
+                  <button type="button" id="signout">Sign Out</button>
+                </div>
+              </div>
+            </div>
           </div>
 
           <label style="margin-top:8px">Create a Login</label>
@@ -258,7 +278,11 @@
           </div>
           <div id="users"></div>
         </div>`;
-      document.getElementById('logout').onclick = async () => { await api('/api/logout', { method:'POST' }); renderLogin(); };
+      const profileButton=document.getElementById('profileButton');
+      const profileMenu=document.getElementById('profileMenu');
+      profileButton.onclick=(e)=>{ e.stopPropagation(); profileMenu.hidden=!profileMenu.hidden; profileButton.setAttribute('aria-expanded',String(!profileMenu.hidden)); };
+      document.onclick=(e)=>{ if(!e.target.closest('.account-menu-wrap')){ profileMenu.hidden=true; profileButton.setAttribute('aria-expanded','false'); } };
+      document.getElementById('signout').onclick = async () => { await api('/api/logout', { method:'POST' }); currentUser=null; renderLogin(); };
       document.getElementById('createbtn').onclick = createUser;
       document.getElementById('generatepass').onclick = generatePassword;
       document.getElementById('copypass').onclick = copyPassword;

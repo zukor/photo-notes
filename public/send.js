@@ -97,8 +97,9 @@
     var p = img.parentElement;
     if (!p) return;
     var logout = q('logout');
-    if (logout && p.contains(logout)) {
-      // app header: logo far left, Log out far right
+    var account = p.querySelector('.account-menu-wrap');
+    if ((logout && p.contains(logout)) || account) {
+      // app header: logo far left, account menu far right
       p.style.display = 'flex'; p.style.flexDirection = 'row';
       p.style.justifyContent = 'space-between'; p.style.alignItems = 'center'; p.style.gap = '6px';
     } else {

@@ -1,7 +1,7 @@
 const el = document.getElementById('app');
 // Phones/tablets open to Capture (grab a photo fast); computers open to the Library (review the photos).
 const IS_HANDHELD = (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) || window.innerWidth < 768;
-let state = { view: IS_HANDHELD ? 'capture' : 'organize', location: null, address: null, photoFile: null, kind: 'note', area: '', areas: [], groupId: null, imgv: 0, plan: 'free', ewrId: null, selectedIds: new Set() };
+let state = { view: IS_HANDHELD ? 'capture' : 'organize', location: null, address: null, photoFile: null, kind: 'note', area: '', areas: [], groupId: null, imgv: 0, plan: 'free', me: null, ewrId: null, selectedIds: new Set() };
 
 // Pro gating on the client. Mirrors isPro(user) on the server. Pro-only UI must
 // not render at all for free users (no disabled teaser).
@@ -54,6 +54,12 @@ function esc(s) {
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+function userInitials(user) {
+  const source = String((user && (user.name || user.email)) || 'User').trim();
+  const words = source.split(/\s+/).filter(Boolean);
+  return (words.length > 1 ? words[0][0] + words[words.length - 1][0] : source.slice(0, 2)).toUpperCase();
+}
+
 function photoSrc(p) { return p ? `${p}?v=${state.imgv}` : ''; }
 
 function qualityBlock(idres, idfmt) {
@@ -92,7 +98,7 @@ async function api(path, opts = {}) {
 
 async function boot() {
   const r = await api('/api/me');
-  if (r.ok) { try { const me = await r.json(); state.plan = me.plan || 'free'; } catch (e) {} await loadAreas(); renderApp(); } else renderLogin();
+  if (r.ok) { try { const me = await r.json(); state.me = me; state.plan = me.plan || 'free'; } catch (e) {} await loadAreas(); renderApp(); } else renderLogin();
 }
 
 function renderLogin() {
@@ -121,16 +127,25 @@ async function doLogin() {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password: pw }),
   });
-  if (r.ok) { try { const d = await r.json(); state.plan = d.plan || 'free'; } catch (e) {} await loadAreas(); renderApp(); }
+  if (r.ok) await boot();
   else document.getElementById('loginErr').textContent = 'Wrong email or password. Try again.';
 }
 
 function renderApp() {
   el.innerHTML = `
     <div class="wrap">
-      <div class="logoutbar" style="display:flex;flex-direction:column;align-items:flex-end;gap:3px">
+      <div class="logoutbar">
         <img src="/zukor-logo.svg" alt="Zukor AI" style="height:22px;width:auto;display:block" />
-        <button class="link" id="logout">Log out</button>
+        <div class="account-menu-wrap">
+          <button class="profile-button" id="profileButton" type="button" aria-label="Account menu" aria-expanded="false">${esc(userInitials(state.me))}</button>
+          <div class="profile-menu" id="profileMenu" hidden>
+            <div class="profile-name">${esc((state.me && state.me.name) || 'Photo Notes User')}</div>
+            <div class="profile-email">${esc((state.me && state.me.email) || '')}</div>
+            <div class="profile-plan">${isProClient() ? 'Asphalt Pro Plan' : 'Basic Plan'}</div>
+            ${state.me && state.me.role === 'admin' ? '<a href="/admin">Admin Dashboard</a>' : ''}
+            <button type="button" id="signout">Sign Out</button>
+          </div>
+        </div>
       </div>
       <div class="brandrow">
         <div class="brand ${isProClient() ? 'asphalt-pro-brand' : ''}">Photo Notes${isProClient() ? ' Asphalt Pro' : ''}</div>
@@ -145,7 +160,20 @@ function renderApp() {
       <div id="body"></div>
       <div class="footer">&copy; ${new Date().getFullYear()} Zukor AI. All Rights Reserved.</div>
     </div>`;
-  document.getElementById('logout').onclick = async () => { await api('/api/logout', { method: 'POST' }); renderLogin(); };
+  const profileButton = document.getElementById('profileButton');
+  const profileMenu = document.getElementById('profileMenu');
+  profileButton.onclick = (e) => {
+    e.stopPropagation();
+    profileMenu.hidden = !profileMenu.hidden;
+    profileButton.setAttribute('aria-expanded', String(!profileMenu.hidden));
+  };
+  document.onclick = (e) => {
+    if (!e.target.closest('.account-menu-wrap')) {
+      profileMenu.hidden = true;
+      profileButton.setAttribute('aria-expanded', 'false');
+    }
+  };
+  document.getElementById('signout').onclick = async () => { await api('/api/logout', { method: 'POST' }); state.me = null; renderLogin(); };
   document.getElementById('tabCapture').onclick = () => { state.view='capture'; renderApp(); };
   document.getElementById('tabOrganize').onclick = () => { state.view='organize'; renderApp(); };
   document.getElementById('tabEdit').onclick = () => { state.view='edit'; renderApp(); };
