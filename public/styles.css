@@ -53,6 +53,10 @@ textarea { min-height: 96px; resize: vertical; }
   background-repeat: no-repeat, no-repeat;
   margin: 10px auto 6px;
 }
+.brandrow { display:flex; justify-content:center; align-items:center; gap:8px; }
+.brandrow .brand { flex:0 1 260px; width:260px; margin-left:0; margin-right:0; }
+.edition-label { flex:0 0 auto; color:#000; font-size:12px; font-weight:bold; line-height:1.05; text-align:left; }
+.edition-label span { display:block; }
 @media (max-width: 380px) { .brand:not([style*="font-size"]) { height: 38px; } }
 .logoutbar {
   position: absolute; top: 32px; left: 16px; right: 16px; z-index: 1;
@@ -116,6 +120,8 @@ input.dimfield.suggested {
 @media (max-width: 380px) {
   .wrap { padding: 12px 12px 96px; }
   .logoutbar { top: 28px; left: 12px; right: 12px; }
+  .brandrow .brand { flex-basis:220px; width:220px; }
+  .edition-label { font-size:11px; }
   .pill { padding: 7px 11px; font-size: 14px; }
   .btn { padding: 13px; font-size: 16px; }
   .tab { padding: 9px 6px; font-size: 15px; }

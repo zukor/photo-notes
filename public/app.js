@@ -132,7 +132,10 @@ function renderApp() {
         <img src="/zukor-logo.svg" alt="Zukor AI" style="height:22px;width:auto;display:block" />
         <button class="link" id="logout">Log out</button>
       </div>
-      <div class="brand">Photo Notes</div>
+      <div class="brandrow">
+        <div class="brand">Photo Notes</div>
+        ${isProClient() ? '<div class="edition-label">Asphalt<span>Pro</span></div>' : ''}
+      </div>
       <div class="tabs">
         <div class="tab ${state.view==='capture'?'on':''}" id="tabCapture">Capture</div>
         <div class="tab ${state.view==='list'?'on':''}" id="tabList">Library</div>
