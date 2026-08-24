@@ -134,8 +134,11 @@ async function doLogin() {
 function renderApp() {
   el.innerHTML = `
     <div class="wrap">
-      <div class="logoutbar">
-        <img src="/zukor-logo.svg" alt="Zukor AI" style="height:22px;width:auto;display:block" />
+      <div class="app-header">
+        <img class="zukor-corner-logo" src="/zukor-logo.svg" alt="Zukor AI" />
+        <div class="brandrow">
+          <div class="brand ${isProClient() ? 'asphalt-pro-brand' : ''}">Photo Notes${isProClient() ? ' Asphalt Pro' : ''}</div>
+        </div>
         <div class="account-menu-wrap">
           <button class="profile-button" id="profileButton" type="button" aria-label="Account menu" aria-expanded="false">${esc(userInitials(state.me))}</button>
           <div class="profile-menu" id="profileMenu" hidden>
@@ -146,9 +149,6 @@ function renderApp() {
             <button type="button" id="signout">Sign Out</button>
           </div>
         </div>
-      </div>
-      <div class="brandrow">
-        <div class="brand ${isProClient() ? 'asphalt-pro-brand' : ''}">Photo Notes${isProClient() ? ' Asphalt Pro' : ''}</div>
       </div>
       <div class="tabs workflow-tabs" aria-label="Photo Notes workflow">
         <div class="tab ${state.view==='capture'?'on':''}" id="tabCapture">Capture</div>

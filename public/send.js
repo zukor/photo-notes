@@ -96,6 +96,7 @@
     img.style.width = 'auto';
     var p = img.parentElement;
     if (!p) return;
+    if (p.classList.contains('app-header')) return;
     var logout = q('logout');
     var account = p.querySelector('.account-menu-wrap');
     if ((logout && p.contains(logout)) || account) {

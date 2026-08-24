@@ -64,11 +64,15 @@ textarea { min-height: 96px; resize: vertical; }
 .edition-label span { display:block; }
 @media (max-width: 380px) { .brand:not([style*="font-size"]) { height: 38px; } }
 @media (max-width: 520px) { .brandrow .brand.asphalt-pro-brand { height: 48px; max-width: calc(100vw - 80px); } }
-.logoutbar {
-  position: absolute; top: 32px; left: 16px; right: 16px; z-index: 1;
-  display: flex; justify-content: space-between; align-items:center;
+.app-header {
+  display:grid; grid-template-columns:minmax(80px,1fr) minmax(220px,500px) minmax(80px,1fr);
+  align-items:center; gap:12px; margin:8px 0 10px;
 }
-.account-menu-wrap { position:relative; }
+.app-header .zukor-corner-logo { display:block; width:92px; height:auto; justify-self:start; }
+.app-header .brandrow { min-width:0; }
+.app-header .brandrow .brand { width:100%; max-width:100%; }
+.app-header .account-menu-wrap { justify-self:end; }
+.account-menu-wrap { position:relative; z-index:3; }
 .profile-button {
   width:38px; height:38px; padding:0; border:0; border-radius:50%; cursor:pointer;
   display:flex; align-items:center; justify-content:center;
@@ -164,8 +168,8 @@ input.dimfield.suggested {
 /* small phones: tighten padding and controls so nothing crowds the edge */
 @media (max-width: 380px) {
   .wrap { padding: 12px 12px 96px; }
-  .logoutbar { top: 28px; left: 12px; right: 12px; }
-  .brandrow .brand { flex-basis:220px; width:220px; }
+  .app-header { grid-template-columns:52px minmax(0,1fr) 38px; gap:4px; }
+  .app-header .zukor-corner-logo { width:52px; }
   .edition-label { font-size:11px; }
   .pill { padding: 7px 11px; font-size: 14px; }
   .btn { padding: 13px; font-size: 16px; }
@@ -174,8 +178,12 @@ input.dimfield.suggested {
 
 @media (max-width: 700px) {
   #body, .workflow-organize, .workflow-edit, .workflow-create, .workflow-send { max-width:640px !important; }
-  .workflow-tabs { gap:4px; overflow-x:auto; padding-bottom:4px; }
-  .workflow-tabs .tab { flex:0 0 auto; min-width:82px; padding:9px 8px; font-size:14px; }
+  .app-header { grid-template-columns:62px minmax(0,1fr) 40px; gap:6px; margin-top:6px; }
+  .app-header .zukor-corner-logo { width:62px; }
+  .app-header .brand:not([style*="font-size"]) { height:42px; }
+  .app-header .brandrow .brand.asphalt-pro-brand { width:100%; max-width:100%; height:42px; }
+  .workflow-tabs { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:4px; overflow:visible; padding-bottom:0; }
+  .workflow-tabs .tab { min-width:0; padding:9px 2px; font-size:12px; }
   .workflow-organize #cards, .workflow-edit #cards, #glist, .send-capture-list { grid-template-columns:1fr; }
   .delivery-actions, .delivery-grid { grid-template-columns:1fr 1fr; }
 }
