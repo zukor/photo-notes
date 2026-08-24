@@ -1,6 +1,6 @@
 # Photo Notes — Project State & Resume Guide
 
-_Last updated: 2026-08-18 (expanded admin analytics + iPhone dictation fix). This document is the single source of truth for
+_Last updated: 2026-08-24 (five-stage workflow and delivery center). This document is the single source of truth for
 resuming work on the Photo Notes app after any delay. It captures what the
 app is, where it lives, how it is built and deployed, the full feature set,
 and everything still pending. If you are a Claude session picking this up
@@ -130,6 +130,12 @@ Files:
 
 ## 7. Features built (all live)
 
+- **Five-stage workflow:** the primary navigation is entirely action-based:
+  Capture, Organize, Edit, Create, Send. Selection persists between stages.
+  Organize owns topics, grouping, sequencing, and the map; Edit owns photo and
+  text manipulation; Create builds ordered titled documents; Send handles raw
+  photos, PDF, Word, AI ZIP, native sharing, downloads, and printing.
+
 - **Capture:** Take photo (camera) or Choose from library/files; note field
   with a "Record note" dictation button. On iPhone/iPad, Safari's in-page
   speech API starts but returns no words, so there the button routes to
@@ -137,13 +143,20 @@ Files:
   still records in-page. Location captured at photo time and shown as
   GPS coordinates + Address; editable Area chips (add/delete, server-saved);
   Save.
-- **Library** (the saved items view; the tab was renamed from "Captures" to
-  "Library" on 2026-08-17): filter by area; per-item Edit note; rotate photo
-  90° left/right (rewrites stored file); select captures; add selected to a
-  group; delete selected; "Fix addresses" (re-geocode).
-- **Groups:** create with title + description; add selected captures; open a
-  group to reorder (Up/Down), Reverse order, remove items, edit
-  title/description; export the group as a titled ordered PDF/Word/zip.
+- **Organize:** filter by topic; persistent multi-select; create topics; bulk-file
+  selected captures under a topic; add them to a new or existing document; and
+  open the map. This replaces the old place-oriented Library navigation.
+- **Edit:** per-item note/caption editing; non-destructive crop; restore original;
+  rotate 90° left/right; horizontal flip; photo stamps/overlays (including date,
+  address, GPS, topic, custom text, and boxes); address repair; and deletion.
+- **Create:** create a titled document with optional description directly from
+  the current selection; reorder (Up/Down), reverse order, remove items, edit
+  title/description, preview/build PDF/Word/ZIP, then continue to Send. The
+  underlying storage remains the existing `groups`/`group_items` schema.
+- **Send:** select recent captures and share their original images with captions,
+  or deliver any saved document as a shared PDF, printed PDF, downloaded PDF,
+  Word document, or AI-ready ZIP. Browsers without file sharing fall back to a
+  download that can be attached or uploaded normally.
 - **Export:** PDF, Word, and "For Claude (.zip)" (markdown + photos), with a
   drill-down for photo **resolution** (Standard 2048 / Print 3000 / Full /
   Web 1400) and **format** (JPEG / PNG / WebP / original). Originals are kept

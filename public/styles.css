@@ -10,7 +10,8 @@ body {
 }
 img { max-width: 100%; height: auto; }
 input[type=file] { max-width: 100%; }
-.wrap { position: relative; width: 100%; max-width: 640px; margin: 0 auto; padding: 16px 16px 96px; }
+.wrap { position: relative; width: 100%; max-width: 1120px; margin: 0 auto; padding: 16px 16px 96px; }
+#body { width: 100%; max-width: 640px; margin-left: auto; margin-right: auto; }
 h1 { text-align: center; font-size: 22px; color: #000; margin: 12px 0 4px; }
 .sub { text-align: center; color: #000; font-size: 14px; margin: 0 0 18px; }
 label { display: block; font-weight: bold; color: #000; margin: 16px 0 4px; font-size: 13px; text-transform: uppercase; letter-spacing: .5px; }
@@ -55,9 +56,14 @@ textarea { min-height: 96px; resize: vertical; }
 }
 .brandrow { display:flex; justify-content:center; align-items:center; gap:8px; }
 .brandrow .brand { flex:0 1 260px; width:260px; margin-left:0; margin-right:0; }
+.brandrow .brand.asphalt-pro-brand {
+  flex-basis: 500px; width: 500px; max-width: calc(100vw - 110px);
+  background-image: url('/asphalt-pro-logo-animated.svg');
+}
 .edition-label { flex:0 0 auto; color:#000; font-size:12px; font-weight:bold; line-height:1.05; text-align:left; }
 .edition-label span { display:block; }
 @media (max-width: 380px) { .brand:not([style*="font-size"]) { height: 38px; } }
+@media (max-width: 520px) { .brandrow .brand.asphalt-pro-brand { height: 48px; max-width: calc(100vw - 80px); } }
 .logoutbar {
   position: absolute; top: 32px; left: 16px; right: 16px; z-index: 1;
   display: flex; justify-content: space-between;
@@ -86,6 +92,23 @@ textarea { min-height: 96px; resize: vertical; }
 .tabs { display: flex; gap: 8px; margin: 8px 0 16px; }
 .tab { flex: 1; text-align: center; padding: 10px; border: 1px solid #000; border-radius: 8px; color: #000; background: #fff; font-weight: bold; }
 .tab.on { background: #000; color: #fff; }
+.workflow-tabs { max-width: 820px; margin-left: auto; margin-right: auto; }
+.workflow-intro { display:flex; flex-direction:column; gap:3px; padding:14px 16px; margin:4px 0 18px; border:1px solid #000; border-radius:10px; background:#fff; }
+.workflow-intro strong { font-size:18px; }
+.workflow-intro span { font-size:14px; }
+.workflow-organize, .workflow-edit, .workflow-create, .workflow-send { max-width:980px !important; }
+.workflow-organize #cards, .workflow-edit #cards, #glist, .send-capture-list { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
+.workflow-organize #cards .card, .workflow-edit #cards .card, #glist .card { margin-bottom:0; }
+.workflow-organize .rotaterow, .workflow-organize .stampbtn, .workflow-organize .cropbtn,
+.workflow-organize .restorebtn, .workflow-organize .editnote, .workflow-organize .defectrow { display:none !important; }
+.delivery-actions { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; }
+.delivery-actions .btn, .delivery-grid .btn { margin-top:0; }
+.delivery-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin-top:10px; }
+.send-capture-row { display:grid; grid-template-columns:24px 72px 1fr; gap:10px; align-items:center; padding:10px; margin:0; border:1px solid #000; border-radius:10px; background:#fff; text-transform:none; letter-spacing:0; font-size:14px; cursor:pointer; }
+.send-capture-row input { width:20px; height:20px; }
+.send-capture-row img, .send-no-photo { width:72px; height:58px; object-fit:cover; border-radius:6px; margin:0; background:#eee; display:flex; align-items:center; justify-content:center; }
+.send-capture-row span:last-child { min-width:0; }
+.send-capture-row small { display:block; font-weight:normal; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-top:3px; }
 .card { background: #fff; border: 1px solid #000; border-radius: 10px; padding: 12px; margin-bottom: 14px; }
 .card img { width: 100%; border-radius: 6px; margin-bottom: 8px; }
 .card .addr { font-weight: bold; color: #000; }
@@ -125,4 +148,12 @@ input.dimfield.suggested {
   .pill { padding: 7px 11px; font-size: 14px; }
   .btn { padding: 13px; font-size: 16px; }
   .tab { padding: 9px 6px; font-size: 15px; }
+}
+
+@media (max-width: 700px) {
+  #body, .workflow-organize, .workflow-edit, .workflow-create, .workflow-send { max-width:640px !important; }
+  .workflow-tabs { gap:4px; overflow-x:auto; padding-bottom:4px; }
+  .workflow-tabs .tab { flex:0 0 auto; min-width:82px; padding:9px 8px; font-size:14px; }
+  .workflow-organize #cards, .workflow-edit #cards, #glist, .send-capture-list { grid-template-columns:1fr; }
+  .delivery-actions, .delivery-grid { grid-template-columns:1fr 1fr; }
 }

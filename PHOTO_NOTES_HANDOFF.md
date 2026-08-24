@@ -3,7 +3,7 @@
 **Product:** Photo Notes, a private multi-user photo-documentation web app (PWA) for paving and field work.
 **Live URL:** https://photonotesapp.com
 **Owner:** Zukor AI (Sam Turcotte)
-**Last updated:** 2026-08-22
+**Last updated:** 2026-08-24
 
 This document is the single source of truth for picking up development. It covers the architecture, how to deploy, the full feature set, the data model, environment configuration, known constraints, and the outstanding backlog. Where a detail is safety-critical or easy to get wrong, it is called out explicitly.
 
@@ -14,6 +14,11 @@ This document is the single source of truth for picking up development. It cover
 Photo Notes lets a field worker capture a photo, attach a voice or typed note, auto-tag it with GPS and a street address, organize captures by topic and by site group, and export professional documentation (PDF, Word, and an AI-ready ZIP bundle). A "Pro" tier adds measurement, AI defect classification, per-site condition scoring, a satellite map, before/after pairing, and a proposal report.
 
 It is installable as a PWA (works offline for the app shell) and is designed mobile-first, because the primary user is on a phone in the field.
+
+The product navigation follows the user's actual work: **Capture → Organize →
+Edit → Create → Send**. Create is optional; edited individual photos can go
+straight to Send. The former Library and Groups concepts remain internal data
+structures, not primary navigation labels.
 
 ---
 

@@ -950,7 +950,8 @@ app.post('/api/captures/:id/rotate', requireAuth, async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     if (!Number.isInteger(id)) return res.status(400).json({ error: 'bad id' });
-    const dir = (req.body && req.body.dir) === 'ccw' ? 'ccw' : 'cw';
+    const requested = req.body && req.body.dir;
+    const dir = requested === 'ccw' ? 'ccw' : requested === 'flip' ? 'flip' : 'cw';
     const row = (await pool.query(`SELECT photo_path FROM captures WHERE id = $1 AND user_id = $2`, [id, req.user.id])).rows[0];
     if (!row) return res.status(404).json({ error: 'not found' });
     const p = localPhoto(row.photo_path);
@@ -959,7 +960,7 @@ app.post('/api/captures/:id/rotate', requireAuth, async (req, res) => {
     const angle = dir === 'ccw' ? 270 : 90;
     const buf = fs.readFileSync(p);
     const oriented = await sharp(buf).rotate().toBuffer();
-    const s = sharp(oriented).rotate(angle);
+    const s = dir === 'flip' ? sharp(oriented).flop() : sharp(oriented).rotate(angle);
     let out;
     if (ext === '.png') out = await s.png().toBuffer();
     else if (ext === '.webp') out = await s.webp().toBuffer();

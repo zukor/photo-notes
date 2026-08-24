@@ -1,7 +1,7 @@
 const el = document.getElementById('app');
 // Phones/tablets open to Capture (grab a photo fast); computers open to the Library (review the photos).
 const IS_HANDHELD = (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) || window.innerWidth < 768;
-let state = { view: IS_HANDHELD ? 'capture' : 'list', location: null, address: null, photoFile: null, kind: 'note', area: '', areas: [], groupId: null, imgv: 0, plan: 'free', ewrId: null };
+let state = { view: IS_HANDHELD ? 'capture' : 'organize', location: null, address: null, photoFile: null, kind: 'note', area: '', areas: [], groupId: null, imgv: 0, plan: 'free', ewrId: null, selectedIds: new Set() };
 
 // Pro gating on the client. Mirrors isPro(user) on the server. Pro-only UI must
 // not render at all for free users (no disabled teaser).
@@ -133,28 +133,31 @@ function renderApp() {
         <button class="link" id="logout">Log out</button>
       </div>
       <div class="brandrow">
-        <div class="brand">Photo Notes</div>
-        ${isProClient() ? '<div class="edition-label">Asphalt<span>Pro</span></div>' : ''}
+        <div class="brand ${isProClient() ? 'asphalt-pro-brand' : ''}">Photo Notes${isProClient() ? ' Asphalt Pro' : ''}</div>
       </div>
-      <div class="tabs">
+      <div class="tabs workflow-tabs" aria-label="Photo Notes workflow">
         <div class="tab ${state.view==='capture'?'on':''}" id="tabCapture">Capture</div>
-        <div class="tab ${state.view==='list'?'on':''}" id="tabList">Library</div>
-        <div class="tab ${state.view==='groups'?'on':''}" id="tabGroups">Groups</div>
-        ${isProClient() ? `<div class="tab ${state.view==='map'?'on':''}" id="tabMap">Map</div>` : ''}
+        <div class="tab ${state.view==='organize'?'on':''}" id="tabOrganize">Organize</div>
+        <div class="tab ${state.view==='edit'?'on':''}" id="tabEdit">Edit</div>
+        <div class="tab ${state.view==='create'?'on':''}" id="tabCreate">Create</div>
+        <div class="tab ${state.view==='send'?'on':''}" id="tabSend">Send</div>
       </div>
       <div id="body"></div>
       <div class="footer">&copy; ${new Date().getFullYear()} Zukor AI. All Rights Reserved.</div>
     </div>`;
   document.getElementById('logout').onclick = async () => { await api('/api/logout', { method: 'POST' }); renderLogin(); };
   document.getElementById('tabCapture').onclick = () => { state.view='capture'; renderApp(); };
-  document.getElementById('tabList').onclick = () => { state.view='list'; renderApp(); };
-  document.getElementById('tabGroups').onclick = () => { state.view='groups'; state.groupId=null; renderApp(); };
-  const tm = document.getElementById('tabMap');
-  if (tm) tm.onclick = () => { state.view='map'; renderApp(); };
+  document.getElementById('tabOrganize').onclick = () => { state.view='organize'; renderApp(); };
+  document.getElementById('tabEdit').onclick = () => { state.view='edit'; renderApp(); };
+  document.getElementById('tabCreate').onclick = () => { state.view='create'; state.groupId=null; renderApp(); };
+  document.getElementById('tabSend').onclick = () => { state.view='send'; renderApp(); };
   if (state.view === 'capture') renderCapture();
-  else if (state.view === 'groups') renderGroups();
+  else if (state.view === 'organize') renderList();
+  else if (state.view === 'edit') renderEdit();
+  else if (state.view === 'create') renderGroups();
+  else if (state.view === 'send') renderSend();
   else if (state.view === 'map') renderMap();
-  else renderList();
+  else { state.view = 'organize'; renderList(); }
 }
 
 function areaChips() {
@@ -705,11 +708,11 @@ async function drainQueue() {
         if (!r.ok) throw new Error('http ' + r.status);
         bgActive = 0;
         // Refresh the Library if it is open so the new card appears...
-        if (state.view === 'list') {
+        if (state.view === 'organize' || state.view === 'edit') {
           const flt = document.getElementById('filter');
           loadCards(flt ? (flt.value || '') : '');
           // ...and again shortly after, to pick up the background-filled address.
-          if (item.hadCoords) setTimeout(() => { if (state.view === 'list') { const f = document.getElementById('filter'); loadCards(f ? (f.value || '') : ''); } }, 3000);
+          if (item.hadCoords) setTimeout(() => { if (state.view === 'organize' || state.view === 'edit') { const f = document.getElementById('filter'); loadCards(f ? (f.value || '') : ''); } }, 3000);
         }
       } catch (e) {
         bgActive = 0;
@@ -765,7 +768,7 @@ async function rotatePhoto(id, dir) {
     });
     if (!r.ok) throw new Error('bad');
     state.imgv++; // bust the image cache so the rotated photo shows
-    if (state.view === 'groups' && state.groupId) renderGroupDetail(state.groupId);
+    if (state.view === 'create' && state.groupId) renderGroupDetail(state.groupId);
     else loadCards(document.getElementById('filter') ? (document.getElementById('filter').value || '') : '');
   } catch (e) { toast('Rotate failed'); }
 }
@@ -773,11 +776,13 @@ async function rotatePhoto(id, dir) {
 function rotateButtons(id) {
   return `
     <button class="iconbtn rotccw" data-id="${id}" title="Rotate left 90°">↺ 90°</button>
-    <button class="iconbtn rotcw" data-id="${id}" title="Rotate right 90°">↻ 90°</button>`;
+    <button class="iconbtn rotcw" data-id="${id}" title="Rotate right 90°">↻ 90°</button>
+    <button class="iconbtn flipphoto" data-id="${id}" title="Flip photo horizontally">↔ Flip</button>`;
 }
 function wireRotate(container) {
   container.querySelectorAll('.rotccw').forEach(b => b.onclick = () => rotatePhoto(parseInt(b.getAttribute('data-id'), 10), 'ccw'));
   container.querySelectorAll('.rotcw').forEach(b => b.onclick = () => rotatePhoto(parseInt(b.getAttribute('data-id'), 10), 'cw'));
+  container.querySelectorAll('.flipphoto').forEach(b => b.onclick = () => rotatePhoto(parseInt(b.getAttribute('data-id'), 10), 'flip'));
 }
 
 async function saveNote(id, text, after) {
@@ -792,8 +797,10 @@ async function saveNote(id, text, after) {
 // ---- Library (saved captures) ----
 async function renderList() {
   const body = document.getElementById('body');
+  body.className = 'workflow-organize';
   body.innerHTML = `
-    <label>Filter</label>
+    <div class="workflow-intro"><strong>Organize your captures</strong><span>Choose photos, file them by topic, and place them in the order you need.</span></div>
+    <label>Filter by Topic</label>
     <select id="filter">
       <option value="">All Topics</option>
       ${state.areas.map(a => `<option value="${esc(a)}">${esc(a)}</option>`).join('')}
@@ -805,41 +812,85 @@ async function renderList() {
     ${isProClient() ? `<button class="btn secondary slim" id="classifybatch" style="margin-top:8px">Classify Selected (AI)</button><div class="status" id="classifyprog"></div>
     <button class="btn secondary slim" id="pairbtn" style="margin-top:8px">Pair as Before/After (select 2)</button>` : ''}
 
-    <label>Export <span style="font-weight:normal;text-transform:none;letter-spacing:0">(pick one or more)</span></label>
-    <div class="pill-group" id="fmts">
-      <div class="pill" data-fmt="pdf">PDF</div>
-      <div class="pill" data-fmt="docx">Word</div>
-      <div class="pill" data-fmt="bundle">For AI (.zip)</div>
-    </div>
-    ${qualityBlock('imgres', 'imgfmt')}
-    <button class="btn" id="exportbtn">Export</button>
-
-    <label style="margin-top:18px">Add Selected to a Group</label>
+    <label>File Selected Under a Topic</label>
     <div class="row compact">
-      <select id="groupsel" style="flex:1"><option value="">Choose Group</option></select>
+      <select id="bulktopic"><option value="">Choose Topic</option>${state.areas.map(a => `<option value="${esc(a)}">${esc(a)}</option>`).join('')}</select>
+      <button class="btn secondary" id="applytopic">Apply</button>
+    </div>
+    <div class="row compact" style="margin-top:8px">
+      <input id="organizenewtopic" type="text" placeholder="Create a new topic...">
+      <button class="btn secondary" id="createtopic">Create</button>
+    </div>
+
+    <label style="margin-top:18px">Add Selected to a Document</label>
+    <div class="row compact">
+      <select id="groupsel" style="flex:1"><option value="">Choose Document</option></select>
       <button class="btn secondary" id="addtogroup">Add</button>
     </div>
-    <input id="newgroupname" type="text" placeholder="...or type a new group name" style="margin-top:8px" />
+    <input id="newgroupname" type="text" placeholder="...or type a new document title" style="margin-top:8px" />
 
-    <div class="row" style="margin-top:22px">
-      <button class="btn secondary" id="fixaddr">Fix Addresses</button>
-      <button class="btn" id="delbtn" style="background:#b3261e">Delete Selected</button>
-    </div>
+    ${isProClient() ? `<button class="btn secondary slim" id="openmap">Organize on Map</button>` : ''}
 
     <div id="cards" style="margin-top:16px"></div>`;
   document.getElementById('filter').onchange = e => loadCards(e.target.value);
-  document.getElementById('selall').onclick = () => document.querySelectorAll('.capchk').forEach(c => c.checked = true);
-  document.getElementById('selnone').onclick = () => document.querySelectorAll('.capchk').forEach(c => c.checked = false);
-  document.getElementById('fmts').onclick = (e) => { const p = e.target.closest('.pill'); if (p) p.classList.toggle('on'); };
-  document.getElementById('exportbtn').onclick = doExportSelected;
-  document.getElementById('delbtn').onclick = doDeleteSelected;
-  document.getElementById('fixaddr').onclick = doFixAddresses;
+  document.getElementById('selall').onclick = () => document.querySelectorAll('.capchk').forEach(c => { c.checked = true; state.selectedIds.add(String(c.value)); });
+  document.getElementById('selnone').onclick = () => { state.selectedIds.clear(); document.querySelectorAll('.capchk').forEach(c => c.checked = false); };
+  document.getElementById('applytopic').onclick = applyTopicToSelected;
+  document.getElementById('createtopic').onclick = createOrganizeTopic;
   document.getElementById('addtogroup').onclick = addSelectedToGroup;
   const cb = document.getElementById('classifybatch');
   if (cb) cb.onclick = classifySelected;
   const pb = document.getElementById('pairbtn');
   if (pb) pb.onclick = pairSelected;
+  const om = document.getElementById('openmap'); if (om) om.onclick = () => { state.view = 'map'; renderApp(); };
   loadGroupOptions();
+  loadCards('');
+}
+
+async function createOrganizeTopic() {
+  const input = document.getElementById('organizenewtopic');
+  const name = input ? input.value.trim() : '';
+  if (!name) { toast('Type a topic name'); return; }
+  const r = await api('/api/areas', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
+  if (!r.ok) { toast('Could not create topic'); return; }
+  state.areas = await r.json();
+  renderList();
+  const sel = document.getElementById('bulktopic'); if (sel) sel.value = name;
+  toast('Topic created');
+}
+
+async function applyTopicToSelected() {
+  const topic = (document.getElementById('bulktopic') || {}).value || '';
+  const ids = Array.from(state.selectedIds);
+  if (!topic) { toast('Choose a topic'); return; }
+  if (!ids.length) { toast('Select at least one capture'); return; }
+  const rows = window._lastCards || [];
+  let done = 0;
+  for (const id of ids) {
+    const c = rows.find(x => String(x.id) === String(id));
+    const tags = Array.from(new Set([].concat(c && c.area_tags || [], topic)));
+    const r = await api(`/api/captures/${id}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ area_tags: tags }) });
+    if (r.ok) done++;
+  }
+  toast(`Filed ${done} capture${done === 1 ? '' : 's'} under ${topic}`);
+  loadCards((document.getElementById('filter') || {}).value || '');
+}
+
+async function renderEdit() {
+  const body = document.getElementById('body');
+  body.className = 'workflow-edit';
+  body.innerHTML = `
+    <div class="workflow-intro"><strong>Edit your material</strong><span>Improve photos, add stamps and captions, correct notes, or remove unwanted captures.</span></div>
+    <label>Filter by Topic</label>
+    <select id="filter"><option value="">All Topics</option>${state.areas.map(a => `<option value="${esc(a)}">${esc(a)}</option>`).join('')}</select>
+    <div class="row" style="margin-top:10px"><button class="btn secondary" id="selall">Select All</button><button class="btn secondary" id="selnone">Clear</button></div>
+    <div class="row" style="margin-top:8px"><button class="btn secondary" id="fixaddr">Fix Addresses</button><button class="btn" id="delbtn" style="background:#b3261e">Delete Selected</button></div>
+    <div id="cards" style="margin-top:16px"></div>`;
+  document.getElementById('filter').onchange = e => loadCards(e.target.value);
+  document.getElementById('selall').onclick = () => document.querySelectorAll('.capchk').forEach(c => { c.checked = true; state.selectedIds.add(String(c.value)); });
+  document.getElementById('selnone').onclick = () => { state.selectedIds.clear(); document.querySelectorAll('.capchk').forEach(c => c.checked = false); };
+  document.getElementById('fixaddr').onclick = doFixAddresses;
+  document.getElementById('delbtn').onclick = doDeleteSelected;
   loadCards('');
 }
 
@@ -952,7 +1003,7 @@ async function loadGroupOptions() {
   if (!sel) return;
   const r = await api('/api/groups');
   const groups = r.ok ? await r.json() : [];
-  sel.innerHTML = '<option value="">Choose Group</option>' +
+  sel.innerHTML = '<option value="">Choose Document</option>' +
     groups.map(g => `<option value="${g.id}">${esc(g.title || 'Untitled')} (${g.item_count})</option>`).join('');
 }
 
@@ -968,7 +1019,7 @@ async function addSelectedToGroup() {
         body: JSON.stringify({ title: newName, ids }),
       });
       if (!r.ok) throw new Error('bad');
-      toast(`Group created with ${ids.length} photo${ids.length > 1 ? 's' : ''}`);
+      toast(`Document created with ${ids.length} photo${ids.length > 1 ? 's' : ''}`);
       document.getElementById('newgroupname').value = '';
       loadGroupOptions();
     } else if (sel.value) {
@@ -977,12 +1028,12 @@ async function addSelectedToGroup() {
         body: JSON.stringify({ ids }),
       });
       if (!r.ok) throw new Error('bad');
-      toast(`Added ${ids.length} to group`);
+      toast(`Added ${ids.length} to document`);
       loadGroupOptions();
     } else {
-      toast('Pick a group or type a new name');
+      toast('Pick a document or type a new title');
     }
-  } catch (e) { toast('Could not add to group'); }
+  } catch (e) { toast('Could not add to document'); }
 }
 
 async function doExportSelected() {
@@ -1089,6 +1140,7 @@ async function loadCards(area) {
   }
   cards.innerHTML = banner + html.join('');
   wireCards(cards, rows);
+  cards.querySelectorAll('.capchk').forEach(c => { c.checked = state.selectedIds.has(String(c.value)); });
   if (state._focusCapture) {
     const chk = cards.querySelector(`.capchk[value="${state._focusCapture}"]`);
     state._focusCapture = null;
@@ -1152,6 +1204,7 @@ function pairCardHtml(before, after) {
 }
 
 function wireCards(cards, rows) {
+  cards.querySelectorAll('.capchk').forEach(c => c.onchange = () => { if (c.checked) state.selectedIds.add(String(c.value)); else state.selectedIds.delete(String(c.value)); });
   wireRotate(cards);
   cards.querySelectorAll('.editnote').forEach(b => b.onclick = () => startEditNote(parseInt(b.getAttribute('data-id'), 10), rows));
   cards.querySelectorAll('.classifybtn').forEach(b => b.onclick = async () => {
@@ -1197,7 +1250,7 @@ function renderStampEditor(c) {
   const addOpts = ['datetime', 'address', 'gps', 'copyright', 'topic', 'custom', 'rect'];
   if (isProClient()) { addOpts.push('dims', 'defect'); }
   body.innerHTML = `
-    <button class="backlink" id="stampBack">‹ Back to Library</button>
+    <button class="backlink" id="stampBack">‹ Back to Edit</button>
     <div class="formhead">Add Stamps to Photo</div>
     <div class="status">Tap Add, then drag each item on the photo or use a corner button. Style it below.</div>
     <div id="stampStage" style="position:relative;display:inline-block;max-width:100%;border:1px solid #000;border-radius:8px;overflow:hidden;touch-action:none">
@@ -1212,7 +1265,7 @@ function renderStampEditor(c) {
       <button class="btn" id="stampSave">Save Stamps</button>
       <button class="btn secondary" id="stampCopy">Save Stamped Copy</button>
     </div>`;
-  document.getElementById('stampBack').onclick = () => { state.view = 'list'; renderList(); };
+  document.getElementById('stampBack').onclick = () => { state.view = 'edit'; renderEdit(); };
   document.getElementById('stampAdd').onclick = (e) => { const p = e.target.closest('[data-add]'); if (p) addOverlayItem(p.getAttribute('data-add')); };
   document.getElementById('stampSave').onclick = saveOverlays;
   document.getElementById('stampCopy').onclick = saveStampedCopy;
@@ -1418,7 +1471,7 @@ function renderCropEditor(c) {
   cropBox = { x: 10, y: 10, w: 80, h: 80 };
   const body = document.getElementById('body');
   body.innerHTML = `
-    <button class="backlink" id="cropBack">‹ Back to Library</button>
+    <button class="backlink" id="cropBack">‹ Back to Edit</button>
     <div class="formhead">Crop Photo</div>
     <div class="status">Drag the box to move it. Drag any corner to resize. Everything outside the box is trimmed off. Your original is kept and can be restored.</div>
     <div id="cropStage" style="position:relative;display:inline-block;max-width:100%;border:1px solid #000;border-radius:8px;overflow:hidden;touch-action:none">
@@ -1428,8 +1481,8 @@ function renderCropEditor(c) {
       <button class="btn" id="cropApply">Apply Crop</button>
       <button class="btn secondary" id="cropCancel">Cancel</button>
     </div>`;
-  document.getElementById('cropBack').onclick = () => { state.view = 'list'; renderList(); };
-  document.getElementById('cropCancel').onclick = () => { state.view = 'list'; renderList(); };
+  document.getElementById('cropBack').onclick = () => { state.view = 'edit'; renderEdit(); };
+  document.getElementById('cropCancel').onclick = () => { state.view = 'edit'; renderEdit(); };
   document.getElementById('cropApply').onclick = applyCrop;
   const img = document.getElementById('cropImg');
   if (img.complete) drawCropBox(); else img.onload = drawCropBox;
@@ -1530,7 +1583,7 @@ async function applyCrop() {
     if (!r.ok) throw new Error('crop failed');
     state.imgv++; // bust the image cache so the cropped photo shows
     toast('Photo cropped. Original saved.');
-    state.view = 'list'; renderList();
+    state.view = 'edit'; renderEdit();
   } catch (e) {
     btn.disabled = false; btn.textContent = 'Apply Crop';
     toast('Crop failed, try again');
@@ -1641,7 +1694,7 @@ function mapPopupHtml(c) {
 }
 function openCaptureInLibrary(id) {
   state._focusCapture = id;
-  state.view = 'list';
+  state.view = 'organize';
   renderApp();
 }
 
@@ -1806,18 +1859,133 @@ function wireZonePopup(e, z) {
   };
 }
 
-// ---- Groups ----
+// ---- Send: deliver individual captures or completed documents ----
+async function renderSend() {
+  const body = document.getElementById('body');
+  body.className = 'workflow-send';
+  body.innerHTML = `
+    <div class="workflow-intro"><strong>Send your finished work</strong><span>Share photos directly, download a document, email it, upload it, or print it.</span></div>
+    <div class="formhead">Send Selected Captures</div>
+    <div class="status" id="sendSelection">Loading captures...</div>
+    <div class="delivery-actions">
+      <button class="btn" id="sharephotos">Share Photos</button>
+      <button class="btn secondary" id="sendpdf">Send as PDF</button>
+      <button class="btn secondary" id="sendword">Send as Word</button>
+    </div>
+    <div id="sendCaptures" class="send-capture-list"></div>
+    <div class="formhead" style="margin-top:30px">Send a Document</div>
+    <div id="sendDocs"><p class="status">Loading documents...</p></div>`;
+  document.getElementById('sharephotos').onclick = shareSelectedPhotos;
+  document.getElementById('sendpdf').onclick = () => deliverExport('pdf', null, true);
+  document.getElementById('sendword').onclick = () => deliverExport('docx', null, true);
+  loadSendCenter();
+}
+
+async function loadSendCenter() {
+  const [cr, gr] = await Promise.all([api('/api/captures'), api('/api/groups')]);
+  const captures = cr.ok ? await cr.json() : [];
+  const groups = gr.ok ? await gr.json() : [];
+  window._sendCaptures = captures;
+  const capBox = document.getElementById('sendCaptures');
+  const visible = captures.slice(0, 40);
+  capBox.innerHTML = visible.length ? visible.map(c => `
+    <label class="send-capture-row">
+      <input type="checkbox" class="sendchk" value="${c.id}" ${state.selectedIds.has(String(c.id)) ? 'checked' : ''}>
+      ${c.photo_path ? `<img src="${photoSrc(c.photo_path)}" alt="">` : '<span class="send-no-photo">Note</span>'}
+      <span><strong>${esc((c.area_tags || []).join(', ') || 'Unfiled')}</strong><small>${esc(c.note || 'No caption')}</small></span>
+    </label>`).join('') : '<p class="empty">Nothing has been captured yet.</p>';
+  capBox.querySelectorAll('.sendchk').forEach(c => c.onchange = () => { if (c.checked) state.selectedIds.add(String(c.value)); else state.selectedIds.delete(String(c.value)); updateSendCount(); });
+  updateSendCount();
+  const docs = document.getElementById('sendDocs');
+  docs.innerHTML = groups.length ? groups.map(g => `
+    <div class="card delivery-card">
+      <div><strong>${esc(g.title || 'Untitled document')}</strong><div class="meta">${g.item_count} photo${g.item_count === 1 ? '' : 's'}</div></div>
+      <div class="delivery-grid">
+        <button class="btn slim" data-deliver="share" data-group="${g.id}">Share PDF</button>
+        <button class="btn secondary slim" data-deliver="print" data-group="${g.id}">Print</button>
+        <button class="btn secondary slim" data-deliver="pdf" data-group="${g.id}">Save PDF</button>
+        <button class="btn secondary slim" data-deliver="docx" data-group="${g.id}">Save Word</button>
+        <button class="btn secondary slim" data-deliver="bundle" data-group="${g.id}">AI ZIP</button>
+      </div>
+    </div>`).join('') : '<p class="empty">Create a document first, or send selected captures above.</p>';
+  docs.querySelectorAll('[data-deliver]').forEach(b => b.onclick = () => deliverExport(b.getAttribute('data-deliver'), b.getAttribute('data-group'), false));
+}
+
+function updateSendCount() {
+  const n = state.selectedIds.size;
+  const s = document.getElementById('sendSelection');
+  if (s) s.textContent = n ? `${n} capture${n === 1 ? '' : 's'} selected. Change the selection below or return to Organize.` : 'Select one or more captures below, or return to Organize.';
+}
+
+function downloadBlob(blob, name) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 3000);
+}
+
+async function exportBlob(format, groupId) {
+  const ids = Array.from(state.selectedIds);
+  if (!groupId && !ids.length) throw new Error('Select at least one capture');
+  const q = groupId ? `group=${groupId}` : `ids=${ids.join(',')}`;
+  const r = await api(`/api/export/${format}?${q}&res=standard&fmt=jpeg`);
+  if (!r.ok) throw new Error('Could not build document');
+  return r.blob();
+}
+
+async function deliverExport(action, groupId, selectedOnly) {
+  const format = action === 'share' || action === 'print' ? 'pdf' : action;
+  const ext = format === 'bundle' ? 'zip' : format;
+  const name = `photo-notes.${ext}`;
+  try {
+    const blob = await exportBlob(format, groupId);
+    if (action === 'print') {
+      const url = URL.createObjectURL(blob); const w = window.open(url, '_blank');
+      if (w) setTimeout(() => { try { w.print(); } catch (e) {} }, 900);
+      else downloadBlob(blob, name);
+      return;
+    }
+    if (action === 'share' || selectedOnly) {
+      const file = new File([blob], name, { type: blob.type || (format === 'pdf' ? 'application/pdf' : 'application/octet-stream') });
+      if (navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
+        await navigator.share({ title: 'Photo Notes', text: 'Photo documentation', files: [file] }); return;
+      }
+    }
+    downloadBlob(blob, name);
+    toast('File ready. Attach it to email, text, or upload it to Drive.');
+  } catch (e) { if (!(e && e.name === 'AbortError')) toast(e.message || 'Send failed'); }
+}
+
+async function shareSelectedPhotos() {
+  const rows = (window._sendCaptures || []).filter(c => state.selectedIds.has(String(c.id)));
+  if (!rows.length) { toast('Select at least one capture'); return; }
+  try {
+    const files = [];
+    for (const c of rows) {
+      if (!c.photo_path) continue;
+      const r = await fetch(c.photo_path, { credentials: 'same-origin' });
+      if (r.ok) { const b = await r.blob(); files.push(new File([b], `photo-${c.id}.${b.type.includes('png') ? 'png' : 'jpg'}`, { type: b.type || 'image/jpeg' })); }
+    }
+    const text = rows.map(c => [c.note, c.address, (c.area_tags || []).join(', ')].filter(Boolean).join('\n')).join('\n\n');
+    if (navigator.share && files.length && (!navigator.canShare || navigator.canShare({ files }))) { await navigator.share({ title: 'Photo Notes', text, files }); return; }
+    await deliverExport('share', null, true);
+  } catch (e) { if (!(e && e.name === 'AbortError')) toast('Could not share photos'); }
+}
+
+// ---- Create (ordered documents, stored as groups) ----
 async function renderGroups() {
   if (state.ewrId != null) { renderEwrDetail(); return; }
   if (state.groupId) { renderGroupDetail(state.groupId); return; }
   const body = document.getElementById('body');
+  body.className = 'workflow-create';
   body.innerHTML = `
-    <div class="formhead">Create New Group</div>
-    <input id="gtitle" type="text" placeholder="Group Title" style="font-size:18px;font-weight:bold" />
-    <textarea id="gdesc" placeholder="Description (optional)" style="min-height:60px;margin-top:8px"></textarea>
-    <button class="btn slim" id="gcreate">Create</button>
+    <div class="workflow-intro"><strong>Create a document</strong><span>Build an ordered report from organized captures. PDF and Word documents include the title, description, photos, captions, dates, topics, and locations.</span></div>
+    <div class="formhead">Start a New Document</div>
+    <input id="gtitle" type="text" placeholder="Document Title" style="font-size:18px;font-weight:bold" />
+    <textarea id="gdesc" placeholder="Subtitle or description (optional)" style="min-height:60px;margin-top:8px"></textarea>
+    <div class="status">${state.selectedIds.size ? `${state.selectedIds.size} selected capture${state.selectedIds.size === 1 ? '' : 's'} will be added.` : 'You can create an empty document, then add captures from Organize.'}</div>
+    <button class="btn slim" id="gcreate">Create Document</button>
 
-    <div class="formhead" style="margin-top:30px">Current Groups</div>
+    <div class="formhead" style="margin-top:30px">Your Documents</div>
     <div id="glist"></div>`;
   document.getElementById('gcreate').onclick = createGroup;
   titleCaseInput(document.getElementById('gtitle'));
@@ -1832,12 +2000,13 @@ async function createGroup() {
   try {
     const r = await api('/api/groups', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title, description }),
+      body: JSON.stringify({ title, description, ids: Array.from(state.selectedIds) }),
     });
     if (!r.ok) throw new Error('bad');
     document.getElementById('gtitle').value = '';
     document.getElementById('gdesc').value = '';
-    toast('Group created');
+    state.selectedIds.clear();
+    toast('Document created');
     loadGroups();
   } catch (e) { toast('Could not create group'); }
   finally { btn.disabled = false; }
@@ -1850,14 +2019,14 @@ async function loadGroups() {
   const r = await api('/api/groups');
   if (!r.ok) { list.innerHTML = '<p class="status">Could not load.</p>'; return; }
   const groups = await r.json();
-  if (!groups.length) { list.innerHTML = '<p class="empty">No groups yet. Create one above, then add photos from the Library tab.</p>'; return; }
+  if (!groups.length) { list.innerHTML = '<p class="empty">No documents yet. Select captures in Organize, then create your first document above.</p>'; return; }
   list.innerHTML = groups.map(g => `
     <div class="card">
       <div style="font-weight:bold;font-size:17px">${esc(g.title || 'Untitled group')}</div>
       ${g.description ? `<div style="margin:4px 0">${esc(g.description)}</div>` : ''}
       <div class="meta">${g.item_count} photo${g.item_count === 1 ? '' : 's'}${(isProClient() && g.score != null) ? ` <span class="scorechip" style="background:${scoreColor(g.score)}">Score ${g.score} · ${esc(g.band)}</span>` : ''}</div>
       <div class="row" style="margin-top:8px">
-        <button class="btn slim gopen" data-id="${g.id}">Open</button>
+        <button class="btn slim gopen" data-id="${g.id}">Open Document</button>
         <button class="btn secondary slim" data-id="${g.id}" data-del="1" style="color:#c1121f">Delete</button>
       </div>
     </div>`).join('');
@@ -1877,9 +2046,9 @@ function scoreColor(score) {
 }
 
 async function deleteGroup(id) {
-  if (!confirm('Delete this group? The photos themselves are kept.')) return;
+  if (!confirm('Delete this document? The photos themselves are kept.')) return;
   const r = await api(`/api/groups/${id}/delete`, { method: 'POST' });
-  if (r.ok) { toast('Group deleted'); loadGroups(); } else toast('Delete failed');
+  if (r.ok) { toast('Document deleted'); loadGroups(); } else toast('Delete failed');
 }
 
 async function renderGroupDetail(id) {
@@ -1908,7 +2077,7 @@ async function renderGroupDetail(id) {
     }
   }
   body.innerHTML = `
-    <button class="backlink" id="gback">‹ All Groups</button>
+    <button class="backlink" id="gback">‹ All Documents</button>
     <label>Title</label>
     <div id="titleview"></div>
     <label>Description</label>
@@ -1916,7 +2085,7 @@ async function renderGroupDetail(id) {
 
     ${scoreHtml}
 
-    <label style="margin-top:16px">Export This Group <span style="font-weight:normal;text-transform:none;letter-spacing:0">(pick one or more)</span></label>
+    <label style="margin-top:16px">Preview and Build <span style="font-weight:normal;text-transform:none;letter-spacing:0">(pick one or more formats)</span></label>
     <div class="pill-group" id="gfmts">
       <div class="pill" data-fmt="pdf">PDF</div>
       <div class="pill" data-fmt="docx">Word</div>
@@ -1924,9 +2093,10 @@ async function renderGroupDetail(id) {
     </div>
     ${qualityBlock('gimgres', 'gimgfmt')}
     <div class="row">
-      <button class="btn" id="gexport">Export Group</button>
+      <button class="btn" id="gexport">Build Document</button>
       <button class="btn secondary" id="greverse">Reverse Order</button>
     </div>
+    <button class="btn secondary slim" id="continueSend">Continue to Send</button>
     ${isProClient() ? `<label style="margin-top:16px">Proposal Report</label>
     <div class="row">
       <button class="btn secondary slim" id="proppdf">Proposal PDF</button>
@@ -1942,6 +2112,7 @@ async function renderGroupDetail(id) {
   document.getElementById('gback').onclick = () => { state.groupId = null; renderGroups(); };
   document.getElementById('greverse').onclick = reverseItems;
   document.getElementById('gexport').onclick = groupExport;
+  document.getElementById('continueSend').onclick = () => { state.view = 'send'; renderApp(); };
   document.getElementById('gfmts').onclick = (e) => { const p = e.target.closest('.pill'); if (p) p.classList.toggle('on'); };
   const pp = document.getElementById('proppdf'); if (pp) pp.onclick = () => exportProposal('pdf');
   const pw = document.getElementById('propdocx'); if (pw) pw.onclick = () => exportProposal('docx');
@@ -2292,7 +2463,7 @@ function renderGroupItems() {
   const box = document.getElementById('gitems');
   if (!box) return;
   const items = currentGroupItems;
-  if (!items.length) { box.innerHTML = '<p class="empty">No photos in this group yet. Go to Library, select some, and use "Add Selected to a Group".</p>'; return; }
+  if (!items.length) { box.innerHTML = '<p class="empty">No photos in this document yet. Go to Organize, select some, and use "Add Selected to a Document".</p>'; return; }
   box.innerHTML = items.map((c, i) => `
     <div class="card">
       <div class="meta">#${i + 1}</div>
@@ -2367,7 +2538,7 @@ async function groupExport() {
       await new Promise(res => setTimeout(res, 500));
     } catch (e) { toast('Export failed for ' + f); }
   }
-  btn.disabled = false; btn.textContent = 'Export Group';
+  btn.disabled = false; btn.textContent = 'Build Document';
   toast('Exported');
 }
 
