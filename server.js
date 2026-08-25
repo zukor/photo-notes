@@ -1800,6 +1800,12 @@ function localPhoto(photoPath) {
 function slug(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''); }
 function suffix(area) { return area ? '-' + slug(area) : ''; }
 function fmtWhen(d) { try { return new Date(d).toLocaleString(); } catch { return ''; } }
+const PDF_STATE_ABBR = { Alabama:'AL', Alaska:'AK', Arizona:'AZ', Arkansas:'AR', California:'CA', Colorado:'CO', Connecticut:'CT', Delaware:'DE', Florida:'FL', Georgia:'GA', Hawaii:'HI', Idaho:'ID', Illinois:'IL', Indiana:'IN', Iowa:'IA', Kansas:'KS', Kentucky:'KY', Louisiana:'LA', Maine:'ME', Maryland:'MD', Massachusetts:'MA', Michigan:'MI', Minnesota:'MN', Mississippi:'MS', Missouri:'MO', Montana:'MT', Nebraska:'NE', Nevada:'NV', 'New Hampshire':'NH', 'New Jersey':'NJ', 'New Mexico':'NM', 'New York':'NY', 'North Carolina':'NC', 'North Dakota':'ND', Ohio:'OH', Oklahoma:'OK', Oregon:'OR', Pennsylvania:'PA', 'Rhode Island':'RI', 'South Carolina':'SC', 'South Dakota':'SD', Tennessee:'TN', Texas:'TX', Utah:'UT', Vermont:'VT', Virginia:'VA', Washington:'WA', 'West Virginia':'WV', Wisconsin:'WI', Wyoming:'WY', 'District of Columbia':'DC' };
+function conciseAddress(address) {
+  let value = String(address || '').trim();
+  for (const [name, abbr] of Object.entries(PDF_STATE_ABBR)) value = value.replace(new RegExp(`\\b${name}\\b`, 'g'), abbr);
+  return value;
+}
 // Dimensions for exports: shown unless they are a low-confidence photo estimate
 // the user has not yet confirmed (dim_confirmed = false).
 function exportDims(c) { if (c && c.dim_confirmed === false) return ''; return fmtDims(c); }
@@ -1841,15 +1847,15 @@ async function resolveExport(req) {
   let groupId = req.query.group ? parseInt(req.query.group, 10) : null;
   const imgRes = req.query.res || 'standard';
   const imgFmt = req.query.fmt || 'jpeg';
-  let heading = 'Photo Notes' + (area ? ' - ' + area : '');
+  let heading = area || '';
   let desc = '';
-  let fnameBase = 'photonotes' + suffix(area);
+  let fnameBase = area ? 'photo-documentation' + suffix(area) : 'photo-documentation';
   if (groupId) {
     const g = (await pool.query(`SELECT * FROM groups WHERE id = $1 AND user_id = $2`, [groupId, userId])).rows[0];
     if (g) {
-      heading = g.title || 'Photo Notes';
+      heading = g.title || 'Document';
       desc = g.description || '';
-      fnameBase = 'photonotes-' + (slug(g.title) || 'group');
+      fnameBase = slug(g.title) || 'document';
     } else {
       groupId = null; // not the user's group -> export nothing
     }
@@ -1983,9 +1989,11 @@ app.get('/api/export/pdf', requireAuth, async (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename="${fnameBase}.pdf"`);
     const doc = new PDFDocument({ size: 'LETTER', margin: 48 });
     doc.pipe(res);
-    doc.fontSize(20).fillColor('#000').text(heading, { align: 'center' });
-    if (desc) { doc.moveDown(0.3); doc.fontSize(12).fillColor('#000').text(desc, { align: 'center' }); }
-    doc.moveDown(1);
+    if (heading) {
+      doc.fontSize(20).fillColor('#000').text(heading, { align: 'center' });
+      if (desc) { doc.moveDown(0.3); doc.fontSize(12).fillColor('#000').text(desc, { align: 'center' }); }
+      doc.moveDown(1);
+    }
     const pairs = pro ? await userPairs(req.user.id) : [];
     const units = buildRenderUnits(rows, pairs);
     for (let i = 0; i < units.length; i++) {
@@ -2013,10 +2021,24 @@ app.get('/api/export/pdf', requireAuth, async (req, res) => {
       const img = localPhoto(c.photo_path);
       if (img) {
         const r = await renderForEmbedStamped(img, imgRes, imgFmt, c);
-        if (r) { try { doc.image(r.buffer, { fit: [480, 340], align: 'center' }); doc.moveDown(0.6); } catch (e) {} }
+        if (r) {
+          try {
+            const meta = await sharp(r.buffer).metadata();
+            const maxW = 516;
+            const maxH = scope === 'selection' ? 520 : 455;
+            const scale = Math.min(maxW / meta.width, maxH / meta.height);
+            const drawW = Math.round(meta.width * scale);
+            const drawH = Math.round(meta.height * scale);
+            const imgX = 48 + (maxW - drawW) / 2;
+            const imgTop = doc.y;
+            doc.image(r.buffer, imgX, imgTop, { width: drawW, height: drawH });
+            doc.y = imgTop + drawH + 14;
+            doc.x = 48;
+          } catch (e) {}
+        }
       }
-      doc.fontSize(13).fillColor('#000').text((c.address || 'No location') + (c.kind === 'task' ? '   [TASK]' : ''));
-      if (c.area_tags && c.area_tags.length) doc.fontSize(10).fillColor('#000').text('Area: ' + c.area_tags.join(', '));
+      doc.fontSize(13).fillColor('#000').text((conciseAddress(c.address) || 'No location') + (c.kind === 'task' ? '   [TASK]' : ''), { width: 516 });
+      if (scope !== 'selection' && c.area_tags && c.area_tags.length) doc.fontSize(10).fillColor('#000').text('Area: ' + c.area_tags.join(', '));
       if (pro) { const df = fmtDefect(c); if (df) doc.fontSize(10).fillColor('#000').text('Defect: ' + df); }
       if (pro) { const dm = exportDims(c); if (dm) doc.fontSize(10).fillColor('#000').text('Dimensions: ' + dm); }
       doc.fontSize(9).fillColor('#000').text(fmtWhen(c.created_at));

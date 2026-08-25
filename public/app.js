@@ -2122,7 +2122,7 @@ async function exportBlob(format, groupId) {
 async function deliverExport(action, groupId, selectedOnly) {
   const format = action === 'share' || action === 'print' ? 'pdf' : action;
   const ext = format === 'bundle' ? 'zip' : format;
-  const name = `photo-notes.${ext}`;
+  const name = `photo-documentation.${ext}`;
   try {
     const blob = await exportBlob(format, groupId);
     if (action === 'print') {
