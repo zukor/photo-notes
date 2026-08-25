@@ -313,7 +313,7 @@ function isIOS() {
     (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 }
 
-function toggleDictation() {
+async function toggleDictation() {
   const noteEl = document.getElementById('note');
   const btn = document.getElementById('dictate');
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -325,14 +325,27 @@ function toggleDictation() {
     return;
   }
   if (recognizer) { try { recognizer.stop(); } catch (e) {} return; }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    toast('This browser cannot access the microphone. Type the note or use the keyboard microphone');
+    return;
+  }
+  try {
+    // Ask for the site's microphone permission before starting Safari's speech
+    // service. Safari can otherwise enter its recording state without ever
+    // delivering words or showing the permission prompt.
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    stream.getTracks().forEach(track => track.stop());
+  } catch (e) {
+    toast('Microphone access is off for Photo Notes. Allow it for this website, then tap Record Note again');
+    return;
+  }
   const ios = isIOS();
   recognizer = new SR();
   recognizer.lang = 'en-US';
-  // iPhone/iPad Safari hangs with continuous or interim results on; it only
-  // reliably delivers one final transcript per start. Desktop/Android handle
-  // live continuous dictation, so keep that richer behavior there.
+  // Safari ends each recording as one phrase, but interim results let people
+  // see their words while they are speaking instead of waiting until Stop.
   recognizer.continuous = ios ? false : true;
-  recognizer.interimResults = ios ? false : true;
+  recognizer.interimResults = true;
   let base = noteEl ? noteEl.value : '';
   if (base && !base.endsWith(' ')) base += ' ';
   if (btn) { btn.textContent = 'Recording... tap to stop'; btn.classList.add('on'); }
@@ -353,13 +366,21 @@ function toggleDictation() {
       toast('Allow microphone access for this site, then tap Record Note again');
     } else if (err === 'no-speech') {
       toast('Did not catch that. Tap Record Note and speak again');
+    } else if (err === 'audio-capture') {
+      toast('The microphone is unavailable. Close any other app using it, then try again');
+    } else if (err === 'network') {
+      toast('Speech recognition could not connect. Check your internet connection and try again');
+    } else if (err === 'aborted') {
+      // Stopping after speech can report "aborted" on Safari even though the
+      // final result has already been delivered. No error message is needed.
     } else {
-      toast('Recording could not start. Check that Dictation is on in Settings');
+      toast('Recording stopped unexpectedly. Tap Record Note to try again');
     }
     cleanupDictation();
   };
   recognizer.onend = () => { cleanupDictation(); };
-  try { recognizer.start(); } catch (e) { cleanupDictation(); }
+  try { recognizer.start(); }
+  catch (e) { cleanupDictation(); toast('Recording could not start. Tap Record Note to try again'); }
 }
 
 // ================= Pro dimension fields =================
