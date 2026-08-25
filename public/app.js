@@ -359,10 +359,18 @@ function renderCameraTools() {
     <button class="backlink" id="toolsBack">‹ Back to Capture</button>
     <div class="workflow-intro"><strong>Camera Tools</strong><span>Choose what the camera needs to do. Source photos are retained for verification.</span></div>
     <section class="camera-tool-group">
-      <div class="camera-tool-heading"><strong>Document Scanners</strong><span>Turn photographed documents and identification plates into searchable information.</span></div>
+      <div class="camera-tool-heading"><strong>Document Scanners</strong><span>Turn photographed documents into searchable, reviewable information.</span></div>
       <div class="camera-tool-grid">
         ${cameraToolCard('Asphalt Ticket Scanner','Read delivery-ticket details and calculate saved daily tonnage.','Scan Ticket','toolTicket')}
+        ${cameraToolCard('Plan or Sketch Scanner','Read visible project, sheet, revision, scale, dimension, and field-note information without estimating missing details.','Scan Plan or Sketch','toolPlan')}
+        ${cameraToolCard('Business Card Scanner','Read contact and company details from a photographed business card.','Scan Business Card','toolCard')}
+      </div>
+    </section>
+    <section class="camera-tool-group">
+      <div class="camera-tool-heading"><strong>Equipment &amp; Material Scanners</strong><span>Record identifying information from equipment plates and construction-product labels.</span></div>
+      <div class="camera-tool-grid">
         ${cameraToolCard('Equipment Plate Scanner','Read manufacturer, model, serial number, year, and equipment specifications.','Scan Plate','toolEquipment')}
+        ${cameraToolCard('Material Label Scanner','Read product, manufacturer, lot, quantity, dates, instructions, and visible warnings.','Scan Label','toolMaterial')}
       </div>
     </section>
     <section class="camera-tool-group">
@@ -381,13 +389,19 @@ function renderCameraTools() {
   document.getElementById('toolTicket').onclick = () => { state.view='ticket'; renderApp(); };
   document.getElementById('toolEquipment').onclick = () => { cameraReaderType='equipment_plate'; state.view='camera-reader'; renderApp(); };
   document.getElementById('toolGauge').onclick = () => { cameraReaderType='gauge'; state.view='camera-reader'; renderApp(); };
+  document.getElementById('toolPlan').onclick = () => { cameraReaderType='plan_sketch'; state.view='camera-reader'; renderApp(); };
+  document.getElementById('toolMaterial').onclick = () => { cameraReaderType='material_label'; state.view='camera-reader'; renderApp(); };
+  document.getElementById('toolCard').onclick = () => { cameraReaderType='business_card'; state.view='camera-reader'; renderApp(); };
   document.getElementById('toolAlignment').onclick = () => { state.view='alignment'; renderApp(); };
 }
 
 let cameraReaderType = 'equipment_plate', cameraReaderFile = null, cameraReaderDraft = null;
 const readerConfigs = {
-  equipment_plate: { title:'Equipment Plate Scanner', noun:'plate', fields:[['manufacturer','Manufacturer'],['model','Model'],['serial_number','Serial Number'],['year','Year'],['equipment_type','Equipment Type'],['specifications','Other Specifications']] },
-  gauge: { title:'Gauge & Instrument Reader', noun:'instrument', fields:[['instrument_type','Instrument Type'],['reading','Displayed Reading'],['unit','Unit'],['equipment_name','Equipment Name or Number'],['observed_at','Displayed Date or Time'],['notes','Reading Notes']] },
+  equipment_plate: { title:'Equipment Plate Scanner', noun:'plate', captureLabel:'Plate', readLabel:'Read Plate', fields:[['manufacturer','Manufacturer'],['model','Model'],['serial_number','Serial Number'],['year','Year'],['equipment_type','Equipment Type'],['specifications','Other Specifications']] },
+  gauge: { title:'Gauge & Instrument Reader', noun:'instrument', captureLabel:'Instrument', readLabel:'Read Instrument', fields:[['instrument_type','Instrument Type'],['reading','Displayed Reading'],['unit','Unit'],['equipment_name','Equipment Name or Number'],['observed_at','Displayed Date or Time'],['notes','Reading Notes']] },
+  plan_sketch: { title:'Plan or Sketch Scanner', noun:'plan or sketch', captureLabel:'Plan or Sketch', readLabel:'Read Plan or Sketch', fields:[['project_name','Project Name'],['site_address','Site Address'],['sheet_title','Sheet Title'],['sheet_number','Sheet Number'],['revision_date','Revision Date'],['scale','Printed Scale'],['visible_dimensions','Visible Dimensions','textarea'],['visible_notes','Visible Notes','textarea']] },
+  material_label: { title:'Material Label Scanner', noun:'material label', captureLabel:'Material Label', readLabel:'Read Label', fields:[['product_name','Product Name'],['manufacturer','Manufacturer'],['product_code','Product Code'],['lot_number','Lot Number'],['quantity','Quantity'],['manufactured_date','Manufactured Date'],['expiration_date','Expiration Date'],['instructions','Visible Instructions','textarea'],['warnings','Visible Warnings','textarea']] },
+  business_card: { title:'Business Card Scanner', noun:'business card', captureLabel:'Business Card', readLabel:'Read Business Card', fields:[['name','Name'],['job_title','Job Title'],['company','Company'],['phone','Phone'],['email','Email'],['address','Address'],['website','Website']] },
 };
 function renderCameraReader() {
   const cfg = readerConfigs[cameraReaderType]; const body = document.getElementById('body');
@@ -395,11 +409,11 @@ function renderCameraReader() {
   body.innerHTML = `
     <button class="backlink" id="readerBack">‹ Back to Camera Tools</button>
     <div class="workflow-intro"><strong>${cfg.title}</strong><span>Fill the frame with the ${cfg.noun}, keep the text or display sharp, and avoid glare. Review the reading before saving.</span></div>
-    <section class="ticket-scan-panel"><div class="formhead">1. Photograph the ${cfg.noun === 'plate' ? 'Plate' : 'Instrument'}</div>
+    <section class="ticket-scan-panel"><div class="formhead">1. Photograph the ${cfg.captureLabel}</div>
       <div class="row"><button class="btn" id="readerTake">Take Photo</button><button class="btn secondary" id="readerChoose">Choose Existing Photo</button></div>
       <input type="file" accept="image/*" capture="environment" id="readerCam" style="display:none"><input type="file" accept="image/*" id="readerLib" style="display:none">
       <div class="photo-box" id="readerPreviewBox" style="display:none;margin-top:12px"><img id="readerPreview" alt="Source photo"></div>
-      <button class="btn" id="readerRead" style="margin-top:12px" disabled>Read ${cfg.noun === 'plate' ? 'Plate' : 'Instrument'}</button><div class="status" id="readerStatus"></div>
+      <button class="btn" id="readerRead" style="margin-top:12px" disabled>${cfg.readLabel}</button><div class="status" id="readerStatus"></div>
     </section><div id="readerReview"></div><div class="formhead" style="margin-top:28px">Saved ${cfg.title.replace('Scanner','Records').replace('Reader','Readings')}</div><div id="readerSaved"><p class="status">Loading...</p></div>`;
   document.getElementById('readerBack').onclick = () => { state.view='camera-tools'; renderApp(); };
   document.getElementById('readerTake').onclick = () => document.getElementById('readerCam').click();
@@ -416,7 +430,7 @@ async function scanCameraReader() {
 }
 function renderCameraReaderReview() {
   const cfg=readerConfigs[cameraReaderType], f=cameraReaderDraft.fields||{}, box=document.getElementById('readerReview');
-  box.innerHTML=`<section class="ticket-review-panel"><div class="formhead">2. Review and Save</div><div class="status">AI confidence: <strong>${esc(cameraReaderDraft.confidence||'low')}</strong>. The photograph is the source of truth.</div><div class="ticket-form-grid">${cfg.fields.map(([key,label])=>`<div>${ticketField('cr_'+key,label,f[key])}</div>`).join('')}</div><label for="cr_title">Record Name</label><input id="cr_title" value="${esc(cameraReaderDraft.title||'')}"><button class="btn" id="readerSave">Save Record</button></section>`;
+  box.innerHTML=`<section class="ticket-review-panel"><div class="formhead">2. Review and Save</div><div class="status">AI confidence: <strong>${esc(cameraReaderDraft.confidence||'low')}</strong>. The photograph is the source of truth.</div><div class="ticket-form-grid">${cfg.fields.map(([key,label,kind])=>`<div>${kind==='textarea'?`<label for="cr_${key}">${label}</label><textarea id="cr_${key}">${esc(f[key]||'')}</textarea>`:ticketField('cr_'+key,label,f[key])}</div>`).join('')}</div><label for="cr_title">Record Name</label><input id="cr_title" value="${esc(cameraReaderDraft.title||'')}"><button class="btn" id="readerSave">Save Record</button></section>`;
   document.getElementById('readerSave').onclick=saveCameraReading;
 }
 async function saveCameraReading() {

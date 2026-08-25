@@ -1,4 +1,4 @@
-const CACHE = 'efc-shell-v54';
+const CACHE = 'efc-shell-v55';
 const SHELL = ['/', '/index.html', '/app.js', '/styles.css', '/manifest.json', '/logo.svg', '/logo-animated.svg', '/asphalt-pro-logo-animated.svg', '/icon.svg', '/zukor-logo.svg', '/send.js', '/vendor/html2canvas.min.js'];
 
 self.addEventListener('install', (e) => {

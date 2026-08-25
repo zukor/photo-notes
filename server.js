@@ -855,20 +855,23 @@ app.get('/api/asphalt-tickets', requireAuth, async (req, res) => {
   } catch (err) { console.error('[ticket.list]', err); res.status(500).json({ error: 'ticket list failed' }); }
 });
 
-// ---- Camera readers: equipment plates and gauges (Asphalt Pro) ----
-const CAMERA_READER_TYPES = ['equipment_plate', 'gauge'];
+// ---- Camera readers and scanners (Asphalt Pro) ----
+const CAMERA_READER_TYPES = ['equipment_plate', 'gauge', 'plan_sketch', 'material_label', 'business_card'];
 function cameraReaderFields(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
   const out = {};
   for (const [key, val] of Object.entries(value)) {
     if (!/^[a-z_]{1,40}$/.test(key)) continue;
-    out[key] = ticketText(val, 300);
+    out[key] = ticketText(val, 2000);
   }
   return out;
 }
 function cameraReaderPrompt(type) {
   if (type === 'equipment_plate') return `You are reading a photographed equipment identification or data plate for an asphalt contractor. Extract only information visibly printed on the plate. Never guess. Respond with ONLY JSON using exactly these keys: {"manufacturer":string|null,"model":string|null,"serial_number":string|null,"year":string|null,"equipment_type":string|null,"specifications":string|null,"confidence":"high"|"medium"|"low"}. Preserve identifiers exactly. Put other useful rated capacities, voltage, power, weight, or engine information in specifications as a concise line. Use null when absent or unreadable.`;
-  return `You are reading a photographed gauge, meter, scale display, hour meter, fuel display, thermometer, or other job-site instrument. Extract only what is visibly shown. Never guess. Respond with ONLY JSON using exactly these keys: {"instrument_type":string|null,"reading":string|null,"unit":string|null,"equipment_name":string|null,"observed_at":string|null,"notes":string|null,"confidence":"high"|"medium"|"low"}. Preserve the displayed value and decimal point exactly. Describe ambiguity in notes. Use null when absent or unreadable.`;
+  if (type === 'gauge') return `You are reading a photographed gauge, meter, scale display, hour meter, fuel display, thermometer, or other job-site instrument. Extract only what is visibly shown. Never guess. Respond with ONLY JSON using exactly these keys: {"instrument_type":string|null,"reading":string|null,"unit":string|null,"equipment_name":string|null,"observed_at":string|null,"notes":string|null,"confidence":"high"|"medium"|"low"}. Preserve the displayed value and decimal point exactly. Describe ambiguity in notes. Use null when absent or unreadable.`;
+  if (type === 'material_label') return `You are reading a photographed construction-material container label. Extract only information visibly printed on the label. Never infer missing product data. Respond with ONLY JSON using exactly these keys: {"product_name":string|null,"manufacturer":string|null,"product_code":string|null,"lot_number":string|null,"quantity":string|null,"manufactured_date":string|null,"expiration_date":string|null,"instructions":string|null,"warnings":string|null,"confidence":"high"|"medium"|"low"}. Preserve codes, dates, quantities, and units exactly. Summarize only visible instructions and warnings. Use null when absent or unreadable.`;
+  if (type === 'business_card') return `You are reading a photographed business card. Extract only information visibly printed on the card. Never guess or supplement it. Respond with ONLY JSON using exactly these keys: {"name":string|null,"job_title":string|null,"company":string|null,"phone":string|null,"email":string|null,"address":string|null,"website":string|null,"confidence":"high"|"medium"|"low"}. Preserve spelling, phone extensions, and email addresses exactly. Use null when absent or unreadable.`;
+  return `You are reading a photographed construction plan, marked-up plan, or field sketch. Extract only text and dimensions clearly visible in the image. Do not calculate, infer, or invent measurements. Respond with ONLY JSON using exactly these keys: {"project_name":string|null,"site_address":string|null,"sheet_title":string|null,"sheet_number":string|null,"revision_date":string|null,"scale":string|null,"visible_dimensions":string|null,"visible_notes":string|null,"confidence":"high"|"medium"|"low"}. Preserve dimension values and units exactly. visible_notes should be a concise transcription of legible handwritten or printed work notes. Use null for anything absent, cut off, or unreadable.`;
 }
 
 app.post('/api/camera-readings/scan', requireAuth, upload.single('photo'), async (req, res) => {
@@ -887,9 +890,12 @@ app.post('/api/camera-readings/scan', requireAuth, upload.single('photo'), async
     const fields = cameraReaderFields(ai);
     delete fields.confidence;
     const confidence = ai && ['high','medium','low'].includes(ai.confidence) ? ai.confidence : 'low';
-    const title = type === 'equipment_plate'
-      ? ticketText([fields.manufacturer, fields.model].filter(Boolean).join(' '))
-      : ticketText([fields.instrument_type, fields.reading, fields.unit].filter(Boolean).join(' '));
+    const titleParts = {
+      equipment_plate:[fields.manufacturer, fields.model], gauge:[fields.instrument_type, fields.reading, fields.unit],
+      material_label:[fields.manufacturer, fields.product_name], business_card:[fields.name, fields.company],
+      plan_sketch:[fields.project_name, fields.sheet_title, fields.sheet_number],
+    }[type] || [];
+    const title = ticketText(titleParts.filter(Boolean).join(' '));
     const row = (await pool.query(
       `INSERT INTO camera_readings (user_id, reading_type, photo_path, title, fields, confidence, raw_ai)
        VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
