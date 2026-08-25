@@ -690,7 +690,7 @@ app.get('/api/config', requireAuth, (req, res) => {
 });
 
 // ---- Measure from photo (Pro): estimate dimensions from a ruler reference ----
-// Accepts a photo upload during capture (before the record is saved) plus the
+// Accepts either a temporary photo upload or the ID of a saved capture plus the
 // reference object and its exact known length. Returns AI-estimated dimensions
 // as JSON. Never throws to the client: a soft error lets the record save
 // without measurements.
@@ -698,7 +698,15 @@ app.post('/api/measure', requireAuth, upload.single('photo'), async (req, res) =
   const cleanup = () => { if (req.file && req.file.path) { try { fs.unlinkSync(req.file.path); } catch (e) {} } };
   try {
     if (await currentPlan(req.user.id) !== 'pro') { cleanup(); return res.status(403).json({ error: 'pro only' }); }
-    if (!req.file) return res.status(400).json({ error: 'photo required' });
+    let photoPath = req.file && req.file.path;
+    if (!photoPath) {
+      const captureId = parseInt((req.body && req.body.capture_id) || '', 10);
+      if (Number.isInteger(captureId)) {
+        const row = (await pool.query(`SELECT photo_path FROM captures WHERE id=$1 AND user_id=$2`, [captureId, req.user.id])).rows[0];
+        photoPath = row && localPhoto(row.photo_path);
+      }
+    }
+    if (!photoPath) return res.status(400).json({ error: 'photo required' });
     const refType = String((req.body && req.body.reference_type) || 'ruler_12in');
     const refLenIn = Number((req.body && req.body.reference_length_in)) || (refType === 'tape_25ft' ? 300 : refType === 'ruler_12in' ? 12 : 0);
     const refLabel = refType === 'ruler_12in' ? 'a standard 12-inch ruler'
@@ -710,7 +718,7 @@ Locate the reference object, use its known length to establish the image scale, 
 Respond with ONLY a JSON object, no prose, no markdown, with exactly these keys:
 {"length_in": number, "width_in": number, "depth_in": number or null, "shape": "rectangle"|"circle"|"irregular", "confidence": "high"|"medium"|"low", "warning": string or null}
 Use "warning" to flag problems such as "no reference object found", "ruler appears angled", or "photo taken at an oblique angle". If you cannot find the reference object, set confidence to "low" and put "no reference object found" in warning.`;
-    const ai = await visionJSON(req.file.path, prompt, { maxTokens: 400 });
+    const ai = await visionJSON(photoPath, prompt, { maxTokens: 400 });
     cleanup();
     if (!ai) return res.status(200).json({ ok: false, error: 'measurement_unavailable' });
     // normalize
@@ -908,6 +916,30 @@ app.post('/api/captures/:id', requireAuth, async (req, res) => {
     if (b.overlays !== undefined) {
       const ov = Array.isArray(b.overlays) ? b.overlays.slice(0, 20) : null; // cap to keep JSON small
       vals.push(ov ? JSON.stringify(ov) : null); sets.push(`overlays = $${vals.length}`);
+    }
+    const hasDims = ['dim_length','dim_length_unit','dim_width','dim_width_unit','dim_depth','dim_shape','dim_area_sqft','dim_source'].some(k => Object.prototype.hasOwnProperty.call(b, k));
+    if (hasDims) {
+      if (await currentPlan(req.user.id) !== 'pro') return res.status(403).json({ error: 'pro only' });
+      const lenUnit = b.dim_length_unit === 'in' ? 'in' : 'ft';
+      const widUnit = b.dim_width_unit === 'in' ? 'in' : 'ft';
+      const lenIn = toInches(b.dim_length, lenUnit);
+      const widIn = toInches(b.dim_width, widUnit);
+      const depth = b.dim_depth !== '' && b.dim_depth != null && Number.isFinite(Number(b.dim_depth)) ? Number(b.dim_depth) : null;
+      const shape = ['rectangle','circle','irregular'].includes(b.dim_shape) ? b.dim_shape : 'rectangle';
+      const override = b.dim_area_sqft !== '' && b.dim_area_sqft != null && Number.isFinite(Number(b.dim_area_sqft)) ? Number(b.dim_area_sqft) : null;
+      const area = override != null ? override : computeAreaSqft(lenIn, widIn, shape);
+      const source = ['photo_ai','voice','manual'].includes(b.dim_source) ? b.dim_source : 'manual';
+      const confidence = ['high','medium','low'].includes(b.dim_confidence) ? b.dim_confidence : null;
+      let ai = null; if (b.dim_ai) { try { ai = typeof b.dim_ai === 'string' ? JSON.parse(b.dim_ai) : b.dim_ai; } catch (e) {} }
+      const confirmed = source === 'photo_ai' && confidence === 'low' ? b.dim_confirmed === true || String(b.dim_confirmed) === 'true' : true;
+      for (const [column, value] of [
+        ['dim_length_in',lenIn], ['dim_length_unit',lenIn == null ? null : lenUnit],
+        ['dim_width_in',widIn], ['dim_width_unit',widIn == null ? null : widUnit],
+        ['dim_depth_in',depth], ['dim_shape',(lenIn != null || widIn != null || area != null) ? shape : null],
+        ['dim_area_sqft',area], ['dim_source',source], ['dim_confidence',confidence],
+        ['dim_ai',ai ? JSON.stringify(ai) : null], ['dim_confirmed',confirmed],
+      ]) { vals.push(value); sets.push(`${column} = $${vals.length}`); }
+      logEvent(req.user.id, source === 'photo_ai' ? 'measure' : 'dimensions_edit', { capture_id:id, source, confidence, confirmed });
     }
     if (!sets.length) return res.status(400).json({ error: 'nothing to update' });
     vals.push(id);

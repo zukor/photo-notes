@@ -216,8 +216,6 @@ function renderCapture() {
     <button type="button" class="btn" id="dictate" style="margin-bottom:8px">Record Note</button>
     <textarea id="note" placeholder="Type what you're looking at, or tap Record Note"></textarea>
 
-    ${isProClient() ? dimBlockHtml() : ''}
-
     <label>Select Topic</label>
     <div class="pill-group" id="areas">${areaChips()}</div>
     <div class="row compact" style="margin-top:10px">
@@ -249,9 +247,6 @@ function renderCapture() {
   // preserve any typed note across re-renders
   if (state._note) document.getElementById('note').value = state._note;
   document.getElementById('note').addEventListener('input', e => state._note = e.target.value);
-
-  // Pro-only dimension fields
-  if (isProClient()) wireDims();
 
   // if a photo is already chosen (e.g. re-render after picking an area), keep it and its location visible
   if (state.photoFile) {
@@ -360,8 +355,7 @@ function toggleDictation() {
 }
 
 // ================= Pro dimension fields =================
-// dims state is kept on state._dims so it survives renderCapture re-renders
-// (e.g. after choosing a topic), just like state._note.
+// Dimension state is used by the saved-capture measurement editor in Edit.
 function freshDims() {
   return {
     length: '', lengthUnit: 'ft', width: '', widthUnit: 'ft', depth: '', shape: 'rectangle', area: '',
@@ -441,7 +435,7 @@ function wireDims() {
 
 // ---- Measure from photo (Pro) ----
 function openMeasurePanel() {
-  if (!state.photoFile) { toast('Take or choose a photo first'); return; }
+  if (!state.photoFile && !state._editMeasureCapture) { toast('Choose a saved photo first'); return; }
   const panel = document.getElementById('measurePanel');
   if (!panel) return;
   panel.innerHTML = `
@@ -492,7 +486,8 @@ async function runMeasure(ref) {
   if (btn) { btn.disabled = true; btn.textContent = 'Measuring...'; }
   try {
     const fd = new FormData();
-    fd.append('photo', state.photoFile);
+    if (state.photoFile) fd.append('photo', state.photoFile);
+    else if (state._editMeasureCapture) fd.append('capture_id', String(state._editMeasureCapture.id));
     fd.append('reference_type', ref);
     fd.append('reference_length_in', String(refLenIn));
     const r = await api('/api/measure', { method: 'POST', body: fd });
@@ -538,7 +533,7 @@ function applyMeasurement(d, ref) {
     confirmed: (d.confidence === 'high' || d.confidence === 'medium'),
   };
   // re-render the dim inputs so the suggested highlight + values show
-  if (state.view === 'capture') { renderCapture(); }
+  if (state._editMeasureCapture) renderSavedDimsEditor(state._editMeasureCapture);
 }
 
 function renderMeasureResult() {
@@ -671,6 +666,65 @@ function collectDims() {
   };
 }
 
+function dimsFromCapture(c) {
+  const display = (valueIn, unit) => {
+    const value = Number(valueIn);
+    if (!isFinite(value) || value <= 0) return '';
+    return trimNumC(unit === 'in' ? value : value / 12);
+  };
+  const d = freshDims();
+  d.lengthUnit = c.dim_length_unit === 'in' ? 'in' : 'ft';
+  d.widthUnit = c.dim_width_unit === 'in' ? 'in' : 'ft';
+  d.length = display(c.dim_length_in, d.lengthUnit);
+  d.width = display(c.dim_width_in, d.widthUnit);
+  d.depth = c.dim_depth_in == null ? '' : trimNumC(Number(c.dim_depth_in));
+  d.shape = ['rectangle', 'circle', 'irregular'].includes(c.dim_shape) ? c.dim_shape : 'rectangle';
+  d.area = c.dim_area_sqft == null ? '' : trimNumC(Number(c.dim_area_sqft));
+  d.areaOverridden = d.area !== '';
+  return d;
+}
+
+function renderSavedDimsEditor(c) {
+  state._editMeasureCapture = c;
+  const body = document.getElementById('body');
+  body.className = 'workflow-edit';
+  body.innerHTML = `
+    <button class="backlink" id="dimsBack">← Back to Edit</button>
+    <div class="workflow-intro"><strong>Measure this photo</strong><span>Use AI with a visible reference object, or enter the dimensions yourself.</span></div>
+    ${c.photo_path ? `<div class="photo-box"><img src="${photoSrc(c.photo_path)}" alt="capture" style="display:block" /></div>` : ''}
+    ${dimBlockHtml()}
+    <button class="btn" id="saveDims">Save Measurements</button>`;
+  wireDims();
+  document.getElementById('dimsBack').onclick = () => { state._editMeasureCapture = null; state._dims = null; state._measure = null; renderEdit(); };
+  document.getElementById('saveDims').onclick = saveSavedDims;
+}
+
+async function saveSavedDims() {
+  const c = state._editMeasureCapture;
+  if (!c) return;
+  const payload = collectDims();
+  if (state._measure) {
+    payload.dim_source = 'photo_ai';
+    payload.dim_confidence = state._measure.confidence || 'low';
+    payload.dim_confirmed = !!state._measure.confirmed;
+    payload.measure_reference = state._measure.reference || '';
+    payload.dim_ai = state._measure.raw || null;
+  } else {
+    payload.dim_source = 'manual';
+    payload.dim_confirmed = true;
+  }
+  const btn = document.getElementById('saveDims');
+  btn.disabled = true; btn.textContent = 'Saving...';
+  const r = await api(`/api/captures/${c.id}`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
+  if (r.ok) {
+    toast('Measurements saved');
+    state._editMeasureCapture = null; state._dims = null; state._measure = null;
+    renderEdit();
+  } else {
+    btn.disabled = false; btn.textContent = 'Save Measurements'; toast('Measurements could not be saved');
+  }
+}
+
 // Read-only formatting of stored dims for saved cards (mirrors server fmtDims).
 function trimNumC(n) { const r = Math.round(n * 100) / 100; return String(r); }
 function fmtDimsClient(c) {
@@ -769,16 +823,6 @@ function saveCapture() {
   const hadCoords = !!state.location;
   if (state.location) { fd.append('latitude', state.location.lat); fd.append('longitude', state.location.lng); }
   if (state.address) fd.append('address', state.address);
-  if (isProClient()) {
-    const dm = collectDims(); Object.keys(dm).forEach(k => fd.append(k, dm[k]));
-    if (state._measure) {
-      fd.append('dim_source', 'photo_ai');
-      fd.append('dim_confidence', state._measure.confidence || 'low');
-      fd.append('dim_confirmed', String(!!state._measure.confirmed));
-      fd.append('measure_reference', state._measure.reference || '');
-      if (state._measure.raw) { try { fd.append('dim_ai', JSON.stringify(state._measure.raw)); } catch (e) {} }
-    }
-  }
   // Commit instantly: clear the form and hand the upload to the background.
   state.photoFile = null; state._note = ''; state.location = null; state.address = null;
   state._dims = freshDims(); state._measure = null;
@@ -908,7 +952,7 @@ async function renderEdit() {
   const body = document.getElementById('body');
   body.className = 'workflow-edit';
   body.innerHTML = `
-    <div class="workflow-intro"><strong>Edit your material</strong><span>Improve photos, add stamps and captions, correct notes, or remove unwanted captures.</span></div>
+    <div class="workflow-intro"><strong>Edit your material</strong><span>Measure photos, add stamps and captions, correct notes, or remove unwanted captures.</span></div>
     <label>Filter by Topic</label>
     <select id="filter"><option value="">All Topics</option>${state.areas.map(a => `<option value="${esc(a)}">${esc(a)}</option>`).join('')}</select>
     <div class="row" style="margin-top:10px"><button class="btn secondary" id="selall">Select All</button><button class="btn secondary" id="selnone">Clear</button></div>
@@ -1186,6 +1230,8 @@ function captureCardHtml(c) {
         ? `<div class="defectrow" style="margin:6px 0">${defectBadgeHtml(c)} <button class="editlink overridebtn" data-id="${c.id}">Change</button></div>`
         : `<div class="defectrow" style="margin:6px 0"><button class="btn secondary slim classifybtn" data-id="${c.id}">Classify (AI)</button></div>`)
     : '';
+  const measureRow = isProClient() && state.view === 'edit' && c.photo_path
+    ? `<button class="btn secondary slim editdims" data-id="${c.id}">Measurements</button>` : '';
   return `<div class="card">
     <label style="display:flex;align-items:center;gap:8px;font-weight:bold;margin-bottom:8px;text-transform:none;letter-spacing:0;font-size:15px">
       <input type="checkbox" class="capchk" value="${c.id}" style="width:20px;height:20px"> Select
@@ -1197,6 +1243,7 @@ function captureCardHtml(c) {
     <div class="meta">${kind}${tags}</div>
     ${classifyRow}
     ${dims ? `<div class="meta"><strong>Dimensions:</strong> ${esc(dims)}</div>` : ''}
+    ${measureRow}
     ${c.photo_path ? `<button class="btn secondary slim stampbtn" data-id="${c.id}">Add Stamps to Photo${(c.overlays && c.overlays.length) ? ' (' + c.overlays.length + ')' : ''}</button>` : ''}
     ${c.photo_path ? `<button class="btn secondary slim cropbtn" data-id="${c.id}">Crop Photo</button>` : ''}
     ${c.photo_original_path ? `<button class="btn secondary slim restorebtn" data-id="${c.id}">Restore Original Photo</button>` : ''}
@@ -1221,6 +1268,7 @@ function pairCardHtml(before, after) {
       <div class="rotaterow">${rotateButtons(c.id)}</div>
       ${badge ? `<div style="margin:4px 0">${badge}</div>` : ''}
       ${dims ? `<div class="meta"><strong>Dimensions:</strong> ${esc(dims)}</div>` : ''}
+      ${isProClient() && state.view === 'edit' && c.photo_path ? `<button class="btn secondary slim editdims" data-id="${c.id}">Measurements</button>` : ''}
       <div class="meta">${esc(c.note || '(no note)')}</div>
     </div>`;
   };
@@ -1235,6 +1283,10 @@ function wireCards(cards, rows) {
   cards.querySelectorAll('.capchk').forEach(c => c.onchange = () => { if (c.checked) state.selectedIds.add(String(c.value)); else state.selectedIds.delete(String(c.value)); });
   wireRotate(cards);
   cards.querySelectorAll('.editnote').forEach(b => b.onclick = () => startEditNote(parseInt(b.getAttribute('data-id'), 10), rows));
+  cards.querySelectorAll('.editdims').forEach(b => b.onclick = () => {
+    const c = rows.find(r => r.id === parseInt(b.getAttribute('data-id'), 10));
+    if (c) { state._dims = dimsFromCapture(c); state._measure = null; renderSavedDimsEditor(c); }
+  });
   cards.querySelectorAll('.classifybtn').forEach(b => b.onclick = async () => {
     b.disabled = true; b.textContent = 'Classifying...';
     const d = await classifyOne(parseInt(b.getAttribute('data-id'), 10));
