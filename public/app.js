@@ -1009,7 +1009,7 @@ async function renderEdit() {
   const body = document.getElementById('body');
   body.className = 'workflow-edit';
   body.innerHTML = `
-    <div class="workflow-intro"><strong>Edit your material</strong><span>Measure photos, add stamps and captions, correct notes, or remove unwanted captures.</span></div>
+    <div class="workflow-intro"><strong>Edit your material</strong><span>Measure or mark up photos, correct notes, or remove unwanted captures.</span></div>
     <label>Filter by Topic</label>
     <select id="filter"><option value="">All Topics</option>${state.areas.map(a => `<option value="${esc(a)}">${esc(a)}</option>`).join('')}</select>
     <div class="row" style="margin-top:10px"><button class="btn secondary" id="selall">Select All</button><button class="btn secondary" id="selnone">Clear</button></div>
@@ -1294,7 +1294,7 @@ function captureCardHtml(c) {
     ${classifyRow}
     ${dims ? `<div class="meta"><strong>Dimensions:</strong> ${esc(dims)}</div>` : ''}
     ${measureRow}
-    ${c.photo_path ? `<button class="btn secondary slim stampbtn" data-id="${c.id}">Add Stamps to Photo${(c.overlays && c.overlays.length) ? ' (' + c.overlays.length + ')' : ''}</button>` : ''}
+    ${c.photo_path ? `<button class="btn secondary slim stampbtn" data-id="${c.id}">Mark Up Photo${(c.overlays && c.overlays.length) ? ' (' + c.overlays.length + ')' : ''}</button>` : ''}
     ${c.photo_path ? `<button class="btn secondary slim cropbtn" data-id="${c.id}">Crop Photo</button>` : ''}
     ${c.photo_original_path ? `<button class="btn secondary slim restorebtn" data-id="${c.id}">Restore Original Photo</button>` : ''}
     <div class="notewrap" data-id="${c.id}">
@@ -1389,8 +1389,8 @@ function renderStampEditor(c) {
   }
   body.innerHTML = `
     <button class="backlink" id="stampBack">‹ Back to Edit</button>
-    <div class="formhead">Add Stamps to Photo</div>
-    <div class="status">Tap Add, then drag each item on the photo or use a corner button. Style it below.</div>
+    <div class="formhead">Mark Up Photo</div>
+    <div class="status">Add labels, text, boxes, or arrows. Drag each item where you want it, then adjust its appearance below.</div>
     <div id="stampStage" style="position:relative;display:inline-block;max-width:100%;border:1px solid #000;border-radius:8px;overflow:hidden;touch-action:none">
       <img id="stampImg" src="${photoSrc(c.photo_path)}" alt="photo" style="display:block;max-width:100%;height:auto" />
     </div>
@@ -1401,9 +1401,10 @@ function renderStampEditor(c) {
     <div class="status" style="margin-top:6px">Topic and Defect are available after they have been assigned to this photo.</div>
     <div id="stampCtl"></div>
     <div class="row" style="margin-top:14px">
-      <button class="btn" id="stampSave">Save Stamps</button>
-      <button class="btn secondary" id="stampCopy">Save Stamped Copy</button>
+      <button class="btn" id="stampSave">Save Changes</button>
+      <button class="btn secondary" id="stampCopy">Download Marked Photo</button>
     </div>
+    <div class="status" style="margin-top:8px"><strong>Save Changes</strong> keeps the markings with this photo in Photo Notes. <strong>Download Marked Photo</strong> saves a separate JPEG with the markings permanently visible.</div>
     <button class="backlink" id="stampBackBottom" style="margin-top:18px">‹ Back to Edit</button>`;
   const backToEdit = () => { state.view = 'edit'; renderEdit(); };
   document.getElementById('stampBack').onclick = backToEdit;
@@ -1595,12 +1596,12 @@ async function saveOverlays() {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ overlays: editorOverlays }),
   });
-  btn.disabled = false; btn.textContent = 'Save Stamps';
-  if (r.ok) { editorCapture.overlays = editorOverlays; toast('Stamps saved'); }
+  btn.disabled = false; btn.textContent = 'Save Changes';
+  if (r.ok) { editorCapture.overlays = editorOverlays; toast('Changes saved'); }
   else toast('Save failed');
 }
 async function saveStampedCopy() {
-  const btn = document.getElementById('stampCopy'); btn.disabled = true; btn.textContent = 'Building...';
+  const btn = document.getElementById('stampCopy'); btn.disabled = true; btn.textContent = 'Preparing Download...';
   // save first so the server has the latest overlays
   await api(`/api/captures/${editorCapture.id}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ overlays: editorOverlays }) });
   editorCapture.overlays = editorOverlays;
@@ -1610,9 +1611,9 @@ async function saveStampedCopy() {
     const blob = await r.blob(); const url = URL.createObjectURL(blob);
     const a = document.createElement('a'); a.href = url; a.download = `photo-${editorCapture.id}-stamped.jpg`;
     document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 1500);
-    toast('Stamped copy ready');
-  } catch (e) { toast('Could not build stamped copy'); }
-  finally { btn.disabled = false; btn.textContent = 'Save Stamped Copy'; }
+    toast('Marked photo downloaded');
+  } catch (e) { toast('Could not download marked photo'); }
+  finally { btn.disabled = false; btn.textContent = 'Download Marked Photo'; }
 }
 
 // ================= Photo crop editor =================
