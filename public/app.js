@@ -265,6 +265,7 @@ function renderCapture() {
 
 function onPhotoChosen(file) {
   state.photoFile = file;
+  state._locationPromise = null;
   const box = document.getElementById('previewBox');
   document.getElementById('preview').src = URL.createObjectURL(file);
   box.style.display = 'block';
@@ -273,12 +274,17 @@ function onPhotoChosen(file) {
 }
 
 function acquireLocation() {
+  if (state._locationPromise) return state._locationPromise;
   const gps = document.getElementById('gps');
   const addr = document.getElementById('addr');
   if (gps) gps.textContent = 'Getting location...';
   if (addr) addr.textContent = '';
-  if (!navigator.geolocation) { if (gps) gps.textContent = 'Location not available on this device.'; return; }
-  navigator.geolocation.getCurrentPosition(
+  if (!navigator.geolocation) {
+    if (gps) gps.textContent = 'Location not available on this device.';
+    state._locationPromise = Promise.resolve();
+    return state._locationPromise;
+  }
+  state._locationPromise = new Promise(resolve => navigator.geolocation.getCurrentPosition(
     async (pos) => {
       state.location = { lat: pos.coords.latitude, lng: pos.coords.longitude };
       if (gps) gps.textContent = state.location.lat.toFixed(5) + ', ' + state.location.lng.toFixed(5);
@@ -288,10 +294,12 @@ function acquireLocation() {
         if (r.ok) { const d = await r.json(); state.address = d.address || null; if (addr) addr.textContent = d.address || 'Address not found'; }
         else if (addr) addr.textContent = 'Address lookup failed';
       } catch (e) { if (addr) addr.textContent = 'Address lookup failed'; }
+      resolve();
     },
-    (err) => { if (gps) gps.textContent = 'Location blocked. Allow location for this site to tag photos.'; },
+    (err) => { if (gps) gps.textContent = 'Location blocked. Allow location for this site to tag photos.'; resolve(); },
     { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-  );
+  ));
+  return state._locationPromise;
 }
 
 function cleanupDictation() {
@@ -811,9 +819,14 @@ async function drainQueue() {
   } finally { bgDraining = false; }
 }
 
-function saveCapture() {
+async function saveCapture() {
   const note = document.getElementById('note').value.trim();
   if (!state.photoFile && !note) { toast('Take a photo or add a note first'); return; }
+  const saveBtn = document.getElementById('save');
+  if (state.photoFile && state._locationPromise) {
+    saveBtn.disabled = true; saveBtn.textContent = 'Getting Full Address...';
+    await state._locationPromise;
+  }
   // Build the payload from the CURRENT state before we clear the form.
   const fd = new FormData();
   if (state.photoFile) fd.append('photo', state.photoFile);
@@ -824,7 +837,7 @@ function saveCapture() {
   if (state.location) { fd.append('latitude', state.location.lat); fd.append('longitude', state.location.lng); }
   if (state.address) fd.append('address', state.address);
   // Commit instantly: clear the form and hand the upload to the background.
-  state.photoFile = null; state._note = ''; state.location = null; state.address = null;
+  state.photoFile = null; state._note = ''; state.location = null; state.address = null; state._locationPromise = null;
   state._dims = freshDims(); state._measure = null;
   renderCapture();
   toast('Saved');
@@ -877,35 +890,42 @@ async function renderList() {
       <option value="">All Topics</option>
       ${state.areas.map(a => `<option value="${esc(a)}">${esc(a)}</option>`).join('')}
     </select>
-    <div class="row" style="margin-top:10px">
+    <div class="organize-action-row">
       <button class="btn secondary" id="selall">Select All</button>
       <button class="btn secondary" id="selnone">Clear</button>
+      ${isProClient() ? `<button class="btn secondary" id="classifybatch">Classify Selected (AI)</button>` : ''}
     </div>
-    ${isProClient() ? `<button class="btn secondary slim" id="classifybatch" style="margin-top:8px">Classify Selected (AI)</button><div class="status" id="classifyprog"></div>
+    ${isProClient() ? `<div class="status" id="classifyprog"></div>
     <details class="pair-builder">
       <summary>Create Before/After Matching Pairs</summary>
       <p>Select the original photo and the completed-work photo, then create the pair. The older photo will be marked Before by default.</p>
       <button class="btn secondary slim" id="pairbtn">Create Pair From 2 Selected Photos</button>
     </details>` : ''}
 
-    <label>File Selected Under a Topic</label>
-    <div class="row compact">
-      <select id="bulktopic"><option value="">Choose Topic</option>${state.areas.map(a => `<option value="${esc(a)}">${esc(a)}</option>`).join('')}</select>
-      <button class="btn secondary" id="applytopic">Apply</button>
-    </div>
-    <div class="row compact" style="margin-top:8px">
-      <input id="organizenewtopic" type="text" placeholder="Create a new topic...">
-      <button class="btn secondary" id="createtopic">Create</button>
+    <div class="organize-form-grid">
+      <section class="organize-panel">
+        <label>File Selected Under a Topic</label>
+        <div class="row compact">
+          <select id="bulktopic"><option value="">Choose Topic</option>${state.areas.map(a => `<option value="${esc(a)}">${esc(a)}</option>`).join('')}</select>
+          <button class="btn secondary" id="applytopic">Apply</button>
+        </div>
+        <div class="row compact" style="margin-top:8px">
+          <input id="organizenewtopic" type="text" placeholder="Create a new topic...">
+          <button class="btn secondary" id="createtopic">Create</button>
+        </div>
+      </section>
+
+      <section class="organize-panel">
+        <label>Add Selected to a Document</label>
+        <div class="row compact">
+          <select id="groupsel" style="flex:1"><option value="">Choose Document</option></select>
+          <button class="btn secondary" id="addtogroup">Add</button>
+        </div>
+        <input id="newgroupname" type="text" placeholder="...or type a new document title" style="margin-top:8px" />
+      </section>
     </div>
 
-    <label style="margin-top:18px">Add Selected to a Document</label>
-    <div class="row compact">
-      <select id="groupsel" style="flex:1"><option value="">Choose Document</option></select>
-      <button class="btn secondary" id="addtogroup">Add</button>
-    </div>
-    <input id="newgroupname" type="text" placeholder="...or type a new document title" style="margin-top:8px" />
-
-    ${isProClient() ? `<button class="btn secondary slim" id="openmap">Open Job Site Map</button>` : ''}
+    ${isProClient() ? `<div class="organize-footer-actions"><button class="btn secondary" id="openmap">Open Job Site Map</button></div>` : ''}
 
     <div id="cards" style="margin-top:16px"></div>`;
   document.getElementById('filter').onchange = e => loadCards(e.target.value);
