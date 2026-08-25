@@ -62,6 +62,15 @@ function userInitials(user) {
 
 function photoSrc(p) { return p ? `${p}?v=${state.imgv}` : ''; }
 
+const US_STATE_ABBR = {
+  Alabama:'AL', Alaska:'AK', Arizona:'AZ', Arkansas:'AR', California:'CA', Colorado:'CO', Connecticut:'CT', Delaware:'DE', Florida:'FL', Georgia:'GA', Hawaii:'HI', Idaho:'ID', Illinois:'IL', Indiana:'IN', Iowa:'IA', Kansas:'KS', Kentucky:'KY', Louisiana:'LA', Maine:'ME', Maryland:'MD', Massachusetts:'MA', Michigan:'MI', Minnesota:'MN', Mississippi:'MS', Missouri:'MO', Montana:'MT', Nebraska:'NE', Nevada:'NV', 'New Hampshire':'NH', 'New Jersey':'NJ', 'New Mexico':'NM', 'New York':'NY', 'North Carolina':'NC', 'North Dakota':'ND', Ohio:'OH', Oklahoma:'OK', Oregon:'OR', Pennsylvania:'PA', 'Rhode Island':'RI', 'South Carolina':'SC', 'South Dakota':'SD', Tennessee:'TN', Texas:'TX', Utah:'UT', Vermont:'VT', Virginia:'VA', Washington:'WA', 'West Virginia':'WV', Wisconsin:'WI', Wyoming:'WY', 'District of Columbia':'DC'
+};
+function shareAddress(address) {
+  let value = String(address || '').trim();
+  for (const [name, abbr] of Object.entries(US_STATE_ABBR)) value = value.replace(new RegExp(`\\b${name}\\b`, 'g'), abbr);
+  return value;
+}
+
 function qualityBlock(idres, idfmt) {
   return `
     <details style="margin-top:8px">
@@ -2143,7 +2152,9 @@ async function shareSelectedPhotos() {
       const r = await fetch(c.photo_path, { credentials: 'same-origin' });
       if (r.ok) { const b = await r.blob(); files.push(new File([b], `photo-${c.id}.${b.type.includes('png') ? 'png' : 'jpg'}`, { type: b.type || 'image/jpeg' })); }
     }
-    const text = rows.map(c => [c.note, c.address, (c.area_tags || []).join(', ')].filter(Boolean).join('\n')).join('\n\n');
+    // A shared photo starts with the job-site address, followed by its note.
+    // Topics are organizational metadata and do not belong in the message.
+    const text = rows.map(c => [shareAddress(c.address), c.note].filter(Boolean).join('\n')).join('\n\n');
     if (navigator.share && files.length && (!navigator.canShare || navigator.canShare({ files }))) { await navigator.share({ title: 'Photo Notes', text, files }); return; }
     await deliverExport('share', null, true);
   } catch (e) { if (!(e && e.name === 'AbortError')) toast('Could not share photos'); }

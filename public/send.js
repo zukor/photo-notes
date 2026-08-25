@@ -22,16 +22,23 @@
   function q(id) { return document.getElementById(id); }
   function noteVal() { return q('note') ? q('note').value.trim() : ''; }
 
+  var stateAbbr = { Alabama:'AL', Alaska:'AK', Arizona:'AZ', Arkansas:'AR', California:'CA', Colorado:'CO', Connecticut:'CT', Delaware:'DE', Florida:'FL', Georgia:'GA', Hawaii:'HI', Idaho:'ID', Illinois:'IL', Indiana:'IN', Iowa:'IA', Kansas:'KS', Kentucky:'KY', Louisiana:'LA', Maine:'ME', Maryland:'MD', Massachusetts:'MA', Michigan:'MI', Minnesota:'MN', Mississippi:'MS', Missouri:'MO', Montana:'MT', Nebraska:'NE', Nevada:'NV', 'New Hampshire':'NH', 'New Jersey':'NJ', 'New Mexico':'NM', 'New York':'NY', 'North Carolina':'NC', 'North Dakota':'ND', Ohio:'OH', Oklahoma:'OK', Oregon:'OR', Pennsylvania:'PA', 'Rhode Island':'RI', 'South Carolina':'SC', 'South Dakota':'SD', Tennessee:'TN', Texas:'TX', Utah:'UT', Vermont:'VT', Virginia:'VA', Washington:'WA', 'West Virginia':'WV', Wisconsin:'WI', Wyoming:'WY', 'District of Columbia':'DC' };
+  function shortState(address) {
+    var value = String(address || '').trim();
+    Object.keys(stateAbbr).forEach(function (name) { value = value.replace(new RegExp('\\b' + name + '\\b', 'g'), stateAbbr[name]); });
+    return value;
+  }
+
   function caption() {
     var parts = [];
-    var n = noteVal(); if (n) parts.push(n);
     var addr = q('addr') ? q('addr').textContent.trim() : '';
     if (addr && addr.indexOf('...') === -1 && !/^(address not found|address lookup)/i.test(addr)) {
-      parts.push(addr);
+      parts.push(shortState(addr));
     } else {
       var g = q('gps') ? q('gps').textContent.trim() : '';
       if (g && /\d/.test(g) && !/blocked|not available|getting/i.test(g)) parts.push(g);
     }
+    var n = noteVal(); if (n) parts.push(n);
     parts.push(new Date().toLocaleString());
     return parts.join('\n');
   }
