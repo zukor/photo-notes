@@ -1907,9 +1907,9 @@ function overlayItemText(item, c) {
     case 'datetime': return fmtWhen(c.created_at);
     case 'address': return c.address || '';
     case 'gps': return (c.latitude != null && c.longitude != null) ? `${Number(c.latitude).toFixed(5)}, ${Number(c.longitude).toFixed(5)}` : '';
-    case 'topic': return (c.area_tags || []).join(', ');
+    case 'topic': return (c.area_tags || []).length ? `Topic: ${(c.area_tags || []).join(', ')}` : '';
     case 'dims': return fmtDims(c);
-    case 'defect': return fmtDefect(c);
+    case 'defect': return fmtDefect(c) ? `Defect: ${fmtDefect(c)}` : '';
     case 'copyright': return item.text || `© ${new Date().getFullYear()}`;
     default: return item.text || '';
   }
@@ -1929,6 +1929,18 @@ async function burnOverlays(buffer, width, height, overlays, c) {
       const rcol = /^#[0-9a-fA-F]{3,8}$/.test(it.color || '') ? it.color : '#ff0000';
       const sw = Math.max(1, Math.round((Number(it.thickness) || 0.6) / 100 * width));
       parts.push(`<rect x="${rx}" y="${ry}" width="${rw}" height="${rh}" fill="none" stroke="${rcol}" stroke-width="${sw}"/>`);
+      continue;
+    }
+    if (it.t === 'arrow') {
+      const ax = Math.round((Number(it.x) || 0) / 100 * width);
+      const ay = Math.round((Number(it.y) || 0) / 100 * height);
+      const aw = Math.max(1, Math.round((Number(it.w) || 10) / 100 * width));
+      const ah = Math.max(1, Math.round((Number(it.h) || 10) / 100 * height));
+      const acol = /^#[0-9a-fA-F]{3,8}$/.test(it.color || '') ? it.color : '#ff0000';
+      const sw = Math.max(1, Math.round((Number(it.thickness) || 0.8) / 100 * width));
+      const ends = { se:[ax,ay,ax+aw,ay+ah], nw:[ax+aw,ay+ah,ax,ay], ne:[ax,ay+ah,ax+aw,ay], sw:[ax+aw,ay,ax,ay+ah] }[it.dir] || [ax,ay,ax+aw,ay+ah];
+      const marker = `arrowhead${parts.length}`;
+      parts.push(`<defs><marker id="${marker}" markerWidth="5" markerHeight="5" refX="4" refY="2.5" orient="auto"><path d="M0,0 L5,2.5 L0,5 Z" fill="${acol}"/></marker></defs><line x1="${ends[0]}" y1="${ends[1]}" x2="${ends[2]}" y2="${ends[3]}" stroke="${acol}" stroke-width="${sw}" marker-end="url(#${marker})"/>`);
       continue;
     }
     const text = overlayItemText(it, c);

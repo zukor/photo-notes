@@ -1358,16 +1358,16 @@ function wireCards(cards, rows) {
 
 // ================= Photo overlays / stamps editor =================
 let editorCapture = null, editorOverlays = [], editorSel = -1;
-const OVERLAY_FIELD_LABELS = { datetime: 'Date / Time', address: 'Address', gps: 'GPS', copyright: 'Copyright', topic: 'Topic', dims: 'Dimensions', defect: 'Defect', custom: 'Custom Text', rect: 'Box / Rectangle' };
+const OVERLAY_FIELD_LABELS = { datetime: 'Date / Time', address: 'Address', gps: 'GPS', copyright: 'Copyright', topic: 'Topic', dims: 'Dimensions', defect: 'Defect', custom: 'Custom Text', rect: 'Box / Rectangle', arrow: 'Arrow' };
 const OVERLAY_FONT_CSS = { sans: 'Arial, Helvetica, sans-serif', serif: 'Georgia, "Times New Roman", serif', mono: '"Courier New", monospace', heavy: 'Impact, "Arial Black", sans-serif' };
 function overlayTextClient(item, c) {
   switch (item.t) {
     case 'datetime': return new Date(c.created_at).toLocaleString();
     case 'address': return c.address || '';
     case 'gps': return (c.latitude != null && c.longitude != null) ? `${Number(c.latitude).toFixed(5)}, ${Number(c.longitude).toFixed(5)}` : '';
-    case 'topic': return (c.area_tags || []).join(', ');
+    case 'topic': return (c.area_tags || []).length ? `Topic: ${(c.area_tags || []).join(', ')}` : '';
     case 'dims': return fmtDimsClient(c);
-    case 'defect': return c.defect_type ? (defectLabelClient(c.defect_type) + (c.defect_severity ? ', ' + c.defect_severity : '')) : '';
+    case 'defect': return c.defect_type ? ('Defect: ' + defectLabelClient(c.defect_type) + (c.defect_severity ? ', ' + c.defect_severity : '')) : '';
     case 'copyright': return item.text || ('© ' + new Date().getFullYear());
     default: return item.text || '';
   }
@@ -1376,12 +1376,17 @@ function renderStampEditor(c) {
   editorCapture = c;
   editorOverlays = Array.isArray(c.overlays) ? JSON.parse(JSON.stringify(c.overlays)) : [];
   editorOverlays.forEach(it => {
-    if (it.t !== 'rect') it.size = Math.max(0.5, Math.min(3, Number(it.size) || 1.25));
+    if (it.t !== 'rect' && it.t !== 'arrow') it.size = Math.max(0.5, Math.min(3, Number(it.size) || 1.25));
   });
   editorSel = editorOverlays.length ? 0 : -1;
   const body = document.getElementById('body');
-  const addOpts = ['datetime', 'address', 'gps', 'copyright', 'topic', 'custom', 'rect'];
-  if (isProClient()) { addOpts.push('dims', 'defect'); }
+  const addOpts = ['datetime', 'address', 'gps', 'copyright'];
+  if ((c.area_tags || []).length) addOpts.push('topic');
+  addOpts.push('custom', 'rect', 'arrow');
+  if (isProClient()) {
+    if (fmtDimsClient(c)) addOpts.push('dims');
+    if (c.defect_type) addOpts.push('defect');
+  }
   body.innerHTML = `
     <button class="backlink" id="stampBack">‹ Back to Edit</button>
     <div class="formhead">Add Stamps to Photo</div>
@@ -1393,6 +1398,7 @@ function renderStampEditor(c) {
     <div class="pill-group" id="stampAdd">
       ${addOpts.map(t => `<div class="pill" data-add="${t}">${OVERLAY_FIELD_LABELS[t]}</div>`).join('')}
     </div>
+    <div class="status" style="margin-top:6px">Topic and Defect are available after they have been assigned to this photo.</div>
     <div id="stampCtl"></div>
     <div class="row" style="margin-top:14px">
       <button class="btn" id="stampSave">Save Stamps</button>
@@ -1418,6 +1424,8 @@ function addOverlayItem(t) {
   if (t === 'rect') {
     // Box annotation. Geometry + thickness in percent so preview == burn.
     item = { t: 'rect', x: 30, y: 30, w: 40, h: 30, color: '#ff0000', thickness: 0.6 };
+  } else if (t === 'arrow') {
+    item = { t: 'arrow', x: 25, y: 25, w: 40, h: 30, color: '#ff0000', thickness: 0.8, dir: 'se' };
   } else {
     item = { t, text: t === 'copyright' ? ('© ' + new Date().getFullYear() + ' Zukor AI. All Rights Reserved.') : (t === 'custom' ? 'Text' : ''), x: 4, y: 84, size: 1.25, color: '#ffffff', font: 'sans', outline: true };
   }
@@ -1432,12 +1440,17 @@ function drawOverlayItems() {
   st.querySelectorAll('.ovitem').forEach(n => n.remove());
   const { w: stW, h } = stageSize();
   editorOverlays.forEach((it, i) => {
-    if (it.t === 'rect') {
+    if (it.t === 'rect' || it.t === 'arrow') {
       const box = document.createElement('div');
       box.className = 'ovitem ovrect' + (i === editorSel ? ' sel' : '');
       const bw = Math.max(1, (Number(it.thickness) || 0.6) / 100 * stW);
-      box.style.cssText = `position:absolute;left:${it.x}%;top:${it.y}%;width:${it.w}%;height:${it.h}%;border:${bw}px solid ${it.color};box-sizing:border-box;cursor:move;touch-action:none;${i === editorSel ? 'outline:2px dashed #1d4ed8;outline-offset:2px;' : ''}`;
+      const border = it.t === 'rect' ? `border:${bw}px solid ${it.color};` : '';
+      box.style.cssText = `position:absolute;left:${it.x}%;top:${it.y}%;width:${it.w}%;height:${it.h}%;${border}box-sizing:border-box;cursor:move;touch-action:none;${i === editorSel ? 'outline:2px dashed #1d4ed8;outline-offset:2px;' : ''}`;
       box.dataset.i = i;
+      if (it.t === 'arrow') {
+        const ends = { se:[0,0,100,100], nw:[100,100,0,0], ne:[0,100,100,0], sw:[100,0,0,100] }[it.dir] || [0,0,100,100];
+        box.innerHTML = `<svg viewBox="0 0 100 100" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none"><defs><marker id="arrowPreview${i}" markerWidth="5" markerHeight="5" refX="4" refY="2.5" orient="auto"><path d="M0,0 L5,2.5 L0,5 Z" fill="${it.color}"/></marker></defs><line x1="${ends[0]}" y1="${ends[1]}" x2="${ends[2]}" y2="${ends[3]}" stroke="${it.color}" stroke-width="${Math.max(1, bw)}" vector-effect="non-scaling-stroke" marker-end="url(#arrowPreview${i})"/></svg>`;
+      }
       startDrag(box, i);
       if (i === editorSel) {
         const handle = document.createElement('div');
@@ -1470,7 +1483,7 @@ function startDrag(el, i) {
     // Preserve where inside the item the user grabbed, so it doesn't jump.
     const grabX = (e.clientX - rect0.left) / rect0.width * 100 - (Number(it.x) || 0);
     const grabY = (e.clientY - rect0.top) / rect0.height * 100 - (Number(it.y) || 0);
-    const isRect = it.t === 'rect';
+    const isRect = it.t === 'rect' || it.t === 'arrow';
     const move = (ev) => {
       const rect = st.getBoundingClientRect();
       let x = (ev.clientX - rect.left) / rect.width * 100 - grabX;
@@ -1487,7 +1500,7 @@ function startDrag(el, i) {
     document.addEventListener('pointerup', up);
   });
 }
-// Corner-resize for rectangle items: drag the bottom-right handle to set w/h.
+// Corner-resize for box and arrow items: drag the bottom-right handle to set w/h.
 function startResize(handle, i) {
   handle.addEventListener('pointerdown', (e) => {
     e.preventDefault(); e.stopPropagation();
@@ -1513,19 +1526,22 @@ function renderStampCtl() {
   if (editorSel < 0 || !editorOverlays[editorSel]) { box.innerHTML = '<div class="status">No item selected. Add one above.</div>'; return; }
   const it = editorOverlays[editorSel];
   const colors = ['#ffffff', '#000000', '#ff0000', '#c1121f', '#1d4ed8', '#f2c200', '#1b7a3d'];
-  if (it.t === 'rect') {
+  if (it.t === 'rect' || it.t === 'arrow') {
+    const isArrow = it.t === 'arrow';
     box.innerHTML = `
-      <label style="margin-top:12px">Selected: Box / Rectangle</label>
-      <div class="status">Drag the box to move it. Drag the blue corner dot to resize.</div>
+      <label style="margin-top:12px">Selected: ${isArrow ? 'Arrow' : 'Box / Rectangle'}</label>
+      <div class="status">Drag the ${isArrow ? 'arrow' : 'box'} to move it. Drag the blue corner dot to resize.</div>
+      ${isArrow ? `<label style="margin-top:8px">Direction</label><div class="row compact"><button class="btn secondary slim" data-dir="se">↘</button><button class="btn secondary slim" data-dir="sw">↙</button><button class="btn secondary slim" data-dir="ne">↗</button><button class="btn secondary slim" data-dir="nw">↖</button></div>` : ''}
       <label style="margin-top:8px">Color</label>
       <div class="pill-group" id="ovColors">${colors.map(col => `<div class="pill" data-col="${col}" style="background:${col};width:34px;height:28px;${it.color === col ? 'outline:3px solid #1d4ed8;' : ''}"></div>`).join('')}
         <input type="color" id="ovColorPick" value="${/^#[0-9a-fA-F]{6}$/.test(it.color) ? it.color : '#ff0000'}" style="width:44px;height:32px;padding:0;border:1px solid #000;border-radius:6px" />
       </div>
       <label style="margin-top:8px">Line Thickness</label>
       <input type="range" class="stamp-slider" id="ovThick" min="0.2" max="3" step="0.1" value="${it.thickness || 0.6}" />
-      <button class="btn secondary slim" id="ovDelete" style="color:#c1121f;margin-top:8px">Delete This Box</button>`;
+      <button class="btn secondary slim" id="ovDelete" style="color:#c1121f;margin-top:8px">Delete This ${isArrow ? 'Arrow' : 'Box'}</button>`;
     const tq = q => box.querySelector(q);
     box.querySelectorAll('[data-col]').forEach(b => b.onclick = () => { it.color = b.getAttribute('data-col'); renderStampCtl(); drawOverlayItems(); });
+    box.querySelectorAll('[data-dir]').forEach(b => b.onclick = () => { it.dir = b.getAttribute('data-dir'); drawOverlayItems(); });
     tq('#ovColorPick').oninput = () => { it.color = tq('#ovColorPick').value; drawOverlayItems(); };
     tq('#ovThick').oninput = () => { it.thickness = parseFloat(tq('#ovThick').value); drawOverlayItems(); };
     tq('#ovDelete').onclick = () => { editorOverlays.splice(editorSel, 1); editorSel = editorOverlays.length ? 0 : -1; drawOverlayItems(); renderStampCtl(); };
