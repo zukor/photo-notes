@@ -122,6 +122,10 @@ textarea { min-height: 96px; resize: vertical; }
 .workflow-intro { display:flex; flex-direction:column; gap:3px; padding:14px 16px; margin:4px 0 18px; border:1px solid #000; border-radius:10px; background:#fff; }
 .workflow-intro strong { font-size:18px; }
 .workflow-intro span { font-size:14px; }
+.pair-builder { margin-top:12px; padding:12px 14px; border:1px solid #000; border-radius:10px; background:#fff; }
+.pair-builder summary { cursor:pointer; font-weight:bold; color:#000; }
+.pair-builder p { margin:10px 0 4px; font-size:14px; line-height:1.35; color:#000; }
+.pair-builder .btn { margin-top:10px; }
 .workflow-organize, .workflow-edit, .workflow-create, .workflow-send { max-width:980px !important; }
 .workflow-organize #cards, .workflow-edit #cards, #glist, .send-capture-list { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
 .workflow-organize #cards .card, .workflow-edit #cards .card, #glist .card { margin-bottom:0; }

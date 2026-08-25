@@ -882,7 +882,11 @@ async function renderList() {
       <button class="btn secondary" id="selnone">Clear</button>
     </div>
     ${isProClient() ? `<button class="btn secondary slim" id="classifybatch" style="margin-top:8px">Classify Selected (AI)</button><div class="status" id="classifyprog"></div>
-    <button class="btn secondary slim" id="pairbtn" style="margin-top:8px">Pair as Before/After (select 2)</button>` : ''}
+    <details class="pair-builder">
+      <summary>Create Before/After Matching Pairs</summary>
+      <p>Select the original photo and the completed-work photo, then create the pair. The older photo will be marked Before by default.</p>
+      <button class="btn secondary slim" id="pairbtn">Create Pair From 2 Selected Photos</button>
+    </details>` : ''}
 
     <label>File Selected Under a Topic</label>
     <div class="row compact">
@@ -1179,26 +1183,15 @@ async function loadCards(area) {
   const rows = await r.json();
   if (!rows.length) { cards.innerHTML = '<p class="empty">No captures yet. Go grab one.</p>'; return; }
   window._lastCards = rows;
-  // Pro: pull pairs + proximity suggestions so we can render combined cards.
-  let pairs = [], suggestions = [];
+  // Pro: pull only pairs the user deliberately created so we can render them
+  // as combined before/after cards. Never suggest pairs automatically.
+  let pairs = [];
   if (isProClient()) {
     try { const pr = await api('/api/pairs'); if (pr.ok) pairs = await pr.json(); } catch (e) {}
-    try { const sr = await api('/api/pairs/suggestions'); if (sr.ok) suggestions = await sr.json(); } catch (e) {}
   }
   const byId = {}; rows.forEach(c => { byId[c.id] = c; });
   const beforeOf = {}, afterOf = {};
   pairs.forEach(p => { beforeOf[p.before_id] = p; afterOf[p.after_id] = p; });
-  if (!window._dismissedSug) window._dismissedSug = new Set();
-  const visSug = suggestions.filter(s => byId[s.before_id] && byId[s.after_id] && !window._dismissedSug.has(s.before_id + '-' + s.after_id));
-  let banner = '';
-  if (visSug.length) {
-    banner = `<div class="card" style="border-color:#1d4ed8"><div style="font-weight:bold">Possible before/after matches nearby</div>` +
-      visSug.map(s => `<div class="row" style="margin-top:6px;align-items:center">
-        <div class="meta" style="flex:2">#${s.before_id} and #${s.after_id}, ${s.meters} m apart</div>
-        <button class="btn slim sugpair" data-b="${s.before_id}" data-a="${s.after_id}" style="flex:1">Pair</button>
-        <button class="editlink sugdismiss" data-b="${s.before_id}" data-a="${s.after_id}">Dismiss</button>
-      </div>`).join('') + `</div>`;
-  }
   const consumed = new Set();
   const html = [];
   for (const c of rows) {
@@ -1210,7 +1203,7 @@ async function loadCards(area) {
     html.push(captureCardHtml(c));
     consumed.add(c.id);
   }
-  cards.innerHTML = banner + html.join('');
+  cards.innerHTML = html.join('');
   wireCards(cards, rows);
   cards.querySelectorAll('.capchk').forEach(c => { c.checked = state.selectedIds.has(String(c.value)); });
   if (state._focusCapture) {
@@ -1296,11 +1289,6 @@ function wireCards(cards, rows) {
   cards.querySelectorAll('.overridebtn').forEach(b => b.onclick = () => startOverride(parseInt(b.getAttribute('data-id'), 10), rows));
   cards.querySelectorAll('.defbadge').forEach(b => b.onclick = () => startOverride(parseInt(b.getAttribute('data-id'), 10), rows));
   cards.querySelectorAll('.unpairbtn').forEach(b => b.onclick = () => unpair(parseInt(b.getAttribute('data-id'), 10)));
-  cards.querySelectorAll('.sugpair').forEach(b => b.onclick = async () => {
-    const r = await api('/api/pairs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ before_id: parseInt(b.getAttribute('data-b'), 10), after_id: parseInt(b.getAttribute('data-a'), 10) }) });
-    if (r.ok) { toast('Paired'); loadCards(document.getElementById('filter').value || ''); } else toast('Pairing failed');
-  });
-  cards.querySelectorAll('.sugdismiss').forEach(b => b.onclick = () => { window._dismissedSug.add(b.getAttribute('data-b') + '-' + b.getAttribute('data-a')); loadCards(document.getElementById('filter').value || ''); });
   cards.querySelectorAll('.stampbtn').forEach(b => b.onclick = () => { const c = rows.find(r => r.id === parseInt(b.getAttribute('data-id'), 10)); if (c) renderStampEditor(c); });
   cards.querySelectorAll('.cropbtn').forEach(b => b.onclick = () => { const c = rows.find(r => r.id === parseInt(b.getAttribute('data-id'), 10)); if (c) renderCropEditor(c); });
   cards.querySelectorAll('.restorebtn').forEach(b => b.onclick = () => restoreOriginal(parseInt(b.getAttribute('data-id'), 10)));
