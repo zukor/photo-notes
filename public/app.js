@@ -2073,6 +2073,7 @@ async function loadSendCenter() {
   const captures = cr.ok ? await cr.json() : [];
   const groups = gr.ok ? await gr.json() : [];
   window._sendCaptures = captures;
+  window._sendGroups = groups;
   const capBox = document.getElementById('sendCaptures');
   const visible = captures.slice(0, 40);
   capBox.innerHTML = visible.length ? visible.map(c => `
@@ -2119,10 +2120,25 @@ async function exportBlob(format, groupId) {
   return r.blob();
 }
 
+function safeSharedFileName(action, groupId, ext) {
+  let base = '';
+  if (groupId) {
+    const group = (window._sendGroups || []).find(g => String(g.id) === String(groupId));
+    base = group && group.title ? group.title : 'Document';
+  } else {
+    const selected = (window._sendCaptures || []).filter(c => state.selectedIds.has(String(c.id)));
+    base = selected.length === 1
+      ? (shareAddress(selected[0].address) || 'Photo')
+      : `${selected.length || ''} Photos`.trim();
+  }
+  base = String(base).replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, ' ').trim() || 'Document';
+  return `${base}.${ext}`;
+}
+
 async function deliverExport(action, groupId, selectedOnly) {
   const format = action === 'share' || action === 'print' ? 'pdf' : action;
   const ext = format === 'bundle' ? 'zip' : format;
-  const name = `photo-documentation.${ext}`;
+  const name = safeSharedFileName(action, groupId, ext);
   try {
     const blob = await exportBlob(format, groupId);
     if (action === 'print') {
@@ -2134,7 +2150,7 @@ async function deliverExport(action, groupId, selectedOnly) {
     if (action === 'share' || selectedOnly) {
       const file = new File([blob], name, { type: blob.type || (format === 'pdf' ? 'application/pdf' : 'application/octet-stream') });
       if (navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
-        await navigator.share({ title: 'Photo Notes', text: 'Photo documentation', files: [file] }); return;
+        await navigator.share({ files: [file] }); return;
       }
     }
     downloadBlob(blob, name);
