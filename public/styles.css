@@ -68,7 +68,7 @@ textarea { min-height: 96px; resize: vertical; }
   display:grid; grid-template-columns:112px minmax(0,1fr) 30px; grid-template-rows:auto auto;
   width:100%; max-width:980px; align-items:center; column-gap:12px; row-gap:2px; margin:8px auto 10px;
 }
-.app-header .zukor-corner-logo { display:block; grid-column:1; grid-row:1; width:112px; height:auto; justify-self:start; }
+.app-header .zukor-corner-logo { display:block; grid-column:1; grid-row:1; width:112px; max-width:none; height:auto; justify-self:start; }
 .app-header .brandrow { grid-column:1 / -1; grid-row:2; min-width:0; width:min(500px,100%); justify-self:center; }
 .app-header .brandrow .brand { width:100%; max-width:100%; }
 .app-header .account-menu-wrap { grid-column:3; grid-row:1; justify-self:end; }
