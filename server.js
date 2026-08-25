@@ -542,7 +542,6 @@ async function reverseGeocode(lat, lng) {
         const d = await r.json();
         if (d.status === 'OK' && d.results && d.results.length) return d.results[0].formatted_address;
       }
-      return null;
     }
     if (MAPBOX_TOKEN) {
       const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${MAPBOX_TOKEN}&types=address&limit=1`;
@@ -551,7 +550,24 @@ async function reverseGeocode(lat, lng) {
         const d = await r.json();
         if (d.features && d.features.length) return d.features[0].place_name;
       }
-      return null;
+    }
+    // ArcGIS World Geocoding supplies a structured full postal address without
+    // requiring a token on its public endpoint. It is a stronger fallback than
+    // accepting a street-only OpenStreetMap result.
+    const esriParams = new URLSearchParams({
+      f: 'json',
+      location: `${lng},${lat}`,
+      featureTypes: 'PointAddress,StreetAddress',
+      preferredLabelValues: 'localCity',
+    });
+    const esri = await fetch(`https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/reverseGeocode?${esriParams}`);
+    if (esri.ok) {
+      const data = await esri.json();
+      const a = data.address || {};
+      const street = a.Address || '';
+      const city = a.City || '';
+      const regionZip = [a.RegionAbbr || a.Region, a.Postal].filter(Boolean).join(' ');
+      if (street && city && regionZip) return [street, city, regionZip].join(', ');
     }
     // zoom=18 asks Nominatim for building-level detail and addressdetails=1
     // guarantees the structured address object, so a house number is returned
@@ -566,7 +582,7 @@ async function reverseGeocode(lat, lng) {
     const line1 = [houseNo, a.road].filter(Boolean).join(' ');
     const city = a.city || a.town || a.village || a.hamlet || a.suburb || a.county || '';
     const parts = [line1, city, [a.state, a.postcode].filter(Boolean).join(' ')].filter(Boolean);
-    return parts.length ? parts.join(', ') : data.display_name || null;
+    return line1 && city ? parts.join(', ') : data.display_name || null;
   } catch {
     return null;
   }
