@@ -176,7 +176,7 @@ function renderApp() {
         </div>
       </div>
       <div class="tabs workflow-tabs" aria-label="Photo Notes workflow">
-        <div class="tab ${state.view==='capture'?'on':''}" id="tabCapture">Capture</div>
+        <div class="tab ${state.view==='capture'||state.view==='ticket'?'on':''}" id="tabCapture">Capture</div>
         <div class="tab ${state.view==='organize'?'on':''}" id="tabOrganize">Organize</div>
         <div class="tab ${state.view==='edit'?'on':''}" id="tabEdit">Edit</div>
         <div class="tab ${state.view==='create'?'on':''}" id="tabCreate">Create</div>
@@ -205,6 +205,7 @@ function renderApp() {
   document.getElementById('tabCreate').onclick = () => { state.view='create'; state.groupId=null; renderApp(); };
   document.getElementById('tabSend').onclick = () => { state.view='send'; renderApp(); };
   if (state.view === 'capture') renderCapture();
+  else if (state.view === 'ticket') renderTicketScanner();
   else if (state.view === 'organize') renderList();
   else if (state.view === 'edit') renderEdit();
   else if (state.view === 'create') renderGroups();
@@ -223,6 +224,7 @@ function areaChips() {
 function renderCapture() {
   const body = document.getElementById('body');
   body.innerHTML = `
+    ${isProClient() ? `<section class="ticket-entry"><div><strong>Asphalt Ticket Scanner</strong><span>Photograph a delivery ticket, review the details, and track today’s tonnage.</span></div><button type="button" class="btn slim" id="openTicketScanner">Scan Ticket</button></section>` : ''}
     <label>Photo</label>
     <button type="button" class="btn" id="takephoto">Take Photo</button>
     <button type="button" class="btn secondary" id="choosephoto" style="margin-top:8px">Choose from library or files</button>
@@ -250,6 +252,9 @@ function renderCapture() {
 
     <button class="btn" id="save">Save</button>
   `;
+
+  const ticketButton = document.getElementById('openTicketScanner');
+  if (ticketButton) ticketButton.onclick = () => { state.view = 'ticket'; renderApp(); };
 
   document.getElementById('takephoto').onclick = () => document.getElementById('photoCam').click();
   document.getElementById('choosephoto').onclick = () => document.getElementById('photoLib').click();
@@ -286,6 +291,126 @@ function renderCapture() {
       acquireLocation();
     }
   }
+}
+
+// ================= Asphalt Pro ticket scanner =================
+let ticketPhotoFile = null, ticketDraft = null;
+function localDateValue() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function renderTicketScanner() {
+  const body = document.getElementById('body');
+  body.className = 'workflow-ticket';
+  body.innerHTML = `
+    <button class="backlink" id="ticketBack">‹ Back to Capture</button>
+    <div class="workflow-intro"><strong>Asphalt Ticket Scanner</strong><span>Take a clear, straight-on photo of the entire delivery ticket. Review every field before saving.</span></div>
+    <div class="ticket-scan-panel">
+      <div class="formhead">1. Photograph the Ticket</div>
+      <div class="row">
+        <button type="button" class="btn" id="ticketTake">Take Ticket Photo</button>
+        <button type="button" class="btn secondary" id="ticketChoose">Choose Existing Photo</button>
+      </div>
+      <input type="file" accept="image/*" capture="environment" id="ticketCam" style="display:none" />
+      <input type="file" accept="image/*" id="ticketLib" style="display:none" />
+      <div class="photo-box" id="ticketPreviewBox" style="display:none;margin-top:12px"><img id="ticketPreview" alt="Ticket preview" /></div>
+      <button type="button" class="btn" id="ticketRead" style="margin-top:12px" disabled>Read Ticket</button>
+      <div class="status" id="ticketScanStatus"></div>
+    </div>
+    <div id="ticketReview"></div>
+    <div class="formhead" style="margin-top:28px">Today’s Saved Tickets</div>
+    <div id="ticketToday"><p class="status">Loading tickets...</p></div>`;
+  document.getElementById('ticketBack').onclick = () => { ticketPhotoFile = null; ticketDraft = null; state.view='capture'; renderApp(); };
+  document.getElementById('ticketTake').onclick = () => document.getElementById('ticketCam').click();
+  document.getElementById('ticketChoose').onclick = () => document.getElementById('ticketLib').click();
+  const pick = e => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    ticketPhotoFile = file; ticketDraft = null;
+    document.getElementById('ticketPreview').src = URL.createObjectURL(file);
+    document.getElementById('ticketPreviewBox').style.display = 'block';
+    document.getElementById('ticketRead').disabled = false;
+    document.getElementById('ticketReview').innerHTML = '';
+    document.getElementById('ticketScanStatus').textContent = 'Ready to read.';
+    e.target.value = '';
+  };
+  document.getElementById('ticketCam').onchange = pick;
+  document.getElementById('ticketLib').onchange = pick;
+  document.getElementById('ticketRead').onclick = scanTicketPhoto;
+  if (ticketDraft) renderTicketReview(ticketDraft);
+  loadTodayTickets();
+}
+
+async function scanTicketPhoto() {
+  if (!ticketPhotoFile) { toast('Take or choose a ticket photo first'); return; }
+  const btn = document.getElementById('ticketRead');
+  const status = document.getElementById('ticketScanStatus');
+  btn.disabled = true; btn.textContent = 'Reading Ticket...';
+  status.textContent = 'Reading the printed ticket details. This may take a moment.';
+  try {
+    const fd = new FormData(); fd.append('photo', ticketPhotoFile);
+    const r = await api('/api/asphalt-tickets/scan', { method:'POST', body:fd });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || !d.ticket) throw new Error(d.error || 'scan failed');
+    ticketDraft = d.ticket;
+    renderTicketReview(ticketDraft);
+    status.textContent = d.ai_read ? 'Ticket read. Check every field, correct anything needed, then save.' : 'The ticket could not be read automatically. Enter the details below, then save.';
+  } catch (e) {
+    status.textContent = 'The ticket could not be read. Retake it in good light with the full ticket visible.';
+  } finally {
+    btn.disabled = !!ticketDraft;
+    btn.textContent = ticketDraft ? 'Ticket Read' : 'Try Reading Again';
+  }
+}
+
+function ticketField(id, label, value, type='text', attrs='') {
+  return `<label for="${id}">${label}</label><input id="${id}" type="${type}" value="${esc(value == null ? '' : value)}" ${attrs}/>`;
+}
+function renderTicketReview(t) {
+  const box = document.getElementById('ticketReview');
+  if (!box) return;
+  box.innerHTML = `
+    <section class="ticket-review-panel">
+      <div class="formhead">2. Review and Save</div>
+      <div class="status">AI confidence: <strong>${esc(t.confidence || 'low')}</strong>. The photographed ticket is the source of truth.</div>
+      <div class="ticket-form-grid">
+        <div>${ticketField('tkNumber','Ticket Number',t.ticket_number)}${ticketField('tkDate','Ticket Date',t.ticket_date || localDateValue(),'date')}</div>
+        <div>${ticketField('tkJob','Job Number',t.job_number)}${ticketField('tkTruck','Truck Number',t.truck_number)}</div>
+        <div>${ticketField('tkPlant','Plant Name',t.plant_name)}${ticketField('tkPlantAddress','Plant Address',t.plant_address)}</div>
+        <div>${ticketField('tkMix','Mix Description',t.mix_description)}${ticketField('tkMixCode','Mix Code',t.mix_code)}</div>
+        <div>${ticketField('tkTons','Net Tons',t.net_tons,'number','step="0.01" inputmode="decimal"')}${ticketField('tkTemp','Dispatch Temperature (°F)',t.dispatch_temperature_f,'number','step="0.1" inputmode="decimal"')}</div>
+        <div>${ticketField('tkDispatch','Dispatch Time',t.dispatch_time)}${ticketField('tkArrival','Arrival Time',t.arrival_time)}</div>
+      </div>
+      <button class="btn" id="ticketSave">Save Ticket</button>
+    </section>`;
+  document.getElementById('ticketSave').onclick = saveTicketReview;
+}
+
+async function saveTicketReview() {
+  if (!ticketDraft) return;
+  const value = id => document.getElementById(id).value.trim();
+  const body = {
+    ticket_number:value('tkNumber'), ticket_date:value('tkDate'), job_number:value('tkJob'), truck_number:value('tkTruck'),
+    plant_name:value('tkPlant'), plant_address:value('tkPlantAddress'), mix_description:value('tkMix'), mix_code:value('tkMixCode'),
+    net_tons:value('tkTons'), dispatch_temperature_f:value('tkTemp'), dispatch_time:value('tkDispatch'), arrival_time:value('tkArrival'),
+  };
+  const btn = document.getElementById('ticketSave'); btn.disabled = true; btn.textContent = 'Saving...';
+  const r = await api(`/api/asphalt-tickets/${ticketDraft.id}`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
+  if (r.ok) {
+    toast('Ticket saved'); ticketPhotoFile = null; ticketDraft = null; renderTicketScanner();
+  } else { toast('Ticket could not be saved'); btn.disabled = false; btn.textContent = 'Save Ticket'; }
+}
+
+async function loadTodayTickets() {
+  const box = document.getElementById('ticketToday');
+  if (!box) return;
+  try {
+    const r = await api(`/api/asphalt-tickets?date=${localDateValue()}`);
+    if (!r.ok) throw new Error('bad');
+    const d = await r.json(); const rows = d.tickets || [];
+    box.innerHTML = `<div class="ticket-total"><span>Today’s Total</span><strong>${Number(d.total_tons || 0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})} tons</strong></div>` +
+      (rows.length ? `<div class="ticket-list">${rows.map(t => `<article class="card ticket-card">${t.photo_path ? `<img src="${photoSrc(t.photo_path)}" alt="Ticket" />` : ''}<div><strong>Ticket ${esc(t.ticket_number || 'number not entered')}</strong><div>${esc(t.plant_name || 'Plant not entered')}</div><div class="meta">${esc(t.mix_description || t.mix_code || 'Mix not entered')} · ${esc(t.truck_number || 'No truck')}</div><div class="ticket-tons">${t.net_tons == null ? 'Tons not entered' : Number(t.net_tons).toFixed(2) + ' tons'}</div></div></article>`).join('')}</div>` : '<p class="empty">No tickets saved today.</p>');
+  } catch (e) { box.innerHTML = '<p class="status">Today’s tickets could not be loaded.</p>'; }
 }
 
 function onPhotoChosen(file) {

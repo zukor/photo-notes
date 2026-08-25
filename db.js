@@ -168,6 +168,31 @@ CREATE TABLE IF NOT EXISTS ewr_photos (
 CREATE INDEX IF NOT EXISTS ewr_user_idx ON extra_work_records (user_id);
 CREATE INDEX IF NOT EXISTS ewr_group_idx ON extra_work_records (group_id);
 CREATE INDEX IF NOT EXISTS ewr_photos_ewr_idx ON ewr_photos (ewr_id);
+-- Asphalt delivery tickets (Asphalt Pro). A scan begins as a draft so the AI
+-- result can be reviewed and corrected before it counts toward daily tonnage.
+CREATE TABLE IF NOT EXISTS asphalt_tickets (
+  id                     SERIAL PRIMARY KEY,
+  user_id                INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  photo_path             TEXT,
+  ticket_number          TEXT,
+  ticket_date            DATE,
+  plant_name             TEXT,
+  plant_address          TEXT,
+  mix_description        TEXT,
+  mix_code               TEXT,
+  truck_number           TEXT,
+  job_number             TEXT,
+  net_tons               NUMERIC(12,2),
+  dispatch_time          TEXT,
+  arrival_time           TEXT,
+  dispatch_temperature_f NUMERIC(8,2),
+  confidence             TEXT,
+  raw_ai                 JSONB,
+  status                 TEXT NOT NULL DEFAULT 'draft',
+  created_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at             TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS asphalt_tickets_user_date_idx ON asphalt_tickets (user_id, ticket_date DESC, created_at DESC);
 `;
 
 const DEFAULT_AREAS = ['Roads', 'Maintenance', 'Walls', 'Security', 'Landscaping', 'Other'];

@@ -766,6 +766,94 @@ Use "warning" to flag problems such as "no reference object found", "ruler appea
   }
 });
 
+// ---- Asphalt delivery ticket scanner (Asphalt Pro) ----
+function ticketText(value, max = 200) {
+  if (value == null) return null;
+  const s = String(value).trim();
+  return s ? s.slice(0, max) : null;
+}
+function ticketNumber(value) {
+  if (value == null || value === '') return null;
+  const n = Number(String(value).replace(/,/g, '').replace(/[^0-9.-]/g, ''));
+  return Number.isFinite(n) ? n : null;
+}
+function ticketDate(value) {
+  const s = ticketText(value, 10);
+  return s && /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
+}
+
+app.post('/api/asphalt-tickets/scan', requireAuth, upload.single('photo'), async (req, res) => {
+  try {
+    if (await currentPlan(req.user.id) !== 'pro') {
+      if (req.file) { try { fs.unlinkSync(req.file.path); } catch (e) {} }
+      return res.status(403).json({ error: 'pro only' });
+    }
+    if (!req.file || !req.file.path) return res.status(400).json({ error: 'ticket photo required' });
+    const prompt =
+`You are reading an asphalt plant delivery ticket for a paving contractor. Extract only information visibly printed or written on the ticket. Never guess a missing value.
+Respond with ONLY one JSON object, no prose and no markdown, using exactly these keys:
+{"ticket_number": string|null, "ticket_date": "YYYY-MM-DD"|null, "plant_name": string|null, "plant_address": string|null, "mix_description": string|null, "mix_code": string|null, "truck_number": string|null, "job_number": string|null, "net_tons": number|null, "dispatch_time": string|null, "arrival_time": string|null, "dispatch_temperature_f": number|null, "confidence": "high"|"medium"|"low"}
+Use net tons, not gross or tare weight. Preserve ticket and job identifiers exactly. Times may use the clearly printed format. If a field is unreadable or absent, use null.`;
+    const ai = await visionJSON(req.file.path, prompt, { maxTokens: 700 });
+    const data = ai || {};
+    const photoPath = `/uploads/${path.basename(req.file.path)}`;
+    const values = [
+      req.user.id, photoPath, ticketText(data.ticket_number), ticketDate(data.ticket_date),
+      ticketText(data.plant_name), ticketText(data.plant_address), ticketText(data.mix_description),
+      ticketText(data.mix_code), ticketText(data.truck_number), ticketText(data.job_number),
+      ticketNumber(data.net_tons), ticketText(data.dispatch_time, 40), ticketText(data.arrival_time, 40),
+      ticketNumber(data.dispatch_temperature_f), ['high','medium','low'].includes(data.confidence) ? data.confidence : 'low',
+      ai ? JSON.stringify(ai) : null,
+    ];
+    const row = (await pool.query(
+      `INSERT INTO asphalt_tickets
+       (user_id, photo_path, ticket_number, ticket_date, plant_name, plant_address, mix_description, mix_code,
+        truck_number, job_number, net_tons, dispatch_time, arrival_time, dispatch_temperature_f, confidence, raw_ai)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`, values)).rows[0];
+    logEvent(req.user.id, 'ticket_scan', { ai: !!ai, confidence: row.confidence });
+    res.json({ ok: true, ai_read: !!ai, ticket: row });
+  } catch (err) {
+    console.error('[ticket.scan]', err);
+    res.status(500).json({ error: 'ticket scan failed' });
+  }
+});
+
+app.post('/api/asphalt-tickets/:id', requireAuth, async (req, res) => {
+  try {
+    if (await currentPlan(req.user.id) !== 'pro') return res.status(403).json({ error: 'pro only' });
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'bad id' });
+    const b = req.body || {};
+    const values = [
+      ticketText(b.ticket_number), ticketDate(b.ticket_date), ticketText(b.plant_name), ticketText(b.plant_address),
+      ticketText(b.mix_description), ticketText(b.mix_code), ticketText(b.truck_number), ticketText(b.job_number),
+      ticketNumber(b.net_tons), ticketText(b.dispatch_time, 40), ticketText(b.arrival_time, 40),
+      ticketNumber(b.dispatch_temperature_f), id, req.user.id,
+    ];
+    const row = (await pool.query(
+      `UPDATE asphalt_tickets SET ticket_number=$1, ticket_date=$2, plant_name=$3, plant_address=$4,
+       mix_description=$5, mix_code=$6, truck_number=$7, job_number=$8, net_tons=$9,
+       dispatch_time=$10, arrival_time=$11, dispatch_temperature_f=$12, status='saved', updated_at=now()
+       WHERE id=$13 AND user_id=$14 RETURNING *`, values)).rows[0];
+    if (!row) return res.status(404).json({ error: 'not found' });
+    logEvent(req.user.id, 'ticket_save', { has_tons: row.net_tons != null });
+    res.json({ ok: true, ticket: row });
+  } catch (err) { console.error('[ticket.save]', err); res.status(500).json({ error: 'ticket save failed' }); }
+});
+
+app.get('/api/asphalt-tickets', requireAuth, async (req, res) => {
+  try {
+    if (await currentPlan(req.user.id) !== 'pro') return res.json({ tickets: [], total_tons: 0 });
+    const date = ticketDate(req.query.date);
+    const params = [req.user.id];
+    let where = `user_id=$1 AND status='saved'`;
+    if (date) { params.push(date); where += ` AND ticket_date=$2`; }
+    const rows = (await pool.query(`SELECT * FROM asphalt_tickets WHERE ${where} ORDER BY COALESCE(ticket_date, created_at::date) DESC, created_at DESC LIMIT 100`, params)).rows;
+    const total = rows.reduce((sum, row) => sum + (Number(row.net_tons) || 0), 0);
+    res.json({ tickets: rows, total_tons: Math.round(total * 100) / 100 });
+  } catch (err) { console.error('[ticket.list]', err); res.status(500).json({ error: 'ticket list failed' }); }
+});
+
 // ---- AI defect classification (Pro): classify one saved capture ----
 async function classifyCapture(userId, id) {
   const row = (await pool.query(`SELECT * FROM captures WHERE id = $1 AND user_id = $2`, [id, userId])).rows[0];
