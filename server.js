@@ -535,25 +535,9 @@ async function reverseGeocode(lat, lng) {
   const GOOGLE_KEY = process.env.GOOGLE_MAPS_API_KEY || '';
   const MAPBOX_TOKEN = process.env.MAPBOX_TOKEN || '';
   try {
-    if (GOOGLE_KEY) {
-      const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${GOOGLE_KEY}`;
-      const r = await fetch(url);
-      if (r.ok) {
-        const d = await r.json();
-        if (d.status === 'OK' && d.results && d.results.length) return d.results[0].formatted_address;
-      }
-    }
-    if (MAPBOX_TOKEN) {
-      const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${MAPBOX_TOKEN}&types=address&limit=1`;
-      const r = await fetch(url);
-      if (r.ok) {
-        const d = await r.json();
-        if (d.features && d.features.length) return d.features[0].place_name;
-      }
-    }
-    // ArcGIS World Geocoding supplies a structured full postal address without
-    // requiring a token on its public endpoint. It is a stronger fallback than
-    // accepting a street-only OpenStreetMap result.
+    // ArcGIS reliably returns a structured point address for the job-site
+    // coordinates we receive. Try it first so a token-backed provider cannot
+    // replace a house number with a street-only result.
     const esriParams = new URLSearchParams({
       f: 'json',
       location: `${lng},${lat}`,
@@ -567,7 +551,26 @@ async function reverseGeocode(lat, lng) {
       const street = a.Address || '';
       const city = a.City || '';
       const regionZip = [a.RegionAbbr || a.Region, a.Postal].filter(Boolean).join(' ');
-      if (street && city && regionZip) return [street, city, regionZip].join(', ');
+      if (a.AddNum && street && city && regionZip) return [street, city, regionZip].join(', ');
+    }
+    if (GOOGLE_KEY) {
+      const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${GOOGLE_KEY}`;
+      const r = await fetch(url);
+      if (r.ok) {
+        const d = await r.json();
+        const first = d.status === 'OK' && d.results && d.results[0];
+        const types = first && first.address_components ? first.address_components.flatMap(c => c.types || []) : [];
+        if (first && types.includes('street_number') && types.includes('locality') && types.includes('postal_code')) return first.formatted_address;
+      }
+    }
+    if (MAPBOX_TOKEN) {
+      const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${MAPBOX_TOKEN}&types=address&limit=1`;
+      const r = await fetch(url);
+      if (r.ok) {
+        const d = await r.json();
+        const first = d.features && d.features[0];
+        if (first && first.address && first.place_name) return first.place_name;
+      }
     }
     // zoom=18 asks Nominatim for building-level detail and addressdetails=1
     // guarantees the structured address object, so a house number is returned
@@ -582,7 +585,7 @@ async function reverseGeocode(lat, lng) {
     const line1 = [houseNo, a.road].filter(Boolean).join(' ');
     const city = a.city || a.town || a.village || a.hamlet || a.suburb || a.county || '';
     const parts = [line1, city, [a.state, a.postcode].filter(Boolean).join(' ')].filter(Boolean);
-    return line1 && city ? parts.join(', ') : data.display_name || null;
+    return houseNo && a.road && city && a.postcode ? parts.join(', ') : null;
   } catch {
     return null;
   }
@@ -900,18 +903,21 @@ app.post('/api/regeocode', requireAuth, async (req, res) => {
     let rows;
     if (onlyIds && onlyIds.length) {
       ({ rows } = await pool.query(
-        `SELECT id, latitude, longitude FROM captures WHERE user_id = $1 AND id = ANY($2) AND latitude IS NOT NULL`, [req.user.id, onlyIds]));
+        `SELECT id, latitude, longitude, address FROM captures WHERE user_id = $1 AND id = ANY($2) AND latitude IS NOT NULL AND longitude IS NOT NULL`, [req.user.id, onlyIds]));
     } else {
       ({ rows } = await pool.query(
-        `SELECT id, latitude, longitude FROM captures WHERE user_id = $1 AND latitude IS NOT NULL`, [req.user.id]));
+        `SELECT id, latitude, longitude, address FROM captures WHERE user_id = $1 AND latitude IS NOT NULL AND longitude IS NOT NULL`, [req.user.id]));
     }
-    let updated = 0;
+    let updated = 0, unchanged = 0, unresolved = 0;
     for (const c of rows) {
       const addr = await reverseGeocode(c.latitude, c.longitude);
-      if (addr) { await pool.query(`UPDATE captures SET address = $1 WHERE id = $2 AND user_id = $3`, [addr, c.id, req.user.id]); updated++; }
+      if (!addr) { unresolved++; continue; }
+      if (String(addr).trim().toLowerCase() === String(c.address || '').trim().toLowerCase()) { unchanged++; continue; }
+      await pool.query(`UPDATE captures SET address = $1 WHERE id = $2 AND user_id = $3`, [addr, c.id, req.user.id]);
+      updated++;
     }
-    logEvent(req.user.id, 'fix_addresses', { updated, total: rows.length });
-    res.json({ ok: true, updated, total: rows.length });
+    logEvent(req.user.id, 'fix_addresses', { updated, unchanged, unresolved, total: rows.length });
+    res.json({ ok: true, updated, unchanged, unresolved, total: rows.length });
   } catch (err) {
     console.error('[regeocode]', err);
     res.status(500).json({ error: 'regeocode failed' });

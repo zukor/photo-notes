@@ -1221,8 +1221,11 @@ async function doFixAddresses() {
     });
     if (!r.ok) throw new Error('bad');
     const d = await r.json();
-    toast(`Updated ${d.updated} of ${d.total}`);
-    loadCards(document.getElementById('filter').value || '');
+    const parts = [`Corrected ${d.updated} address${d.updated === 1 ? '' : 'es'}`];
+    if (d.unchanged) parts.push(`${d.unchanged} already matched`);
+    if (d.unresolved) parts.push(`${d.unresolved} could not be resolved`);
+    toast(parts.join('. '));
+    await loadCards(document.getElementById('filter').value || '');
   } catch (e) { toast('Fix addresses failed'); }
   finally { btn.disabled = false; btn.textContent = 'Fix Addresses'; }
 }
