@@ -1189,7 +1189,7 @@ async function doExportSelected() {
   const imgRes = (document.getElementById('imgres') || {}).value || 'standard';
   const imgFmt = (document.getElementById('imgfmt') || {}).value || 'jpeg';
   const btn = document.getElementById('exportbtn');
-  btn.disabled = true; btn.textContent = 'Exporting...';
+  btn.disabled = true; btn.textContent = 'Preparing Downloads...';
   for (const f of fmts) {
     try {
       const r = await api(`/api/export/${f}?ids=${ids.join(',')}&res=${imgRes}&fmt=${imgFmt}`);
@@ -1200,7 +1200,7 @@ async function doExportSelected() {
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 1500);
       await new Promise(res => setTimeout(res, 500));
-    } catch (e) { toast('Export failed for ' + f); }
+    } catch (e) { toast('Download failed for ' + f); }
   }
   btn.disabled = false; btn.textContent = 'Export';
   toast('Exported');
@@ -2181,11 +2181,12 @@ async function createGroup() {
       body: JSON.stringify({ title, description, ids: Array.from(state.selectedIds) }),
     });
     if (!r.ok) throw new Error('bad');
-    document.getElementById('gtitle').value = '';
-    document.getElementById('gdesc').value = '';
+    const created = await r.json();
     state.selectedIds.clear();
-    toast('Document created');
-    loadGroups();
+    state.groups = null;
+    state.groupId = created.id;
+    toast('Document created. Add or review its contents below.');
+    await renderGroups();
   } catch (e) { toast('Could not create group'); }
   finally { btn.disabled = false; }
 }
@@ -2212,7 +2213,7 @@ function renderGroupCards(list, groups) {
       ${g.description ? `<div style="margin:4px 0">${esc(g.description)}</div>` : ''}
       <div class="meta">${g.item_count} photo${g.item_count === 1 ? '' : 's'}${(isProClient() && g.score != null) ? ` <span class="scorechip" style="background:${scoreColor(g.score)}">Score ${g.score} · ${esc(g.band)}</span>` : ''}</div>
       <div class="row" style="margin-top:8px">
-        <button class="btn slim gopen" data-id="${g.id}">Open Document</button>
+        <button class="btn slim gopen" data-id="${g.id}">Edit Document</button>
         <button class="btn secondary slim" data-id="${g.id}" data-del="1" style="color:#c1121f">Delete</button>
       </div>
     </article>`).join('');
@@ -2264,25 +2265,31 @@ async function renderGroupDetail(id) {
   }
   body.innerHTML = `
     <button class="backlink" id="gback">‹ All Documents</button>
+    <div class="workflow-intro"><strong>Build Your Document</strong><span>Review the title, arrange the photos and captions, then download the finished document when it looks right.</span></div>
+    <div class="formhead">1. Document Details</div>
     <label>Title</label>
     <div id="titleview"></div>
-    <label>Description</label>
+    <label>Subtitle or Description</label>
     <div id="descview"></div>
 
     ${scoreHtml}
 
-    <label style="margin-top:16px">Preview and Build <span style="font-weight:normal;text-transform:none;letter-spacing:0">(pick one or more formats)</span></label>
+    <div class="formhead" style="margin-top:24px">2. Document Contents</div>
+    <div class="status">These photos and captions are the document preview. Edit captions, change their order, or remove anything you do not want included.</div>
+    <div id="gitems" style="margin-top:12px"></div>
+    <button class="btn secondary slim" id="greverse" style="margin-top:10px">Reverse Photo Order</button>
+
+    <div class="formhead" style="margin-top:28px">3. Download Finished Document</div>
+    <label style="margin-top:8px">Formats</label>
+    <div class="status">Choose one or more file types.</div>
     <div class="pill-group" id="gfmts">
       <div class="pill" data-fmt="pdf">PDF</div>
       <div class="pill" data-fmt="docx">Word</div>
       <div class="pill" data-fmt="bundle">For AI (.zip)</div>
     </div>
     ${qualityBlock('gimgres', 'gimgfmt')}
-    <div class="row">
-      <button class="btn" id="gexport">Build Document</button>
-      <button class="btn secondary" id="greverse">Reverse Order</button>
-    </div>
-    <button class="btn secondary slim" id="continueSend">Continue to Send</button>
+    <button class="btn" id="gexport">Download Selected Formats</button>
+    <button class="btn secondary slim" id="continueSend">More Sharing Options</button>
     ${isProClient() ? `<label style="margin-top:16px">Proposal Report</label>
     <div class="row">
       <button class="btn secondary slim" id="proppdf">Proposal PDF</button>
@@ -2294,7 +2301,7 @@ async function renderGroupDetail(id) {
     <button class="btn slim" id="ewrNew" style="margin-top:6px">+ Extra Work Record</button>
     <div id="ewrList" style="margin-top:8px"></div>` : ''}
 
-    <div id="gitems" style="margin-top:16px"></div>`;
+    `;
   document.getElementById('gback').onclick = () => { state.groupId = null; renderGroups(); };
   document.getElementById('greverse').onclick = reverseItems;
   document.getElementById('gexport').onclick = groupExport;
@@ -2657,7 +2664,9 @@ function renderGroupItems() {
       <div class="rotaterow">${rotateButtons(c.id)}</div>
       <div class="addr">${esc(c.address || 'No location')}</div>
       ${isProClient() && fmtDimsClient(c) ? `<div class="meta"><strong>Dimensions:</strong> ${esc(fmtDimsClient(c))}</div>` : ''}
-      <div>${esc(c.note || '(no note)')}</div>
+      <label style="margin-top:8px">Photo Caption</label>
+      <textarea class="gcaption" data-i="${i}" style="min-height:70px">${esc(c.note || '')}</textarea>
+      <button class="btn secondary slim gsavecaption" data-i="${i}" style="margin-top:6px">Save Caption</button>
       <div class="row" style="margin-top:8px">
         <button class="btn secondary gup" data-i="${i}">↑ Up</button>
         <button class="btn secondary gdown" data-i="${i}">↓ Down</button>
@@ -2665,6 +2674,17 @@ function renderGroupItems() {
       </div>
     </div>`).join('');
   wireRotate(box);
+  box.querySelectorAll('.gsavecaption').forEach(b => b.onclick = async () => {
+    const i = parseInt(b.getAttribute('data-i'), 10);
+    const item = currentGroupItems[i];
+    const field = box.querySelector(`.gcaption[data-i="${i}"]`);
+    if (!item || !field) return;
+    b.disabled = true; b.textContent = 'Saving...';
+    const r = await api(`/api/captures/${item.id}`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ note:field.value }) });
+    if (r.ok) { item.note = field.value; toast('Caption saved'); }
+    else toast('Caption could not be saved');
+    b.disabled = false; b.textContent = 'Save Caption';
+  });
   box.querySelectorAll('.gup').forEach(b => b.onclick = () => moveItem(parseInt(b.getAttribute('data-i'), 10), -1));
   box.querySelectorAll('.gdown').forEach(b => b.onclick = () => moveItem(parseInt(b.getAttribute('data-i'), 10), 1));
   box.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => removeItem(parseInt(b.getAttribute('data-i'), 10)));
@@ -2724,8 +2744,8 @@ async function groupExport() {
       await new Promise(res => setTimeout(res, 500));
     } catch (e) { toast('Export failed for ' + f); }
   }
-  btn.disabled = false; btn.textContent = 'Build Document';
-  toast('Exported');
+  btn.disabled = false; btn.textContent = 'Download Selected Formats';
+  toast('Download ready');
 }
 
 async function exportProposal(doc) {

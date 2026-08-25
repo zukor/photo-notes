@@ -138,8 +138,8 @@ textarea { min-height: 96px; resize: vertical; }
 .organize-footer-actions { display:flex; justify-content:flex-start; margin-top:12px; }
 .map-filter-row { align-items:flex-end; }
 .workflow-organize, .workflow-edit, .workflow-create, .workflow-send { max-width:980px !important; }
-.workflow-organize #cards, .workflow-edit #cards, #glist, .send-capture-list { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
-.workflow-organize #cards .card, .workflow-edit #cards .card, #glist .card { margin-bottom:0; }
+.workflow-organize #cards, .workflow-edit #cards, #glist, .workflow-create #gitems, .send-capture-list { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
+.workflow-organize #cards .card, .workflow-edit #cards .card, #glist .card, .workflow-create #gitems .card { margin-bottom:0; }
 .document-card { display:flex; flex-direction:column; }
 .document-card > .row { margin-top:auto !important; padding-top:8px; border-top:1px solid #d7d7d7; }
 .workflow-organize .rotaterow, .workflow-organize .stampbtn, .workflow-organize .cropbtn,
@@ -201,7 +201,7 @@ input.dimfield.suggested {
   .app-header .brandrow .brand.asphalt-pro-brand { width:100%; max-width:100%; height:42px; }
   .workflow-tabs { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:4px; overflow:visible; padding-bottom:0; }
   .workflow-tabs .tab { min-width:0; padding:9px 2px; font-size:12px; }
-  .workflow-organize #cards, .workflow-edit #cards, #glist, .send-capture-list { grid-template-columns:1fr; }
+  .workflow-organize #cards, .workflow-edit #cards, #glist, .workflow-create #gitems, .send-capture-list { grid-template-columns:1fr; }
   .delivery-actions, .delivery-grid { grid-template-columns:1fr 1fr; }
   .map-filter-row { flex-direction:column; gap:8px; align-items:stretch; }
   .organize-form-grid { grid-template-columns:1fr; }
