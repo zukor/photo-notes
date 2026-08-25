@@ -150,6 +150,8 @@ textarea { min-height: 96px; resize: vertical; }
 .send-capture-row { display:grid; grid-template-columns:24px 72px 1fr; gap:10px; align-items:center; padding:10px; margin:0; border:1px solid #000; border-radius:10px; background:#fff; text-transform:none; letter-spacing:0; font-size:14px; cursor:pointer; }
 .send-capture-row input { width:20px; height:20px; }
 .send-capture-row img, .send-no-photo { width:72px; height:58px; object-fit:cover; border-radius:6px; margin:0; background:#eee; display:flex; align-items:center; justify-content:center; }
+.share-requirement { display:flex; flex-direction:column; gap:4px; margin:10px 0 14px; padding:12px 14px; border:2px solid #1d4ed8; border-radius:10px; background:#eef4ff; color:#000; font-size:14px; line-height:1.35; }
+.share-requirement strong { font-size:15px; }
 .send-capture-row span:last-child { min-width:0; }
 .send-capture-row small { display:block; font-weight:normal; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-top:3px; }
 .card { background: #fff; border: 1px solid #000; border-radius: 10px; padding: 12px; margin-bottom: 14px; }

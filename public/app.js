@@ -6,6 +6,7 @@ let state = { view: IS_HANDHELD ? 'capture' : 'organize', location: null, addres
 // Pro gating on the client. Mirrors isPro(user) on the server. Pro-only UI must
 // not render at all for free users (no disabled teaser).
 function isProClient() { return state.plan === 'pro'; }
+function isMacClient() { return /Macintosh|MacIntel/.test(navigator.userAgent + ' ' + navigator.platform) && !isIOS(); }
 let recognizer = null;
 let currentGroupItems = [];
 let currentGroup = null;
@@ -2053,6 +2054,7 @@ async function renderSend() {
   body.innerHTML = `
     <div class="workflow-intro"><strong>Send your finished work</strong><span>Share photos directly, download a document, email it, upload it, or print it.</span></div>
     <div class="formhead">Send Selected Captures</div>
+    ${isMacClient() ? `<div class="share-requirement"><strong>Texting an Android phone from this Mac?</strong><span>Your iPhone must have Settings → Apps → Messages → Text Message Forwarding enabled for this Mac, plus MMS or RCS messaging.</span></div>` : ''}
     <div class="status" id="sendSelection">Loading captures...</div>
     <div class="delivery-actions">
       <button class="btn" id="sharephotos">Share Photos</button>
