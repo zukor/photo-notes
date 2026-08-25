@@ -1927,7 +1927,8 @@ async function burnOverlays(buffer, width, height, overlays, c) {
     }
     const text = overlayItemText(it, c);
     if (!text) continue;
-    const fs = Math.max(9, Math.round((Number(it.size) || 4) / 100 * height)); // size = % of height
+    const sizePct = Math.max(0.5, Math.min(3, Number(it.size) || 1.25));
+    const fs = Math.max(4, Math.round(sizePct / 100 * height)); // size = % of height
     const x = Math.round((Number(it.x) || 3) / 100 * width);
     const y = Math.round((Number(it.y) || 90) / 100 * height) + fs; // y% is the item top; add fs for baseline
     const fill = /^#[0-9a-fA-F]{3,8}$/.test(it.color || '') ? it.color : '#ffffff';

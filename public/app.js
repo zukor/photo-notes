@@ -1351,6 +1351,9 @@ function overlayTextClient(item, c) {
 function renderStampEditor(c) {
   editorCapture = c;
   editorOverlays = Array.isArray(c.overlays) ? JSON.parse(JSON.stringify(c.overlays)) : [];
+  editorOverlays.forEach(it => {
+    if (it.t !== 'rect') it.size = Math.max(0.5, Math.min(3, Number(it.size) || 1.25));
+  });
   editorSel = editorOverlays.length ? 0 : -1;
   const body = document.getElementById('body');
   const addOpts = ['datetime', 'address', 'gps', 'copyright', 'topic', 'custom', 'rect'];
@@ -1370,8 +1373,11 @@ function renderStampEditor(c) {
     <div class="row" style="margin-top:14px">
       <button class="btn" id="stampSave">Save Stamps</button>
       <button class="btn secondary" id="stampCopy">Save Stamped Copy</button>
-    </div>`;
-  document.getElementById('stampBack').onclick = () => { state.view = 'edit'; renderEdit(); };
+    </div>
+    <button class="backlink" id="stampBackBottom" style="margin-top:18px">‹ Back to Edit</button>`;
+  const backToEdit = () => { state.view = 'edit'; renderEdit(); };
+  document.getElementById('stampBack').onclick = backToEdit;
+  document.getElementById('stampBackBottom').onclick = backToEdit;
   document.getElementById('stampAdd').onclick = (e) => { const p = e.target.closest('[data-add]'); if (p) addOverlayItem(p.getAttribute('data-add')); };
   document.getElementById('stampSave').onclick = saveOverlays;
   document.getElementById('stampCopy').onclick = saveStampedCopy;
@@ -1389,7 +1395,7 @@ function addOverlayItem(t) {
     // Box annotation. Geometry + thickness in percent so preview == burn.
     item = { t: 'rect', x: 30, y: 30, w: 40, h: 30, color: '#ff0000', thickness: 0.6 };
   } else {
-    item = { t, text: t === 'copyright' ? ('© ' + new Date().getFullYear() + ' Zukor AI. All Rights Reserved.') : (t === 'custom' ? 'Text' : ''), x: 4, y: 84, size: 5, color: '#ffffff', font: 'sans', outline: true };
+    item = { t, text: t === 'copyright' ? ('© ' + new Date().getFullYear() + ' Zukor AI. All Rights Reserved.') : (t === 'custom' ? 'Text' : ''), x: 4, y: 84, size: 1.25, color: '#ffffff', font: 'sans', outline: true };
   }
   editorOverlays.push(item);
   editorSel = editorOverlays.length - 1;
@@ -1422,7 +1428,7 @@ function drawOverlayItems() {
     const txt = overlayTextClient(it, editorCapture) || OVERLAY_FIELD_LABELS[it.t] || 'Text';
     const d = document.createElement('div');
     d.className = 'ovitem' + (i === editorSel ? ' sel' : '');
-    d.style.cssText = `position:absolute;left:${it.x}%;top:${it.y}%;font-size:${Math.max(9, it.size / 100 * h)}px;color:${it.color};font-family:${OVERLAY_FONT_CSS[it.font] || OVERLAY_FONT_CSS.sans};font-weight:${it.font === 'heavy' ? '800' : 'normal'};white-space:nowrap;cursor:move;user-select:none;line-height:1;${it.outline ? 'text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000;' : ''}${i === editorSel ? 'outline:2px dashed #1d4ed8;outline-offset:2px;' : ''}`;
+    d.style.cssText = `position:absolute;left:${it.x}%;top:${it.y}%;font-size:${Math.max(4, it.size / 100 * h)}px;color:${it.color};font-family:${OVERLAY_FONT_CSS[it.font] || OVERLAY_FONT_CSS.sans};font-weight:${it.font === 'heavy' ? '800' : 'normal'};white-space:nowrap;cursor:move;user-select:none;line-height:1;${it.outline ? 'text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000;' : ''}${i === editorSel ? 'outline:2px dashed #1d4ed8;outline-offset:2px;' : ''}`;
     d.textContent = txt;
     d.dataset.i = i;
     startDrag(d, i);
@@ -1492,7 +1498,7 @@ function renderStampCtl() {
         <input type="color" id="ovColorPick" value="${/^#[0-9a-fA-F]{6}$/.test(it.color) ? it.color : '#ff0000'}" style="width:44px;height:32px;padding:0;border:1px solid #000;border-radius:6px" />
       </div>
       <label style="margin-top:8px">Line Thickness</label>
-      <input type="range" id="ovThick" min="0.2" max="3" step="0.1" value="${it.thickness || 0.6}" style="width:100%" />
+      <input type="range" class="stamp-slider" id="ovThick" min="0.2" max="3" step="0.1" value="${it.thickness || 0.6}" />
       <button class="btn secondary slim" id="ovDelete" style="color:#c1121f;margin-top:8px">Delete This Box</button>`;
     const tq = q => box.querySelector(q);
     box.querySelectorAll('[data-col]').forEach(b => b.onclick = () => { it.color = b.getAttribute('data-col'); renderStampCtl(); drawOverlayItems(); });
@@ -1523,7 +1529,7 @@ function renderStampCtl() {
       <input type="color" id="ovColorPick" value="${/^#[0-9a-fA-F]{6}$/.test(it.color) ? it.color : '#ffffff'}" style="width:44px;height:32px;padding:0;border:1px solid #000;border-radius:6px" />
     </div>
     <label style="margin-top:8px">Size</label>
-    <input type="range" id="ovSize" min="2" max="14" step="0.5" value="${it.size}" style="width:100%" />
+    <input type="range" class="stamp-slider" id="ovSize" min="0.5" max="3" step="0.1" value="${it.size}" />
     <label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-weight:bold;font-size:14px;margin-top:8px">
       <input type="checkbox" id="ovOutline" ${it.outline ? 'checked' : ''} style="width:20px;height:20px"> Outline for legibility
     </label>
