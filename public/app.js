@@ -1,7 +1,7 @@
 const el = document.getElementById('app');
 // Phones/tablets open to Capture (grab a photo fast); computers open to the Library (review the photos).
 const IS_HANDHELD = (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) || window.innerWidth < 768;
-let state = { view: IS_HANDHELD ? 'capture' : 'organize', location: null, address: null, photoFile: null, kind: 'note', area: '', areas: [], groupId: null, imgv: 0, plan: 'free', me: null, ewrId: null, selectedIds: new Set() };
+let state = { view: IS_HANDHELD ? 'capture' : 'organize', location: null, address: null, photoFile: null, kind: 'note', area: '', areas: [], groups: null, groupId: null, imgv: 0, plan: 'free', me: null, ewrId: null, selectedIds: new Set() };
 
 // Pro gating on the client. Mirrors isPro(user) on the server. Pro-only UI must
 // not render at all for free users (no disabled teaser).
@@ -98,7 +98,22 @@ async function api(path, opts = {}) {
 
 async function boot() {
   const r = await api('/api/me');
-  if (r.ok) { try { const me = await r.json(); state.me = me; state.plan = me.plan || 'free'; } catch (e) {} await loadAreas(); renderApp(); } else renderLogin();
+  if (r.ok) {
+    try { const me = await r.json(); state.me = me; state.plan = me.plan || 'free'; } catch (e) {}
+    await loadAreas();
+    // Start loading documents as soon as the user signs in. By the time they
+    // open Create, existing documents can be shown immediately instead of
+    // appearing only after another action refreshes the list.
+    prefetchGroups();
+    renderApp();
+  } else renderLogin();
+}
+
+async function prefetchGroups() {
+  try {
+    const r = await api('/api/groups');
+    if (r.ok) state.groups = await r.json();
+  } catch (e) {}
 }
 
 function renderLogin() {
@@ -2178,13 +2193,21 @@ async function createGroup() {
 async function loadGroups() {
   const list = document.getElementById('glist');
   if (!list) return;
-  list.innerHTML = '<p class="status">Loading...</p>';
+  if (Array.isArray(state.groups)) renderGroupCards(list, state.groups);
+  else list.innerHTML = '<p class="status">Loading your documents...</p>';
   const r = await api('/api/groups');
   if (!r.ok) { list.innerHTML = '<p class="status">Could not load.</p>'; return; }
   const groups = await r.json();
+  state.groups = groups;
+  // The user may have changed sections while this request was running.
+  if (!list.isConnected) return;
+  renderGroupCards(list, groups);
+}
+
+function renderGroupCards(list, groups) {
   if (!groups.length) { list.innerHTML = '<p class="empty">No documents yet. Select captures in Organize, then create your first document above.</p>'; return; }
   list.innerHTML = groups.map(g => `
-    <div class="card">
+    <article class="card document-card">
       <div style="font-weight:bold;font-size:17px">${esc(g.title || 'Untitled group')}</div>
       ${g.description ? `<div style="margin:4px 0">${esc(g.description)}</div>` : ''}
       <div class="meta">${g.item_count} photo${g.item_count === 1 ? '' : 's'}${(isProClient() && g.score != null) ? ` <span class="scorechip" style="background:${scoreColor(g.score)}">Score ${g.score} · ${esc(g.band)}</span>` : ''}</div>
@@ -2192,7 +2215,7 @@ async function loadGroups() {
         <button class="btn slim gopen" data-id="${g.id}">Open Document</button>
         <button class="btn secondary slim" data-id="${g.id}" data-del="1" style="color:#c1121f">Delete</button>
       </div>
-    </div>`).join('');
+    </article>`).join('');
   list.querySelectorAll('.gopen').forEach(b => b.onclick = () => { state.groupId = parseInt(b.getAttribute('data-id'), 10); renderGroups(); });
   list.querySelectorAll('[data-del]').forEach(b => b.onclick = () => deleteGroup(parseInt(b.getAttribute('data-id'), 10)));
 }

@@ -140,6 +140,8 @@ textarea { min-height: 96px; resize: vertical; }
 .workflow-organize, .workflow-edit, .workflow-create, .workflow-send { max-width:980px !important; }
 .workflow-organize #cards, .workflow-edit #cards, #glist, .send-capture-list { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
 .workflow-organize #cards .card, .workflow-edit #cards .card, #glist .card { margin-bottom:0; }
+.document-card { display:flex; flex-direction:column; }
+.document-card > .row { margin-top:auto !important; padding-top:8px; border-top:1px solid #d7d7d7; }
 .workflow-organize .rotaterow, .workflow-organize .stampbtn, .workflow-organize .cropbtn,
 .workflow-organize .restorebtn, .workflow-organize .editnote, .workflow-organize .defectrow { display:none !important; }
 .delivery-actions { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; }
