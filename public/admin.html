@@ -31,6 +31,11 @@
     .account-actions { margin-top:14px; padding-top:10px; border-top:1px solid #e3e6ea; }
     .account-actions .row { margin-top:8px; }
     .account-actions .btn { margin-top:0; padding:11px 8px; font-size:14px; }
+    .reset-password-panel { margin-top:10px; padding:12px; border:1px solid #1d4ed8; border-radius:9px; background:#f4f7ff; }
+    .reset-password-panel[hidden] { display:none; }
+    .reset-password-panel label { margin:0 0 5px; }
+    .reset-password-actions { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin-top:8px; }
+    .reset-password-actions .btn { width:100%; }
     .admin-top-actions { display:flex; align-items:center; gap:14px; }
     .issue-admin-card { display:grid; grid-template-columns:180px minmax(0,1fr); gap:14px; }
     .issue-admin-card img { width:180px; max-height:220px; object-fit:cover; object-position:top; margin:0; border:1px solid #aaa; border-radius:6px; }
@@ -40,6 +45,7 @@
       .password-row { grid-template-columns:1fr 1fr; }
       .password-row input { grid-column:1 / -1; }
       .account-actions .row { flex-direction:column; }
+      .reset-password-actions { grid-template-columns:1fr; }
       .issue-admin-card { grid-template-columns:1fr; }
       .issue-admin-card img { width:100%; max-height:280px; }
     }
@@ -101,7 +107,10 @@
       if (!box) return;
       const mode = (document.getElementById('sortsel') || {}).value || 'active';
       box.innerHTML = sortUsers(mode).map(u => userCard(u)).join('');
-      box.querySelectorAll('[data-reset]').forEach(b => b.onclick = () => resetPassword(parseInt(b.getAttribute('data-reset'),10)));
+      box.querySelectorAll('[data-reset]').forEach(b => b.onclick = () => toggleResetPassword(parseInt(b.getAttribute('data-reset'),10)));
+      box.querySelectorAll('[data-recommend-password]').forEach(b => b.onclick = () => recommendResetPassword(parseInt(b.getAttribute('data-recommend-password'),10)));
+      box.querySelectorAll('[data-copy-password]').forEach(b => b.onclick = () => copyResetPassword(parseInt(b.getAttribute('data-copy-password'),10)));
+      box.querySelectorAll('[data-save-password]').forEach(b => b.onclick = () => saveResetPassword(parseInt(b.getAttribute('data-save-password'),10), b));
       box.querySelectorAll('[data-active]').forEach(b => b.onclick = () => setActive(parseInt(b.getAttribute('data-active'),10), b.getAttribute('data-to')==='1'));
       box.querySelectorAll('[data-plan]').forEach(b => b.onclick = () => setPlan(parseInt(b.getAttribute('data-plan'),10), b.getAttribute('data-planto')));
     }
@@ -189,6 +198,16 @@
               <button class="btn secondary" data-reset="${u.id}">Reset Password</button>
               <button class="btn secondary" data-plan="${u.id}" data-planto="${u.plan==='pro' ? 'free' : 'pro'}">${u.plan==='pro' ? 'Switch to Basic' : 'Upgrade to Pro'}</button>
               <button class="btn secondary" data-active="${u.id}" data-to="${u.active ? '0' : '1'}">${u.active ? 'Deactivate Login' : 'Reactivate Login'}</button>
+            </div>
+            <div class="reset-password-panel" id="reset-panel-${u.id}" hidden>
+              <label for="reset-password-${u.id}">New Password</label>
+              <input id="reset-password-${u.id}" type="text" autocomplete="new-password" placeholder="Enter or recommend a password" />
+              <div class="reset-password-actions">
+                <button class="btn secondary" type="button" data-recommend-password="${u.id}">Recommend Password</button>
+                <button class="btn secondary" type="button" data-copy-password="${u.id}">Copy Password</button>
+                <button class="btn" type="button" data-save-password="${u.id}">Save Password</button>
+              </div>
+              <div class="helper" id="reset-help-${u.id}">Recommended passwords are 10 characters and include uppercase, lowercase, numbers, and symbols.</div>
             </div>
           </div>
         </div>`;
@@ -306,14 +325,19 @@
     }
 
     function generatePassword(){
+      const chars=strongPasswordCharacters(20);
+      document.getElementById('cpass').value=chars;
+      document.getElementById('passhelp').textContent='Strong password generated. Copy it before creating the login.';
+    }
+
+    function strongPasswordCharacters(length){
       const upper='ABCDEFGHJKLMNPQRSTUVWXYZ', lower='abcdefghijkmnopqrstuvwxyz', digits='23456789', symbols='!@#$%*-_';
       const all=upper+lower+digits+symbols;
       const pick=(chars) => chars[crypto.getRandomValues(new Uint32Array(1))[0] % chars.length];
       const chars=[pick(upper),pick(lower),pick(digits),pick(symbols)];
-      while(chars.length<20) chars.push(pick(all));
+      while(chars.length<length) chars.push(pick(all));
       for(let i=chars.length-1;i>0;i--){ const j=crypto.getRandomValues(new Uint32Array(1))[0]%(i+1); [chars[i],chars[j]]=[chars[j],chars[i]]; }
-      document.getElementById('cpass').value=chars.join('');
-      document.getElementById('passhelp').textContent='Strong password generated. Copy it before creating the login.';
+      return chars.join('');
     }
 
     async function copyPassword(){
@@ -357,12 +381,35 @@
       renderUserList();
     }
 
-    async function resetPassword(id){
-      const pw = prompt('New password for this login:');
-      if (pw == null) return;
-      if (pw.length < 4) { toast('Password too short'); return; }
-      const r = await api(`/api/admin/users/${id}/password`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ password: pw }) });
-      toast(r.ok ? 'Password reset' : 'Password reset failed');
+    function toggleResetPassword(id){
+      const panel=document.getElementById(`reset-panel-${id}`);
+      if(!panel)return;
+      panel.hidden=!panel.hidden;
+      if(!panel.hidden) document.getElementById(`reset-password-${id}`).focus();
+    }
+    function recommendResetPassword(id){
+      const input=document.getElementById(`reset-password-${id}`);
+      input.value=strongPasswordCharacters(10);
+      document.getElementById(`reset-help-${id}`).textContent='Strong 10-character password recommended. Copy it, then save it.';
+      input.focus(); input.select();
+    }
+    async function copyResetPassword(id){
+      const input=document.getElementById(`reset-password-${id}`);
+      if(!input.value){toast('Recommend or enter a password first');return;}
+      try{await navigator.clipboard.writeText(input.value);toast('Password copied');}
+      catch(e){input.select();document.execCommand('copy');toast('Password copied');}
+    }
+    async function saveResetPassword(id,btn){
+      const input=document.getElementById(`reset-password-${id}`),pw=input.value;
+      if(pw.length<10){toast('Password must be at least 10 characters');input.focus();return;}
+      btn.disabled=true;btn.textContent='Saving...';
+      try{
+        const r=await api(`/api/admin/users/${id}/password`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pw})});
+        if(!r.ok)throw new Error();
+        toast('Password saved');
+        document.getElementById(`reset-help-${id}`).textContent='Password saved. Give the copied password to the user securely.';
+      }catch(e){toast('Password could not be saved');}
+      finally{btn.disabled=false;btn.textContent='Save Password';}
     }
     async function setActive(id, active){
       if (!active && !confirm('Deactivate this login? They will not be able to sign in. Their data is kept.')) return;
