@@ -176,7 +176,7 @@ function renderApp() {
         </div>
       </div>
       <div class="tabs workflow-tabs" aria-label="Photo Notes workflow">
-        <div class="tab ${state.view==='capture'||state.view==='ticket'?'on':''}" id="tabCapture">Capture</div>
+        <div class="tab ${['capture','camera-tools','ticket','camera-reader','alignment'].includes(state.view)?'on':''}" id="tabCapture">Capture</div>
         <div class="tab ${state.view==='organize'?'on':''}" id="tabOrganize">Organize</div>
         <div class="tab ${state.view==='edit'?'on':''}" id="tabEdit">Edit</div>
         <div class="tab ${state.view==='create'?'on':''}" id="tabCreate">Create</div>
@@ -205,7 +205,10 @@ function renderApp() {
   document.getElementById('tabCreate').onclick = () => { state.view='create'; state.groupId=null; renderApp(); };
   document.getElementById('tabSend').onclick = () => { state.view='send'; renderApp(); };
   if (state.view === 'capture') renderCapture();
+  else if (state.view === 'camera-tools') renderCameraTools();
   else if (state.view === 'ticket') renderTicketScanner();
+  else if (state.view === 'camera-reader') renderCameraReader();
+  else if (state.view === 'alignment') renderAlignmentTool();
   else if (state.view === 'organize') renderList();
   else if (state.view === 'edit') renderEdit();
   else if (state.view === 'create') renderGroups();
@@ -224,7 +227,7 @@ function areaChips() {
 function renderCapture() {
   const body = document.getElementById('body');
   body.innerHTML = `
-    ${isProClient() ? `<section class="ticket-entry"><div><strong>Asphalt Ticket Scanner</strong><span>Photograph a delivery ticket, review the details, and track today’s tonnage.</span></div><button type="button" class="btn slim" id="openTicketScanner">Scan Ticket</button></section>` : ''}
+    ${isProClient() ? `<section class="ticket-entry"><div><strong>Camera Tools</strong><span>Use the camera to read documents and instruments, or create precisely matched project photos.</span></div><button type="button" class="btn slim" id="openCameraTools">Open Camera Tools</button></section>` : ''}
     <label>Photo</label>
     <button type="button" class="btn" id="takephoto">Take Photo</button>
     <button type="button" class="btn secondary" id="choosephoto" style="margin-top:8px">Choose from library or files</button>
@@ -253,8 +256,8 @@ function renderCapture() {
     <button class="btn" id="save">Save</button>
   `;
 
-  const ticketButton = document.getElementById('openTicketScanner');
-  if (ticketButton) ticketButton.onclick = () => { state.view = 'ticket'; renderApp(); };
+  const cameraToolsButton = document.getElementById('openCameraTools');
+  if (cameraToolsButton) cameraToolsButton.onclick = () => { state.view = 'camera-tools'; renderApp(); };
 
   document.getElementById('takephoto').onclick = () => document.getElementById('photoCam').click();
   document.getElementById('choosephoto').onclick = () => document.getElementById('photoLib').click();
@@ -293,6 +296,98 @@ function renderCapture() {
   }
 }
 
+// ================= Asphalt Pro camera tools =================
+function cameraToolCard(title, description, action, id) {
+  return `<article class="camera-tool-card"><div><strong>${title}</strong><span>${description}</span></div><button class="btn secondary slim" id="${id}">${action}</button></article>`;
+}
+function renderCameraTools() {
+  const body = document.getElementById('body');
+  body.className = 'workflow-camera-tools';
+  body.innerHTML = `
+    <button class="backlink" id="toolsBack">‹ Back to Capture</button>
+    <div class="workflow-intro"><strong>Camera Tools</strong><span>Choose what the camera needs to do. Source photos are retained for verification.</span></div>
+    <section class="camera-tool-group">
+      <div class="camera-tool-heading"><strong>Document Scanners</strong><span>Turn photographed documents and identification plates into searchable information.</span></div>
+      <div class="camera-tool-grid">
+        ${cameraToolCard('Asphalt Ticket Scanner','Read delivery-ticket details and calculate saved daily tonnage.','Scan Ticket','toolTicket')}
+        ${cameraToolCard('Equipment Plate Scanner','Read manufacturer, model, serial number, year, and equipment specifications.','Scan Plate','toolEquipment')}
+      </div>
+    </section>
+    <section class="camera-tool-group">
+      <div class="camera-tool-heading"><strong>Instrument Readers</strong><span>Capture the displayed value while retaining a photograph of the instrument.</span></div>
+      <div class="camera-tool-grid">
+        ${cameraToolCard('Gauge & Instrument Reader','Read gauges, scales, hour meters, thermometers, fuel displays, and other instruments.','Read Instrument','toolGauge')}
+      </div>
+    </section>
+    <section class="camera-tool-group">
+      <div class="camera-tool-heading"><strong>Comparison Tools</strong><span>Create consistent visual records of work before and after completion.</span></div>
+      <div class="camera-tool-grid">
+        ${cameraToolCard('Before & After Alignment','Use an earlier photo as a framing reference, compare the alignment, and save the pair.','Match Photos','toolAlignment')}
+      </div>
+    </section>`;
+  document.getElementById('toolsBack').onclick = () => { state.view='capture'; renderApp(); };
+  document.getElementById('toolTicket').onclick = () => { state.view='ticket'; renderApp(); };
+  document.getElementById('toolEquipment').onclick = () => { cameraReaderType='equipment_plate'; state.view='camera-reader'; renderApp(); };
+  document.getElementById('toolGauge').onclick = () => { cameraReaderType='gauge'; state.view='camera-reader'; renderApp(); };
+  document.getElementById('toolAlignment').onclick = () => { state.view='alignment'; renderApp(); };
+}
+
+let cameraReaderType = 'equipment_plate', cameraReaderFile = null, cameraReaderDraft = null;
+const readerConfigs = {
+  equipment_plate: { title:'Equipment Plate Scanner', noun:'plate', fields:[['manufacturer','Manufacturer'],['model','Model'],['serial_number','Serial Number'],['year','Year'],['equipment_type','Equipment Type'],['specifications','Other Specifications']] },
+  gauge: { title:'Gauge & Instrument Reader', noun:'instrument', fields:[['instrument_type','Instrument Type'],['reading','Displayed Reading'],['unit','Unit'],['equipment_name','Equipment Name or Number'],['observed_at','Displayed Date or Time'],['notes','Reading Notes']] },
+};
+function renderCameraReader() {
+  const cfg = readerConfigs[cameraReaderType]; const body = document.getElementById('body');
+  body.className = 'workflow-camera-tools'; cameraReaderFile = null; cameraReaderDraft = null;
+  body.innerHTML = `
+    <button class="backlink" id="readerBack">‹ Back to Camera Tools</button>
+    <div class="workflow-intro"><strong>${cfg.title}</strong><span>Fill the frame with the ${cfg.noun}, keep the text or display sharp, and avoid glare. Review the reading before saving.</span></div>
+    <section class="ticket-scan-panel"><div class="formhead">1. Photograph the ${cfg.noun === 'plate' ? 'Plate' : 'Instrument'}</div>
+      <div class="row"><button class="btn" id="readerTake">Take Photo</button><button class="btn secondary" id="readerChoose">Choose Existing Photo</button></div>
+      <input type="file" accept="image/*" capture="environment" id="readerCam" style="display:none"><input type="file" accept="image/*" id="readerLib" style="display:none">
+      <div class="photo-box" id="readerPreviewBox" style="display:none;margin-top:12px"><img id="readerPreview" alt="Source photo"></div>
+      <button class="btn" id="readerRead" style="margin-top:12px" disabled>Read ${cfg.noun === 'plate' ? 'Plate' : 'Instrument'}</button><div class="status" id="readerStatus"></div>
+    </section><div id="readerReview"></div><div class="formhead" style="margin-top:28px">Saved ${cfg.title.replace('Scanner','Records').replace('Reader','Readings')}</div><div id="readerSaved"><p class="status">Loading...</p></div>`;
+  document.getElementById('readerBack').onclick = () => { state.view='camera-tools'; renderApp(); };
+  document.getElementById('readerTake').onclick = () => document.getElementById('readerCam').click();
+  document.getElementById('readerChoose').onclick = () => document.getElementById('readerLib').click();
+  const pick = e => { const f=e.target.files&&e.target.files[0]; if(!f)return; cameraReaderFile=f; document.getElementById('readerPreview').src=URL.createObjectURL(f); document.getElementById('readerPreviewBox').style.display='block'; document.getElementById('readerRead').disabled=false; document.getElementById('readerReview').innerHTML=''; document.getElementById('readerStatus').textContent='Ready to read.'; e.target.value=''; };
+  document.getElementById('readerCam').onchange=pick; document.getElementById('readerLib').onchange=pick; document.getElementById('readerRead').onclick=scanCameraReader;
+  loadCameraReadings();
+}
+async function scanCameraReader() {
+  if(!cameraReaderFile)return; const cfg=readerConfigs[cameraReaderType], btn=document.getElementById('readerRead'), st=document.getElementById('readerStatus');
+  btn.disabled=true; btn.textContent='Reading...'; st.textContent='Reading only the information visible in the photo.';
+  try { const fd=new FormData(); fd.append('reading_type',cameraReaderType); fd.append('photo',cameraReaderFile); const r=await api('/api/camera-readings/scan',{method:'POST',body:fd}); const d=await r.json().catch(()=>({})); if(!r.ok||!d.reading)throw new Error(); cameraReaderDraft=d.reading; renderCameraReaderReview(); st.textContent=d.ai_read?'Reading complete. Correct anything needed, then save.':'Automatic reading was unsuccessful. Enter the visible information, then save.'; }
+  catch(e){ st.textContent=`The ${cfg.noun} could not be read. Retake the photo closer, in even light, and avoid glare.`; btn.disabled=false; btn.textContent='Try Again'; }
+}
+function renderCameraReaderReview() {
+  const cfg=readerConfigs[cameraReaderType], f=cameraReaderDraft.fields||{}, box=document.getElementById('readerReview');
+  box.innerHTML=`<section class="ticket-review-panel"><div class="formhead">2. Review and Save</div><div class="status">AI confidence: <strong>${esc(cameraReaderDraft.confidence||'low')}</strong>. The photograph is the source of truth.</div><div class="ticket-form-grid">${cfg.fields.map(([key,label])=>`<div>${ticketField('cr_'+key,label,f[key])}</div>`).join('')}</div><label for="cr_title">Record Name</label><input id="cr_title" value="${esc(cameraReaderDraft.title||'')}"><button class="btn" id="readerSave">Save Record</button></section>`;
+  document.getElementById('readerSave').onclick=saveCameraReading;
+}
+async function saveCameraReading() {
+  const cfg=readerConfigs[cameraReaderType], fields={}; cfg.fields.forEach(([key])=>fields[key]=document.getElementById('cr_'+key).value.trim()); const btn=document.getElementById('readerSave'); btn.disabled=true; btn.textContent='Saving...';
+  const r=await api(`/api/camera-readings/${cameraReaderDraft.id}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:document.getElementById('cr_title').value.trim(),fields})});
+  if(r.ok){toast('Record saved');renderCameraReader();}else{toast('Record could not be saved');btn.disabled=false;btn.textContent='Save Record';}
+}
+async function loadCameraReadings() {
+  const box=document.getElementById('readerSaved'); if(!box)return; try{const r=await api(`/api/camera-readings?type=${cameraReaderType}`);if(!r.ok)throw new Error();const rows=await r.json();box.innerHTML=rows.length?`<div class="camera-reading-list">${rows.map(x=>`<article class="card camera-reading-card">${x.photo_path?`<img src="${photoSrc(x.photo_path)}" alt="Source">`:''}<div><strong>${esc(x.title||'Untitled record')}</strong>${Object.entries(x.fields||{}).filter(([,v])=>v).slice(0,4).map(([k,v])=>`<div class="meta"><span>${esc(k.replaceAll('_',' '))}:</span> ${esc(v)}</div>`).join('')}</div></article>`).join('')}</div>`:'<p class="empty">No saved records yet.</p>'; }catch(e){box.innerHTML='<p class="status">Saved records could not be loaded.</p>';}
+}
+
+let alignmentBefore=null, alignmentAfterFile=null, alignmentCaptures=[], alignmentPairedIds=new Set();
+async function renderAlignmentTool() {
+  const body=document.getElementById('body'); body.className='workflow-camera-tools'; alignmentBefore=null; alignmentAfterFile=null;
+  body.innerHTML=`<button class="backlink" id="alignBack">‹ Back to Camera Tools</button><div class="workflow-intro"><strong>Before &amp; After Alignment</strong><span>Select the original photo, use it as your framing reference, then compare the new photo before saving the pair.</span></div><section class="alignment-step"><div class="formhead">1. Choose the Before Photo</div><div id="alignBeforeList"><p class="status">Loading your photos...</p></div></section><section class="alignment-step" id="alignTakeStep" hidden><div class="formhead">2. Match the Framing</div><p class="status">Stand in the same location. Match the camera height, direction, horizon, and visible landmarks shown below.</p><img class="alignment-reference" id="alignReference" alt="Before-photo framing reference"><button class="btn" id="alignTake">Take After Photo</button><button class="btn secondary" id="alignChoose">Choose Existing Photo</button><input type="file" accept="image/*" capture="environment" id="alignCam" style="display:none"><input type="file" accept="image/*" id="alignLib" style="display:none"></section><section class="alignment-step" id="alignCompareStep" hidden><div class="formhead">3. Check the Alignment</div><div class="alignment-overlay"><img id="alignBeforeImage" alt="Before"><img id="alignAfterImage" alt="After"></div><label for="alignOpacity">Comparison Overlay</label><input id="alignOpacity" class="blue-range" type="range" min="0" max="100" value="50"><p class="status">Move the slider. Fixed objects should remain in the same position. Retake the after photo if they shift substantially.</p><label for="alignNote">After Photo Note</label><textarea id="alignNote" placeholder="Describe the completed work..."></textarea><div class="row"><button class="btn secondary" id="alignRetake">Retake</button><button class="btn" id="alignSave">Save Matched Pair</button></div></section>`;
+  document.getElementById('alignBack').onclick=()=>{state.view='camera-tools';renderApp();};
+  try{const [r,p]=await Promise.all([api('/api/captures'),api('/api/pairs')]);alignmentCaptures=r.ok?await r.json():[];const pairs=p.ok?await p.json():[];alignmentPairedIds=new Set();pairs.forEach(x=>{alignmentPairedIds.add(Number(x.before_id));alignmentPairedIds.add(Number(x.after_id));});renderAlignmentChoices();}catch(e){document.getElementById('alignBeforeList').innerHTML='<p class="status">Photos could not be loaded.</p>';}
+}
+function renderAlignmentChoices(){const box=document.getElementById('alignBeforeList');const photos=alignmentCaptures.filter(c=>c.photo_path&&!alignmentPairedIds.has(Number(c.id))).slice(0,30);box.innerHTML=photos.length?`<div class="alignment-choice-grid">${photos.map(c=>`<button class="alignment-choice" data-id="${c.id}"><img src="${photoSrc(c.photo_path)}" alt=""><span>${esc(c.address||new Date(c.created_at).toLocaleDateString())}</span></button>`).join('')}</div>`:'<p class="empty">There are no unpaired project photos available. Save a new project photo first, then return here.</p>';box.querySelectorAll('.alignment-choice').forEach(b=>b.onclick=()=>chooseAlignmentBefore(Number(b.dataset.id)));}
+function chooseAlignmentBefore(id){alignmentBefore=alignmentCaptures.find(c=>c.id===id);document.querySelectorAll('.alignment-choice').forEach(b=>b.classList.toggle('selected',Number(b.dataset.id)===id));document.getElementById('alignReference').src=photoSrc(alignmentBefore.photo_path);document.getElementById('alignTakeStep').hidden=false;document.getElementById('alignTake').onclick=()=>document.getElementById('alignCam').click();document.getElementById('alignChoose').onclick=()=>document.getElementById('alignLib').click();const pick=e=>{const f=e.target.files&&e.target.files[0];if(!f)return;alignmentAfterFile=f;showAlignmentComparison();e.target.value='';};document.getElementById('alignCam').onchange=pick;document.getElementById('alignLib').onchange=pick;document.getElementById('alignTakeStep').scrollIntoView({behavior:'smooth'});}
+function showAlignmentComparison(){document.getElementById('alignBeforeImage').src=photoSrc(alignmentBefore.photo_path);document.getElementById('alignAfterImage').src=URL.createObjectURL(alignmentAfterFile);document.getElementById('alignCompareStep').hidden=false;const range=document.getElementById('alignOpacity'),after=document.getElementById('alignAfterImage');range.oninput=()=>after.style.opacity=String(Number(range.value)/100);after.style.opacity='.5';document.getElementById('alignRetake').onclick=()=>document.getElementById('alignCam').click();document.getElementById('alignSave').onclick=saveAlignedPair;document.getElementById('alignCompareStep').scrollIntoView({behavior:'smooth'});}
+async function saveAlignedPair(){if(!alignmentBefore||!alignmentAfterFile)return;const btn=document.getElementById('alignSave');btn.disabled=true;btn.textContent='Saving...';try{const fd=new FormData();fd.append('photo',alignmentAfterFile);fd.append('note',document.getElementById('alignNote').value.trim());fd.append('kind','note');fd.append('area_tags',JSON.stringify(alignmentBefore.area_tags||[]));const loc=await getLocationOnce();if(loc){fd.append('latitude',loc.lat);fd.append('longitude',loc.lng);}const cr=await api('/api/captures',{method:'POST',body:fd});if(!cr.ok)throw new Error();const after=await cr.json();const pr=await api('/api/pairs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({before_id:alignmentBefore.id,after_id:after.id})});if(!pr.ok)throw new Error();toast('Before and after pair saved');state.view='organize';renderApp();}catch(e){toast('Matched pair could not be saved');btn.disabled=false;btn.textContent='Save Matched Pair';}}
+
 // ================= Asphalt Pro ticket scanner =================
 let ticketPhotoFile = null, ticketDraft = null;
 function localDateValue() {
@@ -303,7 +398,7 @@ function renderTicketScanner() {
   const body = document.getElementById('body');
   body.className = 'workflow-ticket';
   body.innerHTML = `
-    <button class="backlink" id="ticketBack">‹ Back to Capture</button>
+    <button class="backlink" id="ticketBack">‹ Back to Camera Tools</button>
     <div class="workflow-intro"><strong>Asphalt Ticket Scanner</strong><span>Take a clear, straight-on photo of the entire delivery ticket. Review every field before saving.</span></div>
     <div class="ticket-scan-panel">
       <div class="formhead">1. Photograph the Ticket</div>
@@ -320,7 +415,7 @@ function renderTicketScanner() {
     <div id="ticketReview"></div>
     <div class="formhead" style="margin-top:28px">Today’s Saved Tickets</div>
     <div id="ticketToday"><p class="status">Loading tickets...</p></div>`;
-  document.getElementById('ticketBack').onclick = () => { ticketPhotoFile = null; ticketDraft = null; state.view='capture'; renderApp(); };
+  document.getElementById('ticketBack').onclick = () => { ticketPhotoFile = null; ticketDraft = null; state.view='camera-tools'; renderApp(); };
   document.getElementById('ticketTake').onclick = () => document.getElementById('ticketCam').click();
   document.getElementById('ticketChoose').onclick = () => document.getElementById('ticketLib').click();
   const pick = e => {

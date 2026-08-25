@@ -193,6 +193,22 @@ CREATE TABLE IF NOT EXISTS asphalt_tickets (
   updated_at             TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS asphalt_tickets_user_date_idx ON asphalt_tickets (user_id, ticket_date DESC, created_at DESC);
+-- Camera readers (Asphalt Pro): equipment plates and gauges are photographed
+-- as source evidence, while their reviewed structured data is the useful record.
+CREATE TABLE IF NOT EXISTS camera_readings (
+  id           SERIAL PRIMARY KEY,
+  user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  reading_type TEXT NOT NULL,
+  photo_path   TEXT,
+  title        TEXT,
+  fields       JSONB NOT NULL DEFAULT '{}'::jsonb,
+  confidence   TEXT,
+  raw_ai       JSONB,
+  status       TEXT NOT NULL DEFAULT 'draft',
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS camera_readings_user_type_idx ON camera_readings (user_id, reading_type, created_at DESC);
 `;
 
 const DEFAULT_AREAS = ['Roads', 'Maintenance', 'Walls', 'Security', 'Landscaping', 'Other'];

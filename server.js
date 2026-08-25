@@ -854,6 +854,77 @@ app.get('/api/asphalt-tickets', requireAuth, async (req, res) => {
   } catch (err) { console.error('[ticket.list]', err); res.status(500).json({ error: 'ticket list failed' }); }
 });
 
+// ---- Camera readers: equipment plates and gauges (Asphalt Pro) ----
+const CAMERA_READER_TYPES = ['equipment_plate', 'gauge'];
+function cameraReaderFields(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  const out = {};
+  for (const [key, val] of Object.entries(value)) {
+    if (!/^[a-z_]{1,40}$/.test(key)) continue;
+    out[key] = ticketText(val, 300);
+  }
+  return out;
+}
+function cameraReaderPrompt(type) {
+  if (type === 'equipment_plate') return `You are reading a photographed equipment identification or data plate for an asphalt contractor. Extract only information visibly printed on the plate. Never guess. Respond with ONLY JSON using exactly these keys: {"manufacturer":string|null,"model":string|null,"serial_number":string|null,"year":string|null,"equipment_type":string|null,"specifications":string|null,"confidence":"high"|"medium"|"low"}. Preserve identifiers exactly. Put other useful rated capacities, voltage, power, weight, or engine information in specifications as a concise line. Use null when absent or unreadable.`;
+  return `You are reading a photographed gauge, meter, scale display, hour meter, fuel display, thermometer, or other job-site instrument. Extract only what is visibly shown. Never guess. Respond with ONLY JSON using exactly these keys: {"instrument_type":string|null,"reading":string|null,"unit":string|null,"equipment_name":string|null,"observed_at":string|null,"notes":string|null,"confidence":"high"|"medium"|"low"}. Preserve the displayed value and decimal point exactly. Describe ambiguity in notes. Use null when absent or unreadable.`;
+}
+
+app.post('/api/camera-readings/scan', requireAuth, upload.single('photo'), async (req, res) => {
+  try {
+    if (await currentPlan(req.user.id) !== 'pro') {
+      if (req.file) { try { fs.unlinkSync(req.file.path); } catch (e) {} }
+      return res.status(403).json({ error: 'pro only' });
+    }
+    const type = ticketText(req.body && req.body.reading_type, 30);
+    if (!CAMERA_READER_TYPES.includes(type)) {
+      if (req.file) { try { fs.unlinkSync(req.file.path); } catch (e) {} }
+      return res.status(400).json({ error: 'invalid reader type' });
+    }
+    if (!req.file || !req.file.path) return res.status(400).json({ error: 'photo required' });
+    const ai = await visionJSON(req.file.path, cameraReaderPrompt(type), { maxTokens: 600 });
+    const fields = cameraReaderFields(ai);
+    delete fields.confidence;
+    const confidence = ai && ['high','medium','low'].includes(ai.confidence) ? ai.confidence : 'low';
+    const title = type === 'equipment_plate'
+      ? ticketText([fields.manufacturer, fields.model].filter(Boolean).join(' '))
+      : ticketText([fields.instrument_type, fields.reading, fields.unit].filter(Boolean).join(' '));
+    const row = (await pool.query(
+      `INSERT INTO camera_readings (user_id, reading_type, photo_path, title, fields, confidence, raw_ai)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      [req.user.id, type, `/uploads/${path.basename(req.file.path)}`, title, JSON.stringify(fields), confidence, ai ? JSON.stringify(ai) : null])).rows[0];
+    logEvent(req.user.id, 'camera_reader_scan', { type, ai: !!ai, confidence });
+    res.json({ ok:true, ai_read:!!ai, reading:row });
+  } catch (err) { console.error('[camera-reader.scan]', err); res.status(500).json({ error:'scan failed' }); }
+});
+
+app.post('/api/camera-readings/:id', requireAuth, async (req, res) => {
+  try {
+    if (await currentPlan(req.user.id) !== 'pro') return res.status(403).json({ error:'pro only' });
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id)) return res.status(400).json({ error:'bad id' });
+    const fields = cameraReaderFields(req.body && req.body.fields);
+    const title = ticketText(req.body && req.body.title);
+    const row = (await pool.query(
+      `UPDATE camera_readings SET title=$1, fields=$2, status='saved', updated_at=now()
+       WHERE id=$3 AND user_id=$4 RETURNING *`, [title, JSON.stringify(fields), id, req.user.id])).rows[0];
+    if (!row) return res.status(404).json({ error:'not found' });
+    logEvent(req.user.id, 'camera_reader_save', { type:row.reading_type });
+    res.json({ ok:true, reading:row });
+  } catch (err) { console.error('[camera-reader.save]', err); res.status(500).json({ error:'save failed' }); }
+});
+
+app.get('/api/camera-readings', requireAuth, async (req, res) => {
+  try {
+    if (await currentPlan(req.user.id) !== 'pro') return res.json([]);
+    const type = ticketText(req.query.type, 30);
+    const params = [req.user.id]; let where = `user_id=$1 AND status='saved'`;
+    if (CAMERA_READER_TYPES.includes(type)) { params.push(type); where += ` AND reading_type=$2`; }
+    const rows = (await pool.query(`SELECT * FROM camera_readings WHERE ${where} ORDER BY created_at DESC LIMIT 100`, params)).rows;
+    res.json(rows);
+  } catch (err) { console.error('[camera-reader.list]', err); res.status(500).json({ error:'list failed' }); }
+});
+
 // ---- AI defect classification (Pro): classify one saved capture ----
 async function classifyCapture(userId, id) {
   const row = (await pool.query(`SELECT * FROM captures WHERE id = $1 AND user_id = $2`, [id, userId])).rows[0];
