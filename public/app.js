@@ -879,6 +879,18 @@ async function saveNote(id, text, after) {
   else toast('Save failed');
 }
 
+async function editCaptureAddress(c) {
+  const next = prompt('Enter the complete address, including street number, city, state, and ZIP:', c.address || '');
+  if (next == null) return;
+  const address = next.trim();
+  if (!address) { toast('Enter a complete address'); return; }
+  const r = await api(`/api/captures/${c.id}`, {
+    method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ address }),
+  });
+  if (r.ok) { toast('Address saved'); loadCards((document.getElementById('filter') || {}).value || ''); }
+  else toast('Address could not be saved');
+}
+
 // ---- Library (saved captures) ----
 async function renderList() {
   const body = document.getElementById('body');
@@ -1253,6 +1265,7 @@ function captureCardHtml(c) {
     <div class="meta">${when}</div>
     <div class="rotaterow">${rotateButtons(c.id)}</div>
     <div class="addr">${esc(c.address || (c.latitude ? c.latitude.toFixed(5)+', '+c.longitude.toFixed(5) : 'No location'))}</div>
+    ${state.view === 'edit' ? `<button class="editlink editaddress" data-id="${c.id}" style="padding-left:0">Edit Address</button>` : ''}
     <div class="meta">${kind}${tags}</div>
     ${classifyRow}
     ${dims ? `<div class="meta"><strong>Dimensions:</strong> ${esc(dims)}</div>` : ''}
@@ -1280,6 +1293,8 @@ function pairCardHtml(before, after) {
       ${c.photo_path ? `<img src="${photoSrc(c.photo_path)}" alt="${label}" />` : ''}
       <div class="rotaterow">${rotateButtons(c.id)}</div>
       ${badge ? `<div style="margin:4px 0">${badge}</div>` : ''}
+      <div class="meta">${esc(c.address || 'No address')}</div>
+      ${state.view === 'edit' ? `<button class="editlink editaddress" data-id="${c.id}" style="padding-left:0">Edit Address</button>` : ''}
       ${dims ? `<div class="meta"><strong>Dimensions:</strong> ${esc(dims)}</div>` : ''}
       ${isProClient() && state.view === 'edit' && c.photo_path ? `<button class="btn secondary slim editdims" data-id="${c.id}">Measurements</button>` : ''}
       <div class="meta">${esc(c.note || '(no note)')}</div>
@@ -1296,6 +1311,9 @@ function wireCards(cards, rows) {
   cards.querySelectorAll('.capchk').forEach(c => c.onchange = () => { if (c.checked) state.selectedIds.add(String(c.value)); else state.selectedIds.delete(String(c.value)); });
   wireRotate(cards);
   cards.querySelectorAll('.editnote').forEach(b => b.onclick = () => startEditNote(parseInt(b.getAttribute('data-id'), 10), rows));
+  cards.querySelectorAll('.editaddress').forEach(b => {
+    b.onclick = () => { const c = rows.find(r => r.id === parseInt(b.getAttribute('data-id'), 10)); if (c) editCaptureAddress(c); };
+  });
   cards.querySelectorAll('.editdims').forEach(b => b.onclick = () => {
     const c = rows.find(r => r.id === parseInt(b.getAttribute('data-id'), 10));
     if (c) { state._dims = dimsFromCapture(c); state._measure = null; renderSavedDimsEditor(c); }

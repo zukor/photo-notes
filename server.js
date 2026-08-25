@@ -927,6 +927,7 @@ app.post('/api/captures/:id', requireAuth, async (req, res) => {
     const sets = [];
     const vals = [];
     if (typeof b.note === 'string') { vals.push(b.note); sets.push(`note = $${vals.length}`); }
+    if (typeof b.address === 'string') { vals.push(b.address.trim() || null); sets.push(`address = $${vals.length}`); }
     if (Array.isArray(b.area_tags)) { vals.push(b.area_tags); sets.push(`area_tags = $${vals.length}`); }
     if (b.kind === 'note' || b.kind === 'task') { vals.push(b.kind); sets.push(`kind = $${vals.length}`); }
     if (b.overlays !== undefined) {
@@ -964,6 +965,7 @@ app.post('/api/captures/:id', requireAuth, async (req, res) => {
       `UPDATE captures SET ${sets.join(', ')} WHERE id = $${vals.length - 1} AND user_id = $${vals.length} RETURNING *`, vals);
     if (!rows.length) return res.status(404).json({ error: 'not found' });
     if (typeof b.note === 'string') logEvent(req.user.id, 'note_edit', { chars: b.note.length });
+    if (typeof b.address === 'string') logEvent(req.user.id, 'address_edit', {});
     res.json(rows[0]);
   } catch (err) {
     console.error('[captures.update]', err);
