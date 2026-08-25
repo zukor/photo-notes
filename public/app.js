@@ -905,7 +905,7 @@ async function renderList() {
     </div>
     <input id="newgroupname" type="text" placeholder="...or type a new document title" style="margin-top:8px" />
 
-    ${isProClient() ? `<button class="btn secondary slim" id="openmap">Organize on Map</button>` : ''}
+    ${isProClient() ? `<button class="btn secondary slim" id="openmap">Open Job Site Map</button>` : ''}
 
     <div id="cards" style="margin-top:16px"></div>`;
   document.getElementById('filter').onchange = e => loadCards(e.target.value);
@@ -1699,12 +1699,22 @@ function loadLeaflet() {
 }
 async function renderMap() {
   const body = document.getElementById('body');
+  body.className = 'workflow-organize';
   body.innerHTML = `
-    <div class="row compact">
-      <select id="mapTopic" style="flex:1"><option value="">All Topics</option>${state.areas.map(a => `<option value="${esc(a)}">${esc(a)}</option>`).join('')}</select>
-      <select id="mapGroup" style="flex:1"><option value="">All Groups</option></select>
+    <div class="workflow-intro"><strong>Job Site Map</strong><span>See where saved photos were taken, filter them by topic or document, and measure pavement areas or roadway spans for takeoffs.</span></div>
+    <div class="row map-filter-row">
+      <div>
+        <label for="mapTopic" style="margin-top:0">Filter by Topic</label>
+        <select id="mapTopic"><option value="">All Topics</option>${state.areas.map(a => `<option value="${esc(a)}">${esc(a)}</option>`).join('')}</select>
+      </div>
+      <div>
+        <label for="mapGroup" style="margin-top:0">Filter by Document</label>
+        <select id="mapGroup"><option value="">All Documents</option></select>
+      </div>
     </div>
     <div class="status" style="margin-top:4px">Satellite imagery can be one or more years old. Verify recent construction on site.</div>
+    <label style="margin-top:14px">Optional Takeoff Tools</label>
+    <div class="status">Trace a pavement area or measure a roadway span directly on the satellite map.</div>
     <div id="mapMeasureBar" style="margin-top:6px"></div>
     <div id="mapdiv" style="height:68vh;min-height:340px;margin-top:8px;border:1px solid #000;border-radius:8px"></div>`;
   await loadLeaflet();
@@ -1713,7 +1723,7 @@ async function renderMap() {
   let cfg = {}; try { const c = await api('/api/config'); if (c.ok) cfg = await c.json(); } catch (e) {}
   window._mapCfg = cfg;
   const gsel = document.getElementById('mapGroup');
-  try { const gr = await api('/api/groups'); if (gr.ok) { const gs = await gr.json(); gsel.innerHTML = '<option value="">All Groups</option>' + gs.map(g => `<option value="${g.id}">${esc(g.title || 'Untitled')}</option>`).join(''); } } catch (e) {}
+  try { const gr = await api('/api/groups'); if (gr.ok) { const gs = await gr.json(); gsel.innerHTML = '<option value="">All Documents</option>' + gs.map(g => `<option value="${g.id}">${esc(g.title || 'Untitled')}</option>`).join(''); } } catch (e) {}
   const div = document.getElementById('mapdiv');
   mapObj = L.map(div).setView([29.5, -98.5], 12);
   if (cfg.mapbox_token) {
@@ -1757,7 +1767,7 @@ function mapPopupHtml(c) {
     ${badge ? `<div style="margin:4px 0">${badge}</div>` : ''}
     <div style="font-weight:bold;font-size:13px;color:#000">${esc(c.address || 'No location')}</div>
     <div style="font-size:12px;color:#000">${esc(note)}${(c.note || '').length > 120 ? '…' : ''}</div>
-    <button class="mapopen" data-id="${c.id}" style="margin-top:6px">Open in Library</button>
+    <button class="mapopen" data-id="${c.id}" style="margin-top:6px">Open in Organize</button>
   </div>`;
 }
 function openCaptureInLibrary(id) {
@@ -1900,7 +1910,7 @@ function zonePopupHtml(z, defc) {
     <div class="row" style="margin-top:6px;gap:6px;flex-wrap:wrap">
       <button class="zn-edit" data-id="${z.id}">Edit points</button>
       <button class="zn-rename" data-id="${z.id}">Rename</button>
-      <button class="zn-attach" data-id="${z.id}">Attach to group</button>
+      <button class="zn-attach" data-id="${z.id}">Attach to document</button>
       <button class="zn-del" data-id="${z.id}">Delete</button>
     </div>
   </div>`;
@@ -1916,9 +1926,9 @@ function wireZonePopup(e, z) {
   };
   const at = q('.zn-attach'); if (at) at.onclick = async () => {
     const gsel = document.getElementById('mapGroup'); const gid = gsel ? gsel.value : '';
-    if (!gid) { toast('Pick a group in the filter above first, then Attach'); return; }
+    if (!gid) { toast('Choose a document in the filter above first, then Attach'); return; }
     const r = await api(`/api/zones/${z.id}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ group_id: gid }) });
-    if (r.ok) { toast('Attached to group'); loadZones(); } else toast('Attach failed');
+    if (r.ok) { toast('Attached to document'); loadZones(); } else toast('Attach failed');
   };
   const dl = q('.zn-del'); if (dl) dl.onclick = async () => {
     if (!confirm('Delete this zone?')) return;
