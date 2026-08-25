@@ -23,6 +23,7 @@ app.use(express.json());
 app.use(cookieParser());
 
 // ---- static frontend + uploaded photos ----
+app.get('/vendor/html2canvas.min.js', (req, res) => res.sendFile(require.resolve('html2canvas/dist/html2canvas.min.js')));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static(UPLOAD_DIR));
 
@@ -923,6 +924,62 @@ app.get('/api/camera-readings', requireAuth, async (req, res) => {
     const rows = (await pool.query(`SELECT * FROM camera_readings WHERE ${where} ORDER BY created_at DESC LIMIT 100`, params)).rows;
     res.json(rows);
   } catch (err) { console.error('[camera-reader.list]', err); res.status(500).json({ error:'list failed' }); }
+});
+
+// ---- Basic tester issue reports ----
+async function emailIssueReport(report, user) {
+  const key = process.env.RESEND_API_KEY;
+  if (!key) return { status:'pending', error:'Email delivery is not configured' };
+  const recipient = process.env.ISSUE_REPORT_EMAIL || process.env.ADMIN_EMAIL || 'turcotte@zukor.com';
+  const from = process.env.ISSUE_REPORT_FROM || 'Photo Notes Issues <issues@photonotesapp.com>';
+  const when = new Date(report.created_at).toLocaleString('en-US', { timeZone:'America/Chicago' });
+  const body = {
+    from, to:[recipient], subject:`Photo Notes issue #${report.id} from ${user.name || user.email}`,
+    html:`<h2>Photo Notes Issue #${report.id}</h2><p><strong>Tester:</strong> ${escXml(user.name || '')} (${escXml(user.email || '')})</p><p><strong>Page:</strong> ${escXml(report.page_name || '')}</p><p><strong>Submitted:</strong> ${escXml(when)} CT</p><p><strong>Description:</strong></p><p style="white-space:pre-wrap">${escXml(report.description)}</p><hr><p><strong>Page URL:</strong> ${escXml(report.page_url || '')}<br><strong>Screen:</strong> ${escXml(report.viewport || '')}<br><strong>Device:</strong> ${escXml(report.user_agent || '')}</p>`,
+  };
+  const local = localPhoto(report.screenshot_path);
+  if (local && fs.existsSync(local)) body.attachments = [{ filename:`photo-notes-issue-${report.id}.jpg`, content:fs.readFileSync(local).toString('base64') }];
+  try {
+    const r = await fetch('https://api.resend.com/emails', { method:'POST', headers:{'content-type':'application/json','authorization':`Bearer ${key}`}, body:JSON.stringify(body) });
+    if (!r.ok) return { status:'failed', error:`Mail service returned ${r.status}` };
+    return { status:'sent', error:null };
+  } catch (e) { return { status:'failed', error:ticketText(e && e.message, 200) || 'Mail request failed' }; }
+}
+
+app.post('/api/issues', requireAuth, upload.single('screenshot'), async (req, res) => {
+  try {
+    if (await currentPlan(req.user.id) === 'pro') {
+      if (req.file) { try { fs.unlinkSync(req.file.path); } catch (e) {} }
+      return res.status(403).json({ error:'basic only' });
+    }
+    const description = ticketText(req.body && req.body.description, 10000);
+    if (!description) {
+      if (req.file) { try { fs.unlinkSync(req.file.path); } catch (e) {} }
+      return res.status(400).json({ error:'description required' });
+    }
+    let screenshotPath = null;
+    if (req.file) {
+      if (!String(req.file.mimetype || '').startsWith('image/')) { try { fs.unlinkSync(req.file.path); } catch (e) {} }
+      else screenshotPath = `/uploads/${path.basename(req.file.path)}`;
+    }
+    const row = (await pool.query(
+      `INSERT INTO issue_reports (user_id, description, page_name, page_url, screenshot_path, viewport, user_agent)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      [req.user.id, description, ticketText(req.body.page_name,100), ticketText(req.body.page_url,500), screenshotPath, ticketText(req.body.viewport,100), ticketText(req.body.user_agent,1000)])).rows[0];
+    const user = (await pool.query(`SELECT name,email FROM users WHERE id=$1`, [req.user.id])).rows[0] || req.user;
+    const delivery = await emailIssueReport(row, user);
+    await pool.query(`UPDATE issue_reports SET email_status=$1,email_error=$2 WHERE id=$3`, [delivery.status, delivery.error, row.id]);
+    logEvent(req.user.id, 'issue_report', { issue_id:row.id, screenshot:!!screenshotPath, email_status:delivery.status });
+    res.json({ ok:true, id:row.id, email_status:delivery.status });
+  } catch (err) { console.error('[issues.create]', err); res.status(500).json({ error:'issue report failed' }); }
+});
+
+app.get('/api/admin/issues', requireAdmin, async (req, res) => {
+  try {
+    const rows = (await pool.query(
+      `SELECT i.*,u.name AS user_name,u.email AS user_email FROM issue_reports i JOIN users u ON u.id=i.user_id ORDER BY i.created_at DESC LIMIT 200`)).rows;
+    res.json(rows);
+  } catch (err) { console.error('[issues.admin-list]', err); res.status(500).json({ error:'failed' }); }
 });
 
 // ---- AI defect classification (Pro): classify one saved capture ----

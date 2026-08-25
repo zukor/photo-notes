@@ -184,7 +184,21 @@ function renderApp() {
       </div>
       <div id="body"></div>
       <div class="footer">&copy; ${new Date().getFullYear()} Zukor AI. All Rights Reserved.</div>
-    </div>`;
+    </div>
+    ${!isProClient() ? `<button class="issue-fab" id="issueFab" type="button" data-html2canvas-ignore="true" aria-label="Report an issue">Report an Issue</button>
+    <div class="issue-modal" id="issueModal" hidden data-html2canvas-ignore="true">
+      <div class="issue-dialog" role="dialog" aria-modal="true" aria-labelledby="issueTitle">
+        <button class="issue-close" id="issueClose" type="button" aria-label="Close">×</button>
+        <h2 id="issueTitle">Report an Issue</h2>
+        <p class="status">Tell us what happened, what you expected, and what you were doing when it happened.</p>
+        <div class="issue-shot-status" id="issueShotStatus">Capturing this page...</div>
+        <label for="issueDescription">What went wrong?</label>
+        <button class="btn" id="issueRecord" type="button">Speak Description</button>
+        <textarea id="issueDescription" placeholder="Describe the problem in detail..."></textarea>
+        <button class="btn" id="issueSend" type="button">Send Issue Report</button>
+        <div class="status" id="issueStatus"></div>
+      </div>
+    </div>` : ''}`;
   const profileButton = document.getElementById('profileButton');
   const profileMenu = document.getElementById('profileMenu');
   profileButton.onclick = (e) => {
@@ -199,6 +213,7 @@ function renderApp() {
     }
   };
   document.getElementById('signout').onclick = async () => { await api('/api/logout', { method: 'POST' }); state.me = null; renderLogin(); };
+  const issueFab = document.getElementById('issueFab'); if (issueFab) issueFab.onclick = openIssueReporter;
   document.getElementById('tabCapture').onclick = () => { state.view='capture'; renderApp(); };
   document.getElementById('tabOrganize').onclick = () => { state.view='organize'; renderApp(); };
   document.getElementById('tabEdit').onclick = () => { state.view='edit'; renderApp(); };
@@ -215,6 +230,43 @@ function renderApp() {
   else if (state.view === 'send') renderSend();
   else if (state.view === 'map') renderMap();
   else { state.view = 'organize'; renderList(); }
+}
+
+// ================= Basic issue reporter =================
+let issueScreenshotBlob = null, issuePageName = '', issueRecognizer = null;
+const issuePageLabels = { capture:'Capture', organize:'Organize', edit:'Edit', create:'Create', send:'Send', map:'Job Site Map' };
+async function openIssueReporter() {
+  const fab=document.getElementById('issueFab'); if(fab){fab.disabled=true;fab.textContent='Capturing...';}
+  issuePageName=issuePageLabels[state.view]||state.view||'Photo Notes'; issueScreenshotBlob=null;
+  try {
+    if(window.html2canvas){const canvas=await window.html2canvas(document.querySelector('.wrap'),{useCORS:true,allowTaint:false,backgroundColor:'#f4f7f8',scale:Math.min(window.devicePixelRatio||1,1.5),logging:false});issueScreenshotBlob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',0.78));}
+  } catch(e){issueScreenshotBlob=null;}
+  const modal=document.getElementById('issueModal'); if(!modal)return; modal.hidden=false;
+  document.getElementById('issueShotStatus').textContent=issueScreenshotBlob?'✓ Screenshot of this page attached':'Screenshot unavailable; your description will still be saved';
+  document.getElementById('issueClose').onclick=closeIssueReporter;
+  document.getElementById('issueRecord').onclick=toggleIssueDictation;
+  document.getElementById('issueSend').onclick=submitIssueReport;
+  document.getElementById('issueDescription').focus();
+  if(fab){fab.disabled=false;fab.textContent='Report an Issue';}
+}
+function closeIssueReporter(){if(issueRecognizer){try{issueRecognizer.stop();}catch(e){}}const m=document.getElementById('issueModal');if(m)m.hidden=true;issueScreenshotBlob=null;issueRecognizer=null;}
+async function toggleIssueDictation(){
+  const ta=document.getElementById('issueDescription'),btn=document.getElementById('issueRecord'),SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){ta.focus();toast('Use the microphone key on your keyboard to dictate');return;}
+  if(issueRecognizer){try{issueRecognizer.stop();}catch(e){}return;}
+  try{if(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia){const stream=await navigator.mediaDevices.getUserMedia({audio:true});stream.getTracks().forEach(t=>t.stop());}}catch(e){toast('Allow microphone access for this website, then try again');return;}
+  issueRecognizer=new SR();issueRecognizer.lang='en-US';issueRecognizer.continuous=!isIOS();issueRecognizer.interimResults=true;let base=ta.value.trim();if(base)base+=' ';btn.textContent='Recording... tap to stop';btn.classList.add('on');
+  issueRecognizer.onresult=e=>{let finalText='',interim='';for(let i=e.resultIndex;i<e.results.length;i++){const t=e.results[i][0].transcript;if(e.results[i].isFinal)finalText+=t;else interim+=t;}if(finalText)base+=finalText+' ';ta.value=(base+interim).trimStart();};
+  issueRecognizer.onerror=e=>{if(e&&e.error!=='aborted'&&e.error!=='no-speech')toast('Recording stopped. You can continue by typing or try again');};
+  issueRecognizer.onend=()=>{issueRecognizer=null;const b=document.getElementById('issueRecord');if(b){b.textContent='Speak Description';b.classList.remove('on');}};
+  try{issueRecognizer.start();}catch(e){issueRecognizer=null;btn.textContent='Speak Description';btn.classList.remove('on');}
+}
+async function submitIssueReport(){
+  if(issueRecognizer){try{issueRecognizer.stop();}catch(e){}}
+  const ta=document.getElementById('issueDescription'),description=ta.value.trim(),btn=document.getElementById('issueSend'),st=document.getElementById('issueStatus');
+  if(!description){st.textContent='Please describe the problem before sending.';ta.focus();return;}
+  btn.disabled=true;btn.textContent='Sending...';st.textContent='Saving your report...';
+  try{const fd=new FormData();fd.append('description',description);fd.append('page_name',issuePageName);fd.append('page_url',location.href);fd.append('viewport',`${window.innerWidth} × ${window.innerHeight}`);fd.append('user_agent',navigator.userAgent);if(issueScreenshotBlob)fd.append('screenshot',issueScreenshotBlob,'issue-screen.jpg');const r=await api('/api/issues',{method:'POST',body:fd});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error();st.textContent=d.email_status==='sent'?`Issue #${d.id} sent. Thank you.`:`Issue #${d.id} saved. Thank you.`;btn.textContent='Sent';setTimeout(closeIssueReporter,1800);}catch(e){st.textContent='The report could not be sent. Check your connection and try again.';btn.disabled=false;btn.textContent='Send Issue Report';}
 }
 
 function areaChips() {

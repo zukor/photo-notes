@@ -32,11 +32,16 @@
     .account-actions .row { margin-top:8px; }
     .account-actions .btn { margin-top:0; padding:11px 8px; font-size:14px; }
     .admin-top-actions { display:flex; align-items:center; gap:14px; }
+    .issue-admin-card { display:grid; grid-template-columns:180px minmax(0,1fr); gap:14px; }
+    .issue-admin-card img { width:180px; max-height:220px; object-fit:cover; object-position:top; margin:0; border:1px solid #aaa; border-radius:6px; }
+    .issue-description { white-space:pre-wrap; line-height:1.4; margin:8px 0; }
     @media (max-width:520px) {
       .capture-stats { grid-template-columns:repeat(3, minmax(0, 1fr)); }
       .password-row { grid-template-columns:1fr 1fr; }
       .password-row input { grid-column:1 / -1; }
       .account-actions .row { flex-direction:column; }
+      .issue-admin-card { grid-template-columns:1fr; }
+      .issue-admin-card img { width:100%; max-height:280px; }
     }
   </style>
 </head>
@@ -265,6 +270,10 @@
           <div class="helper">Combined account and activity counts for every user listed below.</div>
           <div id="summary"></div>
 
+          <label style="margin-top:22px">Tester Issue Reports</label>
+          <div class="helper">Reports sent from Photo Notes Basic, including the page screenshot and the tester’s spoken or typed description.</div>
+          <div id="issues"><p class="status">Loading...</p></div>
+
           <div class="row" style="margin-top:18px; align-items:center; gap:10px">
             <label style="margin:0">Users &amp; Usage</label>
             <select id="sortsel" style="margin-left:auto; max-width:230px">
@@ -286,7 +295,14 @@
       document.getElementById('createbtn').onclick = createUser;
       document.getElementById('generatepass').onclick = generatePassword;
       document.getElementById('copypass').onclick = copyPassword;
+      loadIssues();
       loadUsers();
+    }
+
+    async function loadIssues(){
+      const box=document.getElementById('issues'); if(!box)return;
+      try{const r=await api('/api/admin/issues');if(!r.ok)throw new Error();const rows=await r.json();box.innerHTML=rows.length?rows.map(i=>`<article class="card issue-admin-card">${i.screenshot_path?`<a href="${esc(i.screenshot_path)}" target="_blank" rel="noopener"><img src="${esc(i.screenshot_path)}" alt="Issue ${i.id} screenshot"></a>`:'<div class="muted">No screenshot</div>'}<div><div class="user-title-row"><div class="userhead">Issue #${i.id}: ${esc(i.page_name||'Photo Notes')}</div><span class="pill ${i.email_status==='sent'?'pro':'basic'}">Email ${esc(i.email_status||'pending')}</span></div><div class="muted">${esc(i.user_name||i.user_email)} · ${fdatetime(i.created_at)} · ${esc(i.viewport||'screen unknown')}</div><div class="issue-description">${esc(i.description)}</div><div class="muted">${esc(i.page_url||'')}</div></div></article>`).join(''):'<p class="helper">No tester issues have been reported yet.</p>';}
+      catch(e){box.innerHTML='<p class="status">Issue reports could not be loaded.</p>';}
     }
 
     function generatePassword(){

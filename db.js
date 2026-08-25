@@ -209,6 +209,22 @@ CREATE TABLE IF NOT EXISTS camera_readings (
   updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS camera_readings_user_type_idx ON camera_readings (user_id, reading_type, created_at DESC);
+-- Basic-app issue reports. Reports are stored before email is attempted so a
+-- mail-provider outage can never discard a tester's feedback.
+CREATE TABLE IF NOT EXISTS issue_reports (
+  id             SERIAL PRIMARY KEY,
+  user_id        INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  description    TEXT NOT NULL,
+  page_name      TEXT,
+  page_url       TEXT,
+  screenshot_path TEXT,
+  viewport       TEXT,
+  user_agent     TEXT,
+  email_status   TEXT NOT NULL DEFAULT 'pending',
+  email_error    TEXT,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS issue_reports_created_idx ON issue_reports (created_at DESC);
 `;
 
 const DEFAULT_AREAS = ['Roads', 'Maintenance', 'Walls', 'Security', 'Landscaping', 'Other'];

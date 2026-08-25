@@ -187,6 +187,15 @@ textarea { min-height: 96px; resize: vertical; }
 .alignment-overlay { position:relative; width:100%; aspect-ratio:4/3; overflow:hidden; margin:10px 0 14px; border-radius:8px; background:#111; }
 .alignment-overlay img { position:absolute; inset:0; width:100%; height:100%; object-fit:contain; margin:0; }
 .blue-range { accent-color:#1d4ed8; }
+.issue-fab { position:fixed; right:max(14px,env(safe-area-inset-right)); bottom:max(14px,env(safe-area-inset-bottom)); z-index:80; width:auto; padding:8px 12px; border:1px solid #000; border-radius:999px; background:#fff; color:#000; font:700 12px/1.2 Arial,sans-serif; box-shadow:0 2px 10px rgba(0,0,0,.18); cursor:pointer; }
+.issue-fab:hover { background:#eef4ff; border-color:#1d4ed8; }
+.issue-modal[hidden] { display:none; }
+.issue-modal { position:fixed; inset:0; z-index:100; display:flex; align-items:center; justify-content:center; padding:18px; background:rgba(0,0,0,.55); }
+.issue-dialog { position:relative; width:min(560px,100%); max-height:calc(100vh - 36px); overflow:auto; padding:20px; border:1px solid #000; border-radius:12px; background:#fff; color:#000; box-shadow:0 10px 35px rgba(0,0,0,.3); }
+.issue-dialog h2 { margin:0 34px 4px 0; }
+.issue-close { position:absolute; top:10px; right:12px; width:34px; height:34px; border:0; background:transparent; color:#000; font-size:28px; line-height:1; cursor:pointer; }
+.issue-shot-status { margin:12px 0; padding:9px 11px; border-radius:7px; background:#eef4ff; color:#000; font-size:13px; }
+.issue-dialog textarea { min-height:150px; }
 .send-capture-row span:last-child { min-width:0; }
 .send-capture-row small { display:block; font-weight:normal; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-top:3px; }
 .card { background: #fff; border: 1px solid #000; border-radius: 10px; padding: 12px; margin-bottom: 14px; }
@@ -246,6 +255,8 @@ input.dimfield.suggested {
   .ticket-entry .btn { width:100%; }
   .ticket-form-grid, .ticket-list, .camera-tool-grid, .camera-reading-list { grid-template-columns:1fr; }
   .alignment-choice-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .issue-modal { align-items:flex-end; padding:10px; }
+  .issue-dialog { max-height:calc(100vh - 20px); padding:18px; border-radius:14px 14px 8px 8px; }
   .organize-action-row .btn { flex:1 1 auto; }
   .organize-footer-actions .btn { width:100%; }
 }
