@@ -930,8 +930,8 @@ async function renderList() {
     </div>
     ${isProClient() ? `<div class="status" id="classifyprog"></div>
     <details class="pair-builder">
-      <summary>Create Before/After Matching Pairs</summary>
-      <p>Select the original photo and the completed-work photo, then create the pair. The older photo will be marked Before by default.</p>
+      <summary><span>Before &amp; After Photos</span><span class="pair-expand">Search for Pairs</span></summary>
+      <p>When work is complete, select one photo from before the job and one photo from after the job. The older photo will be marked Before by default.</p>
       <button class="btn secondary slim" id="pairbtn">Create Pair From 2 Selected Photos</button>
     </details>` : ''}
 
@@ -1239,7 +1239,7 @@ async function loadCards(area) {
   // Pro: pull only pairs the user deliberately created so we can render them
   // as combined before/after cards. Never suggest pairs automatically.
   let pairs = [];
-  if (isProClient()) {
+  if (isProClient() && state.view === 'organize') {
     try { const pr = await api('/api/pairs'); if (pr.ok) pairs = await pr.json(); } catch (e) {}
   }
   const byId = {}; rows.forEach(c => { byId[c.id] = c; });

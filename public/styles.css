@@ -126,7 +126,8 @@ textarea { min-height: 96px; resize: vertical; }
 .workflow-intro strong { font-size:18px; }
 .workflow-intro span { font-size:14px; }
 .pair-builder { margin-top:12px; padding:12px 14px; border:1px solid #000; border-radius:10px; background:#fff; }
-.pair-builder summary { cursor:pointer; font-weight:bold; color:#000; }
+.pair-builder summary { display:flex; align-items:center; justify-content:space-between; gap:16px; cursor:pointer; font-weight:bold; color:#000; }
+.pair-expand { flex:none; color:#1d4ed8; font-size:14px; text-decoration:underline; }
 .pair-builder p { margin:10px 0 4px; font-size:14px; line-height:1.35; color:#000; }
 .pair-builder .btn { margin-top:10px; }
 .organize-action-row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
