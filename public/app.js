@@ -279,10 +279,10 @@ function areaChips() {
 function renderCapture() {
   const body = document.getElementById('body');
   body.innerHTML = `
-    ${isProClient() ? `<section class="ticket-entry"><div><strong>Camera Tools</strong><span>Use the camera to read documents and instruments, or create precisely matched project photos.</span></div><button type="button" class="btn slim" id="openCameraTools">Open Camera Tools</button></section>` : ''}
-    <label>Photo</label>
+    <label>Photo Note</label>
     <button type="button" class="btn" id="takephoto">Take Photo</button>
     <button type="button" class="btn secondary" id="choosephoto" style="margin-top:8px">Choose from library or files</button>
+    ${isProClient() ? `<button type="button" class="btn secondary" id="openCameraTools" style="margin-top:8px">Other Camera Tools</button>` : ''}
     <input type="file" accept="image/*" capture="environment" id="photoCam" style="display:none" />
     <input type="file" accept="image/*" id="photoLib" style="display:none" />
     <div class="photo-box" id="previewBox" style="display:none;margin-top:12px"><img id="preview" alt="preview" style="display:block" /></div>

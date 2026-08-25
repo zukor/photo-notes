@@ -254,8 +254,8 @@
           </div>
 
           <label style="margin-top:8px">Create a Login</label>
-          <div class="helper">Create access for a person or company. Email and password are required; industry is optional.</div>
-          <input id="cname" type="text" placeholder="User or company name" autocomplete="name" />
+          <div class="helper">Create access for a person. First name, last name, email, and password are required; industry is optional.</div>
+          <input id="cname" type="text" placeholder="First and last name" autocomplete="name" />
           <input id="cemail" type="email" placeholder="Email" inputmode="email" autocomplete="email" style="margin-top:8px" />
           <input id="cindustry" type="text" placeholder="Industry (optional)" style="margin-top:8px" />
           <div class="password-row">
@@ -328,6 +328,7 @@
       const email = document.getElementById('cemail').value.trim();
       const industry = document.getElementById('cindustry').value.trim();
       const password = document.getElementById('cpass').value;
+      if (name.split(/\s+/).filter(Boolean).length < 2) { toast('First and last name are required'); return; }
       if (!email || !password) { toast('Email and password are required'); return; }
       const btn = document.getElementById('createbtn'); btn.disabled = true; btn.textContent = 'Creating...';
       try {

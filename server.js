@@ -514,8 +514,9 @@ async function currentPlan(userId) {
 }
 
 app.get('/api/me', requireAuth, async (req, res) => {
-  const plan = await currentPlan(req.user.id);
-  res.json({ authed: true, name: req.user.name, role: req.user.role, email: req.user.email, plan });
+  const row = (await pool.query(`SELECT name,email,role,plan FROM users WHERE id=$1 AND active=true`, [req.user.id])).rows[0];
+  if (!row) return res.status(401).json({ error:'not authenticated' });
+  res.json({ authed:true, name:row.name, role:row.role, email:row.email, plan:row.plan === 'pro' ? 'pro' : 'free' });
 });
 
 // ---- photo upload ----
@@ -1943,6 +1944,7 @@ app.post('/api/admin/users', requireAdmin, async (req, res) => {
     const name = b.name ? String(b.name).trim() : '';
     const industry = b.industry ? String(b.industry).trim() : null;
     const password = String(b.password || '');
+    if (name.split(/\s+/).filter(Boolean).length < 2) return res.status(400).json({ error: 'first and last name are required' });
     if (!email || !password) return res.status(400).json({ error: 'email and password are required' });
     const hash = bcrypt.hashSync(password, 10);
     const { rows } = await pool.query(
@@ -1966,7 +1968,11 @@ app.post('/api/admin/users/:id', requireAdmin, async (req, res) => {
     const b = req.body || {};
     const sets = [];
     const vals = [];
-    if (typeof b.name === 'string') { vals.push(b.name.trim()); sets.push(`name = $${vals.length}`); }
+    if (typeof b.name === 'string') {
+      const name = b.name.trim();
+      if (name.split(/\s+/).filter(Boolean).length < 2) return res.status(400).json({ error:'first and last name are required' });
+      vals.push(name); sets.push(`name = $${vals.length}`);
+    }
     if (typeof b.industry === 'string') { vals.push(b.industry.trim()); sets.push(`industry = $${vals.length}`); }
     if (typeof b.active === 'boolean') { vals.push(b.active); sets.push(`active = $${vals.length}`); }
     if (b.role === 'admin' || b.role === 'user') { vals.push(b.role); sets.push(`role = $${vals.length}`); }
