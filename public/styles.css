@@ -68,7 +68,7 @@ textarea { min-height: 96px; resize: vertical; }
   display:grid; grid-template-columns:112px minmax(0,1fr) 30px; grid-template-rows:auto auto;
   width:100%; max-width:980px; align-items:center; column-gap:12px; row-gap:2px; margin:8px auto 10px;
 }
-.app-header .zukor-corner-logo { display:block; grid-column:1; grid-row:1; width:112px; max-width:none; height:auto; justify-self:start; }
+.app-header .zukor-corner-logo { display:block; grid-column:1; grid-row:1; width:112px; min-width:112px; max-width:none; height:auto; justify-self:start; }
 .app-header .brandrow { grid-column:1 / -1; grid-row:2; min-width:0; width:min(500px,100%); justify-self:center; }
 .app-header .brandrow .brand { width:100%; max-width:100%; }
 .app-header .account-menu-wrap { grid-column:3; grid-row:1; justify-self:end; }
@@ -232,7 +232,7 @@ input.dimfield.suggested {
 @media (max-width: 380px) {
   .wrap { padding: 12px 12px 96px; }
   .app-header { grid-template-columns:auto minmax(0,1fr) auto; column-gap:4px; }
-  .app-header .zukor-corner-logo { width:63px; }
+  .app-header .zukor-corner-logo { width:63px; min-width:0; }
   .edition-label { font-size:11px; }
   .pill { padding: 7px 11px; font-size: 14px; }
   .btn { padding: 13px; font-size: 16px; }
@@ -242,7 +242,7 @@ input.dimfield.suggested {
 @media (max-width: 700px) {
   #body, .workflow-organize, .workflow-edit, .workflow-create, .workflow-send { max-width:640px !important; }
   .app-header { grid-template-columns:auto minmax(0,1fr) auto; column-gap:6px; row-gap:1px; margin-top:6px; }
-  .app-header .zukor-corner-logo { width:74px; }
+  .app-header .zukor-corner-logo { width:74px; min-width:0; }
   .app-header .brand:not([style*="font-size"]) { height:42px; }
   .app-header .brandrow { width:100%; }
   .app-header .brandrow .brand.asphalt-pro-brand { width:100%; max-width:calc(100vw - 28px); height:42px; }
