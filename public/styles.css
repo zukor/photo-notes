@@ -58,7 +58,7 @@ textarea { min-height: 96px; resize: vertical; }
 .brandrow .brand { flex:0 1 260px; width:260px; margin-left:0; margin-right:0; }
 .brandrow .brand.asphalt-pro-brand {
   flex-basis: 500px; width: 500px; max-width: calc(100vw - 110px);
-  background-image: url('/asphalt-pro-logo-animated.svg?v=57');
+  background-image: url('/asphalt-pro-logo-animated.svg?v=64');
 }
 .edition-label { flex:0 0 auto; color:#000; font-size:12px; font-weight:bold; line-height:1.05; text-align:left; }
 .edition-label span { display:block; }
