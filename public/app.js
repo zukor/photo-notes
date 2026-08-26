@@ -1,12 +1,14 @@
 const el = document.getElementById('app');
 // Phones/tablets open to Capture (grab a photo fast); computers open to the Library (review the photos).
 const IS_HANDHELD = (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) || window.innerWidth < 768;
-let state = { view: IS_HANDHELD ? 'capture' : 'organize', location: null, address: null, photoFile: null, kind: 'note', area: '', areas: [], jobs: [], jobId: '', groups: null, groupId: null, imgv: 0, plan: 'free', me: null, ewrId: null, selectedIds: new Set() };
+let state = { view: IS_HANDHELD ? 'capture' : 'organize', location: null, address: null, photoFile: null, kind: 'note', area: '', areas: [], jobs: [], jobId: '', hoaCompany:null, hoaMembers:[], hoaUnread:0, communities:[], communityId:'', groups: null, groupId: null, imgv: 0, plan: 'free', proType:'asphalt', me: null, ewrId: null, selectedIds: new Set() };
 
 // Pro gating on the client. Mirrors isPro(user) on the server. Pro-only UI must
 // not render at all for free users (no disabled teaser).
 function isProClient() { return state.plan === 'pro'; }
-function featureOn(name) { return isProClient() && (!state.me || !state.me.feature_access || state.me.feature_access[name] !== false); }
+function isHoaClient(){return isProClient()&&state.proType==='hoa';}
+function isAsphaltClient(){return isProClient()&&!isHoaClient();}
+function featureOn(name) { return isAsphaltClient() && (!state.me || !state.me.feature_access || state.me.feature_access[name] !== false); }
 function isMacClient() { return /Macintosh|MacIntel/.test(navigator.userAgent + ' ' + navigator.platform) && !isIOS(); }
 let recognizer = null;
 let currentGroupItems = [];
@@ -33,6 +35,7 @@ async function loadAreas() {
   if (!state.area || !state.areas.includes(state.area)) state.area = state.areas[0] || '';
 }
 async function loadJobs(){try{const r=await api('/api/jobs');state.jobs=r.ok?await r.json():[];if(state.jobId&&!state.jobs.some(j=>String(j.id)===String(state.jobId)))state.jobId='';}catch(e){state.jobs=[];}}
+async function loadHoaContext(){if(!isHoaClient())return;try{const [a,b,m,n]=await Promise.all([api('/api/hoa/company'),api('/api/hoa/communities'),api('/api/hoa/members'),api('/api/hoa/notifications')]);state.hoaCompany=a.ok?await a.json():null;state.communities=b.ok?await b.json():[];state.hoaMembers=m.ok?await m.json():[];const notes=n.ok?await n.json():[];state.hoaUnread=notes.filter(x=>!x.read_at).length;if(!state.communityId&&state.communities.length)state.communityId=String(state.communities[0].id);}catch(e){state.communities=[];state.hoaMembers=[];}}
 
 async function addArea() {
   const input = document.getElementById('newarea');
@@ -115,8 +118,8 @@ async function api(path, opts = {}) {
 async function boot() {
   const r = await api('/api/me');
   if (r.ok) {
-    try { const me = await r.json(); state.me = me; state.plan = me.plan || 'free'; } catch (e) {}
-    await Promise.all([loadAreas(),loadJobs()]);
+    try { const me = await r.json(); state.me = me; state.plan = me.plan || 'free'; state.proType=me.pro_type||'asphalt'; } catch (e) {}
+    await Promise.all([loadAreas(),loadJobs(),loadHoaContext()]);
     restoreOfflineQueue();
     // Start loading documents as soon as the user signs in. By the time they
     // open Create, existing documents can be shown immediately instead of
@@ -169,7 +172,7 @@ function renderApp() {
       <div class="app-header">
         <img class="zukor-corner-logo" src="/zukor-logo.svg" alt="Zukor AI" />
         <div class="brandrow">
-          <div class="brand ${isProClient() ? 'asphalt-pro-brand' : ''}">Photo Notes${isProClient() ? ' Asphalt Pro' : ''}</div>
+          <div class="brand ${isAsphaltClient() ? 'asphalt-pro-brand' : ''} ${isHoaClient()?'hoa-pro-brand':''}">Photo Notes${isHoaClient()?' HOA Maintenance Pro':isAsphaltClient()?' Asphalt Pro':''}</div>
         </div>
         <div class="header-controls">
           <div class="language-switch" aria-label="Language"><button type="button" data-language="en">EN</button><span> </span><button type="button" data-language="es">ES</button></div>
@@ -178,19 +181,19 @@ function renderApp() {
             <div class="profile-menu" id="profileMenu" hidden>
               <div class="profile-name">${esc((state.me && state.me.name) || 'Photo Notes User')}</div>
               <div class="profile-email">${esc((state.me && state.me.email) || '')}</div>
-              <div class="profile-plan">${isProClient() ? 'Asphalt Pro Plan' : 'Basic Plan'}</div>
+              <div class="profile-plan">${isHoaClient()?'HOA Maintenance Pro':isAsphaltClient() ? 'Asphalt Pro Plan' : 'Basic Plan'}</div>
               ${state.me && state.me.role === 'admin' ? '<a href="/admin">Admin Dashboard</a>' : ''}
               <button type="button" id="signout">Sign Out</button>
             </div>
           </div>
         </div>
       </div>
-      <div class="tabs workflow-tabs" aria-label="Photo Notes workflow">
+      <div class="tabs workflow-tabs ${isHoaClient()?'hoa-tabs':''}" aria-label="Photo Notes workflow">
         <div class="tab ${['capture','camera-tools','ticket','camera-reader','alignment'].includes(state.view)?'on':''}" id="tabCapture">Capture</div>
-        <div class="tab ${state.view==='organize'?'on':''}" id="tabOrganize">Organize</div>
-        <div class="tab ${state.view==='edit'?'on':''}" id="tabEdit">Edit</div>
-        <div class="tab ${state.view==='create'?'on':''}" id="tabCreate">Create</div>
-        <div class="tab ${state.view==='send'?'on':''}" id="tabSend">Send</div>
+        <div class="tab ${['organize','hoa-maintenance'].includes(state.view)?'on':''}" id="tabOrganize">${isHoaClient()?'Maintenance':'Organize'}</div>
+        <div class="tab ${['edit','hoa-communities'].includes(state.view)?'on':''}" id="tabEdit">${isHoaClient()?'Communities':'Edit'}</div>
+        <div class="tab ${['create','hoa-dashboard'].includes(state.view)?'on':''}" id="tabCreate">${isHoaClient()?`Dashboard${state.hoaUnread?' ('+state.hoaUnread+')':''}`:'Create'}</div>
+        <div class="tab ${['send','hoa-reports'].includes(state.view)?'on':''}" id="tabSend">${isHoaClient()?'Reports':'Send'}</div>
       </div>
       <div id="body"></div>
       <div class="footer">&copy; ${new Date().getFullYear()} Zukor AI. All Rights Reserved.</div>
@@ -225,19 +228,23 @@ function renderApp() {
   document.getElementById('signout').onclick = async () => { await api('/api/logout', { method: 'POST' }); state.me = null; renderLogin(); };
   const issueFab = document.getElementById('issueFab'); if (issueFab) issueFab.onclick = openIssueReporter;
   document.getElementById('tabCapture').onclick = () => { state.view='capture'; renderApp(); };
-  document.getElementById('tabOrganize').onclick = () => { state.view='organize'; renderApp(); };
-  document.getElementById('tabEdit').onclick = () => { state.view='edit'; renderApp(); };
-  document.getElementById('tabCreate').onclick = () => { state.view='create'; state.groupId=null; renderApp(); };
-  document.getElementById('tabSend').onclick = () => { state.view='send'; renderApp(); };
+  document.getElementById('tabOrganize').onclick = () => { state.view=isHoaClient()?'hoa-maintenance':'organize'; renderApp(); };
+  document.getElementById('tabEdit').onclick = () => { state.view=isHoaClient()?'hoa-communities':'edit'; renderApp(); };
+  document.getElementById('tabCreate').onclick = () => { state.view=isHoaClient()?'hoa-dashboard':'create'; state.groupId=null; renderApp(); };
+  document.getElementById('tabSend').onclick = () => { state.view=isHoaClient()?'hoa-reports':'send'; renderApp(); };
   if (state.view === 'capture') renderCapture();
   else if (state.view === 'camera-tools') renderCameraTools();
   else if (state.view === 'ticket') renderTicketScanner();
   else if (state.view === 'camera-reader') renderCameraReader();
   else if (state.view === 'alignment') renderAlignmentTool();
-  else if (state.view === 'organize') renderList();
+  else if (state.view === 'organize') isHoaClient()?renderHoaMaintenance():renderList();
   else if (state.view === 'edit') renderEdit();
   else if (state.view === 'create') renderGroups();
   else if (state.view === 'send') renderSend();
+  else if (state.view === 'hoa-maintenance') renderHoaMaintenance();
+  else if (state.view === 'hoa-communities') renderHoaCommunities();
+  else if (state.view === 'hoa-dashboard') renderHoaDashboard();
+  else if (state.view === 'hoa-reports') renderHoaReports();
   else if (state.view === 'map') renderMap();
   else { state.view = 'organize'; renderList(); }
 }
@@ -285,12 +292,12 @@ function areaChips() {
     `<div class="pill ${state.area===a?'on':''}" data-area="${esc(a)}">${esc(a)} <span class="areax" data-del="${esc(a)}">&times;</span></div>`
   ).join('');
 }
+const HOA_AREAS=['Streets and Pavement','Sidewalks and Curbs','Drainage','Walls and Fencing','Gates and Access Control','Landscaping and Irrigation','Lighting and Electrical','Signs and Pavement Markings','Pools and Recreation','Clubhouse and Buildings','Mailboxes','Security','Trees','Utilities','General Appearance','Other'];
 
 function renderCapture() {
   const body = document.getElementById('body');
   body.innerHTML = `
-    <label>Job</label>
-    <select id="captureJob"><option value="">No Job Selected</option>${state.jobs.filter(j=>j.status==='active').map(j=>`<option value="${j.id}" ${String(state.jobId)===String(j.id)?'selected':''}>${esc(j.job_number?j.job_number+' — '+j.name:j.name)}</option>`).join('')}</select>
+    ${isHoaClient()?`<label>HOA / Community</label><select id="hoaCommunity"><option value="">Select Community</option>${state.communities.map(c=>`<option value="${c.id}" ${String(state.communityId)===String(c.id)?'selected':''}>${esc(c.name)}</option>`).join('')}</select>${!state.communities.length?'<p class="status">Create your first community under Communities before saving a maintenance record.</p>':''}<label>Issue Title</label><input id="hoaTitle" placeholder="Briefly identify the maintenance issue"><div class="row compact"><div style="flex:1"><label>Record Type</label><select id="hoaType"><option value="maintenance">Maintenance Issue</option><option value="information">Information Request</option><option value="inspection">Inspection Finding</option></select></div><div style="flex:1"><label>Priority</label><select id="hoaPriority"><option value="routine">Routine</option><option value="high">High</option><option value="emergency">Emergency</option><option value="monitor">Monitor</option></select></div></div>`:`<label>Job</label><select id="captureJob"><option value="">No Job Selected</option>${state.jobs.filter(j=>j.status==='active').map(j=>`<option value="${j.id}" ${String(state.jobId)===String(j.id)?'selected':''}>${esc(j.job_number?j.job_number+' — '+j.name:j.name)}</option>`).join('')}</select>`}
     <label>Photo Note</label>
     <button type="button" class="btn" id="takephoto">Take Photo</button>
     <button type="button" class="btn secondary" id="choosephoto" style="margin-top:8px">Choose from library or files</button>
@@ -311,12 +318,12 @@ function renderCapture() {
     <button type="button" class="btn" id="dictate" style="margin-bottom:8px">Record Note</button>
     <textarea id="note" placeholder="Type what you're looking at, or tap Record Note"></textarea>
 
-    <label>Select Topic</label>
+    ${isHoaClient()?`<label>Maintenance Category</label><select id="hoaArea">${HOA_AREAS.map(a=>`<option value="${esc(a)}">${esc(a)}</option>`).join('')}</select><div id="hoaDirectedWrap" style="display:none"><label>Directed To</label><input id="hoaDirected" placeholder="Person expected to answer"></div>`:`<label>Select Topic</label>
     <div class="pill-group" id="areas">${areaChips()}</div>
     <div class="row compact" style="margin-top:10px">
       <input type="text" id="newarea" placeholder="Add a topic..." />
       <button class="btn secondary" id="addarea">Add</button>
-    </div>
+    </div>`}
 
     <button class="btn" id="save">Save</button>
   `;
@@ -329,16 +336,16 @@ function renderCapture() {
   document.getElementById('photoCam').onchange = (e) => { if (e.target.files[0]) onPhotoChosen(e.target.files[0]); };
   document.getElementById('photoLib').onchange = (e) => { if (e.target.files[0]) onPhotoChosen(e.target.files[0]); };
   document.getElementById('save').onclick = saveCapture;
+  if(isHoaClient()){document.getElementById('hoaCommunity').onchange=e=>state.communityId=e.target.value;document.getElementById('hoaType').onchange=e=>document.getElementById('hoaDirectedWrap').style.display=e.target.value==='information'?'block':'none';}else{
   document.getElementById('captureJob').onchange=e=>state.jobId=e.target.value;
   document.getElementById('addarea').onclick = addArea;
   document.getElementById('newarea').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addArea(); } });
-
   document.getElementById('areas').onclick = (e) => {
     const del = e.target.getAttribute('data-del');
     if (del != null) { deleteArea(del); return; }
     const pill = e.target.closest('[data-area]');
     if (pill) { state.area = pill.getAttribute('data-area'); renderCapture(); }
-  };
+  };}
 
   const dictateBtn = document.getElementById('dictate');
   if (dictateBtn) dictateBtn.onclick = toggleDictation;
@@ -1141,7 +1148,7 @@ function queueDb(){return new Promise((resolve,reject)=>{if(!window.indexedDB)re
 async function queueStore(payload,hadCoords){const db=await queueDb();return new Promise((resolve,reject)=>{const tx=db.transaction('captures','readwrite');const r=tx.objectStore('captures').add({payload,hadCoords:!!hadCoords,createdAt:Date.now()});r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);tx.oncomplete=()=>db.close();});}
 async function queueDelete(id){if(id==null)return;try{const db=await queueDb();await new Promise((resolve,reject)=>{const tx=db.transaction('captures','readwrite');tx.objectStore('captures').delete(id);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);});db.close();}catch(e){}}
 async function restoreOfflineQueue(){if(offlineQueueRestored)return;offlineQueueRestored=true;try{const db=await queueDb();const rows=await new Promise((resolve,reject)=>{const tx=db.transaction('captures','readonly');const r=tx.objectStore('captures').getAll();r.onsuccess=()=>resolve(r.result||[]);r.onerror=()=>reject(r.error);});db.close();const known=new Set(bgQueue.map(x=>x.id));rows.forEach(row=>{if(!known.has(row.id))bgQueue.push({id:row.id,payload:row.payload,hadCoords:row.hadCoords,tries:0});});if(rows.length){toast(`${rows.length} offline capture${rows.length===1?'':'s'} ready to upload`);bgIndicator();drainQueue();}}catch(e){}}
-function payloadFormData(p){const fd=new FormData();if(p.photo)fd.append('photo',p.photo,p.photoName||'offline-photo.jpg');fd.append('note',p.note||'');fd.append('area_tags',p.area_tags||'[]');fd.append('kind',p.kind||'note');if(p.job_id)fd.append('job_id',p.job_id);if(p.latitude!=null)fd.append('latitude',p.latitude);if(p.longitude!=null)fd.append('longitude',p.longitude);if(p.address)fd.append('address',p.address);return fd;}
+function payloadFormData(p){const fd=new FormData();if(p.photo)fd.append('photo',p.photo,p.photoName||'offline-photo.jpg');fd.append('note',p.note||'');fd.append('area_tags',p.area_tags||'[]');fd.append('kind',p.kind||'note');if(p.job_id)fd.append('job_id',p.job_id);for(const k of ['hoa_community_id','hoa_title','hoa_item_type','hoa_priority','hoa_area','hoa_directed_to','hoa_budget_source','hoa_photo_stage','hoa_target_date'])if(p[k])fd.append(k,p[k]);if(p.latitude!=null)fd.append('latitude',p.latitude);if(p.longitude!=null)fd.append('longitude',p.longitude);if(p.address)fd.append('address',p.address);return fd;}
 
 function bgIndicator() {
   let el = document.getElementById('bgstatus');
@@ -1186,6 +1193,7 @@ async function drainQueue() {
         if (!r.ok) throw new Error('http ' + r.status);
         const saved=await r.json().catch(()=>({}));
         if(saved.duplicate_matches&&saved.duplicate_matches.length)toast(`Possible duplicate found (${saved.duplicate_matches.length})`);
+        else if(saved.maintenance_item)toast('Maintenance item saved');
         await queueDelete(item.id);
         bgActive = 0;
         // Refresh the Library if it is open so the new card appears...
@@ -1213,6 +1221,8 @@ async function drainQueue() {
 async function saveCapture() {
   const note = document.getElementById('note').value.trim();
   if (!state.photoFile && !note) { toast('Take a photo or add a note first'); return; }
+  if(isHoaClient()&&!state.communityId){toast('Select an HOA or community');return;}
+  if(isHoaClient()&&!document.getElementById('hoaTitle').value.trim()&&!note){toast('Enter an issue title or note');return;}
   if (!(await confirmPhotoQuality())) { toast('Photo kept for retaking'); return; }
   const saveBtn = document.getElementById('save');
   if (state.photoFile && state._locationPromise) {
@@ -1220,7 +1230,8 @@ async function saveCapture() {
     await state._locationPromise;
   }
   // Build the payload from the CURRENT state before we clear the form.
-  const payload={photo:state.photoFile||null,photoName:state.photoFile&&state.photoFile.name||'offline-photo.jpg',note,area_tags:JSON.stringify(state.area?[state.area]:[]),kind:'note',job_id:state.jobId||''};
+  const payload={photo:state.photoFile||null,photoName:state.photoFile&&state.photoFile.name||'offline-photo.jpg',note,area_tags:JSON.stringify(isHoaClient()?[document.getElementById('hoaArea').value]:(state.area?[state.area]:[])),kind:'note',job_id:state.jobId||''};
+  if(isHoaClient()){Object.assign(payload,{hoa_community_id:state.communityId,hoa_title:document.getElementById('hoaTitle').value.trim(),hoa_item_type:document.getElementById('hoaType').value,hoa_priority:document.getElementById('hoaPriority').value,hoa_area:document.getElementById('hoaArea').value,hoa_directed_to:(document.getElementById('hoaDirected')||{}).value||'',hoa_budget_source:'unassigned',hoa_photo_stage:'initial'});}
   const hadCoords = !!state.location;
   if (state.location) { payload.latitude=state.location.lat;payload.longitude=state.location.lng; }
   if (state.address) payload.address=state.address;
@@ -1231,6 +1242,25 @@ async function saveCapture() {
   toast('Saved');
   await enqueueUpload(payload, hadCoords);
 }
+
+// ================= HOA Maintenance Pro =================
+const HOA_STATUS_LABELS={new:'New',investigating:'Investigating',getting_pricing:'Getting Pricing',board_decision:'Board Decision Needed',on_hold:'On Hold',approved:'Approved',scheduled:'Scheduled',work_in_progress:'Work In Progress',waiting_vendor:'Waiting for Vendor',waiting_management:'Waiting for Management',waiting_board:'Waiting for Board',work_done:'Work Done',needs_review:'Needs Review',completed:'Completed',deferred:'Deferred',cancelled:'Cancelled'};
+const HOA_PRIORITY_LABELS={emergency:'Emergency',high:'High',routine:'Routine',monitor:'Monitor'};
+const HOA_TYPE_LABELS={maintenance:'Maintenance Issue',information:'Information Request',inspection:'Inspection Finding'};
+function optsFrom(map,current){return Object.entries(map).map(([v,l])=>`<option value="${v}" ${v===current?'selected':''}>${l}</option>`).join('');}
+async function renderHoaMaintenance(){const body=document.getElementById('body');body.className='workflow-organize';body.innerHTML=`<div class="workflow-intro"><strong>Maintenance</strong><span>Track every issue from the first photo through completed work and final review.</span></div><div id="hoaSummary" class="statrow"></div><div class="organize-form-grid"><section class="organize-panel"><label>Community</label><select id="hoaFilterCommunity"><option value="">All Communities</option>${state.communities.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select><label>Status</label><select id="hoaFilterStatus"><option value="">All Open Statuses</option>${optsFrom(HOA_STATUS_LABELS,'')}</select></section><section class="organize-panel"><label>Priority</label><select id="hoaFilterPriority"><option value="">All Priorities</option>${optsFrom(HOA_PRIORITY_LABELS,'')}</select><label>Record Type</label><select id="hoaFilterType"><option value="">All Types</option>${optsFrom(HOA_TYPE_LABELS,'')}</select></section></div><div class="row compact"><input id="hoaSearch" type="search" placeholder="Search titles, notes, communities, or categories"><button class="btn secondary" id="hoaSearchBtn">Search</button></div><label style="text-transform:none;letter-spacing:0"><input id="hoaShowClosed" type="checkbox" style="width:auto"> Show completed and cancelled</label><div id="hoaItems"><p class="status">Loading maintenance items...</p></div>`;['hoaFilterCommunity','hoaFilterStatus','hoaFilterPriority','hoaFilterType','hoaShowClosed'].forEach(id=>document.getElementById(id).onchange=loadHoaItems);document.getElementById('hoaSearchBtn').onclick=loadHoaItems;document.getElementById('hoaSearch').onkeydown=e=>{if(e.key==='Enter')loadHoaItems();};loadHoaSummary();loadHoaItems();}
+async function loadHoaSummary(){const box=document.getElementById('hoaSummary');if(!box)return;const r=await api('/api/hoa/dashboard');if(!r.ok)return;const d=await r.json();box.innerHTML=`${[['open','Open'],['emergency','Emergency'],['high','High Priority'],['overdue','Overdue'],['board_needed','Board Needed'],['needs_review','Needs Review']].map(([k,l])=>`<div class="stat"><strong>${d[k]||0}</strong><span>${l}</span></div>`).join('')}`;}
+async function loadHoaItems(){const box=document.getElementById('hoaItems');if(!box)return;const p=new URLSearchParams(),val=id=>(document.getElementById(id)||{}).value||'';for(const [id,key] of [['hoaFilterCommunity','community_id'],['hoaFilterStatus','status'],['hoaFilterPriority','priority'],['hoaFilterType','type'],['hoaSearch','q']])if(val(id))p.set(key,val(id));if((document.getElementById('hoaShowClosed')||{}).checked)p.set('closed','1');const r=await api('/api/hoa/items?'+p);if(!r.ok){box.innerHTML='<p class="status">Maintenance items could not be loaded.</p>';return;}const rows=await r.json();box.innerHTML=rows.length?rows.map(hoaItemCard).join(''):'<p class="empty">No maintenance items match this view.</p>';box.querySelectorAll('[data-hoa-item]').forEach(b=>b.onclick=()=>renderHoaItem(Number(b.dataset.hoaItem)));}
+function hoaItemCard(i){const priority=i.priority||'routine';return `<article class="card" style="border-left:6px solid ${priority==='emergency'?'#b3261e':priority==='high'?'#e18a00':priority==='monitor'?'#6b7280':'#2455d9'}">${i.photo_path?`<img src="${photoSrc(i.photo_path)}" alt="Maintenance issue">`:''}<div class="row"><div><strong>${esc(i.title)}</strong><div class="meta">${esc(i.community_name)} · ${esc(i.area)}</div></div><span class="badge">${HOA_PRIORITY_LABELS[priority]}</span></div><div class="meta">${HOA_TYPE_LABELS[i.item_type]||i.item_type} · ${HOA_STATUS_LABELS[i.status]||i.status}${i.target_date?' · Due '+new Date(i.target_date+'T12:00:00').toLocaleDateString(uiLocale()):''}</div><div>${esc(i.description||'')}</div><div class="meta">${i.primary_assignee?'Assigned to '+esc(i.primary_assignee):'Not yet assigned'} · ${String(i.budget_source||'unassigned').replace('_',' ')}</div><button class="btn secondary slim" data-hoa-item="${i.id}">Open Maintenance Record</button></article>`;}
+async function renderHoaItem(id){const r=await api(`/api/hoa/items/${id}`);if(!r.ok){toast('Maintenance record could not be loaded');return;}const d=await r.json(),i=d.item,body=document.getElementById('body');body.innerHTML=`<button class="backlink" id="hoaItemBack">← Back to Maintenance</button><div class="workflow-intro"><strong>${esc(i.title)}</strong><span>${esc(i.community_name)} · Reported ${new Date(i.created_at).toLocaleString(uiLocale())}</span></div>${i.photo_path?`<div class="photo-box"><img src="${photoSrc(i.photo_path)}" alt="Maintenance issue" style="display:block"></div>`:''}<div class="organize-form-grid"><section class="organize-panel"><label>Title</label><input id="hiTitle" value="${esc(i.title)}"><label>Description</label><textarea id="hiDescription">${esc(i.description||'')}</textarea><label>Category</label><select id="hiArea">${HOA_AREAS.map(a=>`<option ${a===i.area?'selected':''}>${esc(a)}</option>`).join('')}</select><label>Primary Assignee</label><input id="hiAssignee" value="${esc(i.primary_assignee||'')}"><label>Directed To</label><input id="hiDirected" value="${esc(i.directed_to||'')}"></section><section class="organize-panel"><label>Status</label><select id="hiStatus">${optsFrom(HOA_STATUS_LABELS,i.status)}</select><label>Priority</label><select id="hiPriority">${optsFrom(HOA_PRIORITY_LABELS,i.priority)}</select><label>Target Completion Date</label><input id="hiTarget" type="date" value="${i.target_date?String(i.target_date).slice(0,10):''}"><label>Budget Source</label><select id="hiBudget"><option value="unassigned">Unassigned</option><option value="operating" ${i.budget_source==='operating'?'selected':''}>Operating Budget</option><option value="reserve" ${i.budget_source==='reserve'?'selected':''}>Reserve Budget</option><option value="board_determination" ${i.budget_source==='board_determination'?'selected':''}>Board Determination Needed</option></select><div class="row compact"><div><label>Estimated Cost</label><input id="hiEstimated" type="number" step="0.01" value="${i.estimated_cost||''}"></div><div><label>Actual Cost</label><input id="hiActual" type="number" step="0.01" value="${i.actual_cost||''}"></div></div><label>Board Approval</label><select id="hiApproval"><option value="not_required">Not Required</option><option value="requested">Requested</option><option value="agenda">On Meeting Agenda</option><option value="approved">Approved</option><option value="rejected">Rejected</option><option value="deferred">Deferred</option><option value="more_information">More Information Requested</option></select><label>Vendor or Completed By</label><input id="hiCompletedBy" value="${esc(i.completed_by||'')}" placeholder="Required before completion"><label>Completion Date</label><input id="hiCompletion" type="date" value="${i.completion_date?String(i.completion_date).slice(0,10):''}"></section></div><button class="btn" id="hoaItemSave">Save Maintenance Record</button><div class="formhead">Activity History</div><div>${d.history.map(h=>`<div style="border-bottom:1px solid #ddd;padding:8px 0"><strong>${esc(h.action==='created'?'Created':'Updated')}</strong><div class="meta">${esc(h.user_name||'System')} · ${new Date(h.created_at).toLocaleString(uiLocale())}${h.detail&&h.detail.fields?' · '+esc(h.detail.fields.join(', ')):''}</div></div>`).join('')}</div>`;document.getElementById('hiApproval').value=i.board_approval;document.getElementById('hoaItemBack').onclick=renderHoaMaintenance;document.getElementById('hoaItemSave').onclick=()=>saveHoaItem(id);}
+const renderHoaItemCore=renderHoaItem;
+renderHoaItem=async function(id){await renderHoaItemCore(id);const r=await api(`/api/hoa/items/${id}`);if(!r.ok)return;const d=await r.json(),body=document.getElementById('body'),oldPhoto=body.querySelector('.photo-box');if(oldPhoto)oldPhoto.remove();const intro=body.querySelector('.workflow-intro');if(!intro)return;intro.insertAdjacentHTML('afterend',`<div class="formhead">Photo Documentation Timeline</div><div class="organize-form-grid">${(d.photos||[]).map(p=>`<article class="card"><strong>${esc(String(p.photo_stage||'photo').replaceAll('_',' '))}</strong>${p.photo_path?`<img src="${photoSrc(p.photo_path)}" alt="Maintenance documentation">`:''}<div class="meta">${new Date(p.created_at).toLocaleString(uiLocale())}</div>${p.note?`<div>${esc(p.note)}</div>`:''}</article>`).join('')}</div><details class="pair-builder"><summary><span>Add Documentation Photo</span></summary><label>Photo Stage</label><select id="hoaPhotoStage"><option value="inspection">Inspection</option><option value="estimate">Estimate or Proposal</option><option value="work_in_progress">Work In Progress</option><option value="completed_work">Completed Work</option><option value="final_verification">Final Verification</option><option value="follow_up">Follow-Up Monitoring</option></select><input id="hoaItemPhoto" type="file" accept="image/*"><label>Photo Note</label><textarea id="hoaItemPhotoNote"></textarea><button class="btn" id="hoaAddPhoto">Add Photo to Timeline</button></details>`);document.getElementById('hoaAddPhoto').onclick=()=>addHoaItemPhoto(id);};
+async function addHoaItemPhoto(id){const file=document.getElementById('hoaItemPhoto').files[0];if(!file){toast('Choose a photo first');return;}const fd=new FormData();fd.append('photo',file);fd.append('photo_stage',document.getElementById('hoaPhotoStage').value);fd.append('note',document.getElementById('hoaItemPhotoNote').value.trim());const btn=document.getElementById('hoaAddPhoto');btn.disabled=true;btn.textContent='Uploading...';const r=await api(`/api/hoa/items/${id}/photos`,{method:'POST',body:fd});if(r.ok){toast('Documentation photo added');renderHoaItem(id);}else{toast('Photo could not be added');btn.disabled=false;btn.textContent='Add Photo to Timeline';}}
+async function saveHoaItem(id){const v=x=>document.getElementById(x).value,body={title:v('hiTitle'),description:v('hiDescription'),area:v('hiArea'),primary_assignee:v('hiAssignee'),directed_to:v('hiDirected'),status:v('hiStatus'),priority:v('hiPriority'),target_date:v('hiTarget'),budget_source:v('hiBudget'),estimated_cost:v('hiEstimated'),actual_cost:v('hiActual'),board_approval:v('hiApproval'),completed_by:v('hiCompletedBy'),completion_date:v('hiCompletion')};const r=await api(`/api/hoa/items/${id}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),d=await r.json().catch(()=>({}));if(!r.ok){toast(d.error==='completed by required'?'Enter Vendor or Completed By before completing':'Maintenance record could not be saved');return;}toast('Maintenance record saved');renderHoaItem(id);}
+async function renderHoaCommunities(){await loadHoaContext();const body=document.getElementById('body');body.innerHTML=`<div class="workflow-intro"><strong>Communities</strong><span>Manage the HOAs and neighborhoods served by ${esc(state.hoaCompany&&state.hoaCompany.name||'your management company')}.</span></div><details class="pair-builder"><summary><span>Management Company &amp; Team</span></summary><label>Management Company Name</label><div class="row compact"><input id="hcCompanyName" value="${esc(state.hoaCompany&&state.hoaCompany.name||'')}"><button class="btn secondary" id="hcSaveCompany">Save</button></div><div class="formhead">Team Members</div>${state.hoaMembers.map(m=>`<div class="card"><strong>${esc(m.name)}</strong><div class="meta">${esc(m.email)} · ${esc(m.company_role)}</div></div>`).join('')}<label>Add Existing HOA Maintenance Pro User</label><div class="row compact"><input id="hcMemberEmail" type="email" placeholder="Employee email"><button class="btn secondary" id="hcAddMember">Add</button></div></details><details class="pair-builder" open><summary><span>Add a Community</span></summary><label>Community Name</label><input id="hcName"><label>Full Address</label><input id="hcAddress"><label>Community Manager</label><input id="hcManager"><button class="btn" id="hcCreate">Add Community</button></details><div>${state.communities.length?state.communities.map(c=>`<article class="card"><strong>${esc(c.name)}</strong><div>${esc(c.address||'No address entered')}</div><div class="meta">Manager: ${esc(c.manager_name||'Not assigned')} · ${c.open_items||0} open maintenance items</div></article>`).join(''):'<p class="empty">No communities have been added yet.</p>'}</div>`;document.getElementById('hcSaveCompany').onclick=async()=>{const r=await api('/api/hoa/company',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:document.getElementById('hcCompanyName').value.trim()})});if(r.ok){toast('Company name saved');await loadHoaContext();renderHoaCommunities();}else toast('Company name could not be saved');};document.getElementById('hcAddMember').onclick=async()=>{const email=document.getElementById('hcMemberEmail').value.trim();const r=await api('/api/hoa/members',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})}),d=await r.json().catch(()=>({}));if(r.ok){toast('Team member added');await loadHoaContext();renderHoaCommunities();}else toast(d.error||'Team member could not be added');};document.getElementById('hcCreate').onclick=async()=>{const name=document.getElementById('hcName').value.trim();if(!name){toast('Enter a community name');return;}const r=await api('/api/hoa/communities',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,address:document.getElementById('hcAddress').value.trim(),manager_name:document.getElementById('hcManager').value.trim()})});if(r.ok){toast('Community added');await loadHoaContext();renderHoaCommunities();}else toast('Community could not be added');};}
+async function renderHoaDashboard(){const body=document.getElementById('body');body.innerHTML=`<div class="workflow-intro"><strong>Management Dashboard</strong><span>Urgent work and accountability across every community.</span></div><div id="hoaDashStats" class="statrow"></div><div class="formhead">Notifications</div><button class="btn secondary slim" id="hoaReadAll">Mark All Read</button><div id="hoaNotifications"><p class="status">Loading notifications...</p></div>`;const [dr,nr]=await Promise.all([api('/api/hoa/dashboard'),api('/api/hoa/notifications')]);if(dr.ok){const d=await dr.json();document.getElementById('hoaDashStats').innerHTML=[['mine','Assigned to Me'],['emergency','Emergency'],['high','High Priority'],['overdue','Overdue'],['board_needed','Board Needed'],['needs_review','Needs Review'],['open','All Open']].map(([k,l])=>`<div class="stat"><strong>${d[k]||0}</strong><span>${l}</span></div>`).join('');}if(nr.ok){const n=await nr.json();document.getElementById('hoaNotifications').innerHTML=n.length?n.map(x=>`<div class="card ${x.read_at?'':'notification-unread'}"><strong>${esc(x.message)}</strong><div class="meta">${new Date(x.created_at).toLocaleString(uiLocale())}</div></div>`).join(''):'<p class="empty">No notifications yet.</p>';}document.getElementById('hoaReadAll').onclick=async()=>{await api('/api/hoa/notifications/read',{method:'POST'});renderHoaDashboard();};}
+async function renderHoaReports(){const body=document.getElementById('body');body.innerHTML=`<div class="workflow-intro"><strong>Maintenance Reports</strong><span>Review open, urgent, budget, and completed maintenance across the portfolio.</span></div><div class="row"><button class="btn secondary" id="hoaPrintReport">Print Current Report</button></div><label>Community</label><select id="hrCommunity"><option value="">All Communities</option>${state.communities.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select><label>Budget Source</label><select id="hrBudget"><option value="">All Budget Sources</option><option value="operating">Operating</option><option value="reserve">Reserve</option><option value="board_determination">Board Determination Needed</option><option value="unassigned">Unassigned</option></select><label style="text-transform:none;letter-spacing:0"><input id="hrClosed" type="checkbox" style="width:auto"> Include completed work</label><div id="hoaReportItems"></div>`;for(const id of ['hrCommunity','hrBudget','hrClosed'])document.getElementById(id).onchange=loadHoaReport;document.getElementById('hoaPrintReport').onclick=()=>window.print();loadHoaReport();}
+async function loadHoaReport(){const p=new URLSearchParams(),community=document.getElementById('hrCommunity').value,budget=document.getElementById('hrBudget').value;if(community)p.set('community_id',community);if(budget)p.set('budget',budget);if(document.getElementById('hrClosed').checked)p.set('closed','1');const r=await api('/api/hoa/items?'+p),box=document.getElementById('hoaReportItems');if(!r.ok)return;const rows=await r.json();box.innerHTML=`<div class="formhead">${rows.length} Maintenance Items</div>${rows.map(hoaItemCard).join('')}`;box.querySelectorAll('[data-hoa-item]').forEach(b=>b.onclick=()=>renderHoaItem(Number(b.dataset.hoaItem)));}
 
 // ---- rotate + note editing (shared) ----
 async function rotatePhoto(id, dir) {

@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash TEXT NOT NULL,
   role          TEXT NOT NULL DEFAULT 'user',
   plan          TEXT NOT NULL DEFAULT 'free',
+  pro_type      TEXT NOT NULL DEFAULT 'asphalt',
   industry      TEXT,
   feature_access JSONB NOT NULL DEFAULT '{}'::jsonb,
   active        BOOLEAN NOT NULL DEFAULT true,
@@ -278,6 +279,81 @@ CREATE TABLE IF NOT EXISTS approval_packages (
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS approval_packages_user_idx ON approval_packages (user_id, created_at DESC);
+CREATE TABLE IF NOT EXISTS hoa_management_companies (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS hoa_company_members (
+  company_id INTEGER NOT NULL REFERENCES hoa_management_companies(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  company_role TEXT NOT NULL DEFAULT 'manager',
+  PRIMARY KEY(company_id,user_id)
+);
+CREATE TABLE IF NOT EXISTS hoa_communities (
+  id SERIAL PRIMARY KEY,
+  company_id INTEGER NOT NULL REFERENCES hoa_management_companies(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  address TEXT,
+  manager_name TEXT,
+  assignment_rules JSONB NOT NULL DEFAULT '{}'::jsonb,
+  fiscal_year_start INTEGER NOT NULL DEFAULT 1,
+  active BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS hoa_communities_company_idx ON hoa_communities(company_id,active,name);
+CREATE TABLE IF NOT EXISTS hoa_maintenance_items (
+  id SERIAL PRIMARY KEY,
+  company_id INTEGER NOT NULL REFERENCES hoa_management_companies(id) ON DELETE CASCADE,
+  community_id INTEGER NOT NULL REFERENCES hoa_communities(id) ON DELETE CASCADE,
+  capture_id INTEGER REFERENCES captures(id) ON DELETE SET NULL,
+  created_by INTEGER NOT NULL REFERENCES users(id),
+  title TEXT NOT NULL,
+  item_type TEXT NOT NULL DEFAULT 'maintenance',
+  description TEXT,
+  area TEXT NOT NULL DEFAULT 'Maintenance',
+  priority TEXT NOT NULL DEFAULT 'routine',
+  status TEXT NOT NULL DEFAULT 'new',
+  target_date DATE,
+  primary_assignee TEXT,
+  directed_to TEXT,
+  involved_people TEXT[],
+  budget_source TEXT NOT NULL DEFAULT 'unassigned',
+  photo_stage TEXT NOT NULL DEFAULT 'initial',
+  board_approval TEXT NOT NULL DEFAULT 'not_required',
+  estimated_cost NUMERIC(12,2),
+  actual_cost NUMERIC(12,2),
+  completed_by TEXT,
+  completion_date DATE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  completed_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS hoa_items_company_idx ON hoa_maintenance_items(company_id,status,priority,created_at DESC);
+CREATE INDEX IF NOT EXISTS hoa_items_community_idx ON hoa_maintenance_items(community_id,status,created_at DESC);
+CREATE TABLE IF NOT EXISTS hoa_item_photos (
+  item_id INTEGER NOT NULL REFERENCES hoa_maintenance_items(id) ON DELETE CASCADE,
+  capture_id INTEGER NOT NULL REFERENCES captures(id) ON DELETE CASCADE,
+  photo_stage TEXT NOT NULL DEFAULT 'initial',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY(item_id,capture_id)
+);
+CREATE TABLE IF NOT EXISTS hoa_item_history (
+  id SERIAL PRIMARY KEY,
+  item_id INTEGER NOT NULL REFERENCES hoa_maintenance_items(id) ON DELETE CASCADE,
+  user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  action TEXT NOT NULL,
+  detail JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS hoa_notifications (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  item_id INTEGER REFERENCES hoa_maintenance_items(id) ON DELETE CASCADE,
+  message TEXT NOT NULL,
+  read_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 `;
 
 const DEFAULT_AREAS = ['Roads', 'Maintenance', 'Walls', 'Security', 'Landscaping', 'Other'];
@@ -333,6 +409,8 @@ async function init() {
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS photo_height INTEGER`);
   // Pro-tier: user plan ('free'|'pro'), default 'free' for all existing users.
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS plan TEXT NOT NULL DEFAULT 'free'`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS pro_type TEXT NOT NULL DEFAULT 'asphalt'`);
+  await pool.query(`ALTER TABLE hoa_communities ADD COLUMN IF NOT EXISTS assignment_rules JSONB NOT NULL DEFAULT '{}'::jsonb`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS feature_access JSONB NOT NULL DEFAULT '{}'::jsonb`);
   // Pro-tier: capture dimension fields (see SCHEMA above for semantics).
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS dim_length_in DOUBLE PRECISION`);

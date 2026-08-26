@@ -127,6 +127,7 @@ html[lang="es"] .brandrow .brand.asphalt-pro-brand { background-image:url('/asph
 .tab { flex: 1; text-align: center; padding: 10px; border: 1px solid #000; border-radius: 8px; color: #000; background: #fff; font-weight: bold; }
 .tab.on { background: #000; color: #fff; }
 .workflow-tabs { max-width: 820px; margin-left: auto; margin-right: auto; }
+.hoa-pro-brand { font-size:clamp(20px,4vw,32px); }
 .workflow-intro { display:flex; flex-direction:column; gap:3px; padding:14px 16px; margin:4px 0 18px; border:1px solid #000; border-radius:10px; background:#fff; }
 .workflow-intro strong { font-size:18px; }
 .workflow-intro span { font-size:14px; }
@@ -255,6 +256,7 @@ input.dimfield.suggested {
   .app-header .brandrow .brand.asphalt-pro-brand { width:100%; max-width:calc(100vw - 28px); height:42px; }
   .workflow-tabs { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:4px; overflow:visible; padding-bottom:0; }
   .workflow-tabs .tab { min-width:0; padding:9px 2px; font-size:12px; }
+  .workflow-tabs.hoa-tabs .tab { font-size:10px; line-height:1.15; overflow-wrap:anywhere; }
   .workflow-organize #cards, .workflow-edit #cards, #glist, .workflow-create #gitems, .send-capture-list { grid-template-columns:1fr; }
   .delivery-actions, .delivery-grid { grid-template-columns:1fr 1fr; }
   .map-filter-row { flex-direction:column; gap:8px; align-items:stretch; }
