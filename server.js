@@ -11,6 +11,7 @@ const archiver = require('archiver');
 const sharp = require('sharp');
 const { Document, Packer, Paragraph, TextRun, ImageRun, HeadingLevel, Table, TableRow, TableCell, WidthType, BorderStyle } = require('docx');
 const { pool, init, seedUserAreas } = require('./db');
+const { registerStripeRoutes, registerStripeWebhook } = require('./stripe-integration');
 
 const PORT = process.env.PORT || 3000;
 const SESSION_SECRET = process.env.SESSION_SECRET || 'dev-secret-change-me';
@@ -20,6 +21,9 @@ const COOKIE = 'pn_token';
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
 const app = express();
+// Stripe signature verification must receive the exact raw request bytes, so
+// this route is registered before the global JSON parser.
+registerStripeWebhook(app, { pool });
 app.use(express.json());
 app.use(cookieParser());
 
@@ -56,6 +60,7 @@ function requireAdmin(req, res, next) {
   req.user = u;
   next();
 }
+registerStripeRoutes(app, { pool, requireAuth, requireAdmin });
 // Single source of truth for Pro gating. Pro features must not render or store
 // for free users.
 function isPro(user) { return !!(user && user.plan === 'pro'); }
