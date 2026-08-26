@@ -1,4 +1,4 @@
-:root { --accent:#1d4ed8; --line:#000; }
+:root { --accent:#e8231a; --accent-strong:#c41d15; --accent-pressed:#a81812; --line:#000; }
 * { box-sizing: border-box; }
 html, body { max-width: 100%; overflow-x: hidden; }
 body {
@@ -27,6 +27,8 @@ textarea { min-height: 96px; resize: vertical; }
   color: #fff; background: var(--accent); border: none; border-radius: 10px; margin-top: 18px;
 }
 .btn.secondary { background: #fff; color: #000; border: 1px solid #000; }
+.btn:not(.secondary):hover { background: var(--accent-strong); }
+.btn:not(.secondary):active { background: var(--accent-pressed); }
 .btn:disabled { opacity: .5; }
 .row { display: flex; gap: 10px; }
 .row > * { flex: 1; }
@@ -41,7 +43,7 @@ textarea { min-height: 96px; resize: vertical; }
 .topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
 /* Product title base style (kept for the Extra Work Record heading, which
    carries an inline font-size and is excluded from the logo swap below). */
-.brand { text-align: center; text-transform: uppercase; color: #c1121f; font-size: 30px; font-weight: 800; letter-spacing: 1.5px; margin: 6px 0 4px; }
+.brand { text-align: center; text-transform: uppercase; color: #c41d15; font-size: 30px; font-weight: 800; letter-spacing: 1.5px; margin: 6px 0 4px; }
 /* Login + header brand: show the outlined Photo Notes logo. font-size:0 hides
    the literal "Photo Notes" text (still present for screen readers) and the
    wordmark renders as a centered background image. The :not() excludes the
@@ -57,13 +59,13 @@ textarea { min-height: 96px; resize: vertical; }
 .brandrow { display:flex; justify-content:center; align-items:center; gap:8px; }
 .brandrow .brand { flex:0 1 260px; width:260px; margin-left:0; margin-right:0; }
 .brandrow .brand.asphalt-pro-brand {
-  flex-basis: 500px; width: 500px; max-width: calc(100vw - 110px);
-  background-image: url('/asphalt-pro-logo-animated.svg?v=64');
+  flex-basis: 500px; width: 500px; max-width: calc(100vw - 110px); height:60px;
+  background-image: url('/photo-notes-ai-asphalt-pro-animated.svg?v=71');
 }
 .edition-label { flex:0 0 auto; color:#000; font-size:12px; font-weight:bold; line-height:1.05; text-align:left; }
 .edition-label span { display:block; }
 @media (max-width: 380px) { .brand:not([style*="font-size"]) { height: 38px; } }
-@media (max-width: 520px) { .brandrow .brand.asphalt-pro-brand { height: 48px; max-width: calc(100vw - 80px); } }
+@media (max-width: 520px) { .brandrow .brand.asphalt-pro-brand { height:57px; max-width:calc(100vw - 80px); } }
 .app-header {
   display:grid; grid-template-columns:112px minmax(0,1fr) 30px; grid-template-rows:auto auto;
   width:100%; max-width:980px; align-items:center; column-gap:12px; row-gap:2px; margin:8px auto 10px;
@@ -74,16 +76,16 @@ textarea { min-height: 96px; resize: vertical; }
 .app-header .header-controls { grid-column:2 / 4; grid-row:1; justify-self:end; display:flex; align-items:center; gap:10px; }
 .language-switch { display:flex; align-items:center; gap:5px; color:#000; font:700 12px Arial,Helvetica,sans-serif; white-space:nowrap; }
 .language-switch button { appearance:none; border:0; border-bottom:2px solid transparent; padding:2px 1px; background:transparent; color:#555; font:700 12px Arial,Helvetica,sans-serif; cursor:pointer; }
-.language-switch button.active { color:#1d4ed8; border-bottom-color:#1d4ed8; }
-.language-switch button:focus-visible { outline:2px solid #1d4ed8; outline-offset:2px; }
-html[lang="es"] .brandrow .brand.asphalt-pro-brand { background-image:url('/asphalt-pro-logo-es.svg?v=66'); }
+.language-switch button.active { color:#e8231a; border-bottom-color:#e8231a; }
+.language-switch button:focus-visible { outline:2px solid #e8231a; outline-offset:2px; }
 .account-menu-wrap { position:relative; z-index:3; }
 .profile-button {
   width:30px; height:30px; padding:0; border:0; border-radius:50%; cursor:pointer;
   display:flex; align-items:center; justify-content:center;
-  background:#1d4ed8; color:#fff; font:700 11px Arial, Helvetica, sans-serif;
+  background:#e8231a; color:#fff; font:700 11px Arial, Helvetica, sans-serif;
 }
-.profile-button:hover, .profile-button:focus-visible { background:#173fae; outline:2px solid #000; outline-offset:2px; }
+.profile-button:hover, .profile-button:focus-visible { background:var(--accent-strong); outline:2px solid #000; outline-offset:2px; }
+.profile-button:active { background:var(--accent-pressed); }
 .profile-menu {
   position:absolute; top:46px; right:0; width:230px; padding:12px;
   background:#fff; color:#000; border:1px solid #000; border-radius:10px;
@@ -98,10 +100,10 @@ html[lang="es"] .brandrow .brand.asphalt-pro-brand { background-image:url('/asph
   color:#000; background:none; border:0; border-top:1px solid #ddd;
   text-align:left; text-decoration:none; font:700 14px Arial, Helvetica, sans-serif; cursor:pointer;
 }
-.profile-menu a:hover, .profile-menu button:hover { color:#1d4ed8; }
-.stamp-slider { width:100%; height:6px; border-radius:4px; background:#cfd4dc; accent-color:#1d4ed8; -webkit-appearance:none; appearance:none; }
-.stamp-slider::-webkit-slider-thumb { width:20px; height:20px; border:2px solid #fff; border-radius:50%; background:#1d4ed8; box-shadow:0 0 0 1px #000; -webkit-appearance:none; appearance:none; }
-.stamp-slider::-moz-range-thumb { width:18px; height:18px; border:2px solid #fff; border-radius:50%; background:#1d4ed8; box-shadow:0 0 0 1px #000; }
+.profile-menu a:hover, .profile-menu button:hover { color:#e8231a; }
+.stamp-slider { width:100%; height:6px; border-radius:4px; background:#cfd4dc; accent-color:#e8231a; -webkit-appearance:none; appearance:none; }
+.stamp-slider::-webkit-slider-thumb { width:20px; height:20px; border:2px solid #fff; border-radius:50%; background:#e8231a; box-shadow:0 0 0 1px #000; -webkit-appearance:none; appearance:none; }
+.stamp-slider::-moz-range-thumb { width:18px; height:18px; border:2px solid #fff; border-radius:50%; background:#e8231a; box-shadow:0 0 0 1px #000; }
 .send-row { display: flex; gap: 10px; margin-top: 8px; }
 .send-row .btn { flex: 1 1 50%; width: 50%; margin-top: 0; }
 /* compact input+button row (e.g. add a topic) at about half the usual height.
@@ -129,7 +131,7 @@ html[lang="es"] .brandrow .brand.asphalt-pro-brand { background-image:url('/asph
 .workflow-tabs { max-width: 820px; margin-left: auto; margin-right: auto; }
 .hoa-pro-brand { font-size:clamp(20px,4vw,32px); }
 .asset-card img { width:100%; max-height:280px; object-fit:cover; border-radius:9px; margin-bottom:10px; }
-.visit-progress,.visit-next,.success-box { border:2px solid #2455d9; border-radius:12px; padding:16px; margin:14px 0; background:#f4f7ff; }
+.visit-progress,.visit-next,.success-box { border:2px solid #e8231a; border-radius:12px; padding:16px; margin:14px 0; background:#fff1f0; }
 .success-box { border-color:#238636; background:#effaf1; }
 .checklist-row { display:flex; justify-content:space-between; gap:12px; padding:13px 4px; border-bottom:1px solid #d7dce5; }
 .checklist-row.done { color:#238636; }
@@ -138,7 +140,7 @@ html[lang="es"] .brandrow .brand.asphalt-pro-brand { background-image:url('/asph
 .workflow-intro span { font-size:14px; }
 .pair-builder { margin-top:12px; padding:12px 14px; border:1px solid #000; border-radius:10px; background:#fff; }
 .pair-builder summary { display:flex; align-items:center; justify-content:space-between; gap:16px; cursor:pointer; font-weight:bold; color:#000; }
-.pair-expand { flex:none; color:#1d4ed8; font-size:14px; text-decoration:underline; }
+.pair-expand { flex:none; color:#e8231a; font-size:14px; text-decoration:underline; }
 .pair-builder p { margin:10px 0 4px; font-size:14px; line-height:1.35; color:#000; }
 .pair-builder .btn { margin-top:10px; }
 .organize-action-row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
@@ -161,20 +163,20 @@ html[lang="es"] .brandrow .brand.asphalt-pro-brand { background-image:url('/asph
 .send-capture-row { display:grid; grid-template-columns:24px 72px 1fr; gap:10px; align-items:center; padding:10px; margin:0; border:1px solid #000; border-radius:10px; background:#fff; text-transform:none; letter-spacing:0; font-size:14px; cursor:pointer; }
 .send-capture-row input { width:20px; height:20px; }
 .send-capture-row img, .send-no-photo { width:72px; height:58px; object-fit:cover; border-radius:6px; margin:0; background:#eee; display:flex; align-items:center; justify-content:center; }
-.share-requirement { display:flex; flex-direction:column; gap:4px; margin:10px 0 14px; padding:12px 14px; border:2px solid #1d4ed8; border-radius:10px; background:#eef4ff; color:#000; font-size:14px; line-height:1.35; }
+.share-requirement { display:flex; flex-direction:column; gap:4px; margin:10px 0 14px; padding:12px 14px; border:2px solid #e8231a; border-radius:10px; background:#fff1f0; color:#000; font-size:14px; line-height:1.35; }
 .share-requirement strong { font-size:15px; }
-.ticket-entry { display:flex; align-items:center; justify-content:space-between; gap:16px; margin:0 0 18px; padding:14px; border:2px solid #1d4ed8; border-radius:10px; background:#eef4ff; }
+.ticket-entry { display:flex; align-items:center; justify-content:space-between; gap:16px; margin:0 0 18px; padding:14px; border:2px solid #e8231a; border-radius:10px; background:#fff1f0; }
 .ticket-entry > div { display:flex; flex-direction:column; gap:3px; }
 .ticket-entry .btn { width:auto; flex:none; margin:0; }
 .workflow-ticket { max-width:980px !important; }
 .ticket-scan-panel, .ticket-review-panel { margin-top:14px; padding:16px; border:1px solid #000; border-radius:10px; background:#fff; }
 .ticket-form-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:0 18px; }
-.ticket-total { display:flex; justify-content:space-between; align-items:center; margin:10px 0 14px; padding:14px 16px; border-radius:10px; background:#1d4ed8; color:#fff; }
+.ticket-total { display:flex; justify-content:space-between; align-items:center; margin:10px 0 14px; padding:14px 16px; border-radius:10px; background:#e8231a; color:#fff; }
 .ticket-total strong { font-size:22px; }
 .ticket-list { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
 .ticket-card { display:grid; grid-template-columns:110px 1fr; gap:12px; align-items:start; margin:0; }
 .ticket-card img { width:110px; height:130px; object-fit:cover; margin:0; }
-.ticket-tons { margin-top:8px; font-size:18px; font-weight:bold; color:#1d4ed8; }
+.ticket-tons { margin-top:8px; font-size:18px; font-weight:bold; color:#e8231a; }
 .workflow-camera-tools { max-width:980px !important; }
 .camera-tool-group { margin-top:18px; padding:16px; border:1px solid #000; border-radius:10px; background:#fff; }
 .camera-tool-heading { display:flex; flex-direction:column; gap:3px; margin-bottom:12px; }
@@ -191,21 +193,21 @@ html[lang="es"] .brandrow .brand.asphalt-pro-brand { background-image:url('/asph
 .alignment-step { margin-top:16px; padding:16px; border:1px solid #000; border-radius:10px; background:#fff; }
 .alignment-choice-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; }
 .alignment-choice { padding:6px; border:2px solid transparent; border-radius:8px; background:#eee; color:#000; text-align:left; cursor:pointer; }
-.alignment-choice.selected { border-color:#1d4ed8; background:#eef4ff; }
+.alignment-choice.selected { border-color:#e8231a; background:#fff1f0; }
 .alignment-choice img { width:100%; height:120px; object-fit:cover; margin:0 0 5px; border-radius:5px; }
 .alignment-choice span { display:block; font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .alignment-reference { display:block; width:100%; max-height:480px; object-fit:contain; margin:10px 0 14px; border-radius:8px; background:#111; }
 .alignment-overlay { position:relative; width:100%; aspect-ratio:4/3; overflow:hidden; margin:10px 0 14px; border-radius:8px; background:#111; }
 .alignment-overlay img { position:absolute; inset:0; width:100%; height:100%; object-fit:contain; margin:0; }
-.blue-range { accent-color:#1d4ed8; }
+.blue-range { accent-color:#e8231a; }
 .issue-fab { position:fixed; right:max(14px,env(safe-area-inset-right)); bottom:max(14px,env(safe-area-inset-bottom)); z-index:80; width:auto; padding:8px 12px; border:1px solid #000; border-radius:999px; background:#fff; color:#000; font:700 12px/1.2 Arial,sans-serif; box-shadow:0 2px 10px rgba(0,0,0,.18); cursor:pointer; }
-.issue-fab:hover { background:#eef4ff; border-color:#1d4ed8; }
+.issue-fab:hover { background:#fff1f0; border-color:#e8231a; }
 .issue-modal[hidden] { display:none; }
 .issue-modal { position:fixed; inset:0; z-index:100; display:flex; align-items:center; justify-content:center; padding:18px; background:rgba(0,0,0,.55); }
 .issue-dialog { position:relative; width:min(560px,100%); max-height:calc(100vh - 36px); overflow:auto; padding:20px; border:1px solid #000; border-radius:12px; background:#fff; color:#000; box-shadow:0 10px 35px rgba(0,0,0,.3); }
 .issue-dialog h2 { margin:0 34px 4px 0; }
 .issue-close { position:absolute; top:10px; right:12px; width:34px; height:34px; border:0; background:transparent; color:#000; font-size:28px; line-height:1; cursor:pointer; }
-.issue-shot-status { margin:12px 0; padding:9px 11px; border-radius:7px; background:#eef4ff; color:#000; font-size:13px; }
+.issue-shot-status { margin:12px 0; padding:9px 11px; border-radius:7px; background:#fff1f0; color:#000; font-size:13px; }
 .issue-dialog textarea { min-height:150px; }
 .send-capture-row span:last-child { min-width:0; }
 .send-capture-row small { display:block; font-weight:normal; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-top:3px; }
@@ -258,7 +260,7 @@ input.dimfield.suggested {
   .app-header .zukor-corner-logo { width:74px; min-width:0; }
   .app-header .brand:not([style*="font-size"]) { height:42px; }
   .app-header .brandrow { width:100%; }
-  .app-header .brandrow .brand.asphalt-pro-brand { width:100%; max-width:calc(100vw - 28px); height:42px; }
+  .app-header .brandrow .brand.asphalt-pro-brand { width:100%; max-width:calc(100vw - 28px); height:57px; }
   .workflow-tabs { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:4px; overflow:visible; padding-bottom:0; }
   .workflow-tabs .tab { min-width:0; padding:9px 2px; font-size:12px; }
   .workflow-tabs.hoa-tabs .tab { font-size:10px; line-height:1.15; overflow-wrap:anywhere; }
