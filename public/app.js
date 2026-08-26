@@ -11,6 +11,10 @@ let recognizer = null;
 let currentGroupItems = [];
 let currentGroup = null;
 
+function uiT(text) { return window.photoNotesI18n ? window.photoNotesI18n.t(text) : text; }
+function uiLocale() { return window.photoNotesI18n && window.photoNotesI18n.getLanguage() === 'es' ? 'es-US' : undefined; }
+function uiSpeechLanguage() { return window.photoNotesI18n && window.photoNotesI18n.getLanguage() === 'es' ? 'es-US' : 'en-US'; }
+
 // Live title-case: capitalize the first letter of each word as the user types,
 // keeping the caret in place.
 function titleCaseInput(el) {
@@ -41,7 +45,7 @@ async function addArea() {
 }
 
 async function deleteArea(name) {
-  if (!confirm(`Remove the "${name}" topic? Photos already tagged keep their label.`)) return;
+  if (!confirm(uiT(`Remove the "${name}" topic? Photos already tagged keep their label.`))) return;
   const r = await api('/api/areas/delete', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name }),
@@ -129,7 +133,7 @@ async function prefetchGroups() {
 function renderLogin() {
   el.innerHTML = `
     <div class="wrap">
-      <div style="display:flex;justify-content:flex-end;margin-top:8px"><img src="/zukor-logo.svg" alt="Zukor AI" style="height:22px;width:auto;display:block" /></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px"><img src="/zukor-logo.svg" alt="Zukor AI" style="height:22px;width:auto;display:block" /><div class="language-switch" aria-label="Language"><button type="button" data-language="en">EN</button><span> </span><button type="button" data-language="es">ES</button></div></div>
       <div class="brand" style="margin-top:12px">Photo Notes</div>
       <p class="sub">Photo documentation, by voice</p>
       <label for="email">Email</label>
@@ -164,14 +168,17 @@ function renderApp() {
         <div class="brandrow">
           <div class="brand ${isProClient() ? 'asphalt-pro-brand' : ''}">Photo Notes${isProClient() ? ' Asphalt Pro' : ''}</div>
         </div>
-        <div class="account-menu-wrap">
-          <button class="profile-button" id="profileButton" type="button" aria-label="Account menu" aria-expanded="false">${esc(userInitials(state.me))}</button>
-          <div class="profile-menu" id="profileMenu" hidden>
-            <div class="profile-name">${esc((state.me && state.me.name) || 'Photo Notes User')}</div>
-            <div class="profile-email">${esc((state.me && state.me.email) || '')}</div>
-            <div class="profile-plan">${isProClient() ? 'Asphalt Pro Plan' : 'Basic Plan'}</div>
-            ${state.me && state.me.role === 'admin' ? '<a href="/admin">Admin Dashboard</a>' : ''}
-            <button type="button" id="signout">Sign Out</button>
+        <div class="header-controls">
+          <div class="language-switch" aria-label="Language"><button type="button" data-language="en">EN</button><span> </span><button type="button" data-language="es">ES</button></div>
+          <div class="account-menu-wrap">
+            <button class="profile-button" id="profileButton" type="button" aria-label="Account menu" aria-expanded="false">${esc(userInitials(state.me))}</button>
+            <div class="profile-menu" id="profileMenu" hidden>
+              <div class="profile-name">${esc((state.me && state.me.name) || 'Photo Notes User')}</div>
+              <div class="profile-email">${esc((state.me && state.me.email) || '')}</div>
+              <div class="profile-plan">${isProClient() ? 'Asphalt Pro Plan' : 'Basic Plan'}</div>
+              ${state.me && state.me.role === 'admin' ? '<a href="/admin">Admin Dashboard</a>' : ''}
+              <button type="button" id="signout">Sign Out</button>
+            </div>
           </div>
         </div>
       </div>
@@ -255,7 +262,7 @@ async function toggleIssueDictation(){
   if(!SR){ta.focus();toast('Use the microphone key on your keyboard to dictate');return;}
   if(issueRecognizer){try{issueRecognizer.stop();}catch(e){}return;}
   try{if(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia){const stream=await navigator.mediaDevices.getUserMedia({audio:true});stream.getTracks().forEach(t=>t.stop());}}catch(e){toast('Allow microphone access for this website, then try again');return;}
-  issueRecognizer=new SR();issueRecognizer.lang='en-US';issueRecognizer.continuous=!isIOS();issueRecognizer.interimResults=true;let base=ta.value.trim();if(base)base+=' ';btn.textContent='Recording... tap to stop';btn.classList.add('on');
+  issueRecognizer=new SR();issueRecognizer.lang=uiSpeechLanguage();issueRecognizer.continuous=!isIOS();issueRecognizer.interimResults=true;let base=ta.value.trim();if(base)base+=' ';btn.textContent='Recording... tap to stop';btn.classList.add('on');
   issueRecognizer.onresult=e=>{let finalText='',interim='';for(let i=e.resultIndex;i<e.results.length;i++){const t=e.results[i][0].transcript;if(e.results[i].isFinal)finalText+=t;else interim+=t;}if(finalText)base+=finalText+' ';ta.value=(base+interim).trimStart();};
   issueRecognizer.onerror=e=>{if(e&&e.error!=='aborted'&&e.error!=='no-speech')toast('Recording stopped. You can continue by typing or try again');};
   issueRecognizer.onend=()=>{issueRecognizer=null;const b=document.getElementById('issueRecord');if(b){b.textContent='Speak Description';b.classList.remove('on');}};
@@ -449,7 +456,7 @@ async function renderAlignmentTool() {
   document.getElementById('alignBack').onclick=()=>{state.view='camera-tools';renderApp();};
   try{const [r,p]=await Promise.all([api('/api/captures'),api('/api/pairs')]);alignmentCaptures=r.ok?await r.json():[];const pairs=p.ok?await p.json():[];alignmentPairedIds=new Set();pairs.forEach(x=>{alignmentPairedIds.add(Number(x.before_id));alignmentPairedIds.add(Number(x.after_id));});renderAlignmentChoices();}catch(e){document.getElementById('alignBeforeList').innerHTML='<p class="status">Photos could not be loaded.</p>';}
 }
-function renderAlignmentChoices(){const box=document.getElementById('alignBeforeList');const photos=alignmentCaptures.filter(c=>c.photo_path&&!alignmentPairedIds.has(Number(c.id))).slice(0,30);box.innerHTML=photos.length?`<div class="alignment-choice-grid">${photos.map(c=>`<button class="alignment-choice" data-id="${c.id}"><img src="${photoSrc(c.photo_path)}" alt=""><span>${esc(c.address||new Date(c.created_at).toLocaleDateString())}</span></button>`).join('')}</div>`:'<p class="empty">There are no unpaired project photos available. Save a new project photo first, then return here.</p>';box.querySelectorAll('.alignment-choice').forEach(b=>b.onclick=()=>chooseAlignmentBefore(Number(b.dataset.id)));}
+function renderAlignmentChoices(){const box=document.getElementById('alignBeforeList');const photos=alignmentCaptures.filter(c=>c.photo_path&&!alignmentPairedIds.has(Number(c.id))).slice(0,30);box.innerHTML=photos.length?`<div class="alignment-choice-grid">${photos.map(c=>`<button class="alignment-choice" data-id="${c.id}"><img src="${photoSrc(c.photo_path)}" alt=""><span>${esc(c.address||new Date(c.created_at).toLocaleDateString(uiLocale()))}</span></button>`).join('')}</div>`:'<p class="empty">There are no unpaired project photos available. Save a new project photo first, then return here.</p>';box.querySelectorAll('.alignment-choice').forEach(b=>b.onclick=()=>chooseAlignmentBefore(Number(b.dataset.id)));}
 function chooseAlignmentBefore(id){alignmentBefore=alignmentCaptures.find(c=>c.id===id);document.querySelectorAll('.alignment-choice').forEach(b=>b.classList.toggle('selected',Number(b.dataset.id)===id));document.getElementById('alignReference').src=photoSrc(alignmentBefore.photo_path);document.getElementById('alignTakeStep').hidden=false;document.getElementById('alignTake').onclick=()=>document.getElementById('alignCam').click();document.getElementById('alignChoose').onclick=()=>document.getElementById('alignLib').click();const pick=e=>{const f=e.target.files&&e.target.files[0];if(!f)return;alignmentAfterFile=f;showAlignmentComparison();e.target.value='';};document.getElementById('alignCam').onchange=pick;document.getElementById('alignLib').onchange=pick;document.getElementById('alignTakeStep').scrollIntoView({behavior:'smooth'});}
 function showAlignmentComparison(){document.getElementById('alignBeforeImage').src=photoSrc(alignmentBefore.photo_path);document.getElementById('alignAfterImage').src=URL.createObjectURL(alignmentAfterFile);document.getElementById('alignCompareStep').hidden=false;const range=document.getElementById('alignOpacity'),after=document.getElementById('alignAfterImage');range.oninput=()=>after.style.opacity=String(Number(range.value)/100);after.style.opacity='.5';document.getElementById('alignRetake').onclick=()=>document.getElementById('alignCam').click();document.getElementById('alignSave').onclick=saveAlignedPair;document.getElementById('alignCompareStep').scrollIntoView({behavior:'smooth'});}
 async function saveAlignedPair(){if(!alignmentBefore||!alignmentAfterFile)return;const btn=document.getElementById('alignSave');btn.disabled=true;btn.textContent='Saving...';try{const fd=new FormData();fd.append('photo',alignmentAfterFile);fd.append('note',document.getElementById('alignNote').value.trim());fd.append('kind','note');fd.append('area_tags',JSON.stringify(alignmentBefore.area_tags||[]));const loc=await getLocationOnce();if(loc){fd.append('latitude',loc.lat);fd.append('longitude',loc.lng);}const cr=await api('/api/captures',{method:'POST',body:fd});if(!cr.ok)throw new Error();const after=await cr.json();const pr=await api('/api/pairs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({before_id:alignmentBefore.id,after_id:after.id})});if(!pr.ok)throw new Error();toast('Before and after pair saved');state.view='organize';renderApp();}catch(e){toast('Matched pair could not be saved');btn.disabled=false;btn.textContent='Save Matched Pair';}}
@@ -569,7 +576,7 @@ async function loadTodayTickets() {
     const r = await api(`/api/asphalt-tickets?date=${localDateValue()}`);
     if (!r.ok) throw new Error('bad');
     const d = await r.json(); const rows = d.tickets || [];
-    box.innerHTML = `<div class="ticket-total"><span>Today’s Total</span><strong>${Number(d.total_tons || 0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})} tons</strong></div>` +
+    box.innerHTML = `<div class="ticket-total"><span>Today’s Total</span><strong>${Number(d.total_tons || 0).toLocaleString(uiLocale(),{minimumFractionDigits:2,maximumFractionDigits:2})} tons</strong></div>` +
       (rows.length ? `<div class="ticket-list">${rows.map(t => `<article class="card ticket-card">${t.photo_path ? `<img src="${photoSrc(t.photo_path)}" alt="Ticket" />` : ''}<div><strong>Ticket ${esc(t.ticket_number || 'number not entered')}</strong><div>${esc(t.plant_name || 'Plant not entered')}</div><div class="meta">${esc(t.mix_description || t.mix_code || 'Mix not entered')} · ${esc(t.truck_number || 'No truck')}</div><div class="ticket-tons">${t.net_tons == null ? 'Tons not entered' : Number(t.net_tons).toFixed(2) + ' tons'}</div></div></article>`).join('')}</div>` : '<p class="empty">No tickets saved today.</p>');
   } catch (e) { box.innerHTML = '<p class="status">Today’s tickets could not be loaded.</p>'; }
 }
@@ -652,7 +659,7 @@ async function toggleDictation() {
   }
   const ios = isIOS();
   recognizer = new SR();
-  recognizer.lang = 'en-US';
+  recognizer.lang = uiSpeechLanguage();
   // Safari ends each recording as one phrase, but interim results let people
   // see their words while they are speaking instead of waiting until Stop.
   recognizer.continuous = ios ? false : true;
@@ -1212,7 +1219,7 @@ async function saveNote(id, text, after) {
 }
 
 async function editCaptureAddress(c) {
-  const next = prompt('Enter the complete address, including street number, city, state, and ZIP:', c.address || '');
+  const next = prompt(uiT('Enter the complete address, including street number, city, state, and ZIP:'), c.address || '');
   if (next == null) return;
   const address = next.trim();
   if (!address) { toast('Enter a complete address'); return; }
@@ -1343,7 +1350,7 @@ async function pairSelected() {
   // older capture defaults to Before
   const at = new Date(a.created_at || 0).getTime(), bt = new Date(b.created_at || 0).getTime();
   let before = at <= bt ? a : b, after = at <= bt ? b : a;
-  const swap = confirm(`Before = capture #${before.id} (older), After = capture #${after.id}.\n\nOK to keep this order, or Cancel to swap Before/After.`);
+  const swap = confirm(uiT(`Before = capture #${before.id} (older), After = capture #${after.id}.\n\nOK to keep this order, or Cancel to swap Before/After.`));
   if (!swap) { const t = before; before = after; after = t; }
   const r = await api('/api/pairs', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1505,7 +1512,7 @@ async function doExportSelected() {
 async function doDeleteSelected() {
   const ids = Array.from(document.querySelectorAll('.capchk:checked')).map(x => x.value);
   if (!ids.length) { toast('Select at least one capture'); return; }
-  if (!confirm(`Delete ${ids.length} capture${ids.length > 1 ? 's' : ''}? This can't be undone.`)) return;
+  if (!confirm(uiT(`Delete ${ids.length} capture${ids.length > 1 ? 's' : ''}? This can't be undone.`))) return;
   const btn = document.getElementById('delbtn');
   btn.disabled = true; btn.textContent = 'Deleting...';
   try {
@@ -1581,7 +1588,7 @@ async function loadCards(area) {
 }
 
 function captureCardHtml(c) {
-  const when = new Date(c.created_at).toLocaleString([], { year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' });
+  const when = new Date(c.created_at).toLocaleString(uiLocale(), { year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' });
   const tags = (c.area_tags || []).map(t => `<span class="badge">${esc(t)}</span>`).join('');
   const kind = c.kind === 'task' ? `<span class="badge task">Task</span>` : '';
   const dims = isProClient() ? fmtDimsClient(c) : '';
@@ -1673,7 +1680,7 @@ const OVERLAY_FIELD_LABELS = { datetime: 'Date / Time', address: 'Address', gps:
 const OVERLAY_FONT_CSS = { sans: 'Arial, Helvetica, sans-serif', serif: 'Georgia, "Times New Roman", serif', mono: '"Courier New", monospace', heavy: 'Impact, "Arial Black", sans-serif' };
 function overlayTextClient(item, c) {
   switch (item.t) {
-    case 'datetime': return new Date(c.created_at).toLocaleString();
+    case 'datetime': return new Date(c.created_at).toLocaleString(uiLocale());
     case 'address': return c.address || '';
     case 'gps': return (c.latitude != null && c.longitude != null) ? `${Number(c.latitude).toFixed(5)}, ${Number(c.longitude).toFixed(5)}` : '';
     case 'topic': return (c.area_tags || []).length ? `Topic: ${(c.area_tags || []).join(', ')}` : '';
@@ -2254,14 +2261,14 @@ async function finishDraw() {
   if (d.mode === 'polygon' && d.points.length < 3) { toast('Add at least 3 corners'); return; }
   if (d.mode === 'span' && d.points.length < 2) { toast('Add at least 2 points'); return; }
   let width = null;
-  if (d.mode === 'span') { const w = prompt('Pavement width in feet (a standard two-lane residential road is 24):', '24'); if (w == null) return; width = parseFloat(w); if (!isFinite(width) || width <= 0) { toast('Enter a valid width'); return; } }
+  if (d.mode === 'span') { const w = prompt(uiT('Pavement width in feet (a standard two-lane residential road is 24):'), '24'); if (w == null) return; width = parseFloat(w); if (!isFinite(width) || width <= 0) { toast('Enter a valid width'); return; } }
   const gsel = document.getElementById('mapGroup'); const groupId = gsel ? gsel.value : '';
   let name, url, body;
   if (d.editId) {
     url = `/api/zones/${d.editId}`;
     body = { points: d.points }; if (width != null) body.width_ft = width;
   } else {
-    name = prompt('Name this zone:', d.mode === 'polygon' ? 'Area' : 'Roadway'); if (name == null) return;
+    name = prompt(uiT('Name this zone:'), uiT(d.mode === 'polygon' ? 'Area' : 'Roadway')); if (name == null) return;
     url = '/api/zones';
     body = { name: name.trim() || 'Zone', zone_type: d.mode, points: d.points, width_ft: width, group_id: groupId || null };
   }
@@ -2316,7 +2323,7 @@ function wireZonePopup(e, z) {
   const q = (c) => root.querySelector(c);
   const ed = q('.zn-edit'); if (ed) ed.onclick = () => { mapObj.closePopup(); startDraw(z.zone_type, z); };
   const rn = q('.zn-rename'); if (rn) rn.onclick = async () => {
-    const name = prompt('Rename zone:', z.name); if (name == null) return;
+    const name = prompt(uiT('Rename zone:'), z.name); if (name == null) return;
     const r = await api(`/api/zones/${z.id}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
     if (r.ok) { toast('Renamed'); loadZones(); } else toast('Rename failed');
   };
@@ -2327,7 +2334,7 @@ function wireZonePopup(e, z) {
     if (r.ok) { toast('Attached to document'); loadZones(); } else toast('Attach failed');
   };
   const dl = q('.zn-del'); if (dl) dl.onclick = async () => {
-    if (!confirm('Delete this zone?')) return;
+    if (!confirm(uiT('Delete this zone?'))) return;
     const r = await api(`/api/zones/${z.id}/delete`, { method: 'POST' });
     if (r.ok) { toast('Zone deleted'); loadZones(); } else toast('Delete failed');
   };
@@ -2548,7 +2555,7 @@ function scoreColor(score) {
 }
 
 async function deleteGroup(id) {
-  if (!confirm('Delete this document? The photos themselves are kept.')) return;
+  if (!confirm(uiT('Delete this document? The photos themselves are kept.'))) return;
   const r = await api(`/api/groups/${id}/delete`, { method: 'POST' });
   if (r.ok) { toast('Document deleted'); loadGroups(); } else toast('Delete failed');
 }
@@ -2657,7 +2664,7 @@ async function loadEwrList() {
   box.innerHTML = rows.map(e => `
     <div class="card" style="padding:10px">
       <div style="font-weight:bold">EWR-${String(e.id).padStart(4, '0')} <span class="defbadge" style="background:${ewrStatusColor(e.status)};cursor:default">${esc(ewrStatusLabelC(e.status))}</span></div>
-      <div class="meta">${esc(ewrReasonLabelC(e.reason_category))} · ${e.photo_count} photo${e.photo_count === 1 ? '' : 's'} · ${new Date(e.created_at).toLocaleDateString()}</div>
+      <div class="meta">${esc(ewrReasonLabelC(e.reason_category))} · ${e.photo_count} photo${e.photo_count === 1 ? '' : 's'} · ${new Date(e.created_at).toLocaleDateString(uiLocale())}</div>
       <button class="btn secondary slim ewropen" data-id="${e.id}" style="margin-top:6px">Open</button>
     </div>`).join('');
   box.querySelectorAll('.ewropen').forEach(b => b.onclick = () => { state.ewrId = parseInt(b.getAttribute('data-id'), 10); renderGroups(); });
@@ -2669,7 +2676,7 @@ function dictateInto(el, btn) {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) { el.focus(); toast('Tap the microphone key on your keyboard, then talk'); return; }
   if (ewrRecognizer) { try { ewrRecognizer.stop(); } catch (e) {} return; }
-  const ios = isIOS(); ewrRecognizer = new SR(); ewrRecognizer.lang = 'en-US';
+  const ios = isIOS(); ewrRecognizer = new SR(); ewrRecognizer.lang = uiSpeechLanguage();
   ewrRecognizer.continuous = ios ? false : true; ewrRecognizer.interimResults = ios ? false : true;
   let base = el.value; if (base && !base.endsWith(' ')) base += ' ';
   if (btn) { btn.textContent = 'Recording... tap to stop'; btn.classList.add('on'); }
@@ -2803,7 +2810,7 @@ function renderEwrView(body, data) {
     <div class="brand" style="font-size:20px">Extra Work Record</div>
     <div style="font-weight:bold">EWR-${String(e.id).padStart(4, '0')}</div>
     <div class="meta">${group ? 'Job: ' + esc(group.title || 'Untitled') + ' · ' : ''}${esc(e.address || '')}</div>
-    <div class="meta">Created ${new Date(e.created_at).toLocaleString()} by ${esc(e.created_by || '')}</div>
+    <div class="meta">Created ${new Date(e.created_at).toLocaleString(uiLocale())} by ${esc(e.created_by || '')}</div>
 
     <label>Status</label>
     <select id="ewrStatus">${EWR_STATUS_OPTS.map(o => `<option value="${o[0]}"${e.status === o[0] ? ' selected' : ''}>${o[1]}</option>`).join('')}</select>
@@ -2887,7 +2894,7 @@ function renderEwrView(body, data) {
     } catch (er) { toast('Export failed'); }
   };
   document.getElementById('ewrDelete').onclick = async () => {
-    if (!confirm('Delete this Extra Work Record and its photos? This cannot be undone.')) return;
+    if (!confirm(uiT('Delete this Extra Work Record and its photos? This cannot be undone.'))) return;
     const r = await api(`/api/ewr/${e.id}/delete`, { method: 'POST' });
     if (r.ok) { toast('Record deleted'); state.ewrId = null; renderGroups(); } else toast('Delete failed');
   };
@@ -2911,7 +2918,7 @@ function renderEwrView(body, data) {
     toast(r.ok ? 'Caption saved' : 'Save failed');
   });
   pbox.querySelectorAll('.ewrphotodel').forEach(b => b.onclick = async () => {
-    if (!confirm('Remove this photo?')) return;
+    if (!confirm(uiT('Remove this photo?'))) return;
     const r = await api(`/api/ewr/${e.id}/photo/${b.getAttribute('data-pid')}/delete`, { method: 'POST' });
     if (r.ok) renderEwrDetail(); else toast('Remove failed');
   });

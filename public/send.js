@@ -20,6 +20,8 @@
   }, true);
 
   function q(id) { return document.getElementById(id); }
+  function tr(text) { return window.photoNotesI18n ? window.photoNotesI18n.t(text) : text; }
+  function locale() { return window.photoNotesI18n && window.photoNotesI18n.getLanguage() === 'es' ? 'es-US' : undefined; }
   function noteVal() { return q('note') ? q('note').value.trim() : ''; }
 
   var stateAbbr = { Alabama:'AL', Alaska:'AK', Arizona:'AZ', Arkansas:'AR', California:'CA', Colorado:'CO', Connecticut:'CT', Delaware:'DE', Florida:'FL', Georgia:'GA', Hawaii:'HI', Idaho:'ID', Illinois:'IL', Indiana:'IN', Iowa:'IA', Kansas:'KS', Kentucky:'KY', Louisiana:'LA', Maine:'ME', Maryland:'MD', Massachusetts:'MA', Michigan:'MI', Minnesota:'MN', Mississippi:'MS', Missouri:'MO', Montana:'MT', Nebraska:'NE', Nevada:'NV', 'New Hampshire':'NH', 'New Jersey':'NJ', 'New Mexico':'NM', 'New York':'NY', 'North Carolina':'NC', 'North Dakota':'ND', Ohio:'OH', Oklahoma:'OK', Oregon:'OR', Pennsylvania:'PA', 'Rhode Island':'RI', 'South Carolina':'SC', 'South Dakota':'SD', Tennessee:'TN', Texas:'TX', Utah:'UT', Vermont:'VT', Virginia:'VA', Washington:'WA', 'West Virginia':'WV', Wisconsin:'WI', Wyoming:'WY', 'District of Columbia':'DC' };
@@ -39,22 +41,22 @@
       if (g && /\d/.test(g) && !/blocked|not available|getting/i.test(g)) parts.push(g);
     }
     var n = noteVal(); if (n) parts.push(n);
-    parts.push(new Date().toLocaleString());
+    parts.push(new Date().toLocaleString(locale()));
     return parts.join('\n');
   }
 
   function toast(m) {
     var t = q('toast');
-    if (t) { t.textContent = m; t.style.display = 'block'; setTimeout(function () { t.style.display = 'none'; }, 2200); }
+    if (t) { t.textContent = tr(m); t.style.display = 'block'; setTimeout(function () { t.style.display = 'none'; }, 2200); }
   }
 
   async function share(file, text) {
     try {
       if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({ files: [file], text: text, title: 'Photo Note' });
+        await navigator.share({ files: [file], text: text, title: tr('Photo Note') });
         return;
       }
-      if (navigator.share) { await navigator.share({ text: text, title: 'Photo Note' }); return; }
+      if (navigator.share) { await navigator.share({ text: text, title: tr('Photo Note') }); return; }
     } catch (e) { if (e && e.name === 'AbortError') return; }
     // Fallback: download the photo (to attach) and open a pre-filled email.
     if (file) {
@@ -65,8 +67,8 @@
         setTimeout(function () { URL.revokeObjectURL(u); }, 1500);
       } catch (e2) {}
     }
-    var body = encodeURIComponent(text + (file ? '\n\n(Attach the photo just downloaded to this email.)' : ''));
-    window.location.href = 'mailto:?subject=' + encodeURIComponent('Photo Note') + '&body=' + body;
+    var body = encodeURIComponent(text + (file ? '\n\n' + tr('(Attach the photo just downloaded to this email.)') : ''));
+    window.location.href = 'mailto:?subject=' + encodeURIComponent(tr('Photo Note')) + '&body=' + body;
     toast(file ? 'Opened email; photo downloaded to attach' : 'Opened email');
   }
 

@@ -71,7 +71,12 @@ textarea { min-height: 96px; resize: vertical; }
 .app-header .zukor-corner-logo { display:block; grid-column:1; grid-row:1; width:112px; min-width:112px; max-width:none; height:auto; justify-self:start; }
 .app-header .brandrow { grid-column:1 / -1; grid-row:2; min-width:0; width:min(500px,100%); justify-self:center; }
 .app-header .brandrow .brand { width:100%; max-width:100%; }
-.app-header .account-menu-wrap { grid-column:3; grid-row:1; justify-self:end; }
+.app-header .header-controls { grid-column:2 / 4; grid-row:1; justify-self:end; display:flex; align-items:center; gap:10px; }
+.language-switch { display:flex; align-items:center; gap:5px; color:#000; font:700 12px Arial,Helvetica,sans-serif; white-space:nowrap; }
+.language-switch button { appearance:none; border:0; border-bottom:2px solid transparent; padding:2px 1px; background:transparent; color:#555; font:700 12px Arial,Helvetica,sans-serif; cursor:pointer; }
+.language-switch button.active { color:#1d4ed8; border-bottom-color:#1d4ed8; }
+.language-switch button:focus-visible { outline:2px solid #1d4ed8; outline-offset:2px; }
+html[lang="es"] .brandrow .brand.asphalt-pro-brand { background-image:url('/asphalt-pro-logo-es.svg?v=66'); }
 .account-menu-wrap { position:relative; z-index:3; }
 .profile-button {
   width:30px; height:30px; padding:0; border:0; border-radius:50%; cursor:pointer;
@@ -233,6 +238,8 @@ input.dimfield.suggested {
   .wrap { padding: 12px 12px 96px; }
   .app-header { grid-template-columns:auto minmax(0,1fr) auto; column-gap:4px; }
   .app-header .zukor-corner-logo { width:63px; min-width:0; }
+  .app-header .header-controls { gap:6px; }
+  .language-switch, .language-switch button { font-size:11px; }
   .edition-label { font-size:11px; }
   .pill { padding: 7px 11px; font-size: 14px; }
   .btn { padding: 13px; font-size: 16px; }
