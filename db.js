@@ -354,6 +354,78 @@ CREATE TABLE IF NOT EXISTS hoa_notifications (
   read_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+CREATE TABLE IF NOT EXISTS hoa_assets (
+  id SERIAL PRIMARY KEY,
+  company_id INTEGER NOT NULL REFERENCES hoa_management_companies(id) ON DELETE CASCADE,
+  community_id INTEGER NOT NULL REFERENCES hoa_communities(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  asset_type TEXT NOT NULL DEFAULT 'Other',
+  location_description TEXT,
+  condition TEXT NOT NULL DEFAULT 'not_assessed',
+  primary_capture_id INTEGER REFERENCES captures(id) ON DELETE SET NULL,
+  active BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS hoa_assets_company_idx ON hoa_assets(company_id,community_id,active,name);
+CREATE TABLE IF NOT EXISTS hoa_asset_photos (
+  asset_id INTEGER NOT NULL REFERENCES hoa_assets(id) ON DELETE CASCADE,
+  capture_id INTEGER NOT NULL REFERENCES captures(id) ON DELETE CASCADE,
+  photo_type TEXT NOT NULL DEFAULT 'condition',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY(asset_id,capture_id)
+);
+CREATE TABLE IF NOT EXISTS hoa_inspection_routes (
+  id SERIAL PRIMARY KEY,
+  company_id INTEGER NOT NULL REFERENCES hoa_management_companies(id) ON DELETE CASCADE,
+  community_id INTEGER NOT NULL REFERENCES hoa_communities(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  instructions TEXT,
+  active BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS hoa_inspection_stops (
+  id SERIAL PRIMARY KEY,
+  route_id INTEGER NOT NULL REFERENCES hoa_inspection_routes(id) ON DELETE CASCADE,
+  asset_id INTEGER REFERENCES hoa_assets(id) ON DELETE SET NULL,
+  name TEXT NOT NULL,
+  instructions TEXT,
+  required_views TEXT[] NOT NULL DEFAULT ARRAY['overview']::text[],
+  sort_order INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS hoa_property_visits (
+  id SERIAL PRIMARY KEY,
+  company_id INTEGER NOT NULL REFERENCES hoa_management_companies(id) ON DELETE CASCADE,
+  community_id INTEGER NOT NULL REFERENCES hoa_communities(id) ON DELETE CASCADE,
+  route_id INTEGER REFERENCES hoa_inspection_routes(id) ON DELETE SET NULL,
+  created_by INTEGER NOT NULL REFERENCES users(id),
+  status TEXT NOT NULL DEFAULT 'in_progress',
+  started_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  completed_at TIMESTAMPTZ
+);
+CREATE TABLE IF NOT EXISTS hoa_visit_stops (
+  id SERIAL PRIMARY KEY,
+  visit_id INTEGER NOT NULL REFERENCES hoa_property_visits(id) ON DELETE CASCADE,
+  inspection_stop_id INTEGER REFERENCES hoa_inspection_stops(id) ON DELETE SET NULL,
+  name TEXT NOT NULL,
+  instructions TEXT,
+  required_views TEXT[] NOT NULL DEFAULT ARRAY['overview']::text[],
+  capture_ids INTEGER[] NOT NULL DEFAULT '{}'::integer[],
+  note TEXT,
+  status TEXT NOT NULL DEFAULT 'pending',
+  sort_order INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS hoa_completion_photo_requests (
+  id SERIAL PRIMARY KEY,
+  item_id INTEGER NOT NULL REFERENCES hoa_maintenance_items(id) ON DELETE CASCADE,
+  token TEXT UNIQUE NOT NULL,
+  recipient_name TEXT,
+  status TEXT NOT NULL DEFAULT 'open',
+  expires_at TIMESTAMPTZ NOT NULL,
+  submitted_at TIMESTAMPTZ,
+  created_by INTEGER NOT NULL REFERENCES users(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 `;
 
 const DEFAULT_AREAS = ['Roads', 'Maintenance', 'Walls', 'Security', 'Landscaping', 'Other'];
