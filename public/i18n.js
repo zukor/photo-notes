@@ -238,7 +238,26 @@
     'Original File Fingerprint': 'Huella digital del archivo original', 'Not available for this older capture': 'No disponible para esta captura anterior',
     'Verified': 'Verificada', 'Does not match': 'No coincide', 'Unavailable': 'No disponible', 'Evidence History': 'Historial de evidencia',
     'Original capture saved': 'Captura original guardada', 'Details updated': 'Datos actualizados', 'Photo rotated': 'Foto girada', 'Photo flipped': 'Foto volteada', 'Photo cropped': 'Foto recortada',
-    'No edit history is available for this older capture.': 'No hay historial de edición disponible para esta captura anterior.', 'Evidence details could not be loaded': 'No se pudieron cargar los datos de evidencia'
+    'No edit history is available for this older capture.': 'No hay historial de edición disponible para esta captura anterior.', 'Evidence details could not be loaded': 'No se pudieron cargar los datos de evidencia',
+    'Job': 'Trabajo', 'No Job Selected': 'Ningún trabajo seleccionado', 'Projects & Jobs': 'Proyectos y trabajos', 'Manage Jobs': 'Administrar trabajos',
+    'Current Job': 'Trabajo actual', 'All Jobs': 'Todos los trabajos', 'View Job Timeline': 'Ver cronología del trabajo', 'Create a Job': 'Crear un trabajo',
+    'Job name': 'Nombre del trabajo', 'Job number': 'Número de trabajo', 'Customer': 'Cliente', 'Job address': 'Dirección del trabajo', 'Create Job': 'Crear trabajo',
+    'Smart Photo Search': 'Búsqueda inteligente de fotos', 'Search notes, jobs, customers, addresses, topics, dates, or defects': 'Buscar notas, trabajos, clientes, direcciones, temas, fechas o defectos',
+    'Search Filters': 'Filtros de búsqueda', 'From date': 'Fecha inicial', 'To date': 'Fecha final', 'Missing address only': 'Solo sin dirección',
+    'Compare 2 Photos': 'Comparar 2 fotos', 'Batch Process Selected Photos': 'Procesar fotos seleccionadas por lote', 'Move to Job...': 'Mover al trabajo...',
+    'Apply Annotation Template...': 'Aplicar plantilla de anotación...', 'Date + Address': 'Fecha + dirección', 'Evidence Details': 'Datos de evidencia', 'Copyright Only': 'Solo derechos de autor',
+    'Apply Batch Changes': 'Aplicar cambios por lote', 'Photo Comparison & Alignment': 'Comparación y alineación de fotos',
+    'Use side-by-side view for details or the overlay slider to check whether fixed objects line up.': 'Use la vista lado a lado para ver detalles o el control de superposición para comprobar si los objetos fijos se alinean.',
+    'View': 'Vista', 'Side by Side': 'Lado a lado', 'Overlay': 'Superposición', 'Overlay Opacity': 'Opacidad de superposición',
+    'Annotation Template': 'Plantilla de anotación', 'Apply Template': 'Aplicar plantilla', 'Template applied': 'Plantilla aplicada',
+    'Customer Approval Package': 'Paquete de aprobación del cliente', 'Create a private, expiring review link for the selected photos. The customer can approve them or request changes.': 'Cree un enlace privado y temporal para revisar las fotos seleccionadas. El cliente puede aprobarlas o solicitar cambios.',
+    'Review title': 'Título de la revisión', 'Message to customer (optional)': 'Mensaje al cliente (opcional)', 'Create Customer Review Link': 'Crear enlace de revisión del cliente',
+    'Customer review link ready': 'El enlace de revisión está listo', 'Copy Link': 'Copiar enlace', 'Expires in 14 days': 'Vence en 14 días', 'Recent Customer Reviews': 'Revisiones recientes de clientes',
+    'Enter a job name': 'Ingrese el nombre del trabajo', 'Job created': 'Trabajo creado', 'Job could not be created': 'No se pudo crear el trabajo', 'Choose a job first': 'Elija primero un trabajo',
+    'Timeline could not be loaded': 'No se pudo cargar la cronología', 'No photos are assigned to this job yet.': 'Todavía no hay fotos asignadas a este trabajo.',
+    'Choose a batch change': 'Elija un cambio por lote', 'Batch changes failed': 'Fallaron los cambios por lote', 'Select exactly two photos to compare': 'Seleccione exactamente dos fotos para comparar',
+    'Both selections must have photos': 'Ambas selecciones deben tener fotos', 'Possible duplicate found': 'Se encontró un posible duplicado', 'Link copied': 'Enlace copiado', 'Review link could not be created': 'No se pudo crear el enlace de revisión',
+    'Mark Job Complete': 'Marcar trabajo como completado', 'Reopen Job': 'Reabrir trabajo', 'Job status updated': 'Estado del trabajo actualizado', 'Job status could not be updated': 'No se pudo actualizar el estado del trabajo'
   };
 
   const ES_TO_EN = Object.fromEntries(Object.entries(ES).map(([en, es]) => [es, en]));

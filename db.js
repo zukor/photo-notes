@@ -70,6 +70,19 @@ CREATE TABLE IF NOT EXISTS captures (
   -- Non-destructive; rendered on cards, burned into exports, and flattenable.
   overlays        JSONB
 );
+CREATE TABLE IF NOT EXISTS jobs (
+  id          SERIAL PRIMARY KEY,
+  user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name        TEXT NOT NULL,
+  job_number  TEXT,
+  customer    TEXT,
+  address     TEXT,
+  status      TEXT NOT NULL DEFAULT 'active',
+  start_date  DATE,
+  end_date    DATE,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS jobs_user_idx ON jobs (user_id, status, created_at DESC);
 CREATE TABLE IF NOT EXISTS groups (
   id          SERIAL PRIMARY KEY,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -249,6 +262,22 @@ CREATE TABLE IF NOT EXISTS capture_history (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS capture_history_capture_idx ON capture_history (capture_id, created_at);
+CREATE TABLE IF NOT EXISTS approval_packages (
+  id          SERIAL PRIMARY KEY,
+  user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  job_id      INTEGER REFERENCES jobs(id) ON DELETE SET NULL,
+  token       TEXT UNIQUE NOT NULL,
+  title       TEXT NOT NULL,
+  message     TEXT,
+  capture_ids INTEGER[] NOT NULL,
+  status      TEXT NOT NULL DEFAULT 'pending',
+  customer_name TEXT,
+  customer_comment TEXT,
+  responded_at TIMESTAMPTZ,
+  expires_at  TIMESTAMPTZ NOT NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS approval_packages_user_idx ON approval_packages (user_id, created_at DESC);
 `;
 
 const DEFAULT_AREAS = ['Roads', 'Maintenance', 'Walls', 'Security', 'Landscaping', 'Other'];
@@ -325,6 +354,9 @@ async function init() {
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS defect_ai JSONB`);
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS defect_user_confirmed BOOLEAN NOT NULL DEFAULT false`);
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS overlays JSONB`);
+  await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS job_id INTEGER REFERENCES jobs(id) ON DELETE SET NULL`);
+  await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS perceptual_hash TEXT`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS captures_job_idx ON captures (user_id, job_id, created_at DESC)`);
   // Non-destructive crop: when a photo is first cropped, the pre-crop image is
   // backed up here so the original can always be restored.
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS photo_original_path TEXT`);

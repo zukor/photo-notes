@@ -1,7 +1,7 @@
 const el = document.getElementById('app');
 // Phones/tablets open to Capture (grab a photo fast); computers open to the Library (review the photos).
 const IS_HANDHELD = (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) || window.innerWidth < 768;
-let state = { view: IS_HANDHELD ? 'capture' : 'organize', location: null, address: null, photoFile: null, kind: 'note', area: '', areas: [], groups: null, groupId: null, imgv: 0, plan: 'free', me: null, ewrId: null, selectedIds: new Set() };
+let state = { view: IS_HANDHELD ? 'capture' : 'organize', location: null, address: null, photoFile: null, kind: 'note', area: '', areas: [], jobs: [], jobId: '', groups: null, groupId: null, imgv: 0, plan: 'free', me: null, ewrId: null, selectedIds: new Set() };
 
 // Pro gating on the client. Mirrors isPro(user) on the server. Pro-only UI must
 // not render at all for free users (no disabled teaser).
@@ -32,6 +32,7 @@ async function loadAreas() {
   state.areas = r.ok ? await r.json() : [];
   if (!state.area || !state.areas.includes(state.area)) state.area = state.areas[0] || '';
 }
+async function loadJobs(){try{const r=await api('/api/jobs');state.jobs=r.ok?await r.json():[];if(state.jobId&&!state.jobs.some(j=>String(j.id)===String(state.jobId)))state.jobId='';}catch(e){state.jobs=[];}}
 
 async function addArea() {
   const input = document.getElementById('newarea');
@@ -115,7 +116,7 @@ async function boot() {
   const r = await api('/api/me');
   if (r.ok) {
     try { const me = await r.json(); state.me = me; state.plan = me.plan || 'free'; } catch (e) {}
-    await loadAreas();
+    await Promise.all([loadAreas(),loadJobs()]);
     restoreOfflineQueue();
     // Start loading documents as soon as the user signs in. By the time they
     // open Create, existing documents can be shown immediately instead of
@@ -288,6 +289,8 @@ function areaChips() {
 function renderCapture() {
   const body = document.getElementById('body');
   body.innerHTML = `
+    <label>Job</label>
+    <select id="captureJob"><option value="">No Job Selected</option>${state.jobs.filter(j=>j.status==='active').map(j=>`<option value="${j.id}" ${String(state.jobId)===String(j.id)?'selected':''}>${esc(j.job_number?j.job_number+' — '+j.name:j.name)}</option>`).join('')}</select>
     <label>Photo Note</label>
     <button type="button" class="btn" id="takephoto">Take Photo</button>
     <button type="button" class="btn secondary" id="choosephoto" style="margin-top:8px">Choose from library or files</button>
@@ -326,6 +329,7 @@ function renderCapture() {
   document.getElementById('photoCam').onchange = (e) => { if (e.target.files[0]) onPhotoChosen(e.target.files[0]); };
   document.getElementById('photoLib').onchange = (e) => { if (e.target.files[0]) onPhotoChosen(e.target.files[0]); };
   document.getElementById('save').onclick = saveCapture;
+  document.getElementById('captureJob').onchange=e=>state.jobId=e.target.value;
   document.getElementById('addarea').onclick = addArea;
   document.getElementById('newarea').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addArea(); } });
 
@@ -1137,7 +1141,7 @@ function queueDb(){return new Promise((resolve,reject)=>{if(!window.indexedDB)re
 async function queueStore(payload,hadCoords){const db=await queueDb();return new Promise((resolve,reject)=>{const tx=db.transaction('captures','readwrite');const r=tx.objectStore('captures').add({payload,hadCoords:!!hadCoords,createdAt:Date.now()});r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);tx.oncomplete=()=>db.close();});}
 async function queueDelete(id){if(id==null)return;try{const db=await queueDb();await new Promise((resolve,reject)=>{const tx=db.transaction('captures','readwrite');tx.objectStore('captures').delete(id);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);});db.close();}catch(e){}}
 async function restoreOfflineQueue(){if(offlineQueueRestored)return;offlineQueueRestored=true;try{const db=await queueDb();const rows=await new Promise((resolve,reject)=>{const tx=db.transaction('captures','readonly');const r=tx.objectStore('captures').getAll();r.onsuccess=()=>resolve(r.result||[]);r.onerror=()=>reject(r.error);});db.close();const known=new Set(bgQueue.map(x=>x.id));rows.forEach(row=>{if(!known.has(row.id))bgQueue.push({id:row.id,payload:row.payload,hadCoords:row.hadCoords,tries:0});});if(rows.length){toast(`${rows.length} offline capture${rows.length===1?'':'s'} ready to upload`);bgIndicator();drainQueue();}}catch(e){}}
-function payloadFormData(p){const fd=new FormData();if(p.photo)fd.append('photo',p.photo,p.photoName||'offline-photo.jpg');fd.append('note',p.note||'');fd.append('area_tags',p.area_tags||'[]');fd.append('kind',p.kind||'note');if(p.latitude!=null)fd.append('latitude',p.latitude);if(p.longitude!=null)fd.append('longitude',p.longitude);if(p.address)fd.append('address',p.address);return fd;}
+function payloadFormData(p){const fd=new FormData();if(p.photo)fd.append('photo',p.photo,p.photoName||'offline-photo.jpg');fd.append('note',p.note||'');fd.append('area_tags',p.area_tags||'[]');fd.append('kind',p.kind||'note');if(p.job_id)fd.append('job_id',p.job_id);if(p.latitude!=null)fd.append('latitude',p.latitude);if(p.longitude!=null)fd.append('longitude',p.longitude);if(p.address)fd.append('address',p.address);return fd;}
 
 function bgIndicator() {
   let el = document.getElementById('bgstatus');
@@ -1180,6 +1184,8 @@ async function drainQueue() {
       try {
         const r = await fetch('/api/captures', { method: 'POST', credentials: 'same-origin', body: payloadFormData(item.payload) });
         if (!r.ok) throw new Error('http ' + r.status);
+        const saved=await r.json().catch(()=>({}));
+        if(saved.duplicate_matches&&saved.duplicate_matches.length)toast(`Possible duplicate found (${saved.duplicate_matches.length})`);
         await queueDelete(item.id);
         bgActive = 0;
         // Refresh the Library if it is open so the new card appears...
@@ -1214,7 +1220,7 @@ async function saveCapture() {
     await state._locationPromise;
   }
   // Build the payload from the CURRENT state before we clear the form.
-  const payload={photo:state.photoFile||null,photoName:state.photoFile&&state.photoFile.name||'offline-photo.jpg',note,area_tags:JSON.stringify(state.area?[state.area]:[]),kind:'note'};
+  const payload={photo:state.photoFile||null,photoName:state.photoFile&&state.photoFile.name||'offline-photo.jpg',note,area_tags:JSON.stringify(state.area?[state.area]:[]),kind:'note',job_id:state.jobId||''};
   const hadCoords = !!state.location;
   if (state.location) { payload.latitude=state.location.lat;payload.longitude=state.location.lng; }
   if (state.address) payload.address=state.address;
@@ -1279,17 +1285,23 @@ async function renderList() {
   body.className = 'workflow-organize';
   body.innerHTML = `
     <div class="workflow-intro"><strong>Organize your captures</strong><span>Choose photos, file them by topic, and place them in the order you need.</span></div>
+    <details class="pair-builder" open><summary><span>Projects &amp; Jobs</span><span class="pair-expand">Manage Jobs</span></summary>
+      <div class="organize-form-grid"><section class="organize-panel"><label>Current Job</label><select id="jobFilter"><option value="">All Jobs</option>${state.jobs.map(j=>`<option value="${j.id}">${esc(j.job_number?j.job_number+' — '+j.name:j.name)} (${j.photo_count||0})</option>`).join('')}</select><button class="btn secondary slim" id="timelineBtn" type="button">View Job Timeline</button></section>
+      <section class="organize-panel"><label>Create a Job</label><input id="newJobName" placeholder="Job name"><div class="row compact"><input id="newJobNumber" placeholder="Job number"><input id="newJobCustomer" placeholder="Customer"></div><input id="newJobAddress" placeholder="Job address"><button class="btn secondary slim" id="createJobBtn" type="button">Create Job</button></section></div>
+    </details>
     <label>Filter by Topic</label>
     <select id="filter">
       <option value="">All Topics</option>
       ${state.areas.map(a => `<option value="${esc(a)}">${esc(a)}</option>`).join('')}
     </select>
-    <label>Search Photos</label>
-    <div class="row compact"><input id="photoSearch" type="search" placeholder="Search notes, addresses, topics, dates, or defects"><button class="btn secondary" id="photoSearchBtn" type="button">Search</button><button class="btn secondary" id="photoSearchClear" type="button">Clear</button></div>
+    <label>Smart Photo Search</label>
+    <div class="row compact"><input id="photoSearch" type="search" placeholder="Search notes, jobs, customers, addresses, topics, dates, or defects"><button class="btn secondary" id="photoSearchBtn" type="button">Search</button><button class="btn secondary" id="photoSearchClear" type="button">Clear</button></div>
+    <details><summary>Search Filters</summary><div class="row compact"><input id="searchFrom" type="date" title="From date"><input id="searchTo" type="date" title="To date"></div><label style="text-transform:none;letter-spacing:0"><input id="searchMissingAddress" type="checkbox" style="width:auto"> Missing address only</label></details>
     <div class="status" id="photoSearchStatus"></div>
     <div class="organize-action-row">
       <button class="btn secondary" id="selall">Select All</button>
       <button class="btn secondary" id="selnone">Clear</button>
+      <button class="btn secondary" id="compareSelected">Compare 2 Photos</button>
       ${featureOn('measurements') ? `<button class="btn secondary" id="classifybatch">Classify Selected (AI)</button>` : ''}
     </div>
     ${featureOn('before_after') ? `<div class="status" id="classifyprog"></div>
@@ -1320,21 +1332,33 @@ async function renderList() {
         </div>
         <input id="newgroupname" type="text" placeholder="...or type a new document title" style="margin-top:8px" />
       </section>
+
+      <section class="organize-panel">
+        <label>Batch Process Selected Photos</label>
+        <select id="batchJob"><option value="">Move to Job...</option>${state.jobs.map(j=>`<option value="${j.id}">${esc(j.name)}</option>`).join('')}</select>
+        <select id="batchTemplate" style="margin-top:8px"><option value="">Apply Annotation Template...</option><option value="date_address">Date + Address</option><option value="evidence">Evidence Details</option><option value="copyright">Copyright Only</option></select>
+        <button class="btn secondary slim" id="runBatch" type="button">Apply Batch Changes</button>
+      </section>
     </div>
 
     ${featureOn('measurements') ? `<div class="organize-footer-actions"><button class="btn secondary" id="openmap">Open Job Site Map</button></div>` : ''}
 
     <div id="cards" style="margin-top:16px"></div>`;
-  document.getElementById('filter').onchange = e => loadCards(e.target.value);
-  const runSearch=()=>loadCards(document.getElementById('filter').value||'',document.getElementById('photoSearch').value.trim());
+  document.getElementById('filter').onchange = e => runSmartSearch();
+  const runSearch=()=>runSmartSearch();
   document.getElementById('photoSearchBtn').onclick=runSearch;
   document.getElementById('photoSearch').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();runSearch();}};
-  document.getElementById('photoSearchClear').onclick=()=>{document.getElementById('photoSearch').value='';loadCards(document.getElementById('filter').value||'');};
+  document.getElementById('photoSearchClear').onclick=()=>{document.getElementById('photoSearch').value='';document.getElementById('searchFrom').value='';document.getElementById('searchTo').value='';document.getElementById('searchMissingAddress').checked=false;runSmartSearch();};
   document.getElementById('selall').onclick = () => document.querySelectorAll('.capchk').forEach(c => { c.checked = true; state.selectedIds.add(String(c.value)); });
   document.getElementById('selnone').onclick = () => { state.selectedIds.clear(); document.querySelectorAll('.capchk').forEach(c => c.checked = false); };
   document.getElementById('applytopic').onclick = applyTopicToSelected;
   document.getElementById('createtopic').onclick = createOrganizeTopic;
   document.getElementById('addtogroup').onclick = addSelectedToGroup;
+  document.getElementById('createJobBtn').onclick=createJob;
+  document.getElementById('jobFilter').onchange=runSmartSearch;
+  document.getElementById('timelineBtn').onclick=showSelectedJobTimeline;
+  document.getElementById('compareSelected').onclick=compareSelectedPhotos;
+  document.getElementById('runBatch').onclick=runBatchChanges;
   const cb = document.getElementById('classifybatch');
   if (cb) cb.onclick = classifySelected;
   const pb = document.getElementById('pairbtn');
@@ -1343,6 +1367,17 @@ async function renderList() {
   loadGroupOptions();
   loadCards('');
 }
+
+function selectedCaptureIds(){return Array.from(state.selectedIds).map(Number).filter(Number.isInteger);}
+function runSmartSearch(){
+  const area=(document.getElementById('filter')||{}).value||'',q=(document.getElementById('photoSearch')||{}).value||'',job=(document.getElementById('jobFilter')||{}).value||'',from=(document.getElementById('searchFrom')||{}).value||'',to=(document.getElementById('searchTo')||{}).value||'',missing=!!((document.getElementById('searchMissingAddress')||{}).checked);
+  loadCards(area,q.trim(),{job,from,to,missing});
+}
+async function createJob(){const name=document.getElementById('newJobName').value.trim();if(!name){toast('Enter a job name');return;}const body={name,job_number:document.getElementById('newJobNumber').value.trim(),customer:document.getElementById('newJobCustomer').value.trim(),address:document.getElementById('newJobAddress').value.trim()};const r=await api('/api/jobs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});if(!r.ok){toast('Job could not be created');return;}const job=await r.json();await loadJobs();state.jobId=String(job.id);toast('Job created');renderList();}
+async function showSelectedJobTimeline(){const id=(document.getElementById('jobFilter')||{}).value;if(!id){toast('Choose a job first');return;}const r=await api(`/api/jobs/${id}/timeline`);if(!r.ok){toast('Timeline could not be loaded');return;}const d=await r.json(),body=document.getElementById('body');body.innerHTML=`<button class="backlink" id="timelineBack">← Back to Organize</button><div class="workflow-intro"><strong>${esc(d.job.name)} Timeline</strong><span>${esc([d.job.job_number,d.job.customer,d.job.address].filter(Boolean).join(' · '))}</span></div><div class="row"><span class="badge">${esc(d.job.status)}</span><button class="btn secondary slim" id="jobStatusBtn">${d.job.status==='active'?'Mark Job Complete':'Reopen Job'}</button></div><div>${d.captures.length?d.captures.map((c,i)=>`<div style="display:grid;grid-template-columns:90px 1fr;gap:12px;border-left:3px solid #2455d9;padding:0 0 20px 16px"><div><strong>${new Date(c.created_at).toLocaleDateString(uiLocale())}</strong><div class="meta">${new Date(c.created_at).toLocaleTimeString(uiLocale(),{hour:'numeric',minute:'2-digit'})}</div></div><div class="card" style="margin:0">${c.photo_path?`<img src="${photoSrc(c.photo_path)}" alt="Timeline photo">`:''}<div class="addr">${esc(c.address||'No address')}</div><div>${esc(c.note||'(no note)')}</div></div></div>`).join(''):'<p class="empty">No photos are assigned to this job yet.</p>'}</div>`;document.getElementById('timelineBack').onclick=renderList;document.getElementById('jobStatusBtn').onclick=async()=>{const u=await api(`/api/jobs/${id}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:d.job.status==='active'?'completed':'active'})});if(u.ok){toast('Job status updated');await loadJobs();renderList();}else toast('Job status could not be updated');};}
+const ANNOTATION_TEMPLATES={date_address:[{t:'datetime',x:4,y:4,size:3,color:'#ffffff',font:'sans',outline:true},{t:'address',x:4,y:11,size:3,color:'#ffffff',font:'sans',outline:true}],evidence:[{t:'datetime',x:4,y:4,size:2.5,color:'#ffffff',font:'sans',outline:true},{t:'address',x:4,y:10,size:2.5,color:'#ffffff',font:'sans',outline:true},{t:'gps',x:4,y:16,size:2.5,color:'#ffffff',font:'sans',outline:true},{t:'copyright',x:4,y:92,size:2.2,color:'#ffffff',font:'sans',outline:true}],copyright:[{t:'copyright',x:4,y:92,size:2.2,color:'#ffffff',font:'sans',outline:true}]};
+async function runBatchChanges(){const ids=selectedCaptureIds();if(!ids.length){toast('Select at least one capture');return;}const job=document.getElementById('batchJob').value,template=document.getElementById('batchTemplate').value,body={ids};if(job)body.job_id=Number(job);if(template)body.overlays=ANNOTATION_TEMPLATES[template];if(!job&&!template){toast('Choose a batch change');return;}const r=await api('/api/captures/batch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const d=await r.json().catch(()=>({}));if(!r.ok){toast('Batch changes failed');return;}toast(`Updated ${d.updated} photos`);await loadJobs();runSmartSearch();}
+function compareSelectedPhotos(){const ids=selectedCaptureIds();if(ids.length!==2){toast('Select exactly two photos to compare');return;}const rows=window._lastCards||[],a=rows.find(x=>x.id===ids[0]),b=rows.find(x=>x.id===ids[1]);if(!a?.photo_path||!b?.photo_path){toast('Both selections must have photos');return;}const m=document.createElement('div');m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:90;padding:16px;overflow:auto';m.innerHTML=`<section style="max-width:900px;margin:auto;background:white;border-radius:12px;padding:16px"><div class="row"><strong>Photo Comparison &amp; Alignment</strong><button class="iconbtn" id="cmpClose">×</button></div><p class="status">Use side-by-side view for details or the overlay slider to check whether fixed objects line up.</p><div id="cmpSide" class="row" style="align-items:flex-start"><img src="${photoSrc(a.photo_path)}" style="width:50%;max-height:65vh;object-fit:contain"><img src="${photoSrc(b.photo_path)}" style="width:50%;max-height:65vh;object-fit:contain"></div><div id="cmpOverlay" style="display:none;position:relative;max-width:700px;margin:auto"><img src="${photoSrc(a.photo_path)}" style="width:100%;display:block"><img id="cmpTop" src="${photoSrc(b.photo_path)}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;opacity:.5"></div><label>View</label><div class="row"><button class="btn secondary" id="cmpSideBtn">Side by Side</button><button class="btn secondary" id="cmpOverlayBtn">Overlay</button></div><label>Overlay Opacity</label><input id="cmpOpacity" type="range" min="0" max="100" value="50"></section>`;document.body.appendChild(m);m.querySelector('#cmpClose').onclick=()=>m.remove();m.onclick=e=>{if(e.target===m)m.remove();};m.querySelector('#cmpSideBtn').onclick=()=>{m.querySelector('#cmpSide').style.display='flex';m.querySelector('#cmpOverlay').style.display='none';};m.querySelector('#cmpOverlayBtn').onclick=()=>{m.querySelector('#cmpSide').style.display='none';m.querySelector('#cmpOverlay').style.display='block';};m.querySelector('#cmpOpacity').oninput=e=>m.querySelector('#cmpTop').style.opacity=Number(e.target.value)/100;}
 
 async function createOrganizeTopic() {
   const input = document.getElementById('organizenewtopic');
@@ -1598,14 +1633,16 @@ async function doFixAddresses() {
   finally { btn.disabled = false; btn.textContent = 'Fix Addresses'; }
 }
 
-async function loadCards(area, query = '') {
+async function loadCards(area, query = '', filters = {}) {
   const cards = document.getElementById('cards');
   if (!cards) return;
   cards.innerHTML = '<p class="status">Loading...</p>';
-  const r = await api(query ? `/api/captures/search?q=${encodeURIComponent(query)}` : '/api/captures' + (area ? `?area=${encodeURIComponent(area)}` : ''));
+  const smart=query||filters.job||filters.from||filters.to||filters.missing;
+  const params=new URLSearchParams();if(query)params.set('q',query);if(filters.job)params.set('job_id',filters.job);if(filters.from)params.set('from',filters.from);if(filters.to)params.set('to',filters.to);if(filters.missing)params.set('missing_address','1');
+  const r = await api(smart ? `/api/captures/search?${params}` : '/api/captures' + (area ? `?area=${encodeURIComponent(area)}` : ''));
   if (!r.ok) { cards.innerHTML = '<p class="status">Could not load.</p>'; return; }
   let rows = await r.json();
-  if(query&&area)rows=rows.filter(c=>(c.area_tags||[]).includes(area));
+  if(smart&&area)rows=rows.filter(c=>(c.area_tags||[]).includes(area));
   const searchStatus=document.getElementById('photoSearchStatus');if(searchStatus)searchStatus.textContent=query?`${rows.length} matching photo${rows.length===1?'':'s'}`:'';
   if (!rows.length) { cards.innerHTML = '<p class="empty">No captures yet. Go grab one.</p>'; return; }
   window._lastCards = rows;
@@ -1657,6 +1694,7 @@ function captureCardHtml(c) {
     </label>
     ${c.photo_path ? `<img src="${photoSrc(c.photo_path)}" alt="capture" />` : ''}
     <div class="meta">${when}</div>
+    ${c.job_name?`<div class="badge">${esc(c.job_number?c.job_number+' — '+c.job_name:c.job_name)}</div>`:''}
     <div class="rotaterow">${rotateButtons(c.id)}</div>
     <div class="addr">${esc(c.address || (c.latitude ? c.latitude.toFixed(5)+', '+c.longitude.toFixed(5) : 'No location'))}</div>
     ${state.view === 'edit' ? `<button class="editlink editaddress" data-id="${c.id}" style="padding-left:0">Edit Address</button>` : ''}
@@ -1786,6 +1824,7 @@ function renderStampEditor(c) {
       ${addOpts.map(t => `<div class="pill" data-add="${t}">${OVERLAY_FIELD_LABELS[t]}</div>`).join('')}
     </div>
     <div class="status" style="margin-top:6px">Topic and Defect are available after they have been assigned to this photo.</div>
+    <label>Annotation Template</label><div class="row compact"><select id="singleTemplate"><option value="date_address">Date + Address</option><option value="evidence">Evidence Details</option><option value="copyright">Copyright Only</option></select><button class="btn secondary" id="applySingleTemplate">Apply Template</button></div>
     <div id="stampCtl"></div>
     <div class="row" style="margin-top:14px">
       <button class="btn" id="stampSave">Save Changes</button>
@@ -1797,6 +1836,7 @@ function renderStampEditor(c) {
   document.getElementById('stampBack').onclick = backToEdit;
   document.getElementById('stampBackBottom').onclick = backToEdit;
   document.getElementById('stampAdd').onclick = (e) => { const p = e.target.closest('[data-add]'); if (p) addOverlayItem(p.getAttribute('data-add')); };
+  document.getElementById('applySingleTemplate').onclick=()=>{editorOverlays=JSON.parse(JSON.stringify(ANNOTATION_TEMPLATES[document.getElementById('singleTemplate').value]||[]));editorSel=editorOverlays.length?0:-1;drawOverlayItems();renderStampCtl();toast('Template applied');};
   document.getElementById('stampSave').onclick = saveOverlays;
   document.getElementById('stampCopy').onclick = saveStampedCopy;
   const img = document.getElementById('stampImg');
@@ -2424,13 +2464,22 @@ async function renderSend() {
       <button class="btn secondary" id="sendword">Send as Word</button>
     </div>
     <div id="sendCaptures" class="send-capture-list"></div>
+    <div class="formhead" style="margin-top:30px">Customer Approval Package</div>
+    <p class="status">Create a private, expiring review link for the selected photos. The customer can approve them or request changes.</p>
+    <input id="approvalTitle" placeholder="Review title"><textarea id="approvalMessage" placeholder="Message to customer (optional)"></textarea>
+    <button class="btn" id="createApproval">Create Customer Review Link</button><div id="approvalResult"></div><div id="approvalList"></div>
     <div class="formhead" style="margin-top:30px">Send a Document</div>
     <div id="sendDocs"><p class="status">Loading documents...</p></div>`;
   document.getElementById('sharephotos').onclick = shareSelectedPhotos;
   document.getElementById('sendpdf').onclick = () => deliverExport('pdf', null, true);
   document.getElementById('sendword').onclick = () => deliverExport('docx', null, true);
+  document.getElementById('createApproval').onclick=createApprovalPackage;
   loadSendCenter();
+  loadApprovalPackages();
 }
+
+async function createApprovalPackage(){const ids=Array.from(state.selectedIds).map(Number);if(!ids.length){toast('Select at least one capture');return;}const title=document.getElementById('approvalTitle').value.trim()||'Photo Review',message=document.getElementById('approvalMessage').value.trim();const r=await api('/api/approvals',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids,title,message})});const d=await r.json().catch(()=>({}));if(!r.ok){toast(d.error||'Review link could not be created');return;}const box=document.getElementById('approvalResult');box.innerHTML=`<div class="card"><strong>Customer review link ready</strong><input id="approvalUrl" readonly value="${esc(d.url)}"><button class="btn secondary slim" id="copyApproval">Copy Link</button><div class="meta">Expires in 14 days</div></div>`;document.getElementById('copyApproval').onclick=async()=>{try{await navigator.clipboard.writeText(d.url);toast('Link copied');}catch(e){document.getElementById('approvalUrl').select();}};loadApprovalPackages();}
+async function loadApprovalPackages(){const box=document.getElementById('approvalList');if(!box)return;const r=await api('/api/approvals');if(!r.ok)return;const rows=await r.json();box.innerHTML=rows.length?`<div class="formhead">Recent Customer Reviews</div>${rows.slice(0,10).map(x=>`<div class="card"><strong>${esc(x.title)}</strong> <span class="badge">${esc(x.status.replace('_',' '))}</span><div class="meta">${x.photo_count} photo${x.photo_count===1?'':'s'} · expires ${new Date(x.expires_at).toLocaleDateString(uiLocale())}</div>${x.customer_name?`<div>Response from ${esc(x.customer_name)}${x.customer_comment?`: ${esc(x.customer_comment)}`:''}</div>`:''}<button class="btn secondary slim copyExistingApproval" data-url="${esc(location.origin+'/review/'+x.token)}">Copy Link</button></div>`).join('')}`:'';box.querySelectorAll('.copyExistingApproval').forEach(b=>b.onclick=async()=>{try{await navigator.clipboard.writeText(b.dataset.url);toast('Link copied');}catch(e){}});}
 
 async function loadSendCenter() {
   const [cr, gr] = await Promise.all([api('/api/captures'), api('/api/groups')]);

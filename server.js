@@ -482,6 +482,10 @@ async function imageDims(localPath) {
     return { w, h };
   } catch (e) { return null; }
 }
+async function photoDhash(localPath){
+  try{const {data}=await sharp(localPath).rotate().resize(9,8,{fit:'fill'}).greyscale().raw().toBuffer({resolveWithObject:true});let bits='';for(let y=0;y<8;y++)for(let x=0;x<8;x++)bits+=data[y*9+x]>data[y*9+x+1]?'1':'0';return BigInt('0b'+bits).toString(16).padStart(16,'0');}catch(e){return null;}
+}
+function hashDistance(a,b){if(!a||!b||a.length!==b.length)return 99;let x=BigInt('0x'+a)^BigInt('0x'+b),n=0;while(x){n+=Number(x&1n);x>>=1n;}return n;}
 
 app.post('/api/login', async (req, res) => {
   try {
@@ -630,9 +634,14 @@ app.post('/api/captures', requireAuth, upload.single('photo'), async (req, res) 
     }
     const kind = b.kind === 'task' ? 'task' : 'note';
     const photoPath = req.file ? `/uploads/${req.file.filename}` : null;
+    let jobId=Number.isInteger(Number(b.job_id))?Number(b.job_id):null;
+    if(jobId){const ok=(await pool.query(`SELECT 1 FROM jobs WHERE id=$1 AND user_id=$2`,[jobId,req.user.id])).rowCount;if(!ok)jobId=null;}
 
     let pw = null, ph = null;
     if (req.file) { const d = await imageDims(req.file.path); if (d) { pw = d.w; ph = d.h; } }
+    const perceptualHash=req.file?await photoDhash(req.file.path):null;
+    let duplicateMatches=[];
+    if(perceptualHash){const prior=(await pool.query(`SELECT id,photo_path,created_at,perceptual_hash FROM captures WHERE user_id=$1 AND perceptual_hash IS NOT NULL ORDER BY created_at DESC LIMIT 500`,[req.user.id])).rows;duplicateMatches=prior.map(x=>({...x,distance:hashDistance(perceptualHash,x.perceptual_hash)})).filter(x=>x.distance<=6).slice(0,5);}
 
     // Pro-tier dimension fields. Only stored for Pro users; ignored otherwise.
     let dLenIn = null, dLenUnit = null, dWidIn = null, dWidUnit = null, dDepthIn = null, dShape = null, dArea = null;
@@ -672,12 +681,12 @@ app.post('/api/captures', requireAuth, upload.single('photo'), async (req, res) 
       }
     }
 
-    const q = `INSERT INTO captures (user_id, captured_by, photo_path, photo_width, photo_height, note, latitude, longitude, address, area_tags, kind, status,
+    const q = `INSERT INTO captures (user_id, captured_by, photo_path, photo_width, photo_height, note, latitude, longitude, address, area_tags, kind, status, job_id, perceptual_hash,
                  dim_length_in, dim_length_unit, dim_width_in, dim_width_unit, dim_depth_in, dim_shape, dim_area_sqft,
                  dim_source, dim_confidence, dim_ai, dim_confirmed)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23) RETURNING *`;
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25) RETURNING *`;
     const status = kind === 'task' ? 'open' : null;
-    const vals = [req.user.id, req.user.name, photoPath, pw, ph, b.note || null, lat, lng, address, areas, kind, status,
+    const vals = [req.user.id, req.user.name, photoPath, pw, ph, b.note || null, lat, lng, address, areas, kind, status, jobId, perceptualHash,
       dLenIn, dLenUnit, dWidIn, dWidUnit, dDepthIn, dShape, dArea,
       dSource, dConf, dAi ? JSON.stringify(dAi) : null, dConfirmed];
     const { rows } = await pool.query(q, vals);
@@ -690,7 +699,7 @@ app.post('/api/captures', requireAuth, upload.single('photo'), async (req, res) 
       } catch (e) { console.error('[evidence.fingerprint]',e&&e.message); }
     }
     await recordCaptureHistory(req.user.id,saved.id,'captured',{photo:!!req.file,gps:lat!=null&&lng!=null,address:!!address});
-    res.json(saved);
+    res.json({...saved,duplicate_matches:duplicateMatches});
 
     // Background address fill: if we have coordinates but no address yet, geocode
     // AFTER responding and patch the row. The save is already committed and the
@@ -717,9 +726,9 @@ app.get('/api/captures', requireAuth, async (req, res) => {
     let rows;
     if (area) {
       ({ rows } = await pool.query(
-        `SELECT * FROM captures WHERE user_id = $1 AND $2 = ANY(area_tags) ORDER BY created_at DESC`, [req.user.id, area]));
+        `SELECT c.*,j.name job_name,j.job_number FROM captures c LEFT JOIN jobs j ON j.id=c.job_id WHERE c.user_id = $1 AND $2 = ANY(c.area_tags) ORDER BY c.created_at DESC`, [req.user.id, area]));
     } else {
-      ({ rows } = await pool.query(`SELECT * FROM captures WHERE user_id = $1 ORDER BY created_at DESC`, [req.user.id]));
+      ({ rows } = await pool.query(`SELECT c.*,j.name job_name,j.job_number FROM captures c LEFT JOIN jobs j ON j.id=c.job_id WHERE c.user_id = $1 ORDER BY c.created_at DESC`, [req.user.id]));
     }
     res.json(rows);
   } catch (err) {
@@ -731,16 +740,30 @@ app.get('/api/captures', requireAuth, async (req, res) => {
 app.get('/api/captures/search', requireAuth, async (req,res)=>{
   try{
     const q=String(req.query.q||'').trim();
-    if(!q)return res.json([]);
-    const pattern=`%${q}%`;
-    const rows=(await pool.query(`SELECT * FROM captures WHERE user_id=$1 AND (
-      COALESCE(note,'') ILIKE $2 OR COALESCE(address,'') ILIKE $2 OR COALESCE(captured_by,'') ILIKE $2 OR
-      COALESCE(array_to_string(area_tags,' '),'') ILIKE $2 OR COALESCE(defect_type,'') ILIKE $2 OR
-      to_char(created_at,'MM/DD/YYYY HH12:MI AM') ILIKE $2)
-      ORDER BY created_at DESC LIMIT 200`,[req.user.id,pattern])).rows;
+    const vals=[req.user.id],where=['c.user_id=$1'];
+    if(q){vals.push(`%${q}%`);const n=vals.length;where.push(`(COALESCE(c.note,'') ILIKE $${n} OR COALESCE(c.address,'') ILIKE $${n} OR COALESCE(c.captured_by,'') ILIKE $${n} OR COALESCE(array_to_string(c.area_tags,' '),'') ILIKE $${n} OR COALESCE(c.defect_type,'') ILIKE $${n} OR COALESCE(j.name,'') ILIKE $${n} OR COALESCE(j.job_number,'') ILIKE $${n} OR COALESCE(j.customer,'') ILIKE $${n} OR to_char(c.created_at,'MM/DD/YYYY HH12:MI AM') ILIKE $${n})`);}
+    if(Number.isInteger(Number(req.query.job_id))){vals.push(Number(req.query.job_id));where.push(`c.job_id=$${vals.length}`);}
+    if(req.query.from){vals.push(String(req.query.from));where.push(`c.created_at >= $${vals.length}::date`);}
+    if(req.query.to){vals.push(String(req.query.to));where.push(`c.created_at < ($${vals.length}::date + interval '1 day')`);}
+    if(req.query.missing_address==='1')where.push(`COALESCE(c.address,'')=''`);
+    if(req.query.has_photo==='1')where.push(`c.photo_path IS NOT NULL`);
+    const rows=(await pool.query(`SELECT c.*,j.name job_name,j.job_number FROM captures c LEFT JOIN jobs j ON j.id=c.job_id WHERE ${where.join(' AND ')} ORDER BY c.created_at DESC LIMIT 500`,vals)).rows;
     res.json(rows);
   }catch(err){console.error('[captures.search]',err);res.status(500).json({error:'search failed'});}
 });
+
+// ---- jobs: the organizing parent for captures ----
+app.get('/api/jobs',requireAuth,async(req,res)=>{try{const rows=(await pool.query(`SELECT j.*,COUNT(c.id)::int photo_count FROM jobs j LEFT JOIN captures c ON c.job_id=j.id WHERE j.user_id=$1 GROUP BY j.id ORDER BY (j.status='active') DESC,j.created_at DESC`,[req.user.id])).rows;res.json(rows);}catch(e){console.error('[jobs.list]',e);res.status(500).json({error:'jobs failed'});}});
+app.post('/api/jobs',requireAuth,async(req,res)=>{try{const b=req.body||{},name=String(b.name||'').trim();if(!name)return res.status(400).json({error:'name required'});const status=['active','completed','archived'].includes(b.status)?b.status:'active';const row=(await pool.query(`INSERT INTO jobs(user_id,name,job_number,customer,address,status,start_date,end_date) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,[req.user.id,name,ticketText(b.job_number),ticketText(b.customer),ticketText(b.address,500),status,b.start_date||null,b.end_date||null])).rows[0];logEvent(req.user.id,'job_create',{});res.json(row);}catch(e){console.error('[jobs.create]',e);res.status(500).json({error:'job failed'});}});
+app.post('/api/jobs/:id',requireAuth,async(req,res)=>{try{const id=Number(req.params.id),b=req.body||{},sets=[],vals=[];for(const [k,max] of [['name',200],['job_number',100],['customer',200],['address',500]])if(typeof b[k]==='string'){vals.push(ticketText(b[k],max));sets.push(`${k}=$${vals.length}`);}if(['active','completed','archived'].includes(b.status)){vals.push(b.status);sets.push(`status=$${vals.length}`);}for(const k of ['start_date','end_date'])if(b[k]!==undefined){vals.push(b[k]||null);sets.push(`${k}=$${vals.length}`);}if(!sets.length)return res.status(400).json({error:'nothing to update'});vals.push(id,req.user.id);const row=(await pool.query(`UPDATE jobs SET ${sets.join(',')} WHERE id=$${vals.length-1} AND user_id=$${vals.length} RETURNING *`,vals)).rows[0];if(!row)return res.status(404).json({error:'not found'});res.json(row);}catch(e){console.error('[jobs.update]',e);res.status(500).json({error:'job update failed'});}});
+app.get('/api/jobs/:id/timeline',requireAuth,async(req,res)=>{try{const id=Number(req.params.id);const job=(await pool.query(`SELECT * FROM jobs WHERE id=$1 AND user_id=$2`,[id,req.user.id])).rows[0];if(!job)return res.status(404).json({error:'not found'});const captures=(await pool.query(`SELECT * FROM captures WHERE job_id=$1 AND user_id=$2 ORDER BY created_at ASC`,[id,req.user.id])).rows;res.json({job,captures});}catch(e){res.status(500).json({error:'timeline failed'});}});
+app.post('/api/captures/batch',requireAuth,async(req,res)=>{try{const b=req.body||{},ids=Array.isArray(b.ids)?b.ids.map(Number).filter(Number.isInteger).slice(0,500):[];if(!ids.length)return res.status(400).json({error:'no ids'});const sets=[],vals=[];if(b.job_id!==undefined){let j=b.job_id==null||b.job_id===''?null:Number(b.job_id);if(j&&!(await pool.query(`SELECT 1 FROM jobs WHERE id=$1 AND user_id=$2`,[j,req.user.id])).rowCount)return res.status(400).json({error:'bad job'});vals.push(j);sets.push(`job_id=$${vals.length}`);}if(Array.isArray(b.add_topics)&&b.add_topics.length){vals.push(b.add_topics.map(x=>ticketText(x,100)).filter(Boolean));sets.push(`area_tags=(SELECT ARRAY(SELECT DISTINCT unnest(COALESCE(area_tags,'{}') || $${vals.length}::text[])))`);}if(Array.isArray(b.overlays)){vals.push(JSON.stringify(b.overlays.slice(0,20)));sets.push(`overlays=$${vals.length}`);}if(!sets.length)return res.status(400).json({error:'nothing to update'});vals.push(ids,req.user.id);const result=await pool.query(`UPDATE captures SET ${sets.join(',')} WHERE id=ANY($${vals.length-1}) AND user_id=$${vals.length}`,vals);for(const id of ids)await recordCaptureHistory(req.user.id,id,'details_updated',{fields:['batch']});logEvent(req.user.id,'capture_batch',{count:result.rowCount});res.json({ok:true,updated:result.rowCount});}catch(e){console.error('[captures.batch]',e);res.status(500).json({error:'batch failed'});}});
+
+// ---- expiring customer approval packages ----
+app.get('/api/approvals',requireAuth,async(req,res)=>{try{res.json((await pool.query(`SELECT id,job_id,title,status,customer_name,customer_comment,responded_at,expires_at,created_at,cardinality(capture_ids)::int photo_count,token FROM approval_packages WHERE user_id=$1 ORDER BY created_at DESC`,[req.user.id])).rows);}catch(e){res.status(500).json({error:'approvals failed'});}});
+app.post('/api/approvals',requireAuth,async(req,res)=>{try{const b=req.body||{},ids=Array.isArray(b.ids)?b.ids.map(Number).filter(Number.isInteger).slice(0,100):[];if(!ids.length)return res.status(400).json({error:'select photos'});if(!(await ownsCaptures(req.user.id,ids)))return res.status(403).json({error:'invalid photos'});let jobId=Number.isInteger(Number(b.job_id))?Number(b.job_id):null;if(jobId&&!(await pool.query(`SELECT 1 FROM jobs WHERE id=$1 AND user_id=$2`,[jobId,req.user.id])).rowCount)return res.status(403).json({error:'invalid job'});const token=crypto.randomBytes(24).toString('base64url'),title=ticketText(b.title,200)||'Photo Review',expires=new Date(Date.now()+14*86400000);const row=(await pool.query(`INSERT INTO approval_packages(user_id,job_id,token,title,message,capture_ids,expires_at) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *`,[req.user.id,jobId,token,title,ticketText(b.message,1000),ids,expires])).rows[0];logEvent(req.user.id,'approval_package',{count:ids.length});res.json({...row,url:`${req.protocol}://${req.get('host')}/review/${token}`});}catch(e){console.error('[approvals.create]',e);res.status(500).json({error:'approval failed'});}});
+app.get('/review/:token',async(req,res)=>{try{const p=(await pool.query(`SELECT * FROM approval_packages WHERE token=$1`,[req.params.token])).rows[0];if(!p)return res.status(404).send('Review link not found.');if(new Date(p.expires_at)<new Date())return res.status(410).send('This review link has expired.');const photos=(await pool.query(`SELECT id,photo_path,note,address,created_at FROM captures WHERE user_id=$1 AND id=ANY($2) ORDER BY created_at`,[p.user_id,p.capture_ids])).rows;const cards=photos.map(c=>`<article><img src="${escXml(c.photo_path||'')}" alt="Project photo"><p><b>${escXml(c.address||'')}</b></p><p>${escXml(c.note||'')}</p><small>${new Date(c.created_at).toLocaleString()}</small></article>`).join('');res.send(`<!doctype html><html><head><meta name="viewport" content="width=device-width"><title>${escXml(p.title)}</title><style>body{font-family:Arial;margin:auto;max-width:850px;padding:20px;color:#111}article{border:1px solid #ccc;border-radius:10px;padding:12px;margin:18px 0}img{width:100%;max-height:650px;object-fit:contain}textarea,input,button{box-sizing:border-box;width:100%;padding:12px;margin:6px 0;font-size:16px}button{background:#2455d9;color:white;border:0;border-radius:8px;font-weight:bold}.changes{background:#555}.status{padding:12px;background:#eef3ff}</style></head><body><h1>${escXml(p.title)}</h1>${p.message?`<p>${escXml(p.message)}</p>`:''}<div class="status">Status: ${escXml(p.status)}</div>${cards}${p.status==='pending'?`<form method="post" action="/review/${p.token}"><input name="customer_name" placeholder="Your name" required><textarea name="comment" placeholder="Comment (optional)"></textarea><button name="decision" value="approved">Approve Photos</button><button class="changes" name="decision" value="changes_requested">Request Changes</button></form>`:`<p><b>Response received. Thank you.</b></p>`}</body></html>`);}catch(e){res.status(500).send('Review unavailable.');}});
+app.post('/review/:token',express.urlencoded({extended:false}),async(req,res)=>{try{const decision=req.body.decision==='approved'?'approved':'changes_requested';const row=(await pool.query(`UPDATE approval_packages SET status=$1,customer_name=$2,customer_comment=$3,responded_at=now() WHERE token=$4 AND status='pending' AND expires_at>now() RETURNING token`,[decision,ticketText(req.body.customer_name,200),ticketText(req.body.comment,1000),req.params.token])).rows[0];if(!row)return res.status(400).send('This review can no longer be changed.');res.redirect(`/review/${row.token}`);}catch(e){res.status(500).send('Response could not be saved.');}});
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 
