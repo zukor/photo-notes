@@ -58,6 +58,15 @@
     .health-dot.down { background:#b3261e; }
     .health-detail { font-size:12px; margin-top:5px; line-height:1.3; }
     .health-meta { margin:8px 0 10px; }
+    .admin-panel { margin-top:10px; padding:12px; border:1px solid #cdd3dc; border-radius:9px; background:#f8fafc; }
+    .admin-panel[hidden] { display:none; }
+    .edit-user-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+    .feature-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:7px; margin-top:8px; }
+    .feature-item { display:flex; align-items:flex-start; gap:8px; border:1px solid #dbe0e7; border-radius:7px; padding:9px; background:#fff; font-size:13px; text-transform:none; letter-spacing:0; }
+    .feature-item input { width:18px; height:18px; margin:0; flex:0 0 auto; }
+    .activity-table { width:100%; border-collapse:collapse; font-size:13px; }
+    .activity-table th,.activity-table td { text-align:left; padding:8px; border-bottom:1px solid #e3e6ea; vertical-align:top; }
+    .usage-row { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:8px; }
     @media (max-width:520px) {
       .capture-stats { grid-template-columns:repeat(3, minmax(0, 1fr)); }
       .password-row { grid-template-columns:1fr 1fr; }
@@ -66,7 +75,7 @@
       .reset-password-actions { grid-template-columns:1fr; }
       .issue-admin-card { grid-template-columns:1fr; }
       .issue-admin-card img { width:100%; max-height:280px; }
-      .issue-toolbar, .issue-controls, .health-grid { grid-template-columns:1fr; }
+      .issue-toolbar, .issue-controls, .health-grid, .edit-user-grid, .feature-grid, .usage-row { grid-template-columns:1fr; }
     }
   </style>
 </head>
@@ -83,6 +92,7 @@
     function num(v){ return Number(v) || 0; }
     let allUsers = [];
     let allIssues = [];
+    let usageByUser = {};
     let currentUser = null;
     function userInitials(user){
       const source=String((user && (user.name || user.email)) || 'User').trim();
@@ -133,9 +143,14 @@
       box.querySelectorAll('[data-save-password]').forEach(b => b.onclick = () => saveResetPassword(parseInt(b.getAttribute('data-save-password'),10), b));
       box.querySelectorAll('[data-active]').forEach(b => b.onclick = () => setActive(parseInt(b.getAttribute('data-active'),10), b.getAttribute('data-to')==='1'));
       box.querySelectorAll('[data-plan]').forEach(b => b.onclick = () => setPlan(parseInt(b.getAttribute('data-plan'),10), b.getAttribute('data-planto')));
+      box.querySelectorAll('[data-edit-user]').forEach(b => b.onclick = () => toggleAdminPanel(`edit-user-${b.dataset.editUser}`));
+      box.querySelectorAll('[data-save-user]').forEach(b => b.onclick = () => saveUserDetails(Number(b.dataset.saveUser), b));
+      box.querySelectorAll('[data-feature-user]').forEach(b => b.onclick = () => toggleAdminPanel(`feature-user-${b.dataset.featureUser}`));
+      box.querySelectorAll('[data-save-features]').forEach(b => b.onclick = () => saveFeatureAccess(Number(b.dataset.saveFeatures), b));
     }
 
     function userCard(u){
+      const usage=usageByUser[u.id]||{}, features=u.feature_access||{};
       const orientedKnown = u.dims_known || 0;
       const photoLine = orientedKnown
         ? st(u.landscape, 'landscape') + st(u.portrait, 'portrait') + (u.square ? st(u.square, 'square') : '')
@@ -211,14 +226,20 @@
 
           <div class="privacy">Metadata only. This dashboard never shows their photos or the words they wrote.</div>
 
+          <div class="section"><h4>Storage &amp; AI Usage</h4><div class="helper">Actual stored photo-file size and counts of AI-assisted actions. These totals help monitor service cost without showing user content.</div><div class="usage-row">${st(usage.photo_files||0,'stored photos')}${st(formatBytes(usage.storage_bytes||0),'storage')}${st(usage.ai_actions||0,'AI actions')}${st(usage.ticket_scans||0,'ticket scans')}${st(usage.camera_scans||0,'camera scans')}${st((usage.ai_measurements||0)+(usage.ai_classifications||0),'measure/classify')}</div></div>
+
           <div class="account-actions">
             <h4>Account settings</h4>
             <div class="helper">Reset login credentials, change feature access, or prevent sign-in without deleting this user's data.</div>
             <div class="row">
+              <button class="btn secondary" data-edit-user="${u.id}">Edit User</button>
+              <button class="btn secondary" data-feature-user="${u.id}">Feature Access</button>
               <button class="btn secondary" data-reset="${u.id}">Reset Password</button>
               <button class="btn secondary" data-plan="${u.id}" data-planto="${u.plan==='pro' ? 'free' : 'pro'}">${u.plan==='pro' ? 'Switch to Basic' : 'Upgrade to Pro'}</button>
               <button class="btn secondary" data-active="${u.id}" data-to="${u.active ? '0' : '1'}">${u.active ? 'Deactivate Login' : 'Reactivate Login'}</button>
             </div>
+            <div class="admin-panel" id="edit-user-${u.id}" hidden><h4>Edit User</h4><div class="edit-user-grid"><label>First and Last Name<input id="edit-name-${u.id}" value="${esc(u.name||'')}"></label><label>Email<input id="edit-email-${u.id}" type="email" value="${esc(u.email||'')}"></label><label>Industry<input id="edit-industry-${u.id}" value="${esc(u.industry||'')}"></label></div><button class="btn" type="button" data-save-user="${u.id}" style="margin-top:8px">Save User</button></div>
+            <div class="admin-panel" id="feature-user-${u.id}" hidden><h4>Feature Access</h4><div class="helper">These controls apply to Asphalt Pro. Turning a feature off removes it from the app and blocks its protected server actions.</div><div class="feature-grid">${featureToggle(u.id,'ticket_scanner','Asphalt Ticket Scanner',features)}${featureToggle(u.id,'camera_readers','Camera Readers & Scanners',features)}${featureToggle(u.id,'before_after','Before & After Matching',features)}${featureToggle(u.id,'measurements','Measurements, Map & AI Classification',features)}${featureToggle(u.id,'extra_work','Extra Work Records',features)}</div><button class="btn" type="button" data-save-features="${u.id}" style="margin-top:8px">Save Feature Access</button></div>
             <div class="reset-password-panel" id="reset-panel-${u.id}" hidden>
               <label for="reset-password-${u.id}">New Password</label>
               <input id="reset-password-${u.id}" type="text" autocomplete="new-password" placeholder="Enter or recommend a password" />
@@ -313,6 +334,8 @@
           <div class="helper">A safe operational check of the services Photo Notes needs. This shows configuration and availability without displaying passwords or API keys.</div>
           <div id="health"><p class="status">Checking...</p></div>
 
+          <details style="margin-top:16px"><summary style="font-weight:bold;cursor:pointer">Administrative Activity Log</summary><div class="helper">Account, password, plan, feature-access, and issue-management changes. Passwords and user content are never recorded.</div><div id="activity"><p class="status">Loading...</p></div></details>
+
           <label style="margin-top:22px">Issue Management Center</label>
           <div class="helper">Review tester reports, set priority, track repair and retesting, add private administrator notes, and confirm email delivery.</div>
           <div class="issue-toolbar">
@@ -348,6 +371,7 @@
       document.getElementById('issuePriorityFilter').onchange = renderIssues;
       document.getElementById('refreshIssues').onclick = loadIssues;
       loadHealth();
+      loadActivity();
       loadIssues();
       loadUsers();
     }
@@ -379,12 +403,12 @@
     async function saveIssue(id,btn){
       btn.disabled=true;btn.textContent='Saving...';
       const body={management_status:document.getElementById(`issue-status-${id}`).value,priority:document.getElementById(`issue-priority-${id}`).value,admin_notes:document.getElementById(`issue-notes-${id}`).value};
-      try{const r=await api(`/api/admin/issues/${id}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});if(!r.ok)throw new Error();toast('Issue saved');await loadIssues();}
+      try{const r=await api(`/api/admin/issues/${id}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});if(!r.ok)throw new Error();toast('Issue saved');await loadIssues();loadActivity();}
       catch(e){toast('Issue could not be saved');btn.disabled=false;btn.textContent='Save Issue';}
     }
     async function retryIssueEmail(id,btn){
       btn.disabled=true;btn.textContent='Sending...';
-      try{const r=await api(`/api/admin/issues/${id}/retry-email`,{method:'POST'});const d=await r.json();if(!r.ok)throw new Error();toast(d.status==='sent'?'Issue email sent':'Email is still not configured');await loadIssues();}
+      try{const r=await api(`/api/admin/issues/${id}/retry-email`,{method:'POST'});const d=await r.json();if(!r.ok)throw new Error();toast(d.status==='sent'?'Issue email sent':'Email is still not configured');await loadIssues();loadActivity();}
       catch(e){toast('Issue email could not be sent');btn.disabled=false;btn.textContent='Retry Email';}
     }
     async function loadHealth(){
@@ -433,6 +457,7 @@
           document.getElementById('cname').value=''; document.getElementById('cemail').value='';
           document.getElementById('cindustry').value=''; document.getElementById('cpass').value='';
           loadUsers();
+          loadActivity();
         }
       } catch(e){ toast('Could not create login'); }
       finally { btn.disabled = false; btn.textContent = 'Create Login'; }
@@ -441,14 +466,36 @@
     async function loadUsers(){
       const box = document.getElementById('users');
       box.innerHTML = '<p class="status">Loading...</p>';
-      const r = await api('/api/admin/users');
+      const [r,ur] = await Promise.all([api('/api/admin/users'),api('/api/admin/usage')]);
       if (!r.ok) { box.innerHTML = '<p class="status">Could not load.</p>'; return; }
       allUsers = await r.json();
+      if(ur.ok){const rows=await ur.json();usageByUser=Object.fromEntries(rows.map(x=>[x.user_id,x]));}
       renderSummary(allUsers);
       const sortsel = document.getElementById('sortsel');
       if (sortsel && !sortsel._wired) { sortsel._wired = true; sortsel.onchange = renderUserList; }
       renderUserList();
     }
+
+    function formatBytes(n){n=Number(n)||0;if(n<1024)return n+' B';if(n<1048576)return (n/1024).toFixed(1)+' KB';if(n<1073741824)return (n/1048576).toFixed(1)+' MB';return (n/1073741824).toFixed(2)+' GB';}
+    function featureToggle(id,key,label,features){const checked=features[key]!==false;return `<label class="feature-item"><input type="checkbox" data-feature-key="${key}" data-feature-owner="${id}"${checked?' checked':''}><span>${label}</span></label>`;}
+    function toggleAdminPanel(id){const p=document.getElementById(id);if(p)p.hidden=!p.hidden;}
+    async function saveUserDetails(id,btn){
+      const body={name:document.getElementById(`edit-name-${id}`).value.trim(),email:document.getElementById(`edit-email-${id}`).value.trim(),industry:document.getElementById(`edit-industry-${id}`).value.trim()};
+      if(body.name.split(/\s+/).filter(Boolean).length<2){toast('First and last name are required');return;}
+      if(!body.email){toast('Email is required');return;}btn.disabled=true;btn.textContent='Saving...';
+      try{const r=await api(`/api/admin/users/${id}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});if(r.status===409){toast('That email already has a login');return;}if(!r.ok)throw new Error();toast('User saved');await loadUsers();await loadActivity();}catch(e){toast('User could not be saved');}finally{btn.disabled=false;btn.textContent='Save User';}
+    }
+    async function saveFeatureAccess(id,btn){
+      const feature_access={};document.querySelectorAll(`[data-feature-owner="${id}"]`).forEach(c=>feature_access[c.dataset.featureKey]=c.checked);btn.disabled=true;btn.textContent='Saving...';
+      try{const r=await api(`/api/admin/users/${id}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({feature_access})});if(!r.ok)throw new Error();toast('Feature access saved');await loadUsers();await loadActivity();}catch(e){toast('Feature access could not be saved');}finally{btn.disabled=false;btn.textContent='Save Feature Access';}
+    }
+    const activityLabels={admin_user_create:'Created login',admin_user_update:'Changed user settings',admin_password_reset:'Reset password',admin_issue_update:'Updated issue',admin_issue_email_retry:'Retried issue email'};
+    async function loadActivity(){
+      const box=document.getElementById('activity');if(!box)return;
+      try{const r=await api('/api/admin/activity');if(!r.ok)throw new Error();const rows=await r.json();box.innerHTML=rows.length?`<table class="activity-table"><thead><tr><th>When</th><th>Administrator</th><th>Action</th><th>Details</th></tr></thead><tbody>${rows.map(a=>`<tr><td>${fdatetime(a.created_at)}</td><td>${esc(a.admin_name||a.admin_email||'Administrator')}</td><td>${esc(activityLabels[a.action]||a.action)}</td><td>${esc(activityDetail(a))}</td></tr>`).join('')}</tbody></table>`:'<p class="helper">No administrative changes have been recorded yet.</p>';}
+      catch(e){box.innerHTML='<p class="status">Administrative activity could not be loaded.</p>';}
+    }
+    function activityDetail(a){const d=a.detail||{};if(d.target_user_id)return `User #${d.target_user_id}${Array.isArray(d.fields)?' · '+d.fields.join(', '):''}`;if(d.issue_id)return `Issue #${d.issue_id}`;return '';}
 
     function toggleResetPassword(id){
       const panel=document.getElementById(`reset-panel-${id}`);
@@ -476,6 +523,7 @@
         const r=await api(`/api/admin/users/${id}/password`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pw})});
         if(!r.ok)throw new Error();
         toast('Password saved');
+        loadActivity();
         document.getElementById(`reset-help-${id}`).textContent='Password saved. Give the copied password to the user securely.';
       }catch(e){toast('Password could not be saved');}
       finally{btn.disabled=false;btn.textContent='Save Password';}
@@ -483,11 +531,11 @@
     async function setActive(id, active){
       if (!active && !confirm('Deactivate this login? They will not be able to sign in. Their data is kept.')) return;
       const r = await api(`/api/admin/users/${id}`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ active }) });
-      if (r.ok) { toast(active ? 'Activated' : 'Deactivated'); loadUsers(); } else toast('Update failed');
+      if (r.ok) { toast(active ? 'Activated' : 'Deactivated'); loadUsers(); loadActivity(); } else toast('Update failed');
     }
     async function setPlan(id, plan){
       const r = await api(`/api/admin/users/${id}`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ plan }) });
-      if (r.ok) { toast(plan === 'pro' ? 'Upgraded to Pro' : 'Switched to Basic'); loadUsers(); } else toast('Update failed');
+      if (r.ok) { toast(plan === 'pro' ? 'Upgraded to Pro' : 'Switched to Basic'); loadUsers(); loadActivity(); } else toast('Update failed');
     }
 
     boot();

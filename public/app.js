@@ -6,6 +6,7 @@ let state = { view: IS_HANDHELD ? 'capture' : 'organize', location: null, addres
 // Pro gating on the client. Mirrors isPro(user) on the server. Pro-only UI must
 // not render at all for free users (no disabled teaser).
 function isProClient() { return state.plan === 'pro'; }
+function featureOn(name) { return isProClient() && (!state.me || !state.me.feature_access || state.me.feature_access[name] !== false); }
 function isMacClient() { return /Macintosh|MacIntel/.test(navigator.userAgent + ' ' + navigator.platform) && !isIOS(); }
 let recognizer = null;
 let currentGroupItems = [];
@@ -289,7 +290,7 @@ function renderCapture() {
     <label>Photo Note</label>
     <button type="button" class="btn" id="takephoto">Take Photo</button>
     <button type="button" class="btn secondary" id="choosephoto" style="margin-top:8px">Choose from library or files</button>
-    ${isProClient() ? `<button type="button" class="btn secondary" id="openCameraTools" style="margin-top:8px">Other Camera Tools</button>` : ''}
+    ${isProClient() && ['ticket_scanner','camera_readers','before_after'].some(featureOn) ? `<button type="button" class="btn secondary" id="openCameraTools" style="margin-top:8px">Other Camera Tools</button>` : ''}
     <input type="file" accept="image/*" capture="environment" id="photoCam" style="display:none" />
     <input type="file" accept="image/*" id="photoLib" style="display:none" />
     <div class="photo-box" id="previewBox" style="display:none;margin-top:12px"><img id="preview" alt="preview" style="display:block" /></div>
@@ -368,38 +369,39 @@ function renderCameraTools() {
     <section class="camera-tool-group">
       <div class="camera-tool-heading"><strong>Document Scanners</strong><span>Turn photographed documents into searchable, reviewable information.</span></div>
       <div class="camera-tool-grid">
-        ${cameraToolCard('Asphalt Ticket Scanner','Read delivery-ticket details and calculate saved daily tonnage.','Scan Ticket','toolTicket')}
-        ${cameraToolCard('Plan or Sketch Scanner','Read visible project, sheet, revision, scale, dimension, and field-note information without estimating missing details.','Scan Plan or Sketch','toolPlan')}
-        ${cameraToolCard('Business Card Scanner','Read contact and company details from a photographed business card.','Scan Business Card','toolCard')}
+        ${featureOn('ticket_scanner') ? cameraToolCard('Asphalt Ticket Scanner','Read delivery-ticket details and calculate saved daily tonnage.','Scan Ticket','toolTicket') : ''}
+        ${featureOn('camera_readers') ? cameraToolCard('Plan or Sketch Scanner','Read visible project, sheet, revision, scale, dimension, and field-note information without estimating missing details.','Scan Plan or Sketch','toolPlan') : ''}
+        ${featureOn('camera_readers') ? cameraToolCard('Business Card Scanner','Read contact and company details from a photographed business card.','Scan Business Card','toolCard') : ''}
       </div>
     </section>
     <section class="camera-tool-group">
       <div class="camera-tool-heading"><strong>Equipment &amp; Material Scanners</strong><span>Record identifying information from equipment plates and construction-product labels.</span></div>
       <div class="camera-tool-grid">
-        ${cameraToolCard('Equipment Plate Scanner','Read manufacturer, model, serial number, year, and equipment specifications.','Scan Plate','toolEquipment')}
-        ${cameraToolCard('Material Label Scanner','Read product, manufacturer, lot, quantity, dates, instructions, and visible warnings.','Scan Label','toolMaterial')}
+        ${featureOn('camera_readers') ? cameraToolCard('Equipment Plate Scanner','Read manufacturer, model, serial number, year, and equipment specifications.','Scan Plate','toolEquipment') : ''}
+        ${featureOn('camera_readers') ? cameraToolCard('Material Label Scanner','Read product, manufacturer, lot, quantity, dates, instructions, and visible warnings.','Scan Label','toolMaterial') : ''}
       </div>
     </section>
     <section class="camera-tool-group">
       <div class="camera-tool-heading"><strong>Instrument Readers</strong><span>Capture the displayed value while retaining a photograph of the instrument.</span></div>
       <div class="camera-tool-grid">
-        ${cameraToolCard('Gauge & Instrument Reader','Read gauges, scales, hour meters, thermometers, fuel displays, and other instruments.','Read Instrument','toolGauge')}
+        ${featureOn('camera_readers') ? cameraToolCard('Gauge & Instrument Reader','Read gauges, scales, hour meters, thermometers, fuel displays, and other instruments.','Read Instrument','toolGauge') : ''}
       </div>
     </section>
     <section class="camera-tool-group">
       <div class="camera-tool-heading"><strong>Comparison Tools</strong><span>Create consistent visual records of work before and after completion.</span></div>
       <div class="camera-tool-grid">
-        ${cameraToolCard('Before & After Alignment','Use an earlier photo as a framing reference, compare the alignment, and save the pair.','Match Photos','toolAlignment')}
+        ${featureOn('before_after') ? cameraToolCard('Before & After Alignment','Use an earlier photo as a framing reference, compare the alignment, and save the pair.','Match Photos','toolAlignment') : ''}
       </div>
     </section>`;
   document.getElementById('toolsBack').onclick = () => { state.view='capture'; renderApp(); };
-  document.getElementById('toolTicket').onclick = () => { state.view='ticket'; renderApp(); };
-  document.getElementById('toolEquipment').onclick = () => { cameraReaderType='equipment_plate'; state.view='camera-reader'; renderApp(); };
-  document.getElementById('toolGauge').onclick = () => { cameraReaderType='gauge'; state.view='camera-reader'; renderApp(); };
-  document.getElementById('toolPlan').onclick = () => { cameraReaderType='plan_sketch'; state.view='camera-reader'; renderApp(); };
-  document.getElementById('toolMaterial').onclick = () => { cameraReaderType='material_label'; state.view='camera-reader'; renderApp(); };
-  document.getElementById('toolCard').onclick = () => { cameraReaderType='business_card'; state.view='camera-reader'; renderApp(); };
-  document.getElementById('toolAlignment').onclick = () => { state.view='alignment'; renderApp(); };
+  const wire=(id,fn)=>{const b=document.getElementById(id);if(b)b.onclick=fn;};
+  wire('toolTicket',() => { state.view='ticket'; renderApp(); });
+  wire('toolEquipment',() => { cameraReaderType='equipment_plate'; state.view='camera-reader'; renderApp(); });
+  wire('toolGauge',() => { cameraReaderType='gauge'; state.view='camera-reader'; renderApp(); });
+  wire('toolPlan',() => { cameraReaderType='plan_sketch'; state.view='camera-reader'; renderApp(); });
+  wire('toolMaterial',() => { cameraReaderType='material_label'; state.view='camera-reader'; renderApp(); });
+  wire('toolCard',() => { cameraReaderType='business_card'; state.view='camera-reader'; renderApp(); });
+  wire('toolAlignment',() => { state.view='alignment'; renderApp(); });
 }
 
 let cameraReaderType = 'equipment_plate', cameraReaderFile = null, cameraReaderDraft = null;
@@ -1244,9 +1246,9 @@ async function renderList() {
     <div class="organize-action-row">
       <button class="btn secondary" id="selall">Select All</button>
       <button class="btn secondary" id="selnone">Clear</button>
-      ${isProClient() ? `<button class="btn secondary" id="classifybatch">Classify Selected (AI)</button>` : ''}
+      ${featureOn('measurements') ? `<button class="btn secondary" id="classifybatch">Classify Selected (AI)</button>` : ''}
     </div>
-    ${isProClient() ? `<div class="status" id="classifyprog"></div>
+    ${featureOn('before_after') ? `<div class="status" id="classifyprog"></div>
     <details class="pair-builder">
       <summary><span>Before &amp; After Photos</span><span class="pair-expand">Search for Pairs</span></summary>
       <p>When work is complete, select one photo from before the job and one photo from after the job. The older photo will be marked Before by default.</p>
@@ -1276,7 +1278,7 @@ async function renderList() {
       </section>
     </div>
 
-    ${isProClient() ? `<div class="organize-footer-actions"><button class="btn secondary" id="openmap">Open Job Site Map</button></div>` : ''}
+    ${featureOn('measurements') ? `<div class="organize-footer-actions"><button class="btn secondary" id="openmap">Open Job Site Map</button></div>` : ''}
 
     <div id="cards" style="margin-top:16px"></div>`;
   document.getElementById('filter').onchange = e => loadCards(e.target.value);
@@ -1591,13 +1593,13 @@ function captureCardHtml(c) {
   const when = new Date(c.created_at).toLocaleString(uiLocale(), { year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' });
   const tags = (c.area_tags || []).map(t => `<span class="badge">${esc(t)}</span>`).join('');
   const kind = c.kind === 'task' ? `<span class="badge task">Task</span>` : '';
-  const dims = isProClient() ? fmtDimsClient(c) : '';
-  const classifyRow = isProClient()
+  const dims = featureOn('measurements') ? fmtDimsClient(c) : '';
+  const classifyRow = featureOn('measurements')
     ? (c.defect_type
         ? `<div class="defectrow" style="margin:6px 0">${defectBadgeHtml(c)} <button class="editlink overridebtn" data-id="${c.id}">Change</button></div>`
         : `<div class="defectrow" style="margin:6px 0"><button class="btn secondary slim classifybtn" data-id="${c.id}">Classify (AI)</button></div>`)
     : '';
-  const measureRow = isProClient() && state.view === 'edit' && c.photo_path
+  const measureRow = featureOn('measurements') && state.view === 'edit' && c.photo_path
     ? `<button class="btn secondary slim editdims" data-id="${c.id}">Measurements</button>` : '';
   return `<div class="card">
     <label style="display:flex;align-items:center;gap:8px;font-weight:bold;margin-bottom:8px;text-transform:none;letter-spacing:0;font-size:15px">
@@ -1625,7 +1627,7 @@ function captureCardHtml(c) {
 // A combined before/after card: two photos side by side with labels + Unpair.
 function pairCardHtml(before, after) {
   const side = (c, label) => {
-    const dims = isProClient() ? fmtDimsClient(c) : '';
+    const dims = featureOn('measurements') ? fmtDimsClient(c) : '';
     const badge = isProClient() && c.defect_type ? defectBadgeHtml(c) : '';
     return `<div style="flex:1;min-width:0">
       <div style="font-weight:bold;font-size:13px">${label}</div>
@@ -1638,7 +1640,7 @@ function pairCardHtml(before, after) {
       <div class="meta">${esc(c.address || 'No address')}</div>
       ${state.view === 'edit' ? `<button class="editlink editaddress" data-id="${c.id}" style="padding-left:0">Edit Address</button>` : ''}
       ${dims ? `<div class="meta"><strong>Dimensions:</strong> ${esc(dims)}</div>` : ''}
-      ${isProClient() && state.view === 'edit' && c.photo_path ? `<button class="btn secondary slim editdims" data-id="${c.id}">Measurements</button>` : ''}
+      ${featureOn('measurements') && state.view === 'edit' && c.photo_path ? `<button class="btn secondary slim editdims" data-id="${c.id}">Measurements</button>` : ''}
       <div class="meta">${esc(c.note || '(no note)')}</div>
     </div>`;
   };
@@ -2618,7 +2620,7 @@ async function renderGroupDetail(id) {
       <button class="btn secondary slim" id="propdocx">Proposal Word</button>
     </div>` : ''}
 
-    ${isProClient() ? `<label style="margin-top:16px">Extra Work Records</label>
+    ${featureOn('extra_work') ? `<label style="margin-top:16px">Extra Work Records</label>
     <div class="status">Document added scope, unexpected conditions, or customer-requested work.</div>
     <button class="btn slim" id="ewrNew" style="margin-top:6px">+ Extra Work Record</button>
     <div id="ewrList" style="margin-top:8px"></div>` : ''}
@@ -2636,7 +2638,7 @@ async function renderGroupDetail(id) {
   renderTitleView();
   renderDescView();
   renderGroupItems();
-  if (isProClient()) loadEwrList();
+  if (featureOn('extra_work')) loadEwrList();
 }
 
 // ---- Extra Work Records (Pro) ----

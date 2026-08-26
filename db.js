@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS users (
   role          TEXT NOT NULL DEFAULT 'user',
   plan          TEXT NOT NULL DEFAULT 'free',
   industry      TEXT,
+  feature_access JSONB NOT NULL DEFAULT '{}'::jsonb,
   active        BOOLEAN NOT NULL DEFAULT true,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
   last_login_at TIMESTAMPTZ
@@ -285,6 +286,7 @@ async function init() {
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS photo_height INTEGER`);
   // Pro-tier: user plan ('free'|'pro'), default 'free' for all existing users.
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS plan TEXT NOT NULL DEFAULT 'free'`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS feature_access JSONB NOT NULL DEFAULT '{}'::jsonb`);
   // Pro-tier: capture dimension fields (see SCHEMA above for semantics).
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS dim_length_in DOUBLE PRECISION`);
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS dim_length_unit TEXT`);

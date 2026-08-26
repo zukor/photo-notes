@@ -513,10 +513,24 @@ async function currentPlan(userId) {
   } catch { return 'free'; }
 }
 
+const MANAGED_FEATURES = ['ticket_scanner', 'camera_readers', 'before_after', 'measurements', 'extra_work'];
+async function currentFeatureAccess(userId) {
+  try {
+    const row = (await pool.query(`SELECT plan,feature_access FROM users WHERE id=$1`, [userId])).rows[0];
+    if (!row || row.plan !== 'pro') return {};
+    const saved = row.feature_access && typeof row.feature_access === 'object' ? row.feature_access : {};
+    return Object.fromEntries(MANAGED_FEATURES.map(k => [k, saved[k] !== false]));
+  } catch { return {}; }
+}
+async function featureAllowed(userId, feature) {
+  const access = await currentFeatureAccess(userId);
+  return access[feature] === true;
+}
+
 app.get('/api/me', requireAuth, async (req, res) => {
-  const row = (await pool.query(`SELECT name,email,role,plan FROM users WHERE id=$1 AND active=true`, [req.user.id])).rows[0];
+  const row = (await pool.query(`SELECT name,email,role,plan,feature_access FROM users WHERE id=$1 AND active=true`, [req.user.id])).rows[0];
   if (!row) return res.status(401).json({ error:'not authenticated' });
-  res.json({ authed:true, name:row.name, role:row.role, email:row.email, plan:row.plan === 'pro' ? 'pro' : 'free' });
+  res.json({ authed:true, name:row.name, role:row.role, email:row.email, plan:row.plan === 'pro' ? 'pro' : 'free', feature_access:await currentFeatureAccess(req.user.id) });
 });
 
 // ---- photo upload ----
@@ -718,7 +732,7 @@ app.get('/api/config', requireAuth, (req, res) => {
 app.post('/api/measure', requireAuth, upload.single('photo'), async (req, res) => {
   const cleanup = () => { if (req.file && req.file.path) { try { fs.unlinkSync(req.file.path); } catch (e) {} } };
   try {
-    if (await currentPlan(req.user.id) !== 'pro') { cleanup(); return res.status(403).json({ error: 'pro only' }); }
+    if (!(await featureAllowed(req.user.id, 'measurements'))) { cleanup(); return res.status(403).json({ error: 'feature unavailable' }); }
     let photoPath = req.file && req.file.path;
     if (!photoPath) {
       const captureId = parseInt((req.body && req.body.capture_id) || '', 10);
@@ -786,9 +800,9 @@ function ticketDate(value) {
 
 app.post('/api/asphalt-tickets/scan', requireAuth, upload.single('photo'), async (req, res) => {
   try {
-    if (await currentPlan(req.user.id) !== 'pro') {
+    if (!(await featureAllowed(req.user.id, 'ticket_scanner'))) {
       if (req.file) { try { fs.unlinkSync(req.file.path); } catch (e) {} }
-      return res.status(403).json({ error: 'pro only' });
+      return res.status(403).json({ error: 'feature unavailable' });
     }
     if (!req.file || !req.file.path) return res.status(400).json({ error: 'ticket photo required' });
     const prompt =
@@ -822,7 +836,7 @@ Use net tons, not gross or tare weight. Preserve ticket and job identifiers exac
 
 app.post('/api/asphalt-tickets/:id', requireAuth, async (req, res) => {
   try {
-    if (await currentPlan(req.user.id) !== 'pro') return res.status(403).json({ error: 'pro only' });
+    if (!(await featureAllowed(req.user.id, 'ticket_scanner'))) return res.status(403).json({ error: 'feature unavailable' });
     const id = parseInt(req.params.id, 10);
     if (!Number.isInteger(id)) return res.status(400).json({ error: 'bad id' });
     const b = req.body || {};
@@ -845,7 +859,7 @@ app.post('/api/asphalt-tickets/:id', requireAuth, async (req, res) => {
 
 app.get('/api/asphalt-tickets', requireAuth, async (req, res) => {
   try {
-    if (await currentPlan(req.user.id) !== 'pro') return res.json({ tickets: [], total_tons: 0 });
+    if (!(await featureAllowed(req.user.id, 'ticket_scanner'))) return res.json({ tickets: [], total_tons: 0 });
     const date = ticketDate(req.query.date);
     const params = [req.user.id];
     let where = `user_id=$1 AND status='saved'`;
@@ -877,9 +891,9 @@ function cameraReaderPrompt(type) {
 
 app.post('/api/camera-readings/scan', requireAuth, upload.single('photo'), async (req, res) => {
   try {
-    if (await currentPlan(req.user.id) !== 'pro') {
+    if (!(await featureAllowed(req.user.id, 'camera_readers'))) {
       if (req.file) { try { fs.unlinkSync(req.file.path); } catch (e) {} }
-      return res.status(403).json({ error: 'pro only' });
+      return res.status(403).json({ error: 'feature unavailable' });
     }
     const type = ticketText(req.body && req.body.reading_type, 30);
     if (!CAMERA_READER_TYPES.includes(type)) {
@@ -908,7 +922,7 @@ app.post('/api/camera-readings/scan', requireAuth, upload.single('photo'), async
 
 app.post('/api/camera-readings/:id', requireAuth, async (req, res) => {
   try {
-    if (await currentPlan(req.user.id) !== 'pro') return res.status(403).json({ error:'pro only' });
+    if (!(await featureAllowed(req.user.id, 'camera_readers'))) return res.status(403).json({ error:'feature unavailable' });
     const id = parseInt(req.params.id, 10);
     if (!Number.isInteger(id)) return res.status(400).json({ error:'bad id' });
     const fields = cameraReaderFields(req.body && req.body.fields);
@@ -924,7 +938,7 @@ app.post('/api/camera-readings/:id', requireAuth, async (req, res) => {
 
 app.get('/api/camera-readings', requireAuth, async (req, res) => {
   try {
-    if (await currentPlan(req.user.id) !== 'pro') return res.json([]);
+    if (!(await featureAllowed(req.user.id, 'camera_readers'))) return res.json([]);
     const type = ticketText(req.query.type, 30);
     const params = [req.user.id]; let where = `user_id=$1 AND status='saved'`;
     if (CAMERA_READER_TYPES.includes(type)) { params.push(type); where += ` AND reading_type=$2`; }
@@ -1087,7 +1101,7 @@ Respond with ONLY a JSON object, no prose, no markdown, with exactly these keys:
 
 app.post('/api/captures/:id/classify', requireAuth, async (req, res) => {
   try {
-    if (await currentPlan(req.user.id) !== 'pro') return res.status(403).json({ error: 'pro only' });
+    if (!(await featureAllowed(req.user.id, 'measurements'))) return res.status(403).json({ error: 'feature unavailable' });
     const id = parseInt(req.params.id, 10);
     if (!Number.isInteger(id)) return res.status(400).json({ error: 'bad id' });
     const r = await classifyCapture(req.user.id, id);
@@ -1098,7 +1112,7 @@ app.post('/api/captures/:id/classify', requireAuth, async (req, res) => {
 
 app.post('/api/captures/classify-batch', requireAuth, async (req, res) => {
   try {
-    if (await currentPlan(req.user.id) !== 'pro') return res.status(403).json({ error: 'pro only' });
+    if (!(await featureAllowed(req.user.id, 'measurements'))) return res.status(403).json({ error: 'feature unavailable' });
     const ids = Array.isArray(req.body && req.body.ids) ? req.body.ids.map(n => parseInt(n, 10)).filter(Number.isInteger) : [];
     if (!ids.length) return res.status(400).json({ error: 'no ids' });
     const results = [];
@@ -1115,7 +1129,7 @@ app.post('/api/captures/classify-batch', requireAuth, async (req, res) => {
 // touches defect_ai (the AI's original answer is kept for accuracy analysis).
 app.post('/api/captures/:id/classify-set', requireAuth, async (req, res) => {
   try {
-    if (await currentPlan(req.user.id) !== 'pro') return res.status(403).json({ error: 'pro only' });
+    if (!(await featureAllowed(req.user.id, 'measurements'))) return res.status(403).json({ error: 'feature unavailable' });
     const id = parseInt(req.params.id, 10);
     if (!Number.isInteger(id)) return res.status(400).json({ error: 'bad id' });
     const b = req.body || {};
@@ -1237,7 +1251,7 @@ app.post('/api/captures/:id', requireAuth, async (req, res) => {
     }
     const hasDims = ['dim_length','dim_length_unit','dim_width','dim_width_unit','dim_depth','dim_shape','dim_area_sqft','dim_source'].some(k => Object.prototype.hasOwnProperty.call(b, k));
     if (hasDims) {
-      if (await currentPlan(req.user.id) !== 'pro') return res.status(403).json({ error: 'pro only' });
+      if (!(await featureAllowed(req.user.id, 'measurements'))) return res.status(403).json({ error: 'feature unavailable' });
       const lenUnit = b.dim_length_unit === 'in' ? 'in' : 'ft';
       const widUnit = b.dim_width_unit === 'in' ? 'in' : 'ft';
       const lenIn = toInches(b.dim_length, lenUnit);
@@ -1476,7 +1490,7 @@ app.get('/api/groups/:id', requireAuth, async (req, res) => {
       WHERE gi.group_id = $1 AND c.user_id = $2 ORDER BY gi.position ASC, c.created_at ASC`, [id, req.user.id])).rows;
     const score = scoreCaptures(items);
     let zones = null;
-    if (await currentPlan(req.user.id) === 'pro') zones = await groupZoneSummary(req.user.id, id);
+    if (await featureAllowed(req.user.id, 'measurements')) zones = await groupZoneSummary(req.user.id, id);
     res.json({ group: g, items, score, zones });
   } catch (err) { console.error('[groups.get]', err); res.status(500).json({ error: 'failed' }); }
 });
@@ -1556,7 +1570,7 @@ async function pairsForUser(userId) {
 
 app.get('/api/pairs', requireAuth, async (req, res) => {
   try {
-    if (await currentPlan(req.user.id) !== 'pro') return res.json([]);
+    if (!(await featureAllowed(req.user.id, 'before_after'))) return res.json([]);
     const rows = await pairsForUser(req.user.id);
     res.json(rows);
   } catch (err) { console.error('[pairs.list]', err); res.status(500).json({ error: 'failed' }); }
@@ -1564,7 +1578,7 @@ app.get('/api/pairs', requireAuth, async (req, res) => {
 
 app.post('/api/pairs', requireAuth, async (req, res) => {
   try {
-    if (await currentPlan(req.user.id) !== 'pro') return res.status(403).json({ error: 'pro only' });
+    if (!(await featureAllowed(req.user.id, 'before_after'))) return res.status(403).json({ error: 'feature unavailable' });
     const b = req.body || {};
     const beforeId = parseInt(b.before_id, 10), afterId = parseInt(b.after_id, 10);
     if (!Number.isInteger(beforeId) || !Number.isInteger(afterId) || beforeId === afterId) return res.status(400).json({ error: 'two distinct captures required' });
@@ -1587,7 +1601,7 @@ app.post('/api/pairs', requireAuth, async (req, res) => {
 
 app.post('/api/pairs/unpair', requireAuth, async (req, res) => {
   try {
-    if (await currentPlan(req.user.id) !== 'pro') return res.status(403).json({ error: 'pro only' });
+    if (!(await featureAllowed(req.user.id, 'before_after'))) return res.status(403).json({ error: 'feature unavailable' });
     const b = req.body || {};
     if (b.id != null) {
       await pool.query(`DELETE FROM capture_pairs WHERE id=$1 AND user_id=$2`, [parseInt(b.id, 10), req.user.id]);
@@ -1604,7 +1618,7 @@ app.post('/api/pairs/unpair', requireAuth, async (req, res) => {
 // Proximity suggestions: unpaired captures of the user within 15 m of each other.
 app.get('/api/pairs/suggestions', requireAuth, async (req, res) => {
   try {
-    if (await currentPlan(req.user.id) !== 'pro') return res.json([]);
+    if (!(await featureAllowed(req.user.id, 'before_after'))) return res.json([]);
     const caps = (await pool.query(
       `SELECT id, latitude, longitude, created_at FROM captures WHERE user_id=$1 AND latitude IS NOT NULL AND longitude IS NOT NULL ORDER BY created_at ASC`,
       [req.user.id])).rows;
@@ -1633,7 +1647,7 @@ app.get('/api/pairs/suggestions', requireAuth, async (req, res) => {
 // ---- measurement zones (Pro) ----
 app.get('/api/zones', requireAuth, async (req, res) => {
   try {
-    if (await currentPlan(req.user.id) !== 'pro') return res.json([]);
+    if (!(await featureAllowed(req.user.id, 'measurements'))) return res.json([]);
     const groupId = req.query.group ? parseInt(req.query.group, 10) : null;
     let rows;
     if (Number.isInteger(groupId)) rows = (await pool.query(`SELECT * FROM measure_zones WHERE user_id=$1 AND group_id=$2 ORDER BY created_at DESC`, [req.user.id, groupId])).rows;
@@ -1644,7 +1658,7 @@ app.get('/api/zones', requireAuth, async (req, res) => {
 
 app.post('/api/zones', requireAuth, async (req, res) => {
   try {
-    if (await currentPlan(req.user.id) !== 'pro') return res.status(403).json({ error: 'pro only' });
+    if (!(await featureAllowed(req.user.id, 'measurements'))) return res.status(403).json({ error: 'feature unavailable' });
     const b = req.body || {};
     const name = b.name ? String(b.name).trim() : '';
     const zoneType = b.zone_type === 'span' ? 'span' : (b.zone_type === 'polygon' ? 'polygon' : null);
@@ -1668,7 +1682,7 @@ app.post('/api/zones', requireAuth, async (req, res) => {
 
 app.post('/api/zones/:id', requireAuth, async (req, res) => {
   try {
-    if (await currentPlan(req.user.id) !== 'pro') return res.status(403).json({ error: 'pro only' });
+    if (!(await featureAllowed(req.user.id, 'measurements'))) return res.status(403).json({ error: 'feature unavailable' });
     const id = parseInt(req.params.id, 10);
     if (!Number.isInteger(id)) return res.status(400).json({ error: 'bad id' });
     const z = (await pool.query(`SELECT * FROM measure_zones WHERE id=$1 AND user_id=$2`, [id, req.user.id])).rows[0];
@@ -1691,7 +1705,7 @@ app.post('/api/zones/:id', requireAuth, async (req, res) => {
 
 app.post('/api/zones/:id/delete', requireAuth, async (req, res) => {
   try {
-    if (await currentPlan(req.user.id) !== 'pro') return res.status(403).json({ error: 'pro only' });
+    if (!(await featureAllowed(req.user.id, 'measurements'))) return res.status(403).json({ error: 'feature unavailable' });
     const id = parseInt(req.params.id, 10);
     await pool.query(`DELETE FROM measure_zones WHERE id=$1 AND user_id=$2`, [id, req.user.id]);
     logEvent(req.user.id, 'zone_delete', {});
@@ -1701,7 +1715,7 @@ app.post('/api/zones/:id/delete', requireAuth, async (req, res) => {
 
 app.get('/api/zones/:id/defects', requireAuth, async (req, res) => {
   try {
-    if (await currentPlan(req.user.id) !== 'pro') return res.status(403).json({ error: 'pro only' });
+    if (!(await featureAllowed(req.user.id, 'measurements'))) return res.status(403).json({ error: 'feature unavailable' });
     const id = parseInt(req.params.id, 10);
     const z = (await pool.query(`SELECT * FROM measure_zones WHERE id=$1 AND user_id=$2`, [id, req.user.id])).rows[0];
     if (!z) return res.status(404).json({ error: 'not found' });
@@ -1727,7 +1741,7 @@ async function groupZoneSummary(userId, groupId) {
 
 // ---- Extra Work Record (Pro): job-site documentation of out-of-scope work ----
 async function ewrProGuard(req, res) {
-  if (await currentPlan(req.user.id) !== 'pro') { res.status(403).json({ error: 'pro only' }); return false; }
+  if (!(await featureAllowed(req.user.id, 'extra_work'))) { res.status(403).json({ error: 'feature unavailable' }); return false; }
   return true;
 }
 function ewrPhotoCount(ewrId) {
@@ -1763,7 +1777,7 @@ app.post('/api/ewr', requireAuth, async (req, res) => {
 
 app.get('/api/ewr', requireAuth, async (req, res) => {
   try {
-    if (await currentPlan(req.user.id) !== 'pro') return res.json([]);
+    if (!(await featureAllowed(req.user.id, 'extra_work'))) return res.json([]);
     const groupId = req.query.group ? parseInt(req.query.group, 10) : null;
     const params = [req.user.id];
     let where = 'e.user_id = $1';
@@ -1820,7 +1834,7 @@ app.post('/api/ewr/:id', requireAuth, async (req, res) => {
 
 app.post('/api/ewr/:id/photo', requireAuth, upload.single('photo'), async (req, res) => {
   try {
-    if (await currentPlan(req.user.id) !== 'pro') { if (req.file) { try { fs.unlinkSync(req.file.path); } catch (e) {} } return res.status(403).json({ error: 'pro only' }); }
+    if (!(await featureAllowed(req.user.id, 'extra_work'))) { if (req.file) { try { fs.unlinkSync(req.file.path); } catch (e) {} } return res.status(403).json({ error: 'feature unavailable' }); }
     const id = parseInt(req.params.id, 10);
     const e = (await pool.query(`SELECT id FROM extra_work_records WHERE id=$1 AND user_id=$2`, [id, req.user.id])).rows[0];
     if (!e) { if (req.file) { try { fs.unlinkSync(req.file.path); } catch (er) {} } return res.status(404).json({ error: 'not found' }); }
@@ -1934,7 +1948,7 @@ app.get('/api/ewr/:id/export', requireAuth, async (req, res) => {
 app.get('/api/admin/users', requireAdmin, async (req, res) => {
   try {
     const { rows } = await pool.query(`
-      SELECT u.id, u.email, u.name, u.industry, u.role, u.plan, u.active, u.created_at, u.last_login_at,
+      SELECT u.id, u.email, u.name, u.industry, u.role, u.plan, u.feature_access, u.active, u.created_at, u.last_login_at,
         COALESCE(c.cnt, 0)::int      AS capture_count,
         c.first_capture, c.last_capture,
         COALESCE(c.d7, 0)::int       AS last_7d,
@@ -2025,6 +2039,7 @@ app.post('/api/admin/users', requireAdmin, async (req, res) => {
        RETURNING id, email, name, industry, role, plan, active, created_at`,
       [email, name, hash, industry]);
     await seedUserAreas(rows[0].id);
+    logEvent(req.user.id, 'admin_user_create', { target_user_id:rows[0].id });
     res.json(rows[0]);
   } catch (err) {
     if (err && err.code === '23505') return res.status(409).json({ error: 'that email already has a login' });
@@ -2040,22 +2055,29 @@ app.post('/api/admin/users/:id', requireAdmin, async (req, res) => {
     const b = req.body || {};
     const sets = [];
     const vals = [];
+    const changed = [];
     if (typeof b.name === 'string') {
       const name = b.name.trim();
       if (name.split(/\s+/).filter(Boolean).length < 2) return res.status(400).json({ error:'first and last name are required' });
-      vals.push(name); sets.push(`name = $${vals.length}`);
+      vals.push(name); sets.push(`name = $${vals.length}`); changed.push('name');
     }
-    if (typeof b.industry === 'string') { vals.push(b.industry.trim()); sets.push(`industry = $${vals.length}`); }
-    if (typeof b.active === 'boolean') { vals.push(b.active); sets.push(`active = $${vals.length}`); }
-    if (b.role === 'admin' || b.role === 'user') { vals.push(b.role); sets.push(`role = $${vals.length}`); }
-    if (b.plan === 'pro' || b.plan === 'free') { vals.push(b.plan); sets.push(`plan = $${vals.length}`); }
+    if (typeof b.email === 'string') { const email=b.email.toLowerCase().trim(); if(!email)return res.status(400).json({error:'email required'}); vals.push(email);sets.push(`email=$${vals.length}`);changed.push('email'); }
+    if (typeof b.industry === 'string') { vals.push(b.industry.trim()); sets.push(`industry = $${vals.length}`); changed.push('industry'); }
+    if (typeof b.active === 'boolean') { vals.push(b.active); sets.push(`active = $${vals.length}`); changed.push('active'); }
+    if (b.role === 'admin' || b.role === 'user') { vals.push(b.role); sets.push(`role = $${vals.length}`); changed.push('role'); }
+    if (b.plan === 'pro' || b.plan === 'free') { vals.push(b.plan); sets.push(`plan = $${vals.length}`); changed.push('plan'); }
+    if (b.feature_access && typeof b.feature_access === 'object' && !Array.isArray(b.feature_access)) {
+      const clean={}; MANAGED_FEATURES.forEach(k=>{if(typeof b.feature_access[k]==='boolean')clean[k]=b.feature_access[k];});
+      vals.push(JSON.stringify(clean));sets.push(`feature_access=$${vals.length}`);changed.push('feature_access');
+    }
     if (!sets.length) return res.status(400).json({ error: 'nothing to update' });
     vals.push(id);
     const { rows } = await pool.query(
-      `UPDATE users SET ${sets.join(', ')} WHERE id = $${vals.length} RETURNING id, email, name, industry, role, plan, active, created_at, last_login_at`, vals);
+      `UPDATE users SET ${sets.join(', ')} WHERE id = $${vals.length} RETURNING id, email, name, industry, role, plan, feature_access, active, created_at, last_login_at`, vals);
     if (!rows.length) return res.status(404).json({ error: 'not found' });
+    logEvent(req.user.id, 'admin_user_update', { target_user_id:id, fields:changed });
     res.json(rows[0]);
-  } catch (err) { console.error('[admin.update]', err); res.status(500).json({ error: 'update failed' }); }
+  } catch (err) { if(err&&err.code==='23505')return res.status(409).json({error:'that email already has a login'}); console.error('[admin.update]', err); res.status(500).json({ error: 'update failed' }); }
 });
 
 app.post('/api/admin/users/:id/password', requireAdmin, async (req, res) => {
@@ -2067,8 +2089,47 @@ app.post('/api/admin/users/:id/password', requireAdmin, async (req, res) => {
     const hash = bcrypt.hashSync(password, 10);
     const { rowCount } = await pool.query(`UPDATE users SET password_hash = $1 WHERE id = $2`, [hash, id]);
     if (!rowCount) return res.status(404).json({ error: 'not found' });
+    logEvent(req.user.id, 'admin_password_reset', { target_user_id:id });
     res.json({ ok: true });
   } catch (err) { console.error('[admin.password]', err); res.status(500).json({ error: 'reset failed' }); }
+});
+
+function fileBytes(photoPath) {
+  const local=localPhoto(photoPath); if(!local)return 0;
+  try{return fs.statSync(local).size||0;}catch{return 0;}
+}
+app.get('/api/admin/usage', requireAdmin, async (req,res)=>{
+  try{
+    const users=(await pool.query(`SELECT id FROM users ORDER BY id`)).rows;
+    const result=[];
+    for(const u of users){
+      const paths=(await pool.query(`
+        SELECT photo_path FROM captures WHERE user_id=$1 AND photo_path IS NOT NULL
+        UNION ALL SELECT photo_original_path AS photo_path FROM captures WHERE user_id=$1 AND photo_original_path IS NOT NULL
+        UNION ALL SELECT photo_path FROM asphalt_tickets WHERE user_id=$1 AND photo_path IS NOT NULL
+        UNION ALL SELECT photo_path FROM camera_readings WHERE user_id=$1 AND photo_path IS NOT NULL
+        UNION ALL SELECT photo_path FROM ewr_photos WHERE user_id=$1 AND photo_path IS NOT NULL
+        UNION ALL SELECT screenshot_path AS photo_path FROM issue_reports WHERE user_id=$1 AND screenshot_path IS NOT NULL`,[u.id])).rows;
+      const unique=[...new Set(paths.map(p=>p.photo_path).filter(Boolean))];
+      const events=(await pool.query(`SELECT
+        COUNT(*) FILTER(WHERE action IN ('measure','classify','camera_reader_scan','ticket_scan'))::int ai_actions,
+        COUNT(*) FILTER(WHERE action='camera_reader_scan')::int camera_scans,
+        COUNT(*) FILTER(WHERE action='ticket_scan')::int ticket_scans,
+        COUNT(*) FILTER(WHERE action='measure')::int ai_measurements,
+        COUNT(*) FILTER(WHERE action='classify')::int ai_classifications
+        FROM events WHERE user_id=$1`,[u.id])).rows[0];
+      result.push({user_id:u.id,photo_files:unique.length,storage_bytes:unique.reduce((n,p)=>n+fileBytes(p),0),...events});
+    }
+    res.json(result);
+  }catch(err){console.error('[admin.usage]',err);res.status(500).json({error:'usage failed'});}
+});
+
+app.get('/api/admin/activity', requireAdmin, async (req,res)=>{
+  try{
+    const rows=(await pool.query(`SELECT e.id,e.action,e.detail,e.created_at,u.name AS admin_name,u.email AS admin_email
+      FROM events e LEFT JOIN users u ON u.id=e.user_id WHERE e.action LIKE 'admin_%' ORDER BY e.created_at DESC LIMIT 250`)).rows;
+    res.json(rows);
+  }catch(err){console.error('[admin.activity]',err);res.status(500).json({error:'activity failed'});}
 });
 
 // ---- exports (scoped to the logged-in user) ----
