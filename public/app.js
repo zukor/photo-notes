@@ -302,7 +302,7 @@ const HOA_AREAS=['Streets and Pavement','Sidewalks and Curbs','Drainage','Walls 
 function renderCapture() {
   const body = document.getElementById('body');
   body.innerHTML = `
-    ${isHoaClient()?`<label>HOA / Community</label><select id="hoaCommunity"><option value="">Select Community</option>${state.communities.map(c=>`<option value="${c.id}" ${String(state.communityId)===String(c.id)?'selected':''}>${esc(c.name)}</option>`).join('')}</select>${!state.communities.length?'<p class="status">Create your first community under Assets before saving a maintenance record.</p>':''}<label>Issue Title</label><input id="hoaTitle" placeholder="Briefly identify the maintenance issue"><div class="row compact"><div style="flex:1"><label>Record Type</label><select id="hoaType"><option value="maintenance">Maintenance Issue</option><option value="information">Information Request</option><option value="inspection">Inspection Finding</option></select></div><div style="flex:1"><label>Priority</label><select id="hoaPriority"><option value="routine">Routine</option><option value="high">High</option><option value="emergency">Emergency</option><option value="monitor">Monitor</option></select></div></div>`:`<label>Job</label><select id="captureJob"><option value="">No Job Selected</option>${state.jobs.filter(j=>j.status==='active').map(j=>`<option value="${j.id}" ${String(state.jobId)===String(j.id)?'selected':''}>${esc(j.job_number?j.job_number+' — '+j.name:j.name)}</option>`).join('')}</select>`}
+    ${isHoaClient()?`<label>HOA / Community</label><select id="hoaCommunity"><option value="">Select Community</option>${state.communities.map(c=>`<option value="${c.id}" ${String(state.communityId)===String(c.id)?'selected':''}>${esc(c.name)}</option>`).join('')}</select>${!state.communities.length?'<p class="status">Create your first community under Assets before saving a maintenance record.</p>':''}<label>Issue Title</label><input id="hoaTitle" placeholder="Briefly identify the maintenance issue"><div class="row compact"><div style="flex:1"><label>Record Type</label><select id="hoaType"><option value="maintenance">Maintenance Issue</option><option value="information">Information Request</option><option value="inspection">Inspection Finding</option></select></div><div style="flex:1"><label>Priority</label><select id="hoaPriority"><option value="routine">Routine</option><option value="high">High</option><option value="emergency">Emergency</option><option value="monitor">Monitor</option></select></div></div>`:''}
     <label>Photo Note</label>
     <button type="button" class="btn" id="takephoto">Take Photo</button>
     <button type="button" class="btn secondary" id="choosephoto" style="margin-top:8px">Choose from library or files</button>
@@ -342,7 +342,6 @@ function renderCapture() {
   document.getElementById('photoLib').onchange = (e) => { if (e.target.files[0]) onPhotoChosen(e.target.files[0]); };
   document.getElementById('save').onclick = saveCapture;
   if(isHoaClient()){document.getElementById('hoaCommunity').onchange=e=>state.communityId=e.target.value;document.getElementById('hoaType').onchange=e=>document.getElementById('hoaDirectedWrap').style.display=e.target.value==='information'?'block':'none';}else{
-  document.getElementById('captureJob').onchange=e=>state.jobId=e.target.value;
   document.getElementById('addarea').onclick = addArea;
   document.getElementById('newarea').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addArea(); } });
   document.getElementById('areas').onclick = (e) => {
@@ -1235,7 +1234,7 @@ async function saveCapture() {
     await state._locationPromise;
   }
   // Build the payload from the CURRENT state before we clear the form.
-  const payload={photo:state.photoFile||null,photoName:state.photoFile&&state.photoFile.name||'offline-photo.jpg',note,area_tags:JSON.stringify(isHoaClient()?[document.getElementById('hoaArea').value]:(state.area?[state.area]:[])),kind:'note',job_id:state.jobId||''};
+  const payload={photo:state.photoFile||null,photoName:state.photoFile&&state.photoFile.name||'offline-photo.jpg',note,area_tags:JSON.stringify(isHoaClient()?[document.getElementById('hoaArea').value]:(state.area?[state.area]:[])),kind:'note'};
   if(isHoaClient()){Object.assign(payload,{hoa_community_id:state.communityId,hoa_title:document.getElementById('hoaTitle').value.trim(),hoa_item_type:document.getElementById('hoaType').value,hoa_priority:document.getElementById('hoaPriority').value,hoa_area:document.getElementById('hoaArea').value,hoa_directed_to:(document.getElementById('hoaDirected')||{}).value||'',hoa_budget_source:'unassigned',hoa_photo_stage:'initial'});}
   const hadCoords = !!state.location;
   if (state.location) { payload.latitude=state.location.lat;payload.longitude=state.location.lng; }
