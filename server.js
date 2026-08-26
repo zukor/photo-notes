@@ -989,6 +989,78 @@ app.get('/api/admin/issues', requireAdmin, async (req, res) => {
   } catch (err) { console.error('[issues.admin-list]', err); res.status(500).json({ error:'failed' }); }
 });
 
+const ISSUE_MANAGEMENT_STATUSES = ['new', 'reviewing', 'fixing', 'ready_to_test', 'resolved', 'wont_fix'];
+const ISSUE_PRIORITIES = ['low', 'normal', 'high', 'urgent'];
+
+app.post('/api/admin/issues/:id', requireAdmin, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id)) return res.status(400).json({ error:'bad id' });
+    const b = req.body || {}, sets = [], vals = [];
+    if (typeof b.management_status === 'string') {
+      if (!ISSUE_MANAGEMENT_STATUSES.includes(b.management_status)) return res.status(400).json({ error:'bad status' });
+      vals.push(b.management_status); sets.push(`management_status=$${vals.length}`);
+      sets.push(b.management_status === 'resolved' || b.management_status === 'wont_fix' ? 'resolved_at=now()' : 'resolved_at=NULL');
+    }
+    if (typeof b.priority === 'string') {
+      if (!ISSUE_PRIORITIES.includes(b.priority)) return res.status(400).json({ error:'bad priority' });
+      vals.push(b.priority); sets.push(`priority=$${vals.length}`);
+    }
+    if (typeof b.admin_notes === 'string') { vals.push(ticketText(b.admin_notes, 10000)); sets.push(`admin_notes=$${vals.length}`); }
+    if (!sets.length) return res.status(400).json({ error:'nothing to update' });
+    sets.push('updated_at=now()'); vals.push(id);
+    const row = (await pool.query(`UPDATE issue_reports SET ${sets.join(', ')} WHERE id=$${vals.length} RETURNING *`, vals)).rows[0];
+    if (!row) return res.status(404).json({ error:'not found' });
+    logEvent(req.user.id, 'admin_issue_update', { issue_id:id, status:row.management_status, priority:row.priority });
+    res.json(row);
+  } catch (err) { console.error('[issues.admin-update]', err); res.status(500).json({ error:'update failed' }); }
+});
+
+app.post('/api/admin/issues/:id/retry-email', requireAdmin, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id)) return res.status(400).json({ error:'bad id' });
+    const report = (await pool.query(`SELECT * FROM issue_reports WHERE id=$1`, [id])).rows[0];
+    if (!report) return res.status(404).json({ error:'not found' });
+    const user = (await pool.query(`SELECT name,email FROM users WHERE id=$1`, [report.user_id])).rows[0] || {};
+    const delivery = await emailIssueReport(report, user);
+    await pool.query(`UPDATE issue_reports SET email_status=$1,email_error=$2,updated_at=now() WHERE id=$3`, [delivery.status, delivery.error, id]);
+    logEvent(req.user.id, 'admin_issue_email_retry', { issue_id:id, email_status:delivery.status });
+    res.json(delivery);
+  } catch (err) { console.error('[issues.admin-retry]', err); res.status(500).json({ error:'retry failed' }); }
+});
+
+app.get('/api/admin/health', requireAdmin, async (req, res) => {
+  const checkedAt = new Date().toISOString();
+  const services = [];
+  const started = Date.now();
+  try {
+    await pool.query('SELECT 1');
+    services.push({ id:'database', name:'Database', status:'healthy', detail:`Connected (${Date.now() - started} ms)` });
+  } catch (e) { services.push({ id:'database', name:'Database', status:'down', detail:'Connection failed' }); }
+  try {
+    fs.accessSync(UPLOAD_DIR, fs.constants.R_OK | fs.constants.W_OK);
+    services.push({ id:'uploads', name:'Photo Upload Storage', status:'healthy', detail:'Readable and writable' });
+  } catch (e) { services.push({ id:'uploads', name:'Photo Upload Storage', status:'down', detail:'Storage is not writable' }); }
+  services.push({ id:'addresses', name:'Address Lookup', status:'healthy', detail:'ArcGIS with OpenStreetMap fallback' });
+  services.push({ id:'ai', name:'AI Photo Tools', status:process.env.ANTHROPIC_API_KEY ? 'configured' : 'not_configured', detail:process.env.ANTHROPIC_API_KEY ? `Configured (${VISION_MODEL})` : 'Anthropic API key is missing' });
+  services.push({ id:'issue_email', name:'Issue Report Email', status:process.env.RESEND_API_KEY ? 'configured' : 'not_configured', detail:process.env.RESEND_API_KEY ? 'Email delivery configured' : 'Resend API key is missing' });
+  services.push({ id:'exports', name:'PDF, Word & ZIP Exports', status:'healthy', detail:'Export libraries loaded' });
+  let issueCounts = {};
+  try {
+    const rows = (await pool.query(`SELECT management_status,COUNT(*)::int count FROM issue_reports GROUP BY management_status`)).rows;
+    rows.forEach(r => { issueCounts[r.management_status || 'new'] = r.count; });
+  } catch (e) {}
+  res.json({
+    checked_at:checkedAt,
+    version:String(process.env.RAILWAY_GIT_COMMIT_SHA || process.env.GIT_COMMIT_SHA || process.env.SOURCE_VERSION || require('./package.json').version).slice(0,12),
+    environment:process.env.NODE_ENV || 'development',
+    uptime_seconds:Math.floor(process.uptime()),
+    services,
+    issue_counts:issueCounts,
+  });
+});
+
 // ---- AI defect classification (Pro): classify one saved capture ----
 async function classifyCapture(userId, id) {
   const row = (await pool.query(`SELECT * FROM captures WHERE id = $1 AND user_id = $2`, [id, userId])).rows[0];

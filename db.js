@@ -222,6 +222,11 @@ CREATE TABLE IF NOT EXISTS issue_reports (
   user_agent     TEXT,
   email_status   TEXT NOT NULL DEFAULT 'pending',
   email_error    TEXT,
+  management_status TEXT NOT NULL DEFAULT 'new',
+  priority       TEXT NOT NULL DEFAULT 'normal',
+  admin_notes    TEXT,
+  updated_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  resolved_at    TIMESTAMPTZ,
   created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS issue_reports_created_idx ON issue_reports (created_at DESC);
@@ -305,6 +310,13 @@ async function init() {
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS photo_original_path TEXT`);
   await pool.query(`ALTER TABLE groups ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id)`);
   await pool.query(`UPDATE groups SET user_id = $1 WHERE user_id IS NULL`, [adminId]);
+  // Tester issue triage. These ALTERs upgrade existing production databases
+  // without changing or losing previously submitted reports.
+  await pool.query(`ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS management_status TEXT NOT NULL DEFAULT 'new'`);
+  await pool.query(`ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS priority TEXT NOT NULL DEFAULT 'normal'`);
+  await pool.query(`ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS admin_notes TEXT`);
+  await pool.query(`ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now()`);
+  await pool.query(`ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMPTZ`);
 
   // 3. Move any legacy global areas into the admin's per-user area list.
   await pool.query(

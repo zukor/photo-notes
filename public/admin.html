@@ -40,6 +40,24 @@
     .issue-admin-card { display:grid; grid-template-columns:180px minmax(0,1fr); gap:14px; }
     .issue-admin-card img { width:180px; max-height:220px; object-fit:cover; object-position:top; margin:0; border:1px solid #aaa; border-radius:6px; }
     .issue-description { white-space:pre-wrap; line-height:1.4; margin:8px 0; }
+    .issue-toolbar { display:grid; grid-template-columns:repeat(2,minmax(0,220px)) auto; gap:8px; align-items:end; margin:10px 0; }
+    .issue-toolbar label { margin:0; font-size:12px; }
+    .issue-toolbar select { margin-top:4px; }
+    .issue-controls { display:grid; grid-template-columns:minmax(0,180px) minmax(0,180px); gap:8px; margin-top:10px; }
+    .issue-controls label { margin:0; font-size:12px; }
+    .issue-controls select { margin-top:4px; }
+    .issue-notes { margin-top:8px; min-height:76px; }
+    .issue-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+    .issue-actions .btn { width:auto; margin:0; padding:9px 14px; font-size:14px; }
+    .issue-summary { display:flex; gap:7px; flex-wrap:wrap; margin:8px 0; }
+    .health-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:9px; }
+    .health-card { border:1px solid #cdd3dc; border-radius:9px; padding:11px; background:#fff; }
+    .health-name { font-weight:bold; display:flex; align-items:center; gap:7px; }
+    .health-dot { width:10px; height:10px; border-radius:50%; background:#1b7a3d; flex:0 0 auto; }
+    .health-dot.warning { background:#b36b00; }
+    .health-dot.down { background:#b3261e; }
+    .health-detail { font-size:12px; margin-top:5px; line-height:1.3; }
+    .health-meta { margin:8px 0 10px; }
     @media (max-width:520px) {
       .capture-stats { grid-template-columns:repeat(3, minmax(0, 1fr)); }
       .password-row { grid-template-columns:1fr 1fr; }
@@ -48,6 +66,7 @@
       .reset-password-actions { grid-template-columns:1fr; }
       .issue-admin-card { grid-template-columns:1fr; }
       .issue-admin-card img { width:100%; max-height:280px; }
+      .issue-toolbar, .issue-controls, .health-grid { grid-template-columns:1fr; }
     }
   </style>
 </head>
@@ -63,6 +82,7 @@
     function st(n, l){ return `<span class="stat"><div class="n">${n}</div><div class="l">${l}</div></span>`; }
     function num(v){ return Number(v) || 0; }
     let allUsers = [];
+    let allIssues = [];
     let currentUser = null;
     function userInitials(user){
       const source=String((user && (user.name || user.email)) || 'User').trim();
@@ -289,8 +309,18 @@
           <div class="helper">Combined account and activity counts for every user listed below.</div>
           <div id="summary"></div>
 
-          <label style="margin-top:22px">Tester Issue Reports</label>
-          <div class="helper">Reports sent from Photo Notes Basic, including the page screenshot and the tester’s spoken or typed description.</div>
+          <label style="margin-top:22px">System Health</label>
+          <div class="helper">A safe operational check of the services Photo Notes needs. This shows configuration and availability without displaying passwords or API keys.</div>
+          <div id="health"><p class="status">Checking...</p></div>
+
+          <label style="margin-top:22px">Issue Management Center</label>
+          <div class="helper">Review tester reports, set priority, track repair and retesting, add private administrator notes, and confirm email delivery.</div>
+          <div class="issue-toolbar">
+            <label>Status Filter<select id="issueStatusFilter"><option value="open">All Open Issues</option><option value="all">All Issues</option><option value="new">New</option><option value="reviewing">Reviewing</option><option value="fixing">Fixing</option><option value="ready_to_test">Ready to Test</option><option value="resolved">Resolved</option><option value="wont_fix">Won’t Fix</option></select></label>
+            <label>Priority Filter<select id="issuePriorityFilter"><option value="all">All Priorities</option><option value="urgent">Urgent</option><option value="high">High</option><option value="normal">Normal</option><option value="low">Low</option></select></label>
+            <button class="btn secondary" id="refreshIssues" type="button" style="margin:0">Refresh</button>
+          </div>
+          <div id="issueSummary" class="issue-summary"></div>
           <div id="issues"><p class="status">Loading...</p></div>
 
           <div class="row" style="margin-top:18px; align-items:center; gap:10px">
@@ -314,14 +344,53 @@
       document.getElementById('createbtn').onclick = createUser;
       document.getElementById('generatepass').onclick = generatePassword;
       document.getElementById('copypass').onclick = copyPassword;
+      document.getElementById('issueStatusFilter').onchange = renderIssues;
+      document.getElementById('issuePriorityFilter').onchange = renderIssues;
+      document.getElementById('refreshIssues').onclick = loadIssues;
+      loadHealth();
       loadIssues();
       loadUsers();
     }
 
-    async function loadIssues(){
+    const issueStatusLabels={new:'New',reviewing:'Reviewing',fixing:'Fixing',ready_to_test:'Ready to Test',resolved:'Resolved',wont_fix:'Won’t Fix'};
+    const issuePriorityLabels={low:'Low',normal:'Normal',high:'High',urgent:'Urgent'};
+    function issueOptions(values,labels,current){return values.map(v=>`<option value="${v}"${v===current?' selected':''}>${labels[v]}</option>`).join('');}
+    function renderIssues(){
       const box=document.getElementById('issues'); if(!box)return;
-      try{const r=await api('/api/admin/issues');if(!r.ok)throw new Error();const rows=await r.json();box.innerHTML=rows.length?rows.map(i=>`<article class="card issue-admin-card">${i.screenshot_path?`<a href="${esc(i.screenshot_path)}" target="_blank" rel="noopener"><img src="${esc(i.screenshot_path)}" alt="Issue ${i.id} screenshot"></a>`:'<div class="muted">No screenshot</div>'}<div><div class="user-title-row"><div class="userhead">Issue #${i.id}: ${esc(i.page_name||'Photo Notes')}</div><span class="pill ${i.email_status==='sent'?'pro':'basic'}">Email ${esc(i.email_status||'pending')}</span></div><div class="muted">${esc(i.user_name||i.user_email)} · ${fdatetime(i.created_at)} · ${esc(i.viewport||'screen unknown')}</div><div class="issue-description">${esc(i.description)}</div><div class="muted">${esc(i.page_url||'')}</div></div></article>`).join(''):'<p class="helper">No tester issues have been reported yet.</p>';}
+      const sf=(document.getElementById('issueStatusFilter')||{}).value||'open';
+      const pf=(document.getElementById('issuePriorityFilter')||{}).value||'all';
+      const closed=new Set(['resolved','wont_fix']);
+      const rows=allIssues.filter(i=>(sf==='all'||(sf==='open'&&!closed.has(i.management_status||'new'))||i.management_status===sf)&&(pf==='all'||(i.priority||'normal')===pf));
+      const counts={open:allIssues.filter(i=>!closed.has(i.management_status||'new')).length,new:allIssues.filter(i=>(i.management_status||'new')==='new').length,urgent:allIssues.filter(i=>(i.priority||'normal')==='urgent'&&!closed.has(i.management_status||'new')).length,resolved:allIssues.filter(i=>i.management_status==='resolved').length};
+      document.getElementById('issueSummary').innerHTML=`<span class="pill basic">${counts.open} open</span><span class="pill basic">${counts.new} new</span><span class="pill ${counts.urgent?'role':'basic'}">${counts.urgent} urgent</span><span class="pill pro">${counts.resolved} resolved</span>`;
+      box.innerHTML=rows.length?rows.map(issueCard).join(''):'<p class="helper">No issue reports match these filters.</p>';
+      box.querySelectorAll('[data-issue-save]').forEach(b=>b.onclick=()=>saveIssue(Number(b.dataset.issueSave),b));
+      box.querySelectorAll('[data-issue-retry]').forEach(b=>b.onclick=()=>retryIssueEmail(Number(b.dataset.issueRetry),b));
+    }
+    function issueCard(i){
+      const status=i.management_status||'new',priority=i.priority||'normal';
+      return `<article class="card issue-admin-card">${i.screenshot_path?`<a href="${esc(i.screenshot_path)}" target="_blank" rel="noopener"><img src="${esc(i.screenshot_path)}" alt="Issue ${i.id} screenshot"></a>`:'<div class="muted">No screenshot</div>'}<div><div class="user-title-row"><div class="userhead">Issue #${i.id}: ${esc(i.page_name||'Photo Notes')}</div><span class="pill ${status==='resolved'?'pro':priority==='urgent'?'role':'basic'}">${esc(issueStatusLabels[status]||status)}</span><span class="pill basic">${esc(issuePriorityLabels[priority]||priority)} Priority</span></div><div class="muted">${esc(i.user_name||i.user_email)} · ${fdatetime(i.created_at)} · ${esc(i.viewport||'screen unknown')}</div><div class="issue-description">${esc(i.description)}</div><div class="muted">${esc(i.page_url||'')}</div><div class="issue-controls"><label>Status<select id="issue-status-${i.id}">${issueOptions(Object.keys(issueStatusLabels),issueStatusLabels,status)}</select></label><label>Priority<select id="issue-priority-${i.id}">${issueOptions(Object.keys(issuePriorityLabels),issuePriorityLabels,priority)}</select></label></div><label for="issue-notes-${i.id}" style="margin-top:8px">Private Administrator Notes</label><textarea class="issue-notes" id="issue-notes-${i.id}" placeholder="Add diagnosis, decisions, or retesting instructions...">${esc(i.admin_notes||'')}</textarea><div class="muted">Email: ${esc(i.email_status||'pending')}${i.email_error?' · '+esc(i.email_error):''}${i.updated_at?' · Last updated '+fdatetime(i.updated_at):''}</div><div class="issue-actions"><button class="btn" type="button" data-issue-save="${i.id}">Save Issue</button>${i.email_status!=='sent'?`<button class="btn secondary" type="button" data-issue-retry="${i.id}">Retry Email</button>`:''}</div></div></article>`;
+    }
+    async function loadIssues(){
+      const box=document.getElementById('issues'); if(!box)return; box.innerHTML='<p class="status">Loading...</p>';
+      try{const r=await api('/api/admin/issues');if(!r.ok)throw new Error();allIssues=await r.json();renderIssues();}
       catch(e){box.innerHTML='<p class="status">Issue reports could not be loaded.</p>';}
+    }
+    async function saveIssue(id,btn){
+      btn.disabled=true;btn.textContent='Saving...';
+      const body={management_status:document.getElementById(`issue-status-${id}`).value,priority:document.getElementById(`issue-priority-${id}`).value,admin_notes:document.getElementById(`issue-notes-${id}`).value};
+      try{const r=await api(`/api/admin/issues/${id}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});if(!r.ok)throw new Error();toast('Issue saved');await loadIssues();}
+      catch(e){toast('Issue could not be saved');btn.disabled=false;btn.textContent='Save Issue';}
+    }
+    async function retryIssueEmail(id,btn){
+      btn.disabled=true;btn.textContent='Sending...';
+      try{const r=await api(`/api/admin/issues/${id}/retry-email`,{method:'POST'});const d=await r.json();if(!r.ok)throw new Error();toast(d.status==='sent'?'Issue email sent':'Email is still not configured');await loadIssues();}
+      catch(e){toast('Issue email could not be sent');btn.disabled=false;btn.textContent='Retry Email';}
+    }
+    async function loadHealth(){
+      const box=document.getElementById('health'); if(!box)return;
+      try{const r=await api('/api/admin/health');if(!r.ok)throw new Error();const d=await r.json();box.innerHTML=`<div class="muted health-meta">Version ${esc(d.version)} · ${esc(d.environment)} · Checked ${fdatetime(d.checked_at)} · Uptime ${Math.floor((d.uptime_seconds||0)/60)} minutes</div><div class="health-grid">${d.services.map(s=>`<div class="health-card"><div class="health-name"><span class="health-dot ${s.status==='down'?'down':s.status==='not_configured'?'warning':''}"></span>${esc(s.name)}</div><div class="health-detail">${esc(s.detail)}</div></div>`).join('')}</div>`;}
+      catch(e){box.innerHTML='<p class="status">System health could not be checked.</p>';}
     }
 
     function generatePassword(){
