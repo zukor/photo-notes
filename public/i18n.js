@@ -227,7 +227,18 @@
     'This browser cannot access the microphone. Type the note or use the keyboard microphone': 'Este navegador no puede acceder al micrófono. Escriba la nota o use el micrófono del teclado',
     'Topic created': 'Tema creado', 'Type a topic name': 'Escriba el nombre del tema', 'Unpair failed': 'No se pudo separar',
     'Untitled document': 'Documento sin título', 'Untitled group': 'Grupo sin título', 'Upload failed': 'No se pudo cargar', 'Uploading photo…': 'Cargando foto…',
-    'Zone deleted': 'Zona eliminada', 'Zone saved': 'Zona guardada', '✓ Screenshot of this page attached': '✓ Captura de pantalla de esta página adjunta'
+    'Zone deleted': 'Zona eliminada', 'Zone saved': 'Zona guardada', '✓ Screenshot of this page attached': '✓ Captura de pantalla de esta página adjunta',
+    'Photo quality check': 'Revisión de calidad de la foto', 'Photo quality check passed.': 'La foto pasó la revisión de calidad.',
+    'low resolution': 'resolución baja', 'too dark': 'demasiado oscura', 'overexposed': 'sobreexpuesta', 'possibly blurry': 'posiblemente borrosa',
+    'Photo quality warning:': 'Advertencia sobre la calidad de la foto:', 'Choose OK to save this photo anyway, or Cancel to retake it.': 'Elija Aceptar para guardar esta foto de todos modos o Cancelar para volver a tomarla.',
+    'Photo kept for retaking': 'La foto se conservó para volver a tomarla', 'Photo saved offline. Upload will continue automatically.': 'La foto se guardó sin conexión. La carga continuará automáticamente.',
+    'Search Photos': 'Buscar fotos', 'Search notes, addresses, topics, dates, or defects': 'Buscar notas, direcciones, temas, fechas o defectos', 'Search': 'Buscar',
+    'Verify Photo Evidence': 'Verificar evidencia fotográfica', 'Photo Evidence Verification': 'Verificación de evidencia fotográfica',
+    'This verifies when the original was received and records later changes without displaying private note text.': 'Esto verifica cuándo se recibió el original y registra los cambios posteriores sin mostrar el texto privado de la nota.',
+    'Original File Fingerprint': 'Huella digital del archivo original', 'Not available for this older capture': 'No disponible para esta captura anterior',
+    'Verified': 'Verificada', 'Does not match': 'No coincide', 'Unavailable': 'No disponible', 'Evidence History': 'Historial de evidencia',
+    'Original capture saved': 'Captura original guardada', 'Details updated': 'Datos actualizados', 'Photo rotated': 'Foto girada', 'Photo flipped': 'Foto volteada', 'Photo cropped': 'Foto recortada',
+    'No edit history is available for this older capture.': 'No hay historial de edición disponible para esta captura anterior.', 'Evidence details could not be loaded': 'No se pudieron cargar los datos de evidencia'
   };
 
   const ES_TO_EN = Object.fromEntries(Object.entries(ES).map(([en, es]) => [es, en]));
@@ -242,6 +253,11 @@
       [/^Select Topic: (.+)( [▴▾])$/, (_, a, c) => `Seleccionar tema: ${ES[a] || a}${c}`],
       [/^Select Topic( [▴▾])$/, (_, c) => `Seleccionar tema${c}`],
       [/^(\d+) photos$/, '$1 fotos'], [/^(\d+) photo$/, '$1 foto'], [/^(\d+) tons$/, '$1 toneladas'],
+      [/^(\d+) matching photos?$/, '$1 foto(s) encontrada(s)'], [/^(\d+) offline captures? ready to upload$/, '$1 captura(s) sin conexión lista(s) para cargar'],
+      [/^(\d+) photos? saved offline$/, '$1 foto(s) guardada(s) sin conexión'],
+      [/^Fingerprint status: (Verified|Does not match|Unavailable)$/, (_, s) => `Estado de la huella: ${ES[s] || s}`],
+      [/^Original size: (.+) · Received (.+)$/, 'Tamaño original: $1 · Recibida $2'],
+      [/^GPS recorded: (Yes|No) · Address recorded: (Yes|No) · Original backup: (Preserved|Not currently needed)$/, (_, g, a, b) => `GPS registrado: ${g === 'Yes' ? 'Sí' : 'No'} · Dirección registrada: ${a === 'Yes' ? 'Sí' : 'No'} · Respaldo original: ${b === 'Preserved' ? 'Conservado' : 'No necesario actualmente'}`],
       [/^Ticket (.+)$/, 'Boleto $1'], [/^Issue #(\d+) saved\. Thank you\.$/, 'Problema #$1 guardado. Gracias.'],
       [/^Issue #(\d+) sent\. Thank you\.$/, 'Problema #$1 enviado. Gracias.'],
       [/^Score (\d+)$/, 'Puntuación $1'], [/^Added (\d+) photo(s?)$/, 'Se agregaron $1 foto$2'],

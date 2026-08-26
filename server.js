@@ -1,5 +1,6 @@
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 const express = require('express');
 const cookieParser = require('cookie-parser');
 const jwt = require('jsonwebtoken');
@@ -464,6 +465,10 @@ async function logEvent(userId, action, detail) {
       [userId, action, JSON.stringify(detail || {})]);
   } catch (e) { /* analytics is best-effort; never block the real request */ }
 }
+async function recordCaptureHistory(userId, captureId, action, detail) {
+  try { await pool.query(`INSERT INTO capture_history (capture_id,user_id,action,detail) VALUES ($1,$2,$3,$4)`, [captureId,userId,action,JSON.stringify(detail||{})]); }
+  catch (e) { /* evidence history must not prevent the user's primary action */ }
+}
 
 // Oriented photo dimensions (accounts for EXIF orientation) so we can classify
 // landscape vs portrait the way the user actually sees the photo. Content is
@@ -677,6 +682,14 @@ app.post('/api/captures', requireAuth, upload.single('photo'), async (req, res) 
       dSource, dConf, dAi ? JSON.stringify(dAi) : null, dConfirmed];
     const { rows } = await pool.query(q, vals);
     const saved = rows[0];
+    if (req.file) {
+      try {
+        const buffer=fs.readFileSync(req.file.path);
+        const hash=crypto.createHash('sha256').update(buffer).digest('hex');
+        await pool.query(`INSERT INTO capture_evidence (capture_id,user_id,original_sha256,original_bytes,original_name) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (capture_id) DO NOTHING`, [saved.id,req.user.id,hash,buffer.length,ticketText(req.file.originalname,255)]);
+      } catch (e) { console.error('[evidence.fingerprint]',e&&e.message); }
+    }
+    await recordCaptureHistory(req.user.id,saved.id,'captured',{photo:!!req.file,gps:lat!=null&&lng!=null,address:!!address});
     res.json(saved);
 
     // Background address fill: if we have coordinates but no address yet, geocode
@@ -713,6 +726,20 @@ app.get('/api/captures', requireAuth, async (req, res) => {
     console.error('[captures.list]', err);
     res.status(500).json({ error: 'failed to list captures' });
   }
+});
+
+app.get('/api/captures/search', requireAuth, async (req,res)=>{
+  try{
+    const q=String(req.query.q||'').trim();
+    if(!q)return res.json([]);
+    const pattern=`%${q}%`;
+    const rows=(await pool.query(`SELECT * FROM captures WHERE user_id=$1 AND (
+      COALESCE(note,'') ILIKE $2 OR COALESCE(address,'') ILIKE $2 OR COALESCE(captured_by,'') ILIKE $2 OR
+      COALESCE(array_to_string(area_tags,' '),'') ILIKE $2 OR COALESCE(defect_type,'') ILIKE $2 OR
+      to_char(created_at,'MM/DD/YYYY HH12:MI AM') ILIKE $2)
+      ORDER BY created_at DESC LIMIT 200`,[req.user.id,pattern])).rows;
+    res.json(rows);
+  }catch(err){console.error('[captures.search]',err);res.status(500).json({error:'search failed'});}
 });
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
@@ -1279,13 +1306,36 @@ app.post('/api/captures/:id', requireAuth, async (req, res) => {
     const { rows } = await pool.query(
       `UPDATE captures SET ${sets.join(', ')} WHERE id = $${vals.length - 1} AND user_id = $${vals.length} RETURNING *`, vals);
     if (!rows.length) return res.status(404).json({ error: 'not found' });
-    if (typeof b.note === 'string') logEvent(req.user.id, 'note_edit', { chars: b.note.length });
-    if (typeof b.address === 'string') logEvent(req.user.id, 'address_edit', {});
+    const changed=[];
+    if (typeof b.note === 'string') { logEvent(req.user.id, 'note_edit', { chars: b.note.length }); changed.push('note'); }
+    if (typeof b.address === 'string') { logEvent(req.user.id, 'address_edit', {}); changed.push('address'); }
+    if (Array.isArray(b.area_tags)) changed.push('topics');
+    if (b.overlays !== undefined) changed.push('markings');
+    if (hasDims) changed.push('measurements');
+    await recordCaptureHistory(req.user.id,id,'details_updated',{fields:changed});
     res.json(rows[0]);
   } catch (err) {
     console.error('[captures.update]', err);
     res.status(500).json({ error: 'update failed' });
   }
+});
+
+app.get('/api/captures/:id/evidence', requireAuth, async (req,res)=>{
+  try{
+    const id=parseInt(req.params.id,10);if(!Number.isInteger(id))return res.status(400).json({error:'bad id'});
+    const capture=(await pool.query(`SELECT id,created_at,captured_by,photo_path,photo_original_path,latitude,longitude,address FROM captures WHERE id=$1 AND user_id=$2`,[id,req.user.id])).rows[0];
+    if(!capture)return res.status(404).json({error:'not found'});
+    const evidence=(await pool.query(`SELECT original_sha256,original_bytes,original_name,captured_at FROM capture_evidence WHERE capture_id=$1 AND user_id=$2`,[id,req.user.id])).rows[0]||null;
+    const history=(await pool.query(`SELECT action,detail,created_at FROM capture_history WHERE capture_id=$1 AND user_id=$2 ORDER BY created_at ASC`,[id,req.user.id])).rows;
+    let fingerprint_verified=null;
+    if(evidence&&evidence.original_sha256){
+      const originalFile=localPhoto(capture.photo_original_path)||localPhoto(capture.photo_path);
+      if(originalFile){
+        try{fingerprint_verified=crypto.createHash('sha256').update(fs.readFileSync(originalFile)).digest('hex')===evidence.original_sha256;}catch(e){}
+      }
+    }
+    res.json({capture,evidence,history,original_preserved:!!capture.photo_original_path,current_photo_present:!!localPhoto(capture.photo_path),fingerprint_verified});
+  }catch(err){console.error('[evidence.get]',err);res.status(500).json({error:'evidence failed'});}
 });
 
 // ---- flattened stamped copy (overlays burned into a downloadable JPEG) ----
@@ -1317,11 +1367,18 @@ app.post('/api/captures/:id/rotate', requireAuth, async (req, res) => {
     if (!Number.isInteger(id)) return res.status(400).json({ error: 'bad id' });
     const requested = req.body && req.body.dir;
     const dir = requested === 'ccw' ? 'ccw' : requested === 'flip' ? 'flip' : 'cw';
-    const row = (await pool.query(`SELECT photo_path FROM captures WHERE id = $1 AND user_id = $2`, [id, req.user.id])).rows[0];
+    const row = (await pool.query(`SELECT photo_path, photo_original_path FROM captures WHERE id = $1 AND user_id = $2`, [id, req.user.id])).rows[0];
     if (!row) return res.status(404).json({ error: 'not found' });
     const p = localPhoto(row.photo_path);
     if (!p) return res.status(400).json({ error: 'no photo file to rotate' });
     const ext = path.extname(p).toLowerCase();
+    let originalPath=row.photo_original_path;
+    if(!originalPath){
+      const backupName=`${path.basename(p,ext)}-orig${ext}`;
+      fs.copyFileSync(p,path.join(UPLOAD_DIR,backupName));
+      originalPath=`/uploads/${backupName}`;
+      await pool.query(`UPDATE captures SET photo_original_path=$1 WHERE id=$2 AND user_id=$3`,[originalPath,id,req.user.id]);
+    }
     const angle = dir === 'ccw' ? 270 : 90;
     const buf = fs.readFileSync(p);
     const oriented = await sharp(buf).rotate().toBuffer();
@@ -1334,6 +1391,7 @@ app.post('/api/captures/:id/rotate', requireAuth, async (req, res) => {
     const d = await imageDims(p);
     if (d) await pool.query(`UPDATE captures SET photo_width = $1, photo_height = $2 WHERE id = $3 AND user_id = $4`, [d.w, d.h, id, req.user.id]);
     logEvent(req.user.id, 'rotate', { dir });
+    await recordCaptureHistory(req.user.id,id,dir==='flip'?'photo_flipped':'photo_rotated',{direction:dir,original_preserved:true});
     res.json({ ok: true });
   } catch (err) {
     console.error('[captures.rotate]', err);
@@ -1392,6 +1450,7 @@ app.post('/api/captures/:id/crop', requireAuth, async (req, res) => {
       `UPDATE captures SET photo_original_path = $1, photo_width = $2, photo_height = $3 WHERE id = $4 AND user_id = $5`,
       [originalPath, d ? d.w : null, d ? d.h : null, id, req.user.id]);
     logEvent(req.user.id, 'crop', {});
+    await recordCaptureHistory(req.user.id,id,'photo_cropped',{original_preserved:true});
     res.json({ ok: true });
   } catch (err) {
     console.error('[captures.crop]', err);
@@ -1417,6 +1476,7 @@ app.post('/api/captures/:id/restore-original', requireAuth, async (req, res) => 
       `UPDATE captures SET photo_original_path = NULL, photo_width = $1, photo_height = $2 WHERE id = $3 AND user_id = $4`,
       [d ? d.w : null, d ? d.h : null, id, req.user.id]);
     logEvent(req.user.id, 'restore_original', {});
+    await recordCaptureHistory(req.user.id,id,'original_restored',{});
     res.json({ ok: true });
   } catch (err) {
     console.error('[captures.restore]', err);

@@ -231,6 +231,24 @@ CREATE TABLE IF NOT EXISTS issue_reports (
   created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS issue_reports_created_idx ON issue_reports (created_at DESC);
+-- Tamper-evident fingerprint and content-free edit history for each capture.
+CREATE TABLE IF NOT EXISTS capture_evidence (
+  capture_id      INTEGER PRIMARY KEY REFERENCES captures(id) ON DELETE CASCADE,
+  user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  original_sha256 TEXT,
+  original_bytes  BIGINT,
+  original_name   TEXT,
+  captured_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS capture_history (
+  id         SERIAL PRIMARY KEY,
+  capture_id INTEGER NOT NULL REFERENCES captures(id) ON DELETE CASCADE,
+  user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  action     TEXT NOT NULL,
+  detail     JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS capture_history_capture_idx ON capture_history (capture_id, created_at);
 `;
 
 const DEFAULT_AREAS = ['Roads', 'Maintenance', 'Walls', 'Security', 'Landscaping', 'Other'];

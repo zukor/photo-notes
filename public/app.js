@@ -116,6 +116,7 @@ async function boot() {
   if (r.ok) {
     try { const me = await r.json(); state.me = me; state.plan = me.plan || 'free'; } catch (e) {}
     await loadAreas();
+    restoreOfflineQueue();
     // Start loading documents as soon as the user signs in. By the time they
     // open Create, existing documents can be shown immediately instead of
     // appearing only after another action refreshes the list.
@@ -294,6 +295,7 @@ function renderCapture() {
     <input type="file" accept="image/*" capture="environment" id="photoCam" style="display:none" />
     <input type="file" accept="image/*" id="photoLib" style="display:none" />
     <div class="photo-box" id="previewBox" style="display:none;margin-top:12px"><img id="preview" alt="preview" style="display:block" /></div>
+    <div class="status" id="qualityStatus"></div>
 
     <div id="locwrap" style="display:none">
       <label>GPS Coordinates</label>
@@ -585,12 +587,44 @@ async function loadTodayTickets() {
 
 function onPhotoChosen(file) {
   state.photoFile = file;
+  state._qualityResult = null;
+  state._qualityPromise = analyzePhotoQuality(file).then(result=>{
+    state._qualityResult=result;
+    const status=document.getElementById('qualityStatus');
+    if(status)status.textContent=result.warnings.length?`${uiT('Photo quality check')}: ${result.warnings.map(uiT).join('; ')}.`:uiT('Photo quality check passed.');
+    return result;
+  });
   state._locationPromise = null;
   const box = document.getElementById('previewBox');
   document.getElementById('preview').src = URL.createObjectURL(file);
   box.style.display = 'block';
   document.getElementById('locwrap').style.display = 'block';
   acquireLocation();
+}
+
+async function analyzePhotoQuality(file){
+  try{
+    const bitmap=await createImageBitmap(file),sourceWidth=bitmap.width,sourceHeight=bitmap.height;const max=256,scale=Math.min(1,max/Math.max(sourceWidth,sourceHeight));
+    const canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(bitmap.width*scale));canvas.height=Math.max(1,Math.round(bitmap.height*scale));
+    const ctx=canvas.getContext('2d',{willReadFrequently:true});ctx.drawImage(bitmap,0,0,canvas.width,canvas.height);if(bitmap.close)bitmap.close();
+    const data=ctx.getImageData(0,0,canvas.width,canvas.height).data;const lum=new Float32Array(canvas.width*canvas.height);let sum=0,dark=0,bright=0;
+    for(let i=0,p=0;i<data.length;i+=4,p++){const l=.2126*data[i]+.7152*data[i+1]+.0722*data[i+2];lum[p]=l;sum+=l;if(l<35)dark++;if(l>245)bright++;}
+    let edges=0,n=0;for(let y=1;y<canvas.height-1;y++){for(let x=1;x<canvas.width-1;x++){const p=y*canvas.width+x;edges+=Math.abs(lum[p-1]-lum[p+1])+Math.abs(lum[p-canvas.width]-lum[p+canvas.width]);n++;}}
+    const mean=sum/lum.length,edge=n?edges/n:0,warnings=[];
+    if(sourceWidth<900||sourceHeight<700)warnings.push('low resolution');
+    if(mean<55||dark/lum.length>.55)warnings.push('too dark');
+    if(mean>215||bright/lum.length>.45)warnings.push('overexposed');
+    if(edge<13)warnings.push('possibly blurry');
+    return {warnings,width:sourceWidth,height:sourceHeight,brightness:Math.round(mean),sharpness:Math.round(edge)};
+  }catch(e){return {warnings:[],unavailable:true};}
+}
+
+async function confirmPhotoQuality(){
+  if(!state.photoFile)return true;
+  const result=state._qualityPromise?await state._qualityPromise:state._qualityResult;
+  if(!result||!result.warnings||!result.warnings.length)return true;
+  const warningList=result.warnings.map(uiT).join(', ');
+  return confirm(uiT('Photo quality warning:')+' '+warningList+'.\n\n'+uiT('Choose OK to save this photo anyway, or Cancel to retake it.'));
 }
 
 function acquireLocation() {
@@ -1093,10 +1127,17 @@ function fmtDimsClient(c) {
 // the form clears immediately and the photo finishes uploading behind the
 // scenes. Uploads run one at a time (kind to slow connections), auto-retry with
 // backoff, and resume when the device comes back online.
-let bgQueue = [];      // [{ fd, hadCoords, tries }]
+let bgQueue = [];      // [{ id, payload, hadCoords, tries }]
 let bgActive = 0;      // 1 while an upload is in flight, else 0
 let bgDraining = false;
 let bgOnlineHooked = false;
+let offlineQueueRestored = false;
+
+function queueDb(){return new Promise((resolve,reject)=>{if(!window.indexedDB)return reject(new Error('unavailable'));const r=indexedDB.open('photo-notes-offline',1);r.onupgradeneeded=()=>{if(!r.result.objectStoreNames.contains('captures'))r.result.createObjectStore('captures',{keyPath:'id',autoIncrement:true});};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});}
+async function queueStore(payload,hadCoords){const db=await queueDb();return new Promise((resolve,reject)=>{const tx=db.transaction('captures','readwrite');const r=tx.objectStore('captures').add({payload,hadCoords:!!hadCoords,createdAt:Date.now()});r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);tx.oncomplete=()=>db.close();});}
+async function queueDelete(id){if(id==null)return;try{const db=await queueDb();await new Promise((resolve,reject)=>{const tx=db.transaction('captures','readwrite');tx.objectStore('captures').delete(id);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);});db.close();}catch(e){}}
+async function restoreOfflineQueue(){if(offlineQueueRestored)return;offlineQueueRestored=true;try{const db=await queueDb();const rows=await new Promise((resolve,reject)=>{const tx=db.transaction('captures','readonly');const r=tx.objectStore('captures').getAll();r.onsuccess=()=>resolve(r.result||[]);r.onerror=()=>reject(r.error);});db.close();const known=new Set(bgQueue.map(x=>x.id));rows.forEach(row=>{if(!known.has(row.id))bgQueue.push({id:row.id,payload:row.payload,hadCoords:row.hadCoords,tries:0});});if(rows.length){toast(`${rows.length} offline capture${rows.length===1?'':'s'} ready to upload`);bgIndicator();drainQueue();}}catch(e){}}
+function payloadFormData(p){const fd=new FormData();if(p.photo)fd.append('photo',p.photo,p.photoName||'offline-photo.jpg');fd.append('note',p.note||'');fd.append('area_tags',p.area_tags||'[]');fd.append('kind',p.kind||'note');if(p.latitude!=null)fd.append('latitude',p.latitude);if(p.longitude!=null)fd.append('longitude',p.longitude);if(p.address)fd.append('address',p.address);return fd;}
 
 function bgIndicator() {
   let el = document.getElementById('bgstatus');
@@ -1109,7 +1150,8 @@ function bgIndicator() {
     document.body.appendChild(el);
   }
   if (total > 0) {
-    el.textContent = total === 1 ? 'Uploading photo…' : `Uploading ${total} photos…`;
+    const offline=typeof navigator!=='undefined'&&navigator.onLine===false;
+    el.textContent = offline ? (total === 1 ? '1 photo saved offline' : `${total} photos saved offline`) : (total === 1 ? 'Uploading photo…' : `Uploading ${total} photos…`);
     el.style.background = '#111';
     el.style.display = 'block';
   } else {
@@ -1119,8 +1161,9 @@ function bgIndicator() {
   }
 }
 
-function enqueueUpload(fd, hadCoords) {
-  bgQueue.push({ fd, hadCoords: !!hadCoords, tries: 0 });
+async function enqueueUpload(payload, hadCoords) {
+  let id=null;try{id=await queueStore(payload,hadCoords);}catch(e){}
+  bgQueue.push({ id, payload, hadCoords: !!hadCoords, tries: 0 });
   if (!bgOnlineHooked) { window.addEventListener('online', drainQueue); bgOnlineHooked = true; }
   bgIndicator();
   drainQueue();
@@ -1135,8 +1178,9 @@ async function drainQueue() {
       const item = bgQueue.shift();
       bgActive = 1; bgIndicator();
       try {
-        const r = await fetch('/api/captures', { method: 'POST', credentials: 'same-origin', body: item.fd });
+        const r = await fetch('/api/captures', { method: 'POST', credentials: 'same-origin', body: payloadFormData(item.payload) });
         if (!r.ok) throw new Error('http ' + r.status);
+        await queueDelete(item.id);
         bgActive = 0;
         // Refresh the Library if it is open so the new card appears...
         if (state.view === 'organize' || state.view === 'edit') {
@@ -1148,12 +1192,12 @@ async function drainQueue() {
       } catch (e) {
         bgActive = 0;
         item.tries++;
-        if (item.tries < 6) {
-          const delay = Math.min(45000, 2000 * Math.pow(2, item.tries - 1));
-          setTimeout(() => { bgQueue.push(item); drainQueue(); }, delay);
-        } else {
-          toast('A photo could not upload. Check your connection.');
-        }
+        const delay = Math.min(120000, 2000 * Math.pow(2, Math.min(item.tries - 1, 6)));
+        bgQueue.push(item);
+        setTimeout(drainQueue, delay);
+        if(item.tries===3)toast('Photo saved offline. Upload will continue automatically.');
+        bgIndicator();
+        break;
       }
       bgIndicator();
     }
@@ -1163,26 +1207,23 @@ async function drainQueue() {
 async function saveCapture() {
   const note = document.getElementById('note').value.trim();
   if (!state.photoFile && !note) { toast('Take a photo or add a note first'); return; }
+  if (!(await confirmPhotoQuality())) { toast('Photo kept for retaking'); return; }
   const saveBtn = document.getElementById('save');
   if (state.photoFile && state._locationPromise) {
     saveBtn.disabled = true; saveBtn.textContent = 'Getting Full Address...';
     await state._locationPromise;
   }
   // Build the payload from the CURRENT state before we clear the form.
-  const fd = new FormData();
-  if (state.photoFile) fd.append('photo', state.photoFile);
-  fd.append('note', note);
-  fd.append('area_tags', JSON.stringify(state.area ? [state.area] : []));
-  fd.append('kind', 'note');
+  const payload={photo:state.photoFile||null,photoName:state.photoFile&&state.photoFile.name||'offline-photo.jpg',note,area_tags:JSON.stringify(state.area?[state.area]:[]),kind:'note'};
   const hadCoords = !!state.location;
-  if (state.location) { fd.append('latitude', state.location.lat); fd.append('longitude', state.location.lng); }
-  if (state.address) fd.append('address', state.address);
+  if (state.location) { payload.latitude=state.location.lat;payload.longitude=state.location.lng; }
+  if (state.address) payload.address=state.address;
   // Commit instantly: clear the form and hand the upload to the background.
   state.photoFile = null; state._note = ''; state.location = null; state.address = null; state._locationPromise = null;
   state._dims = freshDims(); state._measure = null;
   renderCapture();
   toast('Saved');
-  enqueueUpload(fd, hadCoords);
+  await enqueueUpload(payload, hadCoords);
 }
 
 // ---- rotate + note editing (shared) ----
@@ -1243,6 +1284,9 @@ async function renderList() {
       <option value="">All Topics</option>
       ${state.areas.map(a => `<option value="${esc(a)}">${esc(a)}</option>`).join('')}
     </select>
+    <label>Search Photos</label>
+    <div class="row compact"><input id="photoSearch" type="search" placeholder="Search notes, addresses, topics, dates, or defects"><button class="btn secondary" id="photoSearchBtn" type="button">Search</button><button class="btn secondary" id="photoSearchClear" type="button">Clear</button></div>
+    <div class="status" id="photoSearchStatus"></div>
     <div class="organize-action-row">
       <button class="btn secondary" id="selall">Select All</button>
       <button class="btn secondary" id="selnone">Clear</button>
@@ -1282,6 +1326,10 @@ async function renderList() {
 
     <div id="cards" style="margin-top:16px"></div>`;
   document.getElementById('filter').onchange = e => loadCards(e.target.value);
+  const runSearch=()=>loadCards(document.getElementById('filter').value||'',document.getElementById('photoSearch').value.trim());
+  document.getElementById('photoSearchBtn').onclick=runSearch;
+  document.getElementById('photoSearch').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();runSearch();}};
+  document.getElementById('photoSearchClear').onclick=()=>{document.getElementById('photoSearch').value='';loadCards(document.getElementById('filter').value||'');};
   document.getElementById('selall').onclick = () => document.querySelectorAll('.capchk').forEach(c => { c.checked = true; state.selectedIds.add(String(c.value)); });
   document.getElementById('selnone').onclick = () => { state.selectedIds.clear(); document.querySelectorAll('.capchk').forEach(c => c.checked = false); };
   document.getElementById('applytopic').onclick = applyTopicToSelected;
@@ -1550,13 +1598,15 @@ async function doFixAddresses() {
   finally { btn.disabled = false; btn.textContent = 'Fix Addresses'; }
 }
 
-async function loadCards(area) {
+async function loadCards(area, query = '') {
   const cards = document.getElementById('cards');
   if (!cards) return;
   cards.innerHTML = '<p class="status">Loading...</p>';
-  const r = await api('/api/captures' + (area ? `?area=${encodeURIComponent(area)}` : ''));
+  const r = await api(query ? `/api/captures/search?q=${encodeURIComponent(query)}` : '/api/captures' + (area ? `?area=${encodeURIComponent(area)}` : ''));
   if (!r.ok) { cards.innerHTML = '<p class="status">Could not load.</p>'; return; }
-  const rows = await r.json();
+  let rows = await r.json();
+  if(query&&area)rows=rows.filter(c=>(c.area_tags||[]).includes(area));
+  const searchStatus=document.getElementById('photoSearchStatus');if(searchStatus)searchStatus.textContent=query?`${rows.length} matching photo${rows.length===1?'':'s'}`:'';
   if (!rows.length) { cards.innerHTML = '<p class="empty">No captures yet. Go grab one.</p>'; return; }
   window._lastCards = rows;
   // Pro: pull only pairs the user deliberately created so we can render them
@@ -1616,6 +1666,7 @@ function captureCardHtml(c) {
     ${measureRow}
     ${c.photo_path ? `<button class="btn secondary slim stampbtn" data-id="${c.id}">Mark Up Photo${(c.overlays && c.overlays.length) ? ' (' + c.overlays.length + ')' : ''}</button>` : ''}
     ${c.photo_path ? `<button class="btn secondary slim cropbtn" data-id="${c.id}">Crop Photo</button>` : ''}
+    <button class="btn secondary slim evidencebtn" data-id="${c.id}">Verify Photo Evidence</button>
     ${c.photo_original_path ? `<button class="btn secondary slim restorebtn" data-id="${c.id}">Restore Original Photo</button>` : ''}
     <div class="notewrap" data-id="${c.id}">
       <div class="notetext">${esc(c.note || '(no note)')}</div>
@@ -1623,6 +1674,20 @@ function captureCardHtml(c) {
     </div>
   </div>`;
 }
+
+async function showEvidence(id){
+  try{
+    const r=await api(`/api/captures/${id}/evidence`);if(!r.ok)throw new Error();const d=await r.json();
+    const labels={captured:'Original capture saved',details_updated:'Details updated',photo_rotated:'Photo rotated',photo_flipped:'Photo flipped',photo_cropped:'Photo cropped',original_restored:'Original photo restored'};
+    const hash=d.evidence&&d.evidence.original_sha256||'';
+    const modal=document.createElement('div');modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.58);z-index:80;padding:18px;overflow:auto';
+    const verified=d.fingerprint_verified===true?'Verified':d.fingerprint_verified===false?'Does not match':'Unavailable';
+    modal.innerHTML=`<section style="max-width:620px;margin:30px auto;background:#fff;border-radius:12px;padding:18px;color:#000"><div style="display:flex;justify-content:space-between;gap:12px"><div class="brand" style="font-size:21px">Photo Evidence Verification</div><button class="iconbtn" id="evidenceClose" aria-label="Close">×</button></div><p class="helper">This verifies when the original was received and records later changes without displaying private note text.</p><div class="card"><strong>Original File Fingerprint</strong><div class="muted">SHA-256</div><div style="font-family:monospace;word-break:break-all;margin-top:5px">${esc(hash||'Not available for this older capture')}</div><div class="muted" style="margin-top:7px"><strong>Fingerprint status: ${verified}</strong></div><div class="muted">Original size: ${d.evidence?formatEvidenceBytes(d.evidence.original_bytes):'Unknown'} · Received ${fEvidenceDate(d.evidence&&d.evidence.captured_at||d.capture.created_at)}</div><div class="muted">GPS recorded: ${d.capture.latitude!=null&&d.capture.longitude!=null?'Yes':'No'} · Address recorded: ${d.capture.address?'Yes':'No'} · Original backup: ${d.original_preserved?'Preserved':'Not currently needed'}</div></div><h3 style="font-size:16px">Evidence History</h3>${d.history.length?`<div>${d.history.map(h=>`<div style="border-bottom:1px solid #ddd;padding:8px 0"><strong>${esc(labels[h.action]||h.action)}</strong><div class="muted">${fEvidenceDate(h.created_at)}${h.detail&&Array.isArray(h.detail.fields)&&h.detail.fields.length?' · '+esc(h.detail.fields.join(', ')):''}</div></div>`).join('')}</div>`:'<p class="helper">No edit history is available for this older capture.</p>'}</section>`;
+    document.body.appendChild(modal);modal.querySelector('#evidenceClose').onclick=()=>modal.remove();modal.onclick=e=>{if(e.target===modal)modal.remove();};
+  }catch(e){toast('Evidence details could not be loaded');}
+}
+function fEvidenceDate(value){try{return new Date(value).toLocaleString(uiLocale());}catch(e){return '—';}}
+function formatEvidenceBytes(n){n=Number(n)||0;if(n<1024)return n+' B';if(n<1048576)return (n/1024).toFixed(1)+' KB';return (n/1048576).toFixed(1)+' MB';}
 
 // A combined before/after card: two photos side by side with labels + Unpair.
 function pairCardHtml(before, after) {
@@ -1641,6 +1706,7 @@ function pairCardHtml(before, after) {
       ${state.view === 'edit' ? `<button class="editlink editaddress" data-id="${c.id}" style="padding-left:0">Edit Address</button>` : ''}
       ${dims ? `<div class="meta"><strong>Dimensions:</strong> ${esc(dims)}</div>` : ''}
       ${featureOn('measurements') && state.view === 'edit' && c.photo_path ? `<button class="btn secondary slim editdims" data-id="${c.id}">Measurements</button>` : ''}
+      <button class="btn secondary slim evidencebtn" data-id="${c.id}">Verify Photo Evidence</button>
       <div class="meta">${esc(c.note || '(no note)')}</div>
     </div>`;
   };
@@ -1673,6 +1739,7 @@ function wireCards(cards, rows) {
   cards.querySelectorAll('.unpairbtn').forEach(b => b.onclick = () => unpair(parseInt(b.getAttribute('data-id'), 10)));
   cards.querySelectorAll('.stampbtn').forEach(b => b.onclick = () => { const c = rows.find(r => r.id === parseInt(b.getAttribute('data-id'), 10)); if (c) renderStampEditor(c); });
   cards.querySelectorAll('.cropbtn').forEach(b => b.onclick = () => { const c = rows.find(r => r.id === parseInt(b.getAttribute('data-id'), 10)); if (c) renderCropEditor(c); });
+  cards.querySelectorAll('.evidencebtn').forEach(b=>b.onclick=()=>showEvidence(Number(b.dataset.id)));
   cards.querySelectorAll('.restorebtn').forEach(b => b.onclick = () => restoreOriginal(parseInt(b.getAttribute('data-id'), 10)));
 }
 
