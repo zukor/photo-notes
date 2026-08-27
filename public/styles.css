@@ -119,6 +119,7 @@ textarea { min-height: 96px; resize: vertical; }
    font-size stays 16px so iOS Safari does not auto-zoom the page on focus. */
 .row.compact input, .row.compact select, .row.compact .btn { padding: 8px 10px; font-size: 16px; margin-top: 0; }
 .footer { text-align: center; color: #000; font-size: 13px; font-weight: bold; margin-top: 34px; }
+.concrete-evidence { margin:8px 0; padding:9px 11px; border-left:4px solid #1d4ed8; background:#eef5ff; color:#000; font-size:13px; text-transform:capitalize; }
 /* small rotate buttons that size to their content instead of stretching full width */
 .rotaterow { display: flex; gap: 8px; margin: 6px 0 10px; }
 .iconbtn { flex: 0 0 auto; width: auto; display: inline-flex; align-items: center; gap: 5px; padding: 6px 12px; font-size: 15px; font-weight: bold; color: #000; background: #fff; border: 1px solid #000; border-radius: 8px; }

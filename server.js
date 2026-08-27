@@ -563,6 +563,7 @@ app.get('/api/me', requireAuth, async (req, res) => {
 
 async function hoaCompanyForUser(userId,create=false){let row=(await pool.query(`SELECT c.*,m.company_role FROM hoa_management_companies c JOIN hoa_company_members m ON m.company_id=c.id WHERE m.user_id=$1 ORDER BY c.id LIMIT 1`,[userId])).rows[0];if(!row&&create){const u=(await pool.query(`SELECT name FROM users WHERE id=$1`,[userId])).rows[0];const client=await pool.connect();try{await client.query('BEGIN');row=(await client.query(`INSERT INTO hoa_management_companies(name) VALUES($1) RETURNING *`,[`${u&&u.name||'HOA'} Management`])).rows[0];await client.query(`INSERT INTO hoa_company_members(company_id,user_id,company_role) VALUES($1,$2,'administrator')`,[row.id,userId]);await client.query('COMMIT');}catch(e){await client.query('ROLLBACK');throw e;}finally{client.release();}}return row||null;}
 async function requireHoa(req,res,next){if(await currentProduct(req.user.id)!=='hoa')return res.status(403).json({error:'HOA Maintenance Pro required'});req.hoaCompany=await hoaCompanyForUser(req.user.id,true);next();}
+async function requireConcrete(req,res,next){if(await currentProduct(req.user.id)!=='concrete')return res.status(403).json({error:'Concrete Pro required'});next();}
 async function hoaOwnsCommunity(companyId,communityId){return !!(await pool.query(`SELECT 1 FROM hoa_communities WHERE id=$1 AND company_id=$2 AND active=true`,[communityId,companyId])).rowCount;}
 
 // ---- photo upload ----
@@ -704,14 +705,25 @@ app.post('/api/captures', requireAuth, upload.single('photo'), async (req, res) 
       }
     }
 
+    const concreteProduct = await currentProduct(req.user.id) === 'concrete';
+    const concreteElements=['slab','sidewalk','curb','driveway','foundation','wall','column','beam','steps','deck','other'];
+    const concreteStages=['existing_condition','pre_pour','formwork','reinforcement','placement','finishing','curing','completed','defect','repair','verification'];
+    const concreteConditions=['not_assessed','acceptable','monitor','repair_needed','unsafe'];
+    const concreteSeverities=['none','minor','moderate','severe','critical'];
+    const concreteElement=concreteProduct&&concreteElements.includes(b.concrete_element)?b.concrete_element:null;
+    const concreteStage=concreteProduct&&concreteStages.includes(b.concrete_stage)?b.concrete_stage:null;
+    const concreteCondition=concreteProduct&&concreteConditions.includes(b.concrete_condition)?b.concrete_condition:null;
+    const concreteSeverity=concreteProduct&&concreteSeverities.includes(b.concrete_severity)?b.concrete_severity:null;
+    const concreteMix=concreteProduct?ticketText(b.concrete_mix,100):null;
+    const concreteLocation=concreteProduct?ticketText(b.concrete_location,300):null;
     const q = `INSERT INTO captures (user_id, captured_by, photo_path, photo_width, photo_height, note, latitude, longitude, address, area_tags, kind, status, job_id, perceptual_hash,
                  dim_length_in, dim_length_unit, dim_width_in, dim_width_unit, dim_depth_in, dim_shape, dim_area_sqft,
-                 dim_source, dim_confidence, dim_ai, dim_confirmed)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25) RETURNING *`;
+                 dim_source, dim_confidence, dim_ai, dim_confirmed, concrete_element, concrete_stage, concrete_condition, concrete_severity, concrete_mix, concrete_location)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31) RETURNING *`;
     const status = kind === 'task' ? 'open' : null;
     const vals = [req.user.id, req.user.name, photoPath, pw, ph, b.note || null, lat, lng, address, areas, kind, status, jobId, perceptualHash,
       dLenIn, dLenUnit, dWidIn, dWidUnit, dDepthIn, dShape, dArea,
-      dSource, dConf, dAi ? JSON.stringify(dAi) : null, dConfirmed];
+      dSource, dConf, dAi ? JSON.stringify(dAi) : null, dConfirmed, concreteElement, concreteStage, concreteCondition, concreteSeverity, concreteMix, concreteLocation];
     const { rows } = await pool.query(q, vals);
     const saved = rows[0];
     if (req.file) {
@@ -773,6 +785,15 @@ app.get('/api/captures', requireAuth, async (req, res) => {
     res.status(500).json({ error: 'failed to list captures' });
   }
 });
+
+app.get('/api/concrete/report',requireAuth,requireConcrete,async(req,res)=>{try{
+  const vals=[req.user.id],where=['c.user_id=$1','c.photo_path IS NOT NULL'];
+  if(Number.isInteger(Number(req.query.job_id))){vals.push(Number(req.query.job_id));where.push(`c.job_id=$${vals.length}`);}
+  const rows=(await pool.query(`SELECT c.*,j.name job_name,j.job_number FROM captures c LEFT JOIN jobs j ON j.id=c.job_id WHERE ${where.join(' AND ')} ORDER BY c.created_at DESC LIMIT 500`,vals)).rows;
+  const counts={total:rows.length,defects:0,repair_needed:0,verification:0,critical:0};
+  for(const row of rows){if(row.concrete_stage==='defect')counts.defects++;if(row.concrete_condition==='repair_needed'||row.concrete_condition==='unsafe')counts.repair_needed++;if(row.concrete_stage==='verification')counts.verification++;if(row.concrete_severity==='critical')counts.critical++;}
+  res.json({counts,photos:rows});
+}catch(e){console.error('[concrete.report]',e);res.status(500).json({error:'concrete report failed'});}});
 
 app.get('/api/captures/search', requireAuth, async (req,res)=>{
   try{
@@ -1372,7 +1393,7 @@ app.post('/api/captures/:id', requireAuth, async (req, res) => {
     }
     const hasDims = ['dim_length','dim_length_unit','dim_width','dim_width_unit','dim_depth','dim_shape','dim_area_sqft','dim_source'].some(k => Object.prototype.hasOwnProperty.call(b, k));
     if (hasDims) {
-      if (!(await featureAllowed(req.user.id, 'measurements'))) return res.status(403).json({ error: 'feature unavailable' });
+      if (await currentProduct(req.user.id)!=='concrete' && !(await featureAllowed(req.user.id, 'measurements'))) return res.status(403).json({ error: 'feature unavailable' });
       const lenUnit = b.dim_length_unit === 'in' ? 'in' : 'ft';
       const widUnit = b.dim_width_unit === 'in' ? 'in' : 'ft';
       const lenIn = toInches(b.dim_length, lenUnit);

@@ -67,6 +67,14 @@ CREATE TABLE IF NOT EXISTS captures (
   defect_confidence TEXT,
   defect_ai       JSONB,
   defect_user_confirmed BOOLEAN NOT NULL DEFAULT false,
+  -- Concrete Pro: photo-centered field context. These describe what the photo
+  -- proves; they are not a parallel project-management system.
+  concrete_element TEXT,
+  concrete_stage TEXT,
+  concrete_condition TEXT,
+  concrete_severity TEXT,
+  concrete_mix TEXT,
+  concrete_location TEXT,
   -- Photo overlays (stamps): array of {t,text,x,y,size,color,font,outline}.
   -- Non-destructive; rendered on cards, burned into exports, and flattenable.
   overlays        JSONB
@@ -517,6 +525,12 @@ async function init() {
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS defect_confidence TEXT`);
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS defect_ai JSONB`);
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS defect_user_confirmed BOOLEAN NOT NULL DEFAULT false`);
+  await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS concrete_element TEXT`);
+  await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS concrete_stage TEXT`);
+  await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS concrete_condition TEXT`);
+  await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS concrete_severity TEXT`);
+  await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS concrete_mix TEXT`);
+  await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS concrete_location TEXT`);
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS overlays JSONB`);
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS job_id INTEGER REFERENCES jobs(id) ON DELETE SET NULL`);
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS perceptual_hash TEXT`);

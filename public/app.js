@@ -11,6 +11,8 @@ function isConcreteClient(){return isProClient()&&state.proType==='concrete';}
 function isPavingClient(){return isProClient()&&(state.proType==='paving'||state.proType==='asphalt');}
 function productName(){return isHoaClient()?'HOA Maintenance Pro':isConcreteClient()?'Concrete Pro':isPavingClient()?'Paving Pro':'Photo Notes';}
 function featureOn(name) { return isPavingClient() && (!state.me || !state.me.feature_access || state.me.feature_access[name] !== false); }
+function measurementOn(){return isConcreteClient()||featureOn('measurements');}
+function beforeAfterOn(){return isConcreteClient()||featureOn('before_after');}
 function isMacClient() { return /Macintosh|MacIntel/.test(navigator.userAgent + ' ' + navigator.platform) && !isIOS(); }
 let recognizer = null;
 let currentGroupItems = [];
@@ -194,7 +196,7 @@ function renderApp() {
         <div class="tab ${['capture','camera-tools','ticket','camera-reader','alignment'].includes(state.view)?'on':''}" id="tabCapture">Capture</div>
         <div class="tab ${['organize','hoa-visits','hoa-visit'].includes(state.view)?'on':''}" id="tabOrganize">${isHoaClient()?'Visits':isConcreteClient()?'Projects':'Organize'}</div>
         <div class="tab ${['edit','hoa-assets','hoa-asset'].includes(state.view)?'on':''}" id="tabEdit">${isHoaClient()?'Assets':'Edit'}</div>
-        <div class="tab ${['create','hoa-inspections'].includes(state.view)?'on':''}" id="tabCreate">${isHoaClient()?'Inspections':isConcreteClient()?'Reports':'Create'}</div>
+        <div class="tab ${['create','hoa-inspections','concrete-report'].includes(state.view)?'on':''}" id="tabCreate">${isHoaClient()?'Inspections':isConcreteClient()?'Reports':'Create'}</div>
         <div class="tab ${['send','hoa-maintenance'].includes(state.view)?'on':''}" id="tabSend">${isHoaClient()?'Records':'Send'}</div>
       </div>
       <div id="body"></div>
@@ -232,7 +234,7 @@ function renderApp() {
   document.getElementById('tabCapture').onclick = () => { state.view='capture'; renderApp(); };
   document.getElementById('tabOrganize').onclick = () => { state.view=isHoaClient()?'hoa-visits':'organize'; renderApp(); };
   document.getElementById('tabEdit').onclick = () => { state.view=isHoaClient()?'hoa-assets':'edit'; renderApp(); };
-  document.getElementById('tabCreate').onclick = () => { state.view=isHoaClient()?'hoa-inspections':'create'; state.groupId=null; renderApp(); };
+  document.getElementById('tabCreate').onclick = () => { state.view=isHoaClient()?'hoa-inspections':isConcreteClient()?'concrete-report':'create'; state.groupId=null; renderApp(); };
   document.getElementById('tabSend').onclick = () => { state.view=isHoaClient()?'hoa-maintenance':'send'; renderApp(); };
   if (state.view === 'capture') renderCapture();
   else if (state.view === 'camera-tools') renderCameraTools();
@@ -252,6 +254,7 @@ function renderApp() {
   else if (state.view === 'hoa-communities') renderHoaCommunities();
   else if (state.view === 'hoa-dashboard') renderHoaDashboard();
   else if (state.view === 'hoa-reports') renderHoaReports();
+  else if (state.view === 'concrete-report') renderConcreteReport();
   else if (state.view === 'map') renderMap();
   else { state.view = 'organize'; renderList(); }
 }
@@ -305,6 +308,7 @@ function renderCapture() {
   const body = document.getElementById('body');
   body.innerHTML = `
     ${isHoaClient()?`<label>HOA / Community</label><select id="hoaCommunity"><option value="">Select Community</option>${state.communities.map(c=>`<option value="${c.id}" ${String(state.communityId)===String(c.id)?'selected':''}>${esc(c.name)}</option>`).join('')}</select>${!state.communities.length?'<p class="status">Create your first community under Assets before saving a maintenance record.</p>':''}<label>Issue Title</label><input id="hoaTitle" placeholder="Briefly identify the maintenance issue"><div class="row compact"><div style="flex:1"><label>Record Type</label><select id="hoaType"><option value="maintenance">Maintenance Issue</option><option value="information">Information Request</option><option value="inspection">Inspection Finding</option></select></div><div style="flex:1"><label>Priority</label><select id="hoaPriority"><option value="routine">Routine</option><option value="high">High</option><option value="emergency">Emergency</option><option value="monitor">Monitor</option></select></div></div>`:''}
+    ${isConcreteClient()?`<div class="workflow-intro"><strong>Concrete Photo Evidence</strong><span>Identify what this photo proves. Add only the field context visible in or directly supported by the photo.</span></div><div class="organize-form-grid"><section class="organize-panel"><label>Concrete Element</label><select id="concreteElement"><option value="slab">Slab</option><option value="sidewalk">Sidewalk</option><option value="curb">Curb</option><option value="driveway">Driveway</option><option value="foundation">Foundation</option><option value="wall">Wall</option><option value="column">Column</option><option value="beam">Beam</option><option value="steps">Steps</option><option value="deck">Deck</option><option value="other">Other</option></select><label>Photo Stage</label><select id="concreteStage"><option value="existing_condition">Existing Condition</option><option value="pre_pour">Pre-Pour</option><option value="formwork">Formwork</option><option value="reinforcement">Reinforcement</option><option value="placement">Placement</option><option value="finishing">Finishing</option><option value="curing">Curing</option><option value="completed">Completed</option><option value="defect">Defect</option><option value="repair">Repair</option><option value="verification">Verification</option></select></section><section class="organize-panel"><label>Condition</label><select id="concreteCondition"><option value="not_assessed">Not Assessed</option><option value="acceptable">Acceptable</option><option value="monitor">Monitor</option><option value="repair_needed">Repair Needed</option><option value="unsafe">Unsafe</option></select><label>Observed Severity</label><select id="concreteSeverity"><option value="none">None</option><option value="minor">Minor</option><option value="moderate">Moderate</option><option value="severe">Severe</option><option value="critical">Critical</option></select></section></div><label>Exact Photo Location</label><input id="concreteLocation" placeholder="Grid line, elevation, room, station, or nearby landmark"><label>Mix / Specification Visible or Confirmed</label><input id="concreteMix" placeholder="Optional mix ID or specification tied to this photo">`:''}
     <label>Photo Note</label>
     <button type="button" class="btn" id="takephoto">Take Photo</button>
     <button type="button" class="btn secondary" id="choosephoto" style="margin-top:8px">Choose from library or files</button>
@@ -409,7 +413,7 @@ function renderCameraTools() {
     <section class="camera-tool-group">
       <div class="camera-tool-heading"><strong>Comparison Tools</strong><span>Create consistent visual records of work before and after completion.</span></div>
       <div class="camera-tool-grid">
-        ${featureOn('before_after') ? cameraToolCard('Before & After Alignment','Use an earlier photo as a framing reference, compare the alignment, and save the pair.','Match Photos','toolAlignment') : ''}
+        ${beforeAfterOn() ? cameraToolCard('Before & After Alignment','Use an earlier photo as a framing reference, compare the alignment, and save the pair.','Match Photos','toolAlignment') : ''}
       </div>
     </section>`;
   document.getElementById('toolsBack').onclick = () => { state.view='capture'; renderApp(); };
@@ -1238,6 +1242,7 @@ async function saveCapture() {
   // Build the payload from the CURRENT state before we clear the form.
   const payload={photo:state.photoFile||null,photoName:state.photoFile&&state.photoFile.name||'offline-photo.jpg',note,area_tags:JSON.stringify(isHoaClient()?[document.getElementById('hoaArea').value]:(state.area?[state.area]:[])),kind:'note'};
   if(isHoaClient()){Object.assign(payload,{hoa_community_id:state.communityId,hoa_title:document.getElementById('hoaTitle').value.trim(),hoa_item_type:document.getElementById('hoaType').value,hoa_priority:document.getElementById('hoaPriority').value,hoa_area:document.getElementById('hoaArea').value,hoa_directed_to:(document.getElementById('hoaDirected')||{}).value||'',hoa_budget_source:'unassigned',hoa_photo_stage:'initial'});}
+  if(isConcreteClient()){Object.assign(payload,{concrete_element:document.getElementById('concreteElement').value,concrete_stage:document.getElementById('concreteStage').value,concrete_condition:document.getElementById('concreteCondition').value,concrete_severity:document.getElementById('concreteSeverity').value,concrete_location:document.getElementById('concreteLocation').value.trim(),concrete_mix:document.getElementById('concreteMix').value.trim()});}
   const hadCoords = !!state.location;
   if (state.location) { payload.latitude=state.location.lat;payload.longitude=state.location.lng; }
   if (state.address) payload.address=state.address;
@@ -1353,7 +1358,7 @@ async function renderList() {
       <button class="btn secondary" id="compareSelected">Compare 2 Photos</button>
       ${featureOn('measurements') ? `<button class="btn secondary" id="classifybatch">Classify Selected (AI)</button>` : ''}
     </div>
-    ${featureOn('before_after') ? `<div class="status" id="classifyprog"></div>
+    ${beforeAfterOn() ? `<div class="status" id="classifyprog"></div>
     <details class="pair-builder">
       <summary><span>Before &amp; After Photos</span><span class="pair-expand">Search for Pairs</span></summary>
       <p>When work is complete, select one photo from before the job and one photo from after the job. The older photo will be marked Before by default.</p>
@@ -1729,14 +1734,15 @@ function captureCardHtml(c) {
   const when = new Date(c.created_at).toLocaleString(uiLocale(), { year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' });
   const tags = (c.area_tags || []).map(t => `<span class="badge">${esc(t)}</span>`).join('');
   const kind = c.kind === 'task' ? `<span class="badge task">Task</span>` : '';
-  const dims = featureOn('measurements') ? fmtDimsClient(c) : '';
+  const dims = measurementOn() ? fmtDimsClient(c) : '';
   const classifyRow = featureOn('measurements')
     ? (c.defect_type
         ? `<div class="defectrow" style="margin:6px 0">${defectBadgeHtml(c)} <button class="editlink overridebtn" data-id="${c.id}">Change</button></div>`
         : `<div class="defectrow" style="margin:6px 0"><button class="btn secondary slim classifybtn" data-id="${c.id}">Classify (AI)</button></div>`)
     : '';
-  const measureRow = featureOn('measurements') && state.view === 'edit' && c.photo_path
+  const measureRow = measurementOn() && state.view === 'edit' && c.photo_path
     ? `<button class="btn secondary slim editdims" data-id="${c.id}">Measurements</button>` : '';
+  const concreteRow=isConcreteClient()&&c.concrete_element?`<div class="concrete-evidence"><strong>${esc(String(c.concrete_element).replaceAll('_',' '))}</strong> · ${esc(String(c.concrete_stage||'photo').replaceAll('_',' '))}${c.concrete_condition?` · ${esc(String(c.concrete_condition).replaceAll('_',' '))}`:''}${c.concrete_severity&&c.concrete_severity!=='none'?` · ${esc(c.concrete_severity)} severity`:''}${c.concrete_location?`<div>${esc(c.concrete_location)}</div>`:''}${c.concrete_mix?`<div>Mix/spec: ${esc(c.concrete_mix)}</div>`:''}</div>`:'';
   return `<div class="card">
     <label style="display:flex;align-items:center;gap:8px;font-weight:bold;margin-bottom:8px;text-transform:none;letter-spacing:0;font-size:15px">
       <input type="checkbox" class="capchk" value="${c.id}" style="width:20px;height:20px"> Select
@@ -1748,6 +1754,7 @@ function captureCardHtml(c) {
     <div class="addr">${esc(c.address || (c.latitude ? c.latitude.toFixed(5)+', '+c.longitude.toFixed(5) : 'No location'))}</div>
     ${state.view === 'edit' ? `<button class="editlink editaddress" data-id="${c.id}" style="padding-left:0">Edit Address</button>` : ''}
     <div class="meta">${kind}${tags}</div>
+    ${concreteRow}
     ${classifyRow}
     ${dims ? `<div class="meta"><strong>Dimensions:</strong> ${esc(dims)}</div>` : ''}
     ${measureRow}
@@ -1761,6 +1768,9 @@ function captureCardHtml(c) {
     </div>
   </div>`;
 }
+
+async function renderConcreteReport(){const body=document.getElementById('body');body.className='workflow-organize';body.innerHTML=`<div class="workflow-intro"><strong>Concrete Photo Evidence Report</strong><span>Review photographed conditions, defects, repairs, and verification. Every result below is backed by a saved photo.</span></div><label>Project</label><select id="concreteReportJob"><option value="">All Projects</option>${state.jobs.map(j=>`<option value="${j.id}">${esc(j.job_number?j.job_number+' — '+j.name:j.name)}</option>`).join('')}</select><div id="concreteReportStats" class="statrow"></div><div class="row"><button class="btn secondary" id="concretePrint">Print Photo Report</button></div><div id="concreteReportPhotos"><p class="status">Loading photo evidence...</p></div>`;document.getElementById('concreteReportJob').onchange=loadConcreteReport;document.getElementById('concretePrint').onclick=()=>window.print();loadConcreteReport();}
+async function loadConcreteReport(){const job=(document.getElementById('concreteReportJob')||{}).value||'',r=await api('/api/concrete/report'+(job?'?job_id='+encodeURIComponent(job):'')),box=document.getElementById('concreteReportPhotos');if(!r.ok){box.innerHTML='<p class="status">Concrete photo report could not be loaded.</p>';return;}const d=await r.json();document.getElementById('concreteReportStats').innerHTML=[['total','Photos'],['defects','Defect Photos'],['repair_needed','Needs Repair'],['verification','Verification Photos'],['critical','Critical']].map(([k,l])=>`<div class="stat"><strong>${d.counts[k]||0}</strong><span>${l}</span></div>`).join('');box.innerHTML=d.photos.length?d.photos.map(c=>captureCardHtml(c)).join(''):'<p class="empty">No concrete photo evidence has been captured yet.</p>';wireCards(box,d.photos);}
 
 async function showEvidence(id){
   try{
@@ -1779,7 +1789,7 @@ function formatEvidenceBytes(n){n=Number(n)||0;if(n<1024)return n+' B';if(n<1048
 // A combined before/after card: two photos side by side with labels + Unpair.
 function pairCardHtml(before, after) {
   const side = (c, label) => {
-    const dims = featureOn('measurements') ? fmtDimsClient(c) : '';
+    const dims = measurementOn() ? fmtDimsClient(c) : '';
     const badge = isProClient() && c.defect_type ? defectBadgeHtml(c) : '';
     return `<div style="flex:1;min-width:0">
       <div style="font-weight:bold;font-size:13px">${label}</div>
@@ -1792,7 +1802,7 @@ function pairCardHtml(before, after) {
       <div class="meta">${esc(c.address || 'No address')}</div>
       ${state.view === 'edit' ? `<button class="editlink editaddress" data-id="${c.id}" style="padding-left:0">Edit Address</button>` : ''}
       ${dims ? `<div class="meta"><strong>Dimensions:</strong> ${esc(dims)}</div>` : ''}
-      ${featureOn('measurements') && state.view === 'edit' && c.photo_path ? `<button class="btn secondary slim editdims" data-id="${c.id}">Measurements</button>` : ''}
+      ${measurementOn() && state.view === 'edit' && c.photo_path ? `<button class="btn secondary slim editdims" data-id="${c.id}">Measurements</button>` : ''}
       <button class="btn secondary slim evidencebtn" data-id="${c.id}">Verify Photo Evidence</button>
       <div class="meta">${esc(c.note || '(no note)')}</div>
     </div>`;
