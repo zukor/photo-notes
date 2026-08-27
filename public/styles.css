@@ -64,6 +64,10 @@ textarea { min-height: 96px; resize: vertical; }
   height:60px; background-image:url('/photo-notes-ai-paving-pro-animated.svg?v=76');
   background-position:center; background-size:contain; background-repeat:no-repeat;
 }
+.brandrow .brand.pro-edition-brand.concrete-pro-brand {
+  height:60px; background-image:url('/photo-notes-ai-concrete-pro-animated.svg?v=77');
+  background-position:center; background-size:contain; background-repeat:no-repeat;
+}
 .product-suite-name { display:block; color:#1254a3; font:800 27px/1.05 Arial,Helvetica,sans-serif; letter-spacing:-.7px; }
 .product-edition-name { display:block; color:#000; font:800 20px/1.1 Arial,Helvetica,sans-serif; margin-top:2px; }
 .edition-label { flex:0 0 auto; color:#000; font-size:12px; font-weight:bold; line-height:1.05; text-align:left; }
@@ -71,6 +75,7 @@ textarea { min-height: 96px; resize: vertical; }
 @media (max-width: 380px) { .brand:not([style*="font-size"]) { height: 38px; } }
 @media (max-width: 520px) { .brandrow .brand.pro-edition-brand { max-width:calc(100vw - 80px); } }
 @media (max-width: 520px) { .brandrow .brand.pro-edition-brand.paving-pro-brand { height:57px; } }
+@media (max-width: 520px) { .brandrow .brand.pro-edition-brand.concrete-pro-brand { height:57px; } }
 .app-header {
   display:grid; grid-template-columns:112px minmax(0,1fr) 30px; grid-template-rows:auto auto;
   width:100%; max-width:980px; align-items:center; column-gap:12px; row-gap:2px; margin:8px auto 5px;
