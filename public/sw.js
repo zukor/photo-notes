@@ -1,5 +1,5 @@
-const CACHE = 'efc-shell-v75';
-const SHELL = ['/', '/index.html', '/i18n.js?v=74', '/app.js?v=75', '/styles.css?v=75', '/manifest.json', '/logo.svg', '/logo-animated.svg', '/icon.svg', '/zukor-logo.svg', '/send.js?v=74', '/vendor/html2canvas.min.js?v=59'];
+const CACHE = 'efc-shell-v76';
+const SHELL = ['/', '/index.html', '/i18n.js?v=74', '/app.js?v=76', '/styles.css?v=76', '/manifest.json', '/logo.svg', '/logo-animated.svg', '/photo-notes-ai-paving-pro-animated.svg?v=76', '/icon.svg', '/zukor-logo.svg', '/send.js?v=74', '/vendor/html2canvas.min.js?v=59'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));

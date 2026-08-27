@@ -174,7 +174,7 @@ function renderApp() {
       <div class="app-header">
         <img class="zukor-corner-logo" src="/zukor-logo.svg" alt="Zukor AI" />
         <div class="brandrow">
-          <div class="brand ${isProClient() ? 'pro-edition-brand' : ''} ${isHoaClient()?'hoa-pro-brand':''}"><span class="product-suite-name">Photo Notes</span><span class="product-edition-name">${isProClient()?esc(productName()):''}</span></div>
+          <div class="brand ${isProClient() ? 'pro-edition-brand' : ''} ${isPavingClient()?'paving-pro-brand':''} ${isHoaClient()?'hoa-pro-brand':''}"><span class="product-suite-name">Photo Notes</span><span class="product-edition-name">${isProClient()?esc(productName()):''}</span></div>
         </div>
         <div class="header-controls">
           <div class="language-switch" aria-label="Language"><button type="button" data-language="en">EN</button><span> </span><button type="button" data-language="es">ES</button></div>
