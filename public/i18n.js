@@ -5,7 +5,7 @@
     'Email': 'Correo electrónico', 'Password': 'Contraseña', 'Sign In': 'Iniciar sesión',
     'Wrong email or password. Try again.': 'El correo electrónico o la contraseña no son correctos. Inténtelo de nuevo.',
     'Account menu': 'Menú de la cuenta', 'Photo Notes User': 'Usuario de Photo Notes',
-    'Asphalt Pro Plan': 'Plan Asfalto Pro', 'Basic Plan': 'Plan Básico', 'Admin Dashboard': 'Panel de administración', 'Sign Out': 'Cerrar sesión',
+    'Paving Pro': 'Pavimentación Pro', 'HOA Maintenance Pro': 'Mantenimiento HOA Pro', 'Concrete Pro': 'Concreto Pro', 'Basic Plan': 'Plan Básico', 'Admin Dashboard': 'Panel de administración', 'Sign Out': 'Cerrar sesión',
     'Photo Notes workflow': 'Flujo de trabajo de Photo Notes', 'Capture': 'Capturar', 'Organize': 'Organizar', 'Edit': 'Editar', 'Create': 'Crear', 'Send': 'Enviar',
     'Report an Issue': 'Reportar un problema', 'Report an issue': 'Reportar un problema', 'Close': 'Cerrar',
     'Tell us what happened, what you expected, and what you were doing when it happened.': 'Cuéntenos qué ocurrió, qué esperaba y qué estaba haciendo cuando ocurrió.',

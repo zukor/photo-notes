@@ -1,14 +1,16 @@
 const el = document.getElementById('app');
 // Phones/tablets open to Capture (grab a photo fast); computers open to the Library (review the photos).
 const IS_HANDHELD = (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) || window.innerWidth < 768;
-let state = { view: IS_HANDHELD ? 'capture' : 'organize', location: null, address: null, photoFile: null, kind: 'note', area: '', areas: [], jobs: [], jobId: '', hoaCompany:null, hoaMembers:[], hoaUnread:0, communities:[], communityId:'', groups: null, groupId: null, imgv: 0, plan: 'free', proType:'asphalt', me: null, ewrId: null, selectedIds: new Set() };
+let state = { view: IS_HANDHELD ? 'capture' : 'organize', location: null, address: null, photoFile: null, kind: 'note', area: '', areas: [], jobs: [], jobId: '', hoaCompany:null, hoaMembers:[], hoaUnread:0, communities:[], communityId:'', groups: null, groupId: null, imgv: 0, plan: 'free', proType:'paving', me: null, ewrId: null, selectedIds: new Set() };
 
 // Pro gating on the client. Mirrors isPro(user) on the server. Pro-only UI must
 // not render at all for free users (no disabled teaser).
 function isProClient() { return state.plan === 'pro'; }
 function isHoaClient(){return isProClient()&&state.proType==='hoa';}
-function isAsphaltClient(){return isProClient()&&!isHoaClient();}
-function featureOn(name) { return isAsphaltClient() && (!state.me || !state.me.feature_access || state.me.feature_access[name] !== false); }
+function isConcreteClient(){return isProClient()&&state.proType==='concrete';}
+function isPavingClient(){return isProClient()&&(state.proType==='paving'||state.proType==='asphalt');}
+function productName(){return isHoaClient()?'HOA Maintenance Pro':isConcreteClient()?'Concrete Pro':isPavingClient()?'Paving Pro':'Photo Notes';}
+function featureOn(name) { return isPavingClient() && (!state.me || !state.me.feature_access || state.me.feature_access[name] !== false); }
 function isMacClient() { return /Macintosh|MacIntel/.test(navigator.userAgent + ' ' + navigator.platform) && !isIOS(); }
 let recognizer = null;
 let currentGroupItems = [];
@@ -118,7 +120,7 @@ async function api(path, opts = {}) {
 async function boot() {
   const r = await api('/api/me');
   if (r.ok) {
-    try { const me = await r.json(); state.me = me; state.plan = me.plan || 'free'; state.proType=me.pro_type||'asphalt'; } catch (e) {}
+    try { const me = await r.json(); state.me = me; state.plan = me.plan || 'free'; state.proType=me.pro_type||'paving'; } catch (e) {}
     await Promise.all([loadAreas(),loadJobs(),loadHoaContext()]);
     restoreOfflineQueue();
     // Start loading documents as soon as the user signs in. By the time they
@@ -172,7 +174,7 @@ function renderApp() {
       <div class="app-header">
         <img class="zukor-corner-logo" src="/zukor-logo.svg" alt="Zukor AI" />
         <div class="brandrow">
-          <div class="brand ${isAsphaltClient() ? 'asphalt-pro-brand' : ''} ${isHoaClient()?'hoa-pro-brand':''}">Photo Notes${isHoaClient()?' HOA Maintenance Pro':isAsphaltClient()?' Asphalt Pro':''}</div>
+          <div class="brand ${isProClient() ? 'pro-edition-brand' : ''} ${isHoaClient()?'hoa-pro-brand':''}"><span class="product-suite-name">Photo Notes</span><span class="product-edition-name">${isProClient()?esc(productName()):''}</span></div>
         </div>
         <div class="header-controls">
           <div class="language-switch" aria-label="Language"><button type="button" data-language="en">EN</button><span> </span><button type="button" data-language="es">ES</button></div>
@@ -181,18 +183,18 @@ function renderApp() {
             <div class="profile-menu" id="profileMenu" hidden>
               <div class="profile-name">${esc((state.me && state.me.name) || 'Photo Notes User')}</div>
               <div class="profile-email">${esc((state.me && state.me.email) || '')}</div>
-              <div class="profile-plan">${isHoaClient()?'HOA Maintenance Pro':isAsphaltClient() ? 'Asphalt Pro Plan' : 'Basic Plan'}</div>
+              <div class="profile-plan">${isProClient()?esc(productName()):'Basic Plan'}</div>
               ${state.me && state.me.role === 'admin' ? '<a href="/admin">Admin Dashboard</a>' : ''}
               <button type="button" id="signout">Sign Out</button>
             </div>
           </div>
         </div>
       </div>
-      <div class="tabs workflow-tabs ${isHoaClient()?'hoa-tabs':''}" aria-label="Photo Notes workflow">
+      <div class="tabs workflow-tabs ${isHoaClient()?'hoa-tabs':isConcreteClient()?'concrete-tabs':''}" aria-label="Photo Notes workflow">
         <div class="tab ${['capture','camera-tools','ticket','camera-reader','alignment'].includes(state.view)?'on':''}" id="tabCapture">Capture</div>
-        <div class="tab ${['organize','hoa-visits','hoa-visit'].includes(state.view)?'on':''}" id="tabOrganize">${isHoaClient()?'Visits':'Organize'}</div>
+        <div class="tab ${['organize','hoa-visits','hoa-visit'].includes(state.view)?'on':''}" id="tabOrganize">${isHoaClient()?'Visits':isConcreteClient()?'Projects':'Organize'}</div>
         <div class="tab ${['edit','hoa-assets','hoa-asset'].includes(state.view)?'on':''}" id="tabEdit">${isHoaClient()?'Assets':'Edit'}</div>
-        <div class="tab ${['create','hoa-inspections'].includes(state.view)?'on':''}" id="tabCreate">${isHoaClient()?'Inspections':'Create'}</div>
+        <div class="tab ${['create','hoa-inspections'].includes(state.view)?'on':''}" id="tabCreate">${isHoaClient()?'Inspections':isConcreteClient()?'Reports':'Create'}</div>
         <div class="tab ${['send','hoa-maintenance'].includes(state.view)?'on':''}" id="tabSend">${isHoaClient()?'Records':'Send'}</div>
       </div>
       <div id="body"></div>
@@ -373,7 +375,7 @@ function renderCapture() {
   }
 }
 
-// ================= Asphalt Pro camera tools =================
+// ================= Paving Pro camera tools =================
 function cameraToolCard(title, description, action, id) {
   return `<article class="camera-tool-card"><div><strong>${title}</strong><span>${description}</span></div><button class="btn secondary slim" id="${id}">${action}</button></article>`;
 }
@@ -480,7 +482,7 @@ function chooseAlignmentBefore(id){alignmentBefore=alignmentCaptures.find(c=>c.i
 function showAlignmentComparison(){document.getElementById('alignBeforeImage').src=photoSrc(alignmentBefore.photo_path);document.getElementById('alignAfterImage').src=URL.createObjectURL(alignmentAfterFile);document.getElementById('alignCompareStep').hidden=false;const range=document.getElementById('alignOpacity'),after=document.getElementById('alignAfterImage');range.oninput=()=>after.style.opacity=String(Number(range.value)/100);after.style.opacity='.5';document.getElementById('alignRetake').onclick=()=>document.getElementById('alignCam').click();document.getElementById('alignSave').onclick=saveAlignedPair;document.getElementById('alignCompareStep').scrollIntoView({behavior:'smooth'});}
 async function saveAlignedPair(){if(!alignmentBefore||!alignmentAfterFile)return;const btn=document.getElementById('alignSave');btn.disabled=true;btn.textContent='Saving...';try{const fd=new FormData();fd.append('photo',alignmentAfterFile);fd.append('note',document.getElementById('alignNote').value.trim());fd.append('kind','note');fd.append('area_tags',JSON.stringify(alignmentBefore.area_tags||[]));const loc=await getLocationOnce();if(loc){fd.append('latitude',loc.lat);fd.append('longitude',loc.lng);}const cr=await api('/api/captures',{method:'POST',body:fd});if(!cr.ok)throw new Error();const after=await cr.json();const pr=await api('/api/pairs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({before_id:alignmentBefore.id,after_id:after.id})});if(!pr.ok)throw new Error();toast('Before and after pair saved');state.view='organize';renderApp();}catch(e){toast('Matched pair could not be saved');btn.disabled=false;btn.textContent='Save Matched Pair';}}
 
-// ================= Asphalt Pro ticket scanner =================
+// ================= Paving Pro ticket scanner =================
 let ticketPhotoFile = null, ticketDraft = null;
 function localDateValue() {
   const d = new Date();

@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash TEXT NOT NULL,
   role          TEXT NOT NULL DEFAULT 'user',
   plan          TEXT NOT NULL DEFAULT 'free',
-  pro_type      TEXT NOT NULL DEFAULT 'asphalt',
+  pro_type      TEXT NOT NULL DEFAULT 'paving',
   industry      TEXT,
   feature_access JSONB NOT NULL DEFAULT '{}'::jsonb,
   active        BOOLEAN NOT NULL DEFAULT true,
@@ -154,7 +154,7 @@ CREATE TABLE IF NOT EXISTS measure_zones (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS measure_zones_user_idx ON measure_zones (user_id);
--- Extra Work Record (Asphalt Pro): job-site documentation of out-of-scope work.
+-- Extra Work Record (Paving Pro): job-site documentation of out-of-scope work.
 -- Kept in its own tables (not captures) so it never mixes into the Library,
 -- map, pairing, zones, or normal exports.
 CREATE TABLE IF NOT EXISTS extra_work_records (
@@ -193,7 +193,7 @@ CREATE TABLE IF NOT EXISTS ewr_photos (
 CREATE INDEX IF NOT EXISTS ewr_user_idx ON extra_work_records (user_id);
 CREATE INDEX IF NOT EXISTS ewr_group_idx ON extra_work_records (group_id);
 CREATE INDEX IF NOT EXISTS ewr_photos_ewr_idx ON ewr_photos (ewr_id);
--- Asphalt delivery tickets (Asphalt Pro). A scan begins as a draft so the AI
+-- Asphalt delivery tickets (Paving Pro). A scan begins as a draft so the AI
 -- result can be reviewed and corrected before it counts toward daily tonnage.
 CREATE TABLE IF NOT EXISTS asphalt_tickets (
   id                     SERIAL PRIMARY KEY,
@@ -218,7 +218,7 @@ CREATE TABLE IF NOT EXISTS asphalt_tickets (
   updated_at             TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS asphalt_tickets_user_date_idx ON asphalt_tickets (user_id, ticket_date DESC, created_at DESC);
--- Camera readers (Asphalt Pro): equipment plates and gauges are photographed
+-- Camera readers (Paving Pro): equipment plates and gauges are photographed
 -- as source evidence, while their reviewed structured data is the useful record.
 CREATE TABLE IF NOT EXISTS camera_readings (
   id           SERIAL PRIMARY KEY,
@@ -491,7 +491,11 @@ async function init() {
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS photo_height INTEGER`);
   // Pro-tier: user plan ('free'|'pro'), default 'free' for all existing users.
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS plan TEXT NOT NULL DEFAULT 'free'`);
-  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS pro_type TEXT NOT NULL DEFAULT 'asphalt'`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS pro_type TEXT NOT NULL DEFAULT 'paving'`);
+  // Preserve every existing account and paving record while adopting the new
+  // public product identifier.
+  await pool.query(`UPDATE users SET pro_type = 'paving' WHERE pro_type = 'asphalt'`);
+  await pool.query(`ALTER TABLE users ALTER COLUMN pro_type SET DEFAULT 'paving'`);
   await pool.query(`ALTER TABLE hoa_communities ADD COLUMN IF NOT EXISTS assignment_rules JSONB NOT NULL DEFAULT '{}'::jsonb`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS feature_access JSONB NOT NULL DEFAULT '{}'::jsonb`);
   // Pro-tier: capture dimension fields (see SCHEMA above for semantics).

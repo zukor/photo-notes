@@ -18,6 +18,12 @@ const SESSION_SECRET = process.env.SESSION_SECRET || 'dev-secret-change-me';
 const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(__dirname, 'uploads');
 const COOKIE = 'pn_token';
 
+function normalizeProType(value) {
+  if (value === 'hoa') return 'hoa';
+  if (value === 'concrete') return 'concrete';
+  return 'paving';
+}
+
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
 const app = express();
@@ -34,7 +40,7 @@ app.use('/uploads', express.static(UPLOAD_DIR));
 
 // ---- auth ----
 function setSession(res, user) {
-  const token = jwt.sign({ id: user.id, email: user.email, name: user.name, role: user.role, plan: user.plan || 'free', pro_type:user.pro_type || 'asphalt' }, SESSION_SECRET, { expiresIn: '30d' });
+  const token = jwt.sign({ id: user.id, email: user.email, name: user.name, role: user.role, plan: user.plan || 'free', pro_type:normalizeProType(user.pro_type) }, SESSION_SECRET, { expiresIn: '30d' });
   res.cookie(COOKIE, token, {
     httpOnly: true,
     sameSite: 'lax',
@@ -513,7 +519,7 @@ app.post('/api/login', async (req, res) => {
     await pool.query(`UPDATE users SET last_login_at = now() WHERE id = $1`, [user.id]);
     setSession(res, user);
     logEvent(user.id, 'login', {});
-    res.json({ ok: true, name: user.name, role: user.role, plan: user.plan || 'free', pro_type:user.pro_type || 'asphalt' });
+    res.json({ ok: true, name: user.name, role: user.role, plan: user.plan || 'free', pro_type:normalizeProType(user.pro_type) });
   } catch (err) {
     console.error('[login]', err);
     res.status(500).json({ error: 'login failed' });
@@ -533,13 +539,13 @@ async function currentPlan(userId) {
     return rows.length && rows[0].plan === 'pro' ? 'pro' : 'free';
   } catch { return 'free'; }
 }
-async function currentProduct(userId){try{const r=(await pool.query(`SELECT plan,pro_type FROM users WHERE id=$1`,[userId])).rows[0];return r&&r.plan==='pro'?(r.pro_type==='hoa'?'hoa':'asphalt'):'basic';}catch(e){return 'basic';}}
+async function currentProduct(userId){try{const r=(await pool.query(`SELECT plan,pro_type FROM users WHERE id=$1`,[userId])).rows[0];return r&&r.plan==='pro'?normalizeProType(r.pro_type):'basic';}catch(e){return 'basic';}}
 
 const MANAGED_FEATURES = ['ticket_scanner', 'camera_readers', 'before_after', 'measurements', 'extra_work'];
 async function currentFeatureAccess(userId) {
   try {
     const row = (await pool.query(`SELECT plan,pro_type,feature_access FROM users WHERE id=$1`, [userId])).rows[0];
-    if (!row || row.plan !== 'pro' || row.pro_type==='hoa') return {};
+    if (!row || row.plan !== 'pro' || normalizeProType(row.pro_type)!=='paving') return {};
     const saved = row.feature_access && typeof row.feature_access === 'object' ? row.feature_access : {};
     return Object.fromEntries(MANAGED_FEATURES.map(k => [k, saved[k] !== false]));
   } catch { return {}; }
@@ -552,7 +558,7 @@ async function featureAllowed(userId, feature) {
 app.get('/api/me', requireAuth, async (req, res) => {
   const row = (await pool.query(`SELECT name,email,role,plan,pro_type,feature_access FROM users WHERE id=$1 AND active=true`, [req.user.id])).rows[0];
   if (!row) return res.status(401).json({ error:'not authenticated' });
-  res.json({ authed:true, name:row.name, role:row.role, email:row.email, plan:row.plan === 'pro' ? 'pro' : 'free', pro_type:row.pro_type==='hoa'?'hoa':'asphalt', feature_access:await currentFeatureAccess(req.user.id) });
+  res.json({ authed:true, name:row.name, role:row.role, email:row.email, plan:row.plan === 'pro' ? 'pro' : 'free', pro_type:normalizeProType(row.pro_type), feature_access:await currentFeatureAccess(req.user.id) });
 });
 
 async function hoaCompanyForUser(userId,create=false){let row=(await pool.query(`SELECT c.*,m.company_role FROM hoa_management_companies c JOIN hoa_company_members m ON m.company_id=c.id WHERE m.user_id=$1 ORDER BY c.id LIMIT 1`,[userId])).rows[0];if(!row&&create){const u=(await pool.query(`SELECT name FROM users WHERE id=$1`,[userId])).rows[0];const client=await pool.connect();try{await client.query('BEGIN');row=(await client.query(`INSERT INTO hoa_management_companies(name) VALUES($1) RETURNING *`,[`${u&&u.name||'HOA'} Management`])).rows[0];await client.query(`INSERT INTO hoa_company_members(company_id,user_id,company_role) VALUES($1,$2,'administrator')`,[row.id,userId]);await client.query('COMMIT');}catch(e){await client.query('ROLLBACK');throw e;}finally{client.release();}}return row||null;}
@@ -897,7 +903,7 @@ Use "warning" to flag problems such as "no reference object found", "ruler appea
   }
 });
 
-// ---- Asphalt delivery ticket scanner (Asphalt Pro) ----
+// ---- Asphalt delivery ticket scanner (Paving Pro) ----
 function ticketText(value, max = 200) {
   if (value == null) return null;
   const s = String(value).trim();
@@ -985,7 +991,7 @@ app.get('/api/asphalt-tickets', requireAuth, async (req, res) => {
   } catch (err) { console.error('[ticket.list]', err); res.status(500).json({ error: 'ticket list failed' }); }
 });
 
-// ---- Camera readers and scanners (Asphalt Pro) ----
+// ---- Camera readers and scanners (Paving Pro) ----
 const CAMERA_READER_TYPES = ['equipment_plate', 'gauge', 'plan_sketch', 'material_label', 'business_card'];
 function cameraReaderFields(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
@@ -2053,7 +2059,7 @@ app.get('/api/ewr/:id/export', requireAuth, async (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename="extra-work-record-${id}.pdf"`);
     const pdf = new PDFDocument({ size: 'LETTER', margin: 48 });
     pdf.pipe(res);
-    pdf.fontSize(11).fillColor('#000').text('Photo Notes — Asphalt Pro');
+    pdf.fontSize(11).fillColor('#000').text('Photo Notes — Paving Pro');
     pdf.moveDown(0.2);
     pdf.fontSize(20).fillColor('#000').text('Extra Work Record', { align: 'left' });
     pdf.fontSize(11).fillColor('#000').text(`Record No: EWR-${String(id).padStart(4, '0')}`);
@@ -2178,7 +2184,8 @@ app.post('/api/admin/users', requireAdmin, async (req, res) => {
     const name = b.name ? String(b.name).trim() : '';
     const industry = b.industry ? String(b.industry).trim() : null;
     const password = String(b.password || '');
-    const proType=b.product==='hoa'?'hoa':'asphalt',plan=b.product==='hoa'||b.product==='asphalt'?'pro':'free';
+    const requestedProduct = b.product === 'asphalt' ? 'paving' : b.product;
+    const proType=['paving','hoa','concrete'].includes(requestedProduct)?requestedProduct:'paving',plan=['paving','hoa','concrete'].includes(requestedProduct)?'pro':'free';
     if (name.split(/\s+/).filter(Boolean).length < 2) return res.status(400).json({ error: 'first and last name are required' });
     if (!email || !password) return res.status(400).json({ error: 'email and password are required' });
     const hash = bcrypt.hashSync(password, 10);
@@ -2215,7 +2222,7 @@ app.post('/api/admin/users/:id', requireAdmin, async (req, res) => {
     if (typeof b.active === 'boolean') { vals.push(b.active); sets.push(`active = $${vals.length}`); changed.push('active'); }
     if (b.role === 'admin' || b.role === 'user') { vals.push(b.role); sets.push(`role = $${vals.length}`); changed.push('role'); }
     if (b.plan === 'pro' || b.plan === 'free') { vals.push(b.plan); sets.push(`plan = $${vals.length}`); changed.push('plan'); }
-    if (b.pro_type === 'asphalt' || b.pro_type === 'hoa') { vals.push(b.pro_type); sets.push(`pro_type = $${vals.length}`); changed.push('pro_type'); }
+    if (['asphalt','paving','hoa','concrete'].includes(b.pro_type)) { vals.push(normalizeProType(b.pro_type)); sets.push(`pro_type = $${vals.length}`); changed.push('pro_type'); }
     if (b.feature_access && typeof b.feature_access === 'object' && !Array.isArray(b.feature_access)) {
       const clean={}; MANAGED_FEATURES.forEach(k=>{if(typeof b.feature_access[k]==='boolean')clean[k]=b.feature_access[k];});
       vals.push(JSON.stringify(clean));sets.push(`feature_access=$${vals.length}`);changed.push('feature_access');
