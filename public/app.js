@@ -412,6 +412,7 @@ function renderCapture() {
       <div class="status" id="gps"></div>
       <label>Address</label>
       <div class="status" id="addr"></div>
+      <button type="button" class="btn secondary slim" id="retryLocation">Retry location and address</button>
     </div>
 
     <label>Note</label>
@@ -436,6 +437,7 @@ function renderCapture() {
   document.getElementById('photoCam').onchange = (e) => { if (e.target.files[0]) onPhotoChosen(e.target.files[0]); };
   document.getElementById('photoLib').onchange = (e) => { if (e.target.files[0]) onPhotoChosen(e.target.files[0]); };
   document.getElementById('save').onclick = saveCapture;
+  document.getElementById('retryLocation').onclick = () => acquireLocation(true);
   if(isHoaClient()){document.getElementById('hoaCommunity').onchange=e=>state.communityId=e.target.value;document.getElementById('hoaType').onchange=e=>document.getElementById('hoaDirectedWrap').style.display=e.target.value==='information'?'block':'none';}else{
   document.getElementById('addarea').onclick = addArea;
   document.getElementById('newarea').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addArea(); } });
@@ -737,32 +739,51 @@ async function confirmPhotoQuality(){
   return confirm(uiT('Photo quality warning:')+' '+warningList+'.\n\n'+uiT('Choose OK to save this photo anyway, or Cancel to retake it.'));
 }
 
-function acquireLocation() {
-  if (state._locationPromise) return state._locationPromise;
+function browserPosition(options) {
+  return new Promise((resolve,reject) => navigator.geolocation.getCurrentPosition(resolve,reject,options));
+}
+
+function acquireLocation(force=false) {
+  if (state._locationPromise && !force) return state._locationPromise;
   const gps = document.getElementById('gps');
   const addr = document.getElementById('addr');
+  const retry = document.getElementById('retryLocation');
+  if (force) { state.location=null; state.address=null; state._locationPromise=null; }
   if (gps) gps.textContent = 'Getting location...';
-  if (addr) addr.textContent = '';
+  if (addr) addr.textContent = 'Waiting for GPS coordinates...';
+  if (retry) retry.disabled = true;
   if (!navigator.geolocation) {
     if (gps) gps.textContent = 'Location not available on this device.';
+    if (addr) addr.textContent = 'You can still save the photo without an address.';
+    if (retry) retry.disabled = false;
     state._locationPromise = Promise.resolve();
     return state._locationPromise;
   }
-  state._locationPromise = new Promise(resolve => navigator.geolocation.getCurrentPosition(
-    async (pos) => {
+  state._locationPromise = (async () => {
+    let pos;
+    try {
+      pos = await browserPosition({ enableHighAccuracy:true, timeout:12000, maximumAge:0 });
+    } catch (firstError) {
+      if (firstError && firstError.code === 1) throw firstError;
+      // Android browsers can time out while enabling precise GPS immediately
+      // after permission is granted. Retry with a recent/network location.
+      pos = await browserPosition({ enableHighAccuracy:false, timeout:15000, maximumAge:60000 });
+    }
+    try {
       state.location = { lat: pos.coords.latitude, lng: pos.coords.longitude };
       if (gps) gps.textContent = state.location.lat.toFixed(5) + ', ' + state.location.lng.toFixed(5);
       if (addr) addr.textContent = 'Looking up address...';
       try {
         const r = await api(`/api/geocode?lat=${state.location.lat}&lng=${state.location.lng}`);
-        if (r.ok) { const d = await r.json(); state.address = d.address || null; if (addr) addr.textContent = d.address || 'Address not found'; }
-        else if (addr) addr.textContent = 'Address lookup failed';
-      } catch (e) { if (addr) addr.textContent = 'Address lookup failed'; }
-      resolve();
-    },
-    (err) => { if (gps) gps.textContent = 'Location blocked. Allow location for this site to tag photos.'; resolve(); },
-    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-  ));
+        if (r.ok) { const d = await r.json(); state.address = d.address || null; if (addr) addr.textContent = d.address || 'Exact address not found. GPS coordinates will still be saved.'; }
+        else if (addr) addr.textContent = 'Address lookup failed. GPS coordinates will still be saved.';
+      } catch (e) { if (addr) addr.textContent = 'Address lookup failed. GPS coordinates will still be saved.'; }
+    } finally { if (retry) retry.disabled=false; }
+  })().catch(err => {
+    if (gps) gps.textContent = err && err.code===1 ? 'Location permission is blocked for this site.' : 'Location timed out or is unavailable.';
+    if (addr) addr.textContent = 'Tap Retry location and address, or save without an address.';
+    if (retry) retry.disabled=false;
+  });
   return state._locationPromise;
 }
 
