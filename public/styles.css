@@ -48,10 +48,12 @@ textarea { min-height: 96px; resize: vertical; }
    Extra Work Record heading (it has an inline font-size). */
 .brand:not([style*="font-size"]) {
   font-size: 0; line-height: 0; height: 46px;
-  background-image: url('/logo-animated.svg'), url('/logo.svg');
-  background-position: center, center;
-  background-size: contain, contain;
-  background-repeat: no-repeat, no-repeat;
+  /* Use one asset only. Multiple background URLs are composited, not used as
+     fallbacks, and can expose overlapping logo revisions from mobile caches. */
+  background-image: url('/logo-animated.svg?v=83');
+  background-position: center;
+  background-size: contain;
+  background-repeat: no-repeat;
   margin: 10px auto 6px;
 }
 .brandrow { display:flex; justify-content:center; align-items:center; gap:8px; }
