@@ -17,6 +17,14 @@ test('only administrators see the compact edition switcher',()=>{
   for(const label of ['PNAI','PP','HMP','CP'])assert.match(app,new RegExp(`>${label}<`));
 });
 
+test('HOA Maintenance Pro uses its edition logo',()=>{
+  const css=fs.readFileSync(path.join(root,'public','styles.css'),'utf8');
+  const logo=fs.readFileSync(path.join(root,'public','photo-notes-ai-hoa-maintenance-pro-animated.svg'),'utf8');
+  assert.match(css,/hoa-pro-brand[\s\S]*photo-notes-ai-hoa-maintenance-pro-animated\.svg/);
+  assert.match(logo,/HOA MAINTENANCE PRO/);
+  assert.match(logo,/aria-label="Photo Notes AI HOA Maintenance Pro logo"/);
+});
+
 test('Paving classification covers broader visible pavement failures',()=>{
   for(const defect of ['joint_failure','utility_cut_failure','surface_deformation','drainage_damage','base_failure'])assert.match(server,new RegExp(defect));
 });
