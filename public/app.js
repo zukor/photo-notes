@@ -15,6 +15,9 @@ function measurementOn(){return isConcreteClient()||featureOn('measurements');}
 function beforeAfterOn(){return isConcreteClient()||featureOn('before_after');}
 function isMacClient() { return /Macintosh|MacIntel/.test(navigator.userAgent + ' ' + navigator.platform) && !isIOS(); }
 let recognizer = null;
+let dictationActive = false;
+let dictationRestartTimer = null;
+let dictationBase = '';
 let currentGroupItems = [];
 let currentGroup = null;
 
@@ -788,6 +791,9 @@ function acquireLocation(force=false) {
 }
 
 function cleanupDictation() {
+  if (dictationRestartTimer) clearTimeout(dictationRestartTimer);
+  dictationRestartTimer = null;
+  dictationActive = false;
   recognizer = null;
   const btn = document.getElementById('dictate');
   if (btn) { btn.textContent = 'Record Note'; btn.classList.remove('on'); }
@@ -809,7 +815,14 @@ async function toggleDictation() {
     toast('Tap the microphone key on your keyboard, then talk');
     return;
   }
-  if (recognizer) { try { recognizer.stop(); } catch (e) {} return; }
+  if (dictationActive) {
+    dictationActive = false;
+    if (dictationRestartTimer) clearTimeout(dictationRestartTimer);
+    dictationRestartTimer = null;
+    if (recognizer) { try { recognizer.stop(); } catch (e) {} }
+    cleanupDictation();
+    return;
+  }
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
     toast('This browser cannot access the microphone. Type the note or use the keyboard microphone');
     return;
@@ -824,47 +837,67 @@ async function toggleDictation() {
     toast('Microphone access is off for Photo Notes. Allow it for this website, then tap Record Note again');
     return;
   }
-  const ios = isIOS();
-  recognizer = new SR();
-  recognizer.lang = uiSpeechLanguage();
-  // Safari ends each recording as one phrase, but interim results let people
-  // see their words while they are speaking instead of waiting until Stop.
-  recognizer.continuous = ios ? false : true;
-  recognizer.interimResults = true;
-  let base = noteEl ? noteEl.value : '';
-  if (base && !base.endsWith(' ')) base += ' ';
+  dictationActive = true;
+  dictationBase = noteEl ? noteEl.value.trim() : '';
+  if (dictationBase) dictationBase += ' ';
   if (btn) { btn.textContent = 'Recording... tap to stop'; btn.classList.add('on'); }
-  recognizer.onresult = (ev) => {
-    let finalText = '', interim = '';
-    for (let i = ev.resultIndex; i < ev.results.length; i++) {
-      const t = ev.results[i][0].transcript;
-      if (ev.results[i].isFinal) finalText += t; else interim += t;
-    }
-    if (finalText) base += finalText + ' ';
-    if (noteEl) { noteEl.value = (base + interim).trimStart(); state._note = noteEl.value; }
-    // Pro: pull dimension phrases out of the spoken text and prefill the fields.
-    if (finalText && isProClient()) applyExtraction(base);
+  startDictationSession(SR);
+}
+
+function startDictationSession(SR) {
+  if (!dictationActive) return;
+  const noteEl = document.getElementById('note');
+  const session = new SR();
+  recognizer = session;
+  session.lang = uiSpeechLanguage();
+  session.continuous = !isIOS();
+  session.interimResults = true;
+  let sessionText = '';
+  session.onresult = (ev) => {
+    // Rebuild the current recognition session from its indexed result slots.
+    // Android may revise a cumulative phrase and mark it final repeatedly;
+    // appending each event produces duplicated/spammed words.
+    const parts=[];
+    for (let i=0;i<ev.results.length;i++) parts.push(ev.results[i][0].transcript.trim());
+    sessionText=parts.filter(Boolean).join(' ').trim();
+    if (noteEl) { noteEl.value=(dictationBase+sessionText).trimStart(); state._note=noteEl.value; }
+    if (isProClient()) applyExtraction(dictationBase+sessionText);
   };
-  recognizer.onerror = (e) => {
+  session.onerror = (e) => {
     const err = e && e.error;
     if (err === 'not-allowed' || err === 'service-not-allowed') {
       toast('Allow microphone access for this site, then tap Record Note again');
+      dictationActive=false;
     } else if (err === 'no-speech') {
-      toast('Did not catch that. Tap Record Note and speak again');
+      // Android often ends a session before the user starts talking. onend
+      // restarts it while the Record button remains active.
     } else if (err === 'audio-capture') {
       toast('The microphone is unavailable. Close any other app using it, then try again');
+      dictationActive=false;
     } else if (err === 'network') {
       toast('Speech recognition could not connect. Check your internet connection and try again');
+      dictationActive=false;
     } else if (err === 'aborted') {
       // Stopping after speech can report "aborted" on Safari even though the
       // final result has already been delivered. No error message is needed.
     } else {
       toast('Recording stopped unexpectedly. Tap Record Note to try again');
+      dictationActive=false;
     }
-    cleanupDictation();
   };
-  recognizer.onend = () => { cleanupDictation(); };
-  try { recognizer.start(); }
+  session.onend = () => {
+    if (recognizer === session) recognizer=null;
+    if (sessionText) {
+      dictationBase=(dictationBase+sessionText).trim();
+      if (dictationBase) dictationBase+=' ';
+    }
+    if (dictationActive) {
+      const btn=document.getElementById('dictate');
+      if (btn) btn.textContent='Listening... tap to stop';
+      dictationRestartTimer=setTimeout(()=>startDictationSession(SR),300);
+    } else cleanupDictation();
+  };
+  try { session.start(); }
   catch (e) { cleanupDictation(); toast('Recording could not start. Tap Record Note to try again'); }
 }
 

@@ -32,7 +32,14 @@ test('Tensor Man is hidden at phone and small-tablet widths and cannot cover con
 
 test('new app and style versions are cache-busted', () => {
   assert.match(index, /styles\.css\?v=83/);
-  assert.match(index, /app\.js\?v=85/);
+  assert.match(index, /app\.js\?v=86/);
+});
+
+test('Android note dictation replaces revised results and restarts after silence', () => {
+  assert.match(app, /for \(let i=0;i<ev\.results\.length;i\+\+\) parts\.push/);
+  assert.doesNotMatch(app, /if \(finalText\) base \+= finalText/);
+  assert.match(app, /dictationRestartTimer=setTimeout\(\(\)=>startDictationSession\(SR\),300\)/);
+  assert.match(app, /Listening\.\.\. tap to stop/);
 });
 
 test('Android location lookup retries and remains recoverable', () => {
