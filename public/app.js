@@ -178,6 +178,7 @@ function renderApp() {
         <div class="brandrow">
           <div class="brand ${isProClient() ? 'pro-edition-brand' : ''} ${isPavingClient()?'paving-pro-brand':''} ${isConcreteClient()?'concrete-pro-brand':''} ${isHoaClient()?'hoa-pro-brand':''}"><span class="product-suite-name">Photo Notes</span><span class="product-edition-name">${isProClient()?esc(productName()):''}</span></div>
         </div>
+        ${state.me&&state.me.role==='admin'?`<div class="edition-switcher" aria-label="Switch Photo Notes edition"><button data-edition="basic" class="${!isProClient()?'active':''}">PNAI</button><button data-edition="paving" class="${isPavingClient()?'active':''}">PP</button><button data-edition="hoa" class="${isHoaClient()?'active':''}">HMP</button><button data-edition="concrete" class="${isConcreteClient()?'active':''}">CP</button></div>`:''}
         <div class="header-controls">
           <div class="language-switch" aria-label="Language"><button type="button" data-language="en">EN</button><span> </span><button type="button" data-language="es">ES</button></div>
           <div class="account-menu-wrap">
@@ -230,6 +231,7 @@ function renderApp() {
     }
   };
   document.getElementById('signout').onclick = async () => { await api('/api/logout', { method: 'POST' }); state.me = null; renderLogin(); };
+  document.querySelectorAll('[data-edition]').forEach(button=>button.onclick=async()=>{if(button.classList.contains('active'))return;document.querySelectorAll('[data-edition]').forEach(b=>b.disabled=true);const r=await api('/api/admin/switch-edition',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({edition:button.dataset.edition})});if(!r.ok){toast('Edition could not be switched');return renderApp();}state.view=IS_HANDHELD?'capture':'organize';state.photoFile=null;state._note='';await boot();toast('Edition switched');});
   const issueFab = document.getElementById('issueFab'); if (issueFab) issueFab.onclick = openIssueReporter;
   document.getElementById('tabCapture').onclick = () => { state.view='capture'; renderApp(); };
   document.getElementById('tabOrganize').onclick = () => { state.view=isHoaClient()?'hoa-visits':'organize'; renderApp(); };
@@ -392,7 +394,7 @@ function renderCameraTools() {
     <section class="camera-tool-group">
       <div class="camera-tool-heading"><strong>Document Scanners</strong><span>Turn photographed documents into searchable, reviewable information.</span></div>
       <div class="camera-tool-grid">
-        ${featureOn('ticket_scanner') ? cameraToolCard('Asphalt Ticket Scanner','Read delivery-ticket details and calculate saved daily tonnage.','Scan Ticket','toolTicket') : ''}
+        ${featureOn('ticket_scanner') ? cameraToolCard('Paving Delivery Ticket Scanner','Read asphalt and paving delivery-ticket details and calculate saved daily tonnage.','Scan Ticket','toolTicket') : ''}
         ${featureOn('camera_readers') ? cameraToolCard('Plan or Sketch Scanner','Read visible project, sheet, revision, scale, dimension, and field-note information without estimating missing details.','Scan Plan or Sketch','toolPlan') : ''}
         ${featureOn('camera_readers') ? cameraToolCard('Business Card Scanner','Read contact and company details from a photographed business card.','Scan Business Card','toolCard') : ''}
       </div>
@@ -497,7 +499,7 @@ function renderTicketScanner() {
   body.className = 'workflow-ticket';
   body.innerHTML = `
     <button class="backlink" id="ticketBack">‹ Back to Camera Tools</button>
-    <div class="workflow-intro"><strong>Asphalt Ticket Scanner</strong><span>Take a clear, straight-on photo of the entire delivery ticket. Review every field before saving.</span></div>
+    <div class="workflow-intro"><strong>Paving Delivery Ticket Scanner</strong><span>Take a clear, straight-on photo of the entire asphalt or paving-material delivery ticket. Review every field before saving.</span></div>
     <div class="ticket-scan-panel">
       <div class="formhead">1. Photograph the Ticket</div>
       <div class="row">
@@ -1513,6 +1515,8 @@ const DEFECT_OPTIONS = [
   ['pothole', 'Pothole'], ['alligator_cracking', 'Alligator Cracking'],
   ['transverse_cracking', 'Transverse Cracking'], ['longitudinal_cracking', 'Longitudinal Cracking'],
   ['rutting', 'Rutting'], ['raveling', 'Raveling'], ['edge_cracking', 'Edge Cracking'],
+  ['joint_failure','Joint Failure'], ['utility_cut_failure','Utility Cut Failure'],
+  ['surface_deformation','Surface Deformation'], ['drainage_damage','Drainage Damage'], ['base_failure','Base Failure'],
   ['other', 'Other'], ['none', 'No Defect'],
 ];
 function defectLabelClient(t) { const f = DEFECT_OPTIONS.find(o => o[0] === t); return f ? f[1] : 'Other'; }

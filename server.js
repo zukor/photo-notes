@@ -71,6 +71,20 @@ registerStripeRoutes(app, { pool, requireAuth, requireAdmin });
 // for free users.
 function isPro(user) { return !!(user && user.plan === 'pro'); }
 
+app.post('/api/admin/switch-edition', requireAdmin, async (req,res) => {
+  try {
+    const edition=String(req.body&&req.body.edition||'');
+    const choices={basic:{plan:'free',pro_type:'paving'},paving:{plan:'pro',pro_type:'paving'},hoa:{plan:'pro',pro_type:'hoa'},concrete:{plan:'pro',pro_type:'concrete'}};
+    const choice=choices[edition];
+    if(!choice)return res.status(400).json({error:'invalid edition'});
+    const user=(await pool.query(`UPDATE users SET plan=$1,pro_type=$2 WHERE id=$3 AND role='admin' RETURNING *`,[choice.plan,choice.pro_type,req.user.id])).rows[0];
+    if(!user)return res.status(404).json({error:'administrator not found'});
+    setSession(res,user);
+    await logEvent(req.user.id,'admin_edition_switch',{edition});
+    res.json({ok:true,plan:choice.plan,pro_type:choice.pro_type});
+  } catch(e){console.error('[admin.switch-edition]',e);res.status(500).json({error:'edition switch failed'});}
+});
+
 // ---- Pro dimension helpers ----
 // Compute area in square feet from canonical inch measurements and shape.
 // rectangle: L x W; circle: L x W x 0.785; irregular: L x W x 0.85. Result is
@@ -171,14 +185,15 @@ async function visionJSON(localPath, prompt, opts = {}) {
 }
 
 // ---- defect classification vocabulary + severity presentation ----
-const DEFECT_TYPES = ['pothole', 'alligator_cracking', 'transverse_cracking', 'longitudinal_cracking', 'rutting', 'raveling', 'edge_cracking', 'other', 'none'];
+const DEFECT_TYPES = ['pothole', 'alligator_cracking', 'transverse_cracking', 'longitudinal_cracking', 'rutting', 'raveling', 'edge_cracking', 'joint_failure', 'utility_cut_failure', 'surface_deformation', 'drainage_damage', 'base_failure', 'other', 'none'];
 const SEVERITIES = ['low', 'medium', 'high'];
 const SEVERITY_COLOR = { low: '#1b7a3d', medium: '#b36b00', high: '#b3261e' };
 function defectLabel(t) {
   const map = {
     pothole: 'Pothole', alligator_cracking: 'Alligator Cracking', transverse_cracking: 'Transverse Cracking',
     longitudinal_cracking: 'Longitudinal Cracking', rutting: 'Rutting', raveling: 'Raveling',
-    edge_cracking: 'Edge Cracking', other: 'Other', none: 'No Defect',
+    edge_cracking: 'Edge Cracking', joint_failure:'Joint Failure', utility_cut_failure:'Utility Cut Failure',
+    surface_deformation:'Surface Deformation', drainage_damage:'Drainage Damage', base_failure:'Base Failure', other: 'Other', none: 'No Defect',
   };
   return map[t] || 'Other';
 }
@@ -204,6 +219,11 @@ const SCORE_DEDUCTIONS = {
   longitudinal_cracking:{ high: 5,  medium: 3, low: 2 },
   edge_cracking:        { high: 5,  medium: 3, low: 2 },
   raveling:             { high: 4,  medium: 3, low: 2 },
+  joint_failure:        { high: 7,  medium: 5, low: 3 },
+  utility_cut_failure:  { high: 8,  medium: 5, low: 3 },
+  surface_deformation:  { high: 8,  medium: 5, low: 3 },
+  drainage_damage:      { high: 9,  medium: 6, low: 3 },
+  base_failure:         { high: 12, medium: 8, low: 5 },
   other:                { high: 0,  medium: 0, low: 0 },
   none:                 { high: 0,  medium: 0, low: 0 },
 };
@@ -890,7 +910,7 @@ app.post('/api/measure', requireAuth, upload.single('photo'), async (req, res) =
       : refType === 'tape_25ft' ? 'a tape measure extended to a known length'
       : 'a reference object';
     const prompt =
-`You are measuring a pavement defect for an asphalt contractor. The photo contains ${refLabel} placed in frame as a scale reference. Its exact real-world length is ${refLenIn} inches.
+`You are measuring a pavement defect for a paving contractor. The photo contains ${refLabel} placed in frame as a scale reference. Its exact real-world length is ${refLenIn} inches.
 Locate the reference object, use its known length to establish the image scale, then estimate the primary defect's length, width, and (only if judgeable from shadow/relief) depth, all in inches. Also give the defect's overall shape.
 Respond with ONLY a JSON object, no prose, no markdown, with exactly these keys:
 {"length_in": number, "width_in": number, "depth_in": number or null, "shape": "rectangle"|"circle"|"irregular", "confidence": "high"|"medium"|"low", "warning": string or null}
@@ -1024,7 +1044,7 @@ function cameraReaderFields(value) {
   return out;
 }
 function cameraReaderPrompt(type) {
-  if (type === 'equipment_plate') return `You are reading a photographed equipment identification or data plate for an asphalt contractor. Extract only information visibly printed on the plate. Never guess. Respond with ONLY JSON using exactly these keys: {"manufacturer":string|null,"model":string|null,"serial_number":string|null,"year":string|null,"equipment_type":string|null,"specifications":string|null,"confidence":"high"|"medium"|"low"}. Preserve identifiers exactly. Put other useful rated capacities, voltage, power, weight, or engine information in specifications as a concise line. Use null when absent or unreadable.`;
+  if (type === 'equipment_plate') return `You are reading a photographed equipment identification or data plate for a paving contractor. Extract only information visibly printed on the plate. Never guess. Respond with ONLY JSON using exactly these keys: {"manufacturer":string|null,"model":string|null,"serial_number":string|null,"year":string|null,"equipment_type":string|null,"specifications":string|null,"confidence":"high"|"medium"|"low"}. Preserve identifiers exactly. Put other useful rated capacities, voltage, power, weight, or engine information in specifications as a concise line. Use null when absent or unreadable.`;
   if (type === 'gauge') return `You are reading a photographed gauge, meter, scale display, hour meter, fuel display, thermometer, or other job-site instrument. Extract only what is visibly shown. Never guess. Respond with ONLY JSON using exactly these keys: {"instrument_type":string|null,"reading":string|null,"unit":string|null,"equipment_name":string|null,"observed_at":string|null,"notes":string|null,"confidence":"high"|"medium"|"low"}. Preserve the displayed value and decimal point exactly. Describe ambiguity in notes. Use null when absent or unreadable.`;
   if (type === 'material_label') return `You are reading a photographed construction-material container label. Extract only information visibly printed on the label. Never infer missing product data. Respond with ONLY JSON using exactly these keys: {"product_name":string|null,"manufacturer":string|null,"product_code":string|null,"lot_number":string|null,"quantity":string|null,"manufactured_date":string|null,"expiration_date":string|null,"instructions":string|null,"warnings":string|null,"confidence":"high"|"medium"|"low"}. Preserve codes, dates, quantities, and units exactly. Summarize only visible instructions and warnings. Use null when absent or unreadable.`;
   if (type === 'business_card') return `You are reading a photographed business card. Extract only information visibly printed on the card. Never guess or supplement it. Respond with ONLY JSON using exactly these keys: {"name":string|null,"job_title":string|null,"company":string|null,"phone":string|null,"email":string|null,"address":string|null,"website":string|null,"confidence":"high"|"medium"|"low"}. Preserve spelling, phone extensions, and email addresses exactly. Use null when absent or unreadable.`;
@@ -1224,7 +1244,7 @@ async function classifyCapture(userId, id) {
   const local = localPhoto(row.photo_path);
   if (!local) return { error: 'no_photo' };
   const prompt =
-`You are analyzing a pavement photo for an asphalt contractor. Classify the primary defect as one of: pothole, alligator_cracking, transverse_cracking, longitudinal_cracking, rutting, raveling, edge_cracking, other, none.
+`You are analyzing a pavement photo for a paving contractor. Classify the primary visible defect as one of: pothole, alligator_cracking, transverse_cracking, longitudinal_cracking, rutting, raveling, edge_cracking, joint_failure, utility_cut_failure, surface_deformation, drainage_damage, base_failure, other, none.
 Rate severity as low, medium, or high using visible width, depth, and extent cues.
 Respond with ONLY a JSON object, no prose, no markdown, with exactly these keys:
 {"defect_type": one of the list above, "severity": "low"|"medium"|"high", "confidence": "high"|"medium"|"low", "rationale": "one sentence"}`;
