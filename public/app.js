@@ -308,7 +308,7 @@ function renderTensorHelp() {
   const topics = TENSOR_HELP_TOPICS[page];
   body.insertAdjacentHTML('afterbegin', `<div class="tensor-help-slot" data-html2canvas-ignore="true">
     <div class="tensor-help-widget">
-      <button class="tensor-help-badge" type="button" aria-label="Help with this page" aria-expanded="false"><img src="/tensor-man.svg" alt="" aria-hidden="true"><span>Tensor Man</span></button>
+      <button class="tensor-help-badge" type="button" aria-label="Help with this page" aria-expanded="false"><img src="/tensor-man-badge.png" srcset="/tensor-man-badge.png 1x, /tensor-man-badge@2x.png 2x" alt="" aria-hidden="true"><span>Tensor Man</span></button>
       <section class="tensor-help-panel" hidden aria-label="Tensor Man page help">
         <h2>Need help with this page?</h2>
         <div class="tensor-topic-list">${topics.map((topic, index)=>`<button type="button" data-tensor-topic="${index}">${esc(topic[0])}</button>`).join('')}</div>
@@ -321,9 +321,15 @@ function renderTensorHelp() {
   </div>`);
   const widget = body.querySelector('.tensor-help-widget');
   const badge = widget.querySelector('.tensor-help-badge');
+  const badgeArt = badge.querySelector('img');
   const panel = widget.querySelector('.tensor-help-panel');
-  const closePanel = () => { panel.hidden = true; badge.setAttribute('aria-expanded', 'false'); };
-  badge.onclick = () => { const opening = panel.hidden; panel.hidden = !opening; badge.setAttribute('aria-expanded', String(opening)); };
+  const setTensorArt = stateName => { badgeArt.src = `/tensor-man-${stateName}.png`; badgeArt.srcset = `/tensor-man-${stateName}.png 1x, /tensor-man-${stateName}@2x.png 2x`; };
+  const closePanel = () => { panel.hidden = true; badge.setAttribute('aria-expanded', 'false'); setTensorArt('badge'); };
+  badge.onmouseenter = () => setTensorArt('hover');
+  badge.onmouseleave = () => setTensorArt(panel.hidden ? 'badge' : 'open');
+  badge.onfocus = () => setTensorArt('hover');
+  badge.onblur = () => setTensorArt(panel.hidden ? 'badge' : 'open');
+  badge.onclick = () => { const opening = panel.hidden; panel.hidden = !opening; badge.setAttribute('aria-expanded', String(opening)); setTensorArt(opening ? 'open' : 'badge'); };
   widget.querySelectorAll('[data-tensor-topic]').forEach(button => button.onclick = () => {
     const answer = widget.querySelector('.tensor-topic-answer');
     widget.querySelectorAll('[data-tensor-topic]').forEach(item => item.classList.toggle('active', item === button));

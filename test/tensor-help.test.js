@@ -18,6 +18,8 @@ test('Tensor Man has accessible controls, secondary chat fallback, and per-page 
   assert.match(app, /Need help with this page\?/);
   assert.match(app, /Ask Tensor Man something else/);
   assert.match(app, /Chat help is coming soon\./);
+  assert.match(app, /badge\.onmouseenter = \(\) => setTensorArt\('hover'\)/);
+  assert.match(app, /setTensorArt\(opening \? 'open' : 'badge'\)/);
   assert.match(app, /pn_tensor_help_hidden_\$\{page\}/);
   assert.match(app, /Hide help on this page/);
   assert.match(app, /Not now/);
@@ -29,6 +31,6 @@ test('Tensor Man is hidden at phone and small-tablet widths and cannot cover con
 });
 
 test('new app and style versions are cache-busted', () => {
-  assert.match(index, /styles\.css\?v=81/);
-  assert.match(index, /app\.js\?v=81/);
+  assert.match(index, /styles\.css\?v=82/);
+  assert.match(index, /app\.js\?v=82/);
 });
