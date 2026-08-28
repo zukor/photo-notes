@@ -349,6 +349,7 @@ function renderTensorHelp() {
 
 // ================= Basic issue reporter =================
 let issueScreenshotBlob = null, issuePageName = '', issueRecognizer = null;
+let issueDictationActive = false, issueDictationBase = '', issueDictationRestartTimer = null;
 const issuePageLabels = { capture:'Capture', organize:'Organize', edit:'Edit', create:'Create', send:'Send', map:'Job Site Map' };
 async function openIssueReporter() {
   const fab=document.getElementById('issueFab'); if(fab){fab.disabled=true;fab.textContent='Capturing...';}
@@ -368,19 +369,24 @@ async function openIssueReporter() {
   description.focus();
   if(fab){fab.disabled=false;fab.textContent='Report an Issue';}
 }
-function closeIssueReporter(){if(issueRecognizer){try{issueRecognizer.stop();}catch(e){}}const m=document.getElementById('issueModal');if(m)m.hidden=true;issueScreenshotBlob=null;issueRecognizer=null;}
+function closeIssueReporter(){issueDictationActive=false;if(issueDictationRestartTimer)clearTimeout(issueDictationRestartTimer);issueDictationRestartTimer=null;if(issueRecognizer){try{issueRecognizer.stop();}catch(e){}}const m=document.getElementById('issueModal');if(m)m.hidden=true;issueScreenshotBlob=null;issueRecognizer=null;}
 async function toggleIssueDictation(){
   const ta=document.getElementById('issueDescription'),btn=document.getElementById('issueRecord'),SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   if(!SR){ta.focus();toast('Use the microphone key on your keyboard to dictate');return;}
-  if(issueRecognizer){try{issueRecognizer.stop();}catch(e){}return;}
+  if(issueDictationActive){issueDictationActive=false;if(issueDictationRestartTimer)clearTimeout(issueDictationRestartTimer);issueDictationRestartTimer=null;if(issueRecognizer){try{issueRecognizer.stop();}catch(e){}}btn.textContent='Speak Description';btn.classList.remove('on');return;}
   try{if(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia){const stream=await navigator.mediaDevices.getUserMedia({audio:true});stream.getTracks().forEach(t=>t.stop());}}catch(e){toast('Allow microphone access for this website, then try again');return;}
-  issueRecognizer=new SR();issueRecognizer.lang=uiSpeechLanguage();issueRecognizer.continuous=!isIOS();issueRecognizer.interimResults=true;let base=ta.value.trim();if(base)base+=' ';btn.textContent='Recording... tap to stop';btn.classList.add('on');
-  issueRecognizer.onresult=e=>{let finalText='',interim='';for(let i=e.resultIndex;i<e.results.length;i++){const t=e.results[i][0].transcript;if(e.results[i].isFinal)finalText+=t;else interim+=t;}if(finalText)base+=finalText+' ';ta.value=(base+interim).trimStart();};
-  issueRecognizer.onerror=e=>{if(e&&e.error!=='aborted'&&e.error!=='no-speech')toast('Recording stopped. You can continue by typing or try again');};
-  issueRecognizer.onend=()=>{issueRecognizer=null;const b=document.getElementById('issueRecord');if(b){b.textContent='Speak Description';b.classList.remove('on');}};
-  try{issueRecognizer.start();}catch(e){issueRecognizer=null;btn.textContent='Speak Description';btn.classList.remove('on');}
+  issueDictationActive=true;issueDictationBase=ta.value.trim();if(issueDictationBase)issueDictationBase+=' ';btn.textContent='Recording... tap to stop';btn.classList.add('on');startIssueDictationSession(SR);
+}
+function startIssueDictationSession(SR){
+  if(!issueDictationActive)return;
+  const ta=document.getElementById('issueDescription'),session=new SR();issueRecognizer=session;session.lang=uiSpeechLanguage();session.continuous=!isIOS();session.interimResults=true;let sessionText='';
+  session.onresult=e=>{const parts=[];for(let i=0;i<e.results.length;i++)parts.push(e.results[i][0].transcript.trim());sessionText=parts.filter(Boolean).join(' ').trim();if(ta)ta.value=(issueDictationBase+sessionText).trimStart();};
+  session.onerror=e=>{const err=e&&e.error;if(err==='not-allowed'||err==='service-not-allowed'){toast('Allow microphone access for this website, then try again');issueDictationActive=false;}else if(err==='audio-capture'||err==='network'){toast('Recording stopped. You can continue by typing or try again');issueDictationActive=false;}else if(err!=='aborted'&&err!=='no-speech'){toast('Recording stopped. You can continue by typing or try again');issueDictationActive=false;}};
+  session.onend=()=>{if(issueRecognizer===session)issueRecognizer=null;if(sessionText){issueDictationBase=(issueDictationBase+sessionText).trim();if(issueDictationBase)issueDictationBase+=' ';}if(issueDictationActive){const b=document.getElementById('issueRecord');if(b)b.textContent='Listening... tap to stop';issueDictationRestartTimer=setTimeout(()=>startIssueDictationSession(SR),300);}else{const b=document.getElementById('issueRecord');if(b){b.textContent='Speak Description';b.classList.remove('on');}}};
+  try{session.start();}catch(e){issueDictationActive=false;issueRecognizer=null;const b=document.getElementById('issueRecord');if(b){b.textContent='Speak Description';b.classList.remove('on');}}
 }
 async function submitIssueReport(){
+  issueDictationActive=false;if(issueDictationRestartTimer)clearTimeout(issueDictationRestartTimer);issueDictationRestartTimer=null;
   if(issueRecognizer){try{issueRecognizer.stop();}catch(e){}}
   const ta=document.getElementById('issueDescription'),description=ta.value.trim(),btn=document.getElementById('issueSend'),st=document.getElementById('issueStatus');
   if(!description){st.textContent='Please describe the problem before sending.';ta.focus();return;}
