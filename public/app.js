@@ -350,6 +350,10 @@ const issuePageLabels = { capture:'Capture', organize:'Organize', edit:'Edit', c
 async function openIssueReporter() {
   const fab=document.getElementById('issueFab'); if(fab){fab.disabled=true;fab.textContent='Capturing...';}
   issuePageName=issuePageLabels[state.view]||state.view||'Photo Notes'; issueScreenshotBlob=null;
+  const send=document.getElementById('issueSend'),description=document.getElementById('issueDescription'),status=document.getElementById('issueStatus');
+  if(send){send.disabled=false;send.textContent='Send Issue Report';}
+  if(description)description.value='';
+  if(status)status.textContent='';
   try {
     if(window.html2canvas){const canvas=await window.html2canvas(document.querySelector('.wrap'),{useCORS:true,allowTaint:false,backgroundColor:'#f4f7f8',scale:Math.min(window.devicePixelRatio||1,1.5),logging:false});issueScreenshotBlob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',0.78));}
   } catch(e){issueScreenshotBlob=null;}
@@ -358,7 +362,7 @@ async function openIssueReporter() {
   document.getElementById('issueClose').onclick=closeIssueReporter;
   document.getElementById('issueRecord').onclick=toggleIssueDictation;
   document.getElementById('issueSend').onclick=submitIssueReport;
-  document.getElementById('issueDescription').focus();
+  description.focus();
   if(fab){fab.disabled=false;fab.textContent='Report an Issue';}
 }
 function closeIssueReporter(){if(issueRecognizer){try{issueRecognizer.stop();}catch(e){}}const m=document.getElementById('issueModal');if(m)m.hidden=true;issueScreenshotBlob=null;issueRecognizer=null;}

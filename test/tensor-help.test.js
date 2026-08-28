@@ -32,5 +32,11 @@ test('Tensor Man is hidden at phone and small-tablet widths and cannot cover con
 
 test('new app and style versions are cache-busted', () => {
   assert.match(index, /styles\.css\?v=83/);
-  assert.match(index, /app\.js\?v=83/);
+  assert.match(index, /app\.js\?v=84/);
+});
+
+test('opening a new issue report restores the form after a previous send', () => {
+  assert.match(app, /if\(send\)\{send\.disabled=false;send\.textContent='Send Issue Report';\}/);
+  assert.match(app, /if\(description\)description\.value='';/);
+  assert.match(app, /if\(status\)status\.textContent='';/);
 });
