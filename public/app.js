@@ -259,6 +259,83 @@ function renderApp() {
   else if (state.view === 'concrete-report') renderConcreteReport();
   else if (state.view === 'map') renderMap();
   else { state.view = 'organize'; renderList(); }
+  renderTensorHelp();
+}
+
+// ================= Tensor Man page help (Basic, desktop only) =================
+const TENSOR_HELP_TOPICS = {
+  capture: [
+    ['Take or import a photo', 'Use Capture to take a new business photo or import one you already have. The photo is the main record; notes and details add useful context to it.'],
+    ['Voice notes', 'Record a short spoken note while the details are fresh. Photo Notes turns it into text attached to the photo so you can review and search it later.'],
+    ['Location, topics, and jobs', 'Location records where the photo was taken when permission is available. Topics and jobs help you file the photo with the right work without changing the original image.'],
+    ['Photo quality check', 'The quality check warns you about common problems such as a blurry or dark photo before you save. You can still choose to keep the photo when it is the best evidence available.'],
+    ['Offline save / waiting to upload', 'If the connection is unavailable, Photo Notes can hold the capture on this device until it can upload. Keep the page open long enough to see that the photo was saved or is waiting to upload.']
+  ],
+  organize: [
+    ['Library cards and selection', 'Library cards show the photo and its most useful details together. Select cards when you want to edit, compare, create, or send a specific set of photos.'],
+    ['Topics and jobs', 'Topics group photos by subject, while jobs group them by a piece of work or customer. They make a growing photo library easier to find and reuse.'],
+    ['Smart search', 'Smart search looks across photo notes, addresses, jobs, customers, topics, dates, and other saved details. Use it when you remember the work but not where the photo was filed.'],
+    ['Photo comparison', 'Photo comparison places selected photos together so changes are easier to see. It is useful for before-and-after evidence or checking progress over time.'],
+    ['Batch templates', 'Batch templates apply the same useful structure to several selected photos. They reduce repeated entry while keeping each photo as its own record.']
+  ],
+  edit: [
+    ['Rotate / flip / crop', 'Use these tools to correct the view or focus attention on the useful part of a photo. Photo Notes keeps the original so you can return to it.'],
+    ['Markup and annotation templates', 'Markup adds arrows, shapes, or labels that make visible evidence easier to understand. Templates help you reuse a consistent annotation style.'],
+    ['Fix addresses', 'Fix Addresses retries missing location descriptions for selected photos that have usable coordinates. It does not change the photo itself.'],
+    ['Evidence fingerprint / verification', 'Verification records a digital fingerprint of the original file and its history. It helps show whether the original photo still matches the file first received.'],
+    ['Restore original photo', 'Restore Original removes saved visual edits and returns to the first uploaded image. Notes and other record details remain available.']
+  ],
+  create: [
+    ['Document setup', 'Create turns selected photos into an ordered business document. Add a clear title and short description so the reader knows what the photos document.'],
+    ['Photo order and captions', 'Arrange photos in the sequence that tells the clearest story. Captions explain why each image matters without replacing the visible evidence.'],
+    ['PDF / Word / AI ZIP export', 'Export packages the chosen photos and their context for delivery or further work. Pick PDF for a finished document, Word for editing, or AI ZIP for a structured photo package.'],
+    ['Export quality and format', 'Quality and format settings balance image clarity against file size. Use higher quality when small visual details are important to the reader.']
+  ],
+  send: [
+    ['Share selected photos', 'Share sends the photos you selected in Organize through the options available on this device. Check the selection summary before sending.'],
+    ['Customer approval package', 'An approval package creates a private, expiring review link for selected photos. The customer can approve the package or request changes.'],
+    ['Send or save a document', 'You can send a finished PDF or Word document, or save it for delivery another way. The document keeps the photos and their supporting details together.'],
+    ['Mac-to-Android messaging notice', 'Texting from a Mac to an Android phone may require Text Message Forwarding from your iPhone. The notice appears when that setup may affect delivery.']
+  ]
+};
+
+function renderTensorHelp() {
+  if (isProClient() || !TENSOR_HELP_TOPICS[state.view]) return;
+  const page = state.view;
+  try { if (localStorage.getItem(`pn_tensor_help_hidden_${page}`) === '1') return; } catch (e) {}
+  const body = document.getElementById('body');
+  if (!body || body.querySelector('.tensor-help-slot')) return;
+  const topics = TENSOR_HELP_TOPICS[page];
+  body.insertAdjacentHTML('afterbegin', `<div class="tensor-help-slot" data-html2canvas-ignore="true">
+    <div class="tensor-help-widget">
+      <button class="tensor-help-badge" type="button" aria-label="Help with this page" aria-expanded="false"><img src="/tensor-man.svg" alt="" aria-hidden="true"><span>Tensor Man</span></button>
+      <section class="tensor-help-panel" hidden aria-label="Tensor Man page help">
+        <h2>Need help with this page?</h2>
+        <div class="tensor-topic-list">${topics.map((topic, index)=>`<button type="button" data-tensor-topic="${index}">${esc(topic[0])}</button>`).join('')}</div>
+        <div class="tensor-topic-answer" aria-live="polite" hidden></div>
+        <button class="tensor-ask-toggle" type="button" aria-expanded="false">Ask Tensor Man something else <span aria-hidden="true">⌄</span></button>
+        <form class="tensor-ask-form" hidden><label for="tensorAskInput">Question about Photo Notes</label><div><input id="tensorAskInput" type="text" autocomplete="off"><button type="submit">Send</button></div><p class="tensor-chat-status" aria-live="polite"></p></form>
+        <div class="tensor-help-actions"><button type="button" data-tensor-close>Not now</button><button type="button" data-tensor-hide>Hide help on this page</button></div>
+      </section>
+    </div>
+  </div>`);
+  const widget = body.querySelector('.tensor-help-widget');
+  const badge = widget.querySelector('.tensor-help-badge');
+  const panel = widget.querySelector('.tensor-help-panel');
+  const closePanel = () => { panel.hidden = true; badge.setAttribute('aria-expanded', 'false'); };
+  badge.onclick = () => { const opening = panel.hidden; panel.hidden = !opening; badge.setAttribute('aria-expanded', String(opening)); };
+  widget.querySelectorAll('[data-tensor-topic]').forEach(button => button.onclick = () => {
+    const answer = widget.querySelector('.tensor-topic-answer');
+    widget.querySelectorAll('[data-tensor-topic]').forEach(item => item.classList.toggle('active', item === button));
+    answer.textContent = topics[Number(button.dataset.tensorTopic)][1];
+    answer.hidden = false;
+  });
+  const askToggle = widget.querySelector('.tensor-ask-toggle');
+  const askForm = widget.querySelector('.tensor-ask-form');
+  askToggle.onclick = () => { const opening = askForm.hidden; askForm.hidden = !opening; askToggle.setAttribute('aria-expanded', String(opening)); if (opening) askForm.querySelector('input').focus(); };
+  askForm.onsubmit = event => { event.preventDefault(); askForm.querySelector('.tensor-chat-status').textContent = 'Chat help is coming soon.'; };
+  widget.querySelector('[data-tensor-close]').onclick = closePanel;
+  widget.querySelector('[data-tensor-hide]').onclick = () => { try { localStorage.setItem(`pn_tensor_help_hidden_${page}`, '1'); } catch (e) {} widget.closest('.tensor-help-slot').remove(); };
 }
 
 // ================= Basic issue reporter =================
