@@ -18,6 +18,10 @@ const SESSION_SECRET = process.env.SESSION_SECRET || 'dev-secret-change-me';
 const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(__dirname, 'uploads');
 const COOKIE = 'pn_token';
 
+if (process.env.NODE_ENV === 'production' && (!process.env.SESSION_SECRET || SESSION_SECRET === 'dev-secret-change-me' || SESSION_SECRET.length < 32)) {
+  throw new Error('Production requires a unique SESSION_SECRET of at least 32 characters');
+}
+
 function normalizeProType(value) {
   if (value === 'hoa') return 'hoa';
   if (value === 'concrete') return 'concrete';
@@ -27,6 +31,28 @@ function normalizeProType(value) {
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
 const app = express();
+app.disable('x-powered-by');
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'camera=(self), microphone=(self), geolocation=(self)');
+  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+  if (process.env.NODE_ENV === 'production') res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  res.setHeader('Content-Security-Policy', [
+    "default-src 'self'",
+    "base-uri 'self'",
+    "frame-ancestors 'none'",
+    "form-action 'self'",
+    "object-src 'none'",
+    "script-src 'self' https://unpkg.com",
+    "style-src 'self' 'unsafe-inline' https://unpkg.com",
+    "img-src 'self' data: blob: https://*.arcgisonline.com https://api.mapbox.com",
+    "connect-src 'self' https://*.arcgisonline.com https://api.mapbox.com",
+    "font-src 'self' data:"
+  ].join('; '));
+  next();
+});
 // Stripe signature verification must receive the exact raw request bytes, so
 // this route is registered before the global JSON parser.
 registerStripeWebhook(app, { pool });
@@ -1218,10 +1244,12 @@ app.get('/api/admin/health', requireAdmin, async (req, res) => {
     fs.accessSync(UPLOAD_DIR, fs.constants.R_OK | fs.constants.W_OK);
     services.push({ id:'uploads', name:'Photo Upload Storage', status:'healthy', detail:'Readable and writable' });
   } catch (e) { services.push({ id:'uploads', name:'Photo Upload Storage', status:'down', detail:'Storage is not writable' }); }
-  services.push({ id:'addresses', name:'Address Lookup', status:'healthy', detail:'ArcGIS with OpenStreetMap fallback' });
+  services.push({ id:'addresses', name:'Address Lookup', status:'available', detail:`ArcGIS and OpenStreetMap fallbacks${process.env.GOOGLE_MAPS_API_KEY || process.env.MAPBOX_TOKEN ? '; configured provider also available' : ''}` });
+  services.push({ id:'upload_persistence', name:'Persistent Photo Storage', status:process.env.UPLOAD_PERSISTENCE_CONFIRMED==='true' ? 'confirmed' : 'needs_confirmation', detail:process.env.UPLOAD_PERSISTENCE_CONFIRMED==='true' ? 'Railway volume or persistent storage confirmed' : 'Writable storage is not proof of persistence across deployments' });
   services.push({ id:'ai', name:'AI Photo Tools', status:process.env.ANTHROPIC_API_KEY ? 'configured' : 'not_configured', detail:process.env.ANTHROPIC_API_KEY ? `Configured (${VISION_MODEL})` : 'Anthropic API key is missing' });
   services.push({ id:'issue_email', name:'Issue Report Email', status:process.env.RESEND_API_KEY ? 'configured' : 'not_configured', detail:process.env.RESEND_API_KEY ? 'Email delivery configured' : 'Resend API key is missing' });
   services.push({ id:'exports', name:'PDF, Word & ZIP Exports', status:'healthy', detail:'Export libraries loaded' });
+  services.push({ id:'stripe', name:'Stripe Payments and Invoicing', status:process.env.STRIPE_RESTRICTED_KEY || process.env.STRIPE_SECRET_KEY ? 'configured' : 'not_configured', detail:process.env.STRIPE_RESTRICTED_KEY ? 'Restricted key configured' : process.env.STRIPE_SECRET_KEY ? 'Secret key fallback configured; restricted key preferred' : 'Stripe server key is missing' });
   let issueCounts = {};
   try {
     const rows = (await pool.query(`SELECT management_status,COUNT(*)::int count FROM issue_reports GROUP BY management_status`)).rows;
