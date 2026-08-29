@@ -16,9 +16,14 @@ test('security headers protect the application without blocking required photo t
   for (const header of ['X-Content-Type-Options', 'X-Frame-Options', 'Referrer-Policy', 'Permissions-Policy', 'Strict-Transport-Security', 'Content-Security-Policy']) {
     assert.match(server, new RegExp(header));
   }
-  assert.match(server, /script-src 'self' https:\/\/unpkg\.com/);
+  assert.match(server, /script-src 'self' 'nonce-\$\{cspNonce\}' https:\/\/unpkg\.com/);
   assert.match(server, /img-src 'self' data: blob:/);
   assert.match(server, /frame-ancestors 'none'/);
+});
+
+test('administrator page receives a per-request CSP nonce',()=>{
+  assert.match(server,/cspNonce=crypto\.randomBytes\(18\)/);
+  assert.match(server,/replace\('<script>',`<script nonce=/);
 });
 
 test('admin health distinguishes writable uploads from confirmed persistence', () => {

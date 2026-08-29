@@ -33,6 +33,8 @@ fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 const app = express();
 app.disable('x-powered-by');
 app.use((req, res, next) => {
+  const cspNonce=crypto.randomBytes(18).toString('base64');
+  res.locals.cspNonce=cspNonce;
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
@@ -45,7 +47,7 @@ app.use((req, res, next) => {
     "frame-ancestors 'none'",
     "form-action 'self'",
     "object-src 'none'",
-    "script-src 'self' https://unpkg.com",
+    `script-src 'self' 'nonce-${cspNonce}' https://unpkg.com`,
     "style-src 'self' 'unsafe-inline' https://unpkg.com",
     "img-src 'self' data: blob: https://*.arcgisonline.com https://api.mapbox.com",
     "connect-src 'self' https://*.arcgisonline.com https://api.mapbox.com",
@@ -2985,7 +2987,10 @@ app.get('/api/export/proposal', requireAuth, async (req, res) => {
 });
 
 // ---- admin page (served only as a page; the data behind it is admin-guarded) ----
-app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin.html')));
+app.get('/admin', (req, res) => {
+  const html=fs.readFileSync(path.join(__dirname,'public','admin.html'),'utf8').replace('<script>',`<script nonce="${res.locals.cspNonce}">`);
+  res.type('html').send(html);
+});
 
 // SPA fallback
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
