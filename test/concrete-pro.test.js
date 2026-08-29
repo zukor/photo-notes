@@ -26,3 +26,13 @@ test('Concrete Pro has photo context capture and evidence reporting UI', () => {
   assert.match(app, /Concrete Photo Evidence Report/);
   assert.match(app, /isConcreteClient\(\).*concrete-report/);
 });
+
+test('Concrete batch tickets stay linked to placement photos and export with evidence', () => {
+  assert.match(db, /CREATE TABLE IF NOT EXISTS concrete_ticket_links/);
+  assert.match(server, /app\.post\('\/api\/concrete\/captures\/:id\/ticket'/);
+  assert.match(server, /placement_capture_id,ticket_capture_id/);
+  assert.match(server, /Concrete Pro - Photo Evidence Report/);
+  assert.match(app, /Attach Batch Ticket \/ Spec Photo/);
+  assert.match(app, /Photo Evidence PDF/);
+  assert.match(app, /Photo Evidence Word/);
+});
