@@ -89,7 +89,12 @@ function idempotencyKey(req) {
 
 function stripeError(res, error, label) {
   const status = error && error.statusCode >= 400 && error.statusCode < 500 ? 400 : 502;
-  console.error(`[stripe.${label}]`, error && (error.type || error.code || error.message));
+  console.error(`[stripe.${label}]`, {
+    type: error && error.type,
+    code: error && error.code,
+    param: error && error.param,
+    message: error && error.message,
+  });
   return res.status(status).json({ error: 'Stripe request could not be completed' });
 }
 
