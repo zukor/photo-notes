@@ -206,6 +206,7 @@ CREATE INDEX IF NOT EXISTS ewr_photos_ewr_idx ON ewr_photos (ewr_id);
 CREATE TABLE IF NOT EXISTS asphalt_tickets (
   id                     SERIAL PRIMARY KEY,
   user_id                INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  job_id                 INTEGER REFERENCES jobs(id) ON DELETE SET NULL,
   photo_path             TEXT,
   ticket_number          TEXT,
   ticket_date            DATE,
@@ -538,6 +539,7 @@ async function init() {
   // Non-destructive crop: when a photo is first cropped, the pre-crop image is
   // backed up here so the original can always be restored.
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS photo_original_path TEXT`);
+  await pool.query(`ALTER TABLE asphalt_tickets ADD COLUMN IF NOT EXISTS job_id INTEGER REFERENCES jobs(id) ON DELETE SET NULL`);
   await pool.query(`ALTER TABLE groups ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id)`);
   await pool.query(`UPDATE groups SET user_id = $1 WHERE user_id IS NULL`, [adminId]);
   // Tester issue triage. These ALTERs upgrade existing production databases

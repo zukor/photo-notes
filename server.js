@@ -985,6 +985,11 @@ function ticketDate(value) {
   const s = ticketText(value, 10);
   return s && /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
 }
+async function ownedJobId(userId, value) {
+  const id = Number.parseInt(value, 10);
+  if (!Number.isInteger(id)) return null;
+  return (await pool.query(`SELECT id FROM jobs WHERE id=$1 AND user_id=$2`, [id, userId])).rowCount ? id : null;
+}
 
 app.post('/api/asphalt-tickets/scan', requireAuth, upload.single('photo'), async (req, res) => {
   try {
@@ -1028,17 +1033,18 @@ app.post('/api/asphalt-tickets/:id', requireAuth, async (req, res) => {
     const id = parseInt(req.params.id, 10);
     if (!Number.isInteger(id)) return res.status(400).json({ error: 'bad id' });
     const b = req.body || {};
+    const jobId = await ownedJobId(req.user.id, b.job_id);
     const values = [
       ticketText(b.ticket_number), ticketDate(b.ticket_date), ticketText(b.plant_name), ticketText(b.plant_address),
       ticketText(b.mix_description), ticketText(b.mix_code), ticketText(b.truck_number), ticketText(b.job_number),
       ticketNumber(b.net_tons), ticketText(b.dispatch_time, 40), ticketText(b.arrival_time, 40),
-      ticketNumber(b.dispatch_temperature_f), id, req.user.id,
+      ticketNumber(b.dispatch_temperature_f), jobId, id, req.user.id,
     ];
     const row = (await pool.query(
       `UPDATE asphalt_tickets SET ticket_number=$1, ticket_date=$2, plant_name=$3, plant_address=$4,
        mix_description=$5, mix_code=$6, truck_number=$7, job_number=$8, net_tons=$9,
-       dispatch_time=$10, arrival_time=$11, dispatch_temperature_f=$12, status='saved', updated_at=now()
-       WHERE id=$13 AND user_id=$14 RETURNING *`, values)).rows[0];
+       dispatch_time=$10, arrival_time=$11, dispatch_temperature_f=$12, job_id=$13, status='saved', updated_at=now()
+       WHERE id=$14 AND user_id=$15 RETURNING *`, values)).rows[0];
     if (!row) return res.status(404).json({ error: 'not found' });
     logEvent(req.user.id, 'ticket_save', { has_tons: row.net_tons != null });
     res.json({ ok: true, ticket: row });
@@ -1056,6 +1062,49 @@ app.get('/api/asphalt-tickets', requireAuth, async (req, res) => {
     const total = rows.reduce((sum, row) => sum + (Number(row.net_tons) || 0), 0);
     res.json({ tickets: rows, total_tons: Math.round(total * 100) / 100 });
   } catch (err) { console.error('[ticket.list]', err); res.status(500).json({ error: 'ticket list failed' }); }
+});
+
+// Photo-first Paving job report. Delivery tickets and extra-work records only
+// appear when they can be tied back to the same job's photographed evidence.
+app.get('/api/paving/jobs/:id/report', requireAuth, async (req, res) => {
+  try {
+    if (await currentProduct(req.user.id) !== 'paving') return res.status(403).json({ error:'Paving Pro required' });
+    const jobId = Number.parseInt(req.params.id, 10);
+    const job = (await pool.query(`SELECT * FROM jobs WHERE id=$1 AND user_id=$2`, [jobId, req.user.id])).rows[0];
+    if (!job) return res.status(404).json({ error:'job not found' });
+    const captures = (await pool.query(`SELECT * FROM captures WHERE user_id=$1 AND job_id=$2 AND photo_path IS NOT NULL ORDER BY created_at`, [req.user.id, jobId])).rows;
+    const tickets = (await pool.query(`SELECT * FROM asphalt_tickets WHERE user_id=$1 AND job_id=$2 AND status='saved' ORDER BY COALESCE(ticket_date,created_at::date),created_at`, [req.user.id, jobId])).rows;
+    const extraWork = (await pool.query(`SELECT DISTINCT e.* FROM extra_work_records e JOIN group_items gi ON gi.group_id=e.group_id JOIN captures c ON c.id=gi.capture_id WHERE e.user_id=$1 AND c.job_id=$2 ORDER BY e.created_at`, [req.user.id, jobId])).rows;
+    const pairs = buildRenderUnits(captures, await userPairs(req.user.id));
+    const totalTons = tickets.reduce((sum, ticket) => sum + (Number(ticket.net_tons) || 0), 0);
+    const format = req.query.doc === 'docx' ? 'docx' : 'pdf';
+    logEvent(req.user.id, 'paving_job_report', { job_id:jobId, format, photos:captures.length, tickets:tickets.length, extra_work:extraWork.length });
+    if (format === 'pdf') {
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="paving-${slug(job.name)||job.id}-evidence.pdf"`);
+      const pdf = new PDFDocument({ size:'LETTER', margin:48 }); pdf.pipe(res);
+      pdf.fontSize(20).fillColor('#000').text('Paving Pro - Job Photo Evidence', { align:'center' });
+      pdf.fontSize(15).text(job.name, { align:'center' });
+      pdf.fontSize(10).text([job.job_number,job.customer,job.address].filter(Boolean).join(' | '), { align:'center' });
+      pdf.moveDown(); pdf.fontSize(11).text(`${captures.length} job photos | ${tickets.length} delivery tickets | ${totalTons.toFixed(2)} documented tons | ${extraWork.length} extra-work records`, { align:'center' });
+      for (const unit of pairs) {
+        pdf.addPage();
+        const entries = unit.pair ? [['BEFORE',unit.pair.before,48],['AFTER',unit.pair.after,310]] : [['PHOTO',unit.single,48]];
+        const top=pdf.y;
+        for (const [label,capture,x] of entries) { pdf.fontSize(11).text(label,x,top,{width:240}); const image=localPhoto(capture.photo_path); if(image){const rendered=await renderForEmbedStamped(image,'standard','jpeg',capture);if(rendered)try{pdf.image(rendered.buffer,x,top+16,{fit:[unit.pair?240:500,unit.pair?180:340]});}catch(e){}} }
+        pdf.y=top+(unit.pair?210:370);pdf.x=48;
+        for(const [label,capture] of entries) pdf.fontSize(10).text(`${label}: ${capture.note||'(no note)'}${capture.address?' | '+capture.address:''}`,{width:510});
+      }
+      if(tickets.length){pdf.addPage();pdf.fontSize(15).text('Delivery Ticket Evidence');pdf.moveDown(.5);for(const ticket of tickets)pdf.fontSize(10).text(`${ticket.ticket_date||''} | Ticket ${ticket.ticket_number||'not entered'} | ${ticket.mix_description||ticket.mix_code||'Mix not entered'} | ${ticket.net_tons==null?'Tons not entered':Number(ticket.net_tons).toFixed(2)+' tons'}`);}
+      if(extraWork.length){pdf.addPage();pdf.fontSize(15).text('Photo-Backed Extra Work');pdf.moveDown(.5);for(const item of extraWork)pdf.fontSize(10).text(`${ewrReasonLabel(item.reason_category,item.reason_other_text)} | ${ewrStatusLabel(item.status)}\n${item.description_text||'(no description)'}`).moveDown(.5);}
+      pdf.end(); return;
+    }
+    const children=[new Paragraph({heading:HeadingLevel.HEADING_1,children:[new TextRun({text:'Paving Pro - Job Photo Evidence',bold:true,font:'Arial'})]}),new Paragraph({children:[new TextRun({text:job.name,bold:true,font:'Arial'})]}),new Paragraph({children:[new TextRun({text:[job.job_number,job.customer,job.address].filter(Boolean).join(' | '),font:'Arial'})]}),new Paragraph({children:[new TextRun({text:`${captures.length} job photos | ${tickets.length} delivery tickets | ${totalTons.toFixed(2)} documented tons | ${extraWork.length} extra-work records`,font:'Arial'})]})];
+    for(const unit of pairs){const entries=unit.pair?[['BEFORE',unit.pair.before],['AFTER',unit.pair.after]]:[['PHOTO',unit.single]];const cells=[];for(const [label,capture] of entries){const kids=[new Paragraph({children:[new TextRun({text:label,bold:true,font:'Arial'})]})];const image=localPhoto(capture.photo_path);if(image){const rendered=await renderForEmbedStamped(image,'standard','jpeg',capture);if(rendered)kids.push(new Paragraph({children:[new ImageRun({type:rendered.ext==='.png'?'png':'jpg',data:rendered.buffer,transformation:{width:unit.pair?245:400,height:unit.pair?184:300}})]}));}kids.push(new Paragraph({children:[new TextRun({text:capture.note||'(no note)',font:'Arial'})]}));cells.push(new TableCell({children:kids}));}children.push(new Table({width:{size:100,type:WidthType.PERCENTAGE},rows:[new TableRow({children:cells})]}));}
+    if(tickets.length){children.push(new Paragraph({heading:HeadingLevel.HEADING_2,children:[new TextRun({text:'Delivery Ticket Evidence',bold:true,font:'Arial'})]}));for(const ticket of tickets)children.push(new Paragraph({children:[new TextRun({text:`${ticket.ticket_date||''} | Ticket ${ticket.ticket_number||'not entered'} | ${ticket.mix_description||ticket.mix_code||'Mix not entered'} | ${ticket.net_tons==null?'Tons not entered':Number(ticket.net_tons).toFixed(2)+' tons'}`,font:'Arial'})]}));}
+    if(extraWork.length){children.push(new Paragraph({heading:HeadingLevel.HEADING_2,children:[new TextRun({text:'Photo-Backed Extra Work',bold:true,font:'Arial'})]}));for(const item of extraWork)children.push(new Paragraph({children:[new TextRun({text:`${ewrReasonLabel(item.reason_category,item.reason_other_text)} | ${ewrStatusLabel(item.status)} - ${item.description_text||'(no description)'}`,font:'Arial'})]}));}
+    const buffer=await Packer.toBuffer(new Document({sections:[{children}]}));res.setHeader('Content-Type','application/vnd.openxmlformats-officedocument.wordprocessingml.document');res.setHeader('Content-Disposition',`attachment; filename="paving-${slug(job.name)||job.id}-evidence.docx"`);res.send(buffer);
+  } catch (error) { console.error('[paving.job-report]', error); if(!res.headersSent)res.status(500).json({error:'paving report failed'}); }
 });
 
 // ---- Camera readers and scanners (Paving Pro) ----
