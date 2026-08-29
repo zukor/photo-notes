@@ -1684,9 +1684,15 @@ app.get('/api/groups/:id', requireAuth, async (req, res) => {
       SELECT c.*, gi.position FROM group_items gi JOIN captures c ON c.id = gi.capture_id
       WHERE gi.group_id = $1 AND c.user_id = $2 ORDER BY gi.position ASC, c.created_at ASC`, [id, req.user.id])).rows;
     const score = scoreCaptures(items);
+    const itemIds = items.map((item) => item.id);
+    const pairs = itemIds.length && await featureAllowed(req.user.id, 'before_after')
+      ? (await pool.query(`SELECT * FROM capture_pairs
+          WHERE user_id=$1 AND before_id=ANY($2) AND after_id=ANY($2)
+          ORDER BY created_at ASC`, [req.user.id, itemIds])).rows
+      : [];
     let zones = null;
     if (await featureAllowed(req.user.id, 'measurements')) zones = await groupZoneSummary(req.user.id, id);
-    res.json({ group: g, items, score, zones });
+    res.json({ group: g, items, pairs, score, zones });
   } catch (err) { console.error('[groups.get]', err); res.status(500).json({ error: 'failed' }); }
 });
 
@@ -2712,7 +2718,14 @@ app.get('/api/export/proposal', requireAuth, async (req, res) => {
       SELECT c.* FROM group_items gi JOIN captures c ON c.id = gi.capture_id
       WHERE gi.group_id = $1 AND c.user_id = $2 ORDER BY gi.position ASC, c.created_at ASC`, [groupId, req.user.id])).rows;
     const score = scoreCaptures(items);
-    const { sections, summary } = buildProposal(items);
+    const proposalPairs = await userPairs(req.user.id);
+    const proposalUnits = buildRenderUnits(items, proposalPairs);
+    // A completed before/after pair is one proposal location. Use the After
+    // capture for quantities/recommendations while retaining the Before photo
+    // as evidence of the original condition.
+    const proposalItems = proposalUnits.map((unit) => unit.pair ? unit.pair.after : unit.single);
+    const beforeByAfter = new Map(proposalUnits.filter((unit) => unit.pair).map((unit) => [unit.pair.after.id, unit.pair.before]));
+    const { sections, summary } = buildProposal(proposalItems);
     const zones = await groupZoneSummary(req.user.id, groupId);
     const doc = (req.query.doc === 'docx') ? 'docx' : 'pdf';
     const imgRes = req.query.res || 'standard';
@@ -2762,8 +2775,24 @@ app.get('/api/export/proposal', requireAuth, async (req, res) => {
       for (let i = 0; i < sections.length; i++) {
         const { c, fix, qty } = sections[i];
         pdf.addPage();
-        const img = localPhoto(c.photo_path);
-        if (img) { const r = await renderForEmbedStamped(img, imgRes, imgFmt, c); if (r) { try { pdf.image(r.buffer, { fit: [480, 320], align: 'center' }); pdf.moveDown(0.5); } catch (e) {} } }
+        const before = beforeByAfter.get(c.id);
+        if (before) {
+          const top = pdf.y;
+          pdf.fontSize(11).fillColor('#000').text('BEFORE', 48, top, { width: 240 });
+          pdf.fontSize(11).fillColor('#000').text('AFTER', 310, top, { width: 240 });
+          const imageTop = top + 16;
+          for (const [capture, x] of [[before, 48], [c, 310]]) {
+            const image = localPhoto(capture.photo_path);
+            if (image) { const rendered = await renderForEmbedStamped(image, imgRes, imgFmt, capture); if (rendered) { try { pdf.image(rendered.buffer, x, imageTop, { fit: [240, 180] }); } catch (e) {} } }
+          }
+          pdf.y = imageTop + 190; pdf.x = 48;
+          pdf.fontSize(10).fillColor('#000').text(`Before: ${before.note || '(no note)'}`, { width: 500 });
+          pdf.fontSize(10).fillColor('#000').text(`After: ${c.note || '(no note)'}`, { width: 500 });
+          pdf.moveDown(0.5);
+        } else {
+          const img = localPhoto(c.photo_path);
+          if (img) { const r = await renderForEmbedStamped(img, imgRes, imgFmt, c); if (r) { try { pdf.image(r.buffer, { fit: [480, 320], align: 'center' }); pdf.moveDown(0.5); } catch (e) {} } }
+        }
         pdf.fontSize(13).fillColor('#000').text(`${i + 1}. ${c.address || 'No location'}`);
         const df = fmtDefect(c); if (df) pdf.fontSize(12).fillColor('#000').text('Defect: ' + df);
         const dm = exportDims(c); if (dm) pdf.fontSize(12).fillColor('#000').text('Dimensions: ' + dm);
@@ -2805,8 +2834,21 @@ app.get('/api/export/proposal', requireAuth, async (req, res) => {
     children.push(new Paragraph({ children: [new TextRun({ text: '' })] }));
     for (let i = 0; i < sections.length; i++) {
       const { c, fix, qty } = sections[i];
-      const img = localPhoto(c.photo_path);
-      if (img) { const r = await renderForEmbedStamped(img, imgRes, imgFmt, c); if (r) { try { children.push(new Paragraph({ children: [new ImageRun({ type: r.ext === '.png' ? 'png' : 'jpg', data: r.buffer, transformation: { width: 400, height: 300 } })] })); } catch (e) {} } }
+      const before = beforeByAfter.get(c.id);
+      if (before) {
+        const pairCells = [];
+        for (const [label, capture] of [['BEFORE', before], ['AFTER', c]]) {
+          const cellChildren = [new Paragraph({ children: [new TextRun({ text: label, bold: true, color: '000000', font: 'Arial' })] })];
+          const img = localPhoto(capture.photo_path);
+          if (img) { const r = await renderForEmbedStamped(img, imgRes, imgFmt, capture); if (r) { try { cellChildren.push(new Paragraph({ children: [new ImageRun({ type: r.ext === '.png' ? 'png' : 'jpg', data: r.buffer, transformation: { width: 245, height: 184 } })] })); } catch (e) {} } }
+          cellChildren.push(new Paragraph({ children: [new TextRun({ text: capture.note || '(no note)', color: '000000', font: 'Arial' })] }));
+          pairCells.push(new TableCell({ children: cellChildren }));
+        }
+        children.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: [new TableRow({ children: pairCells })] }));
+      } else {
+        const img = localPhoto(c.photo_path);
+        if (img) { const r = await renderForEmbedStamped(img, imgRes, imgFmt, c); if (r) { try { children.push(new Paragraph({ children: [new ImageRun({ type: r.ext === '.png' ? 'png' : 'jpg', data: r.buffer, transformation: { width: 400, height: 300 } })] })); } catch (e) {} } }
+      }
       children.push(new Paragraph({ spacing: { before: 120 }, children: [new TextRun({ text: `${i + 1}. ${c.address || 'No location'}`, bold: true, color: '000000', font: 'Arial' })] }));
       const df = fmtDefect(c); if (df) children.push(new Paragraph({ children: [new TextRun({ text: 'Defect: ' + df, color: '000000', font: 'Arial' })] }));
       const dm = exportDims(c); if (dm) children.push(new Paragraph({ children: [new TextRun({ text: 'Dimensions: ' + dm, color: '000000', font: 'Arial' })] }));

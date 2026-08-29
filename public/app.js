@@ -20,6 +20,7 @@ let dictationRestartTimer = null;
 let dictationBase = '';
 let currentGroupItems = [];
 let currentGroup = null;
+let currentGroupPairs = [];
 
 function uiT(text) { return window.photoNotesI18n ? window.photoNotesI18n.t(text) : text; }
 function uiLocale() { return window.photoNotesI18n && window.photoNotesI18n.getLanguage() === 'es' ? 'es-US' : undefined; }
@@ -2896,6 +2897,7 @@ async function renderGroupDetail(id) {
   const data = await r.json();
   currentGroup = data.group;
   currentGroupItems = data.items || [];
+  currentGroupPairs = data.pairs || [];
   const score = data.score || null;
   const zsum = data.zones || null;
   let scoreHtml = '';
@@ -2926,6 +2928,7 @@ async function renderGroupDetail(id) {
 
     <div class="formhead" style="margin-top:24px">2. Document Contents</div>
     <div class="status">These photos and captions are the document preview. Edit captions, change their order, or remove anything you do not want included.</div>
+    <div id="gpairpreview"></div>
     <div id="gitems" style="margin-top:12px"></div>
     <button class="btn secondary slim" id="greverse" style="margin-top:10px">Reverse Photo Order</button>
 
@@ -2963,6 +2966,7 @@ async function renderGroupDetail(id) {
   const en = document.getElementById('ewrNew'); if (en) en.onclick = () => { state.ewrId = 'new'; renderGroups(); };
   renderTitleView();
   renderDescView();
+  renderGroupPairPreview();
   renderGroupItems();
   if (featureOn('extra_work')) loadEwrList();
 }
@@ -3338,6 +3342,20 @@ function renderGroupItems() {
   box.querySelectorAll('.gup').forEach(b => b.onclick = () => moveItem(parseInt(b.getAttribute('data-i'), 10), -1));
   box.querySelectorAll('.gdown').forEach(b => b.onclick = () => moveItem(parseInt(b.getAttribute('data-i'), 10), 1));
   box.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => removeItem(parseInt(b.getAttribute('data-i'), 10)));
+}
+
+function renderGroupPairPreview() {
+  const box = document.getElementById('gpairpreview');
+  if (!box) return;
+  const byId = new Map(currentGroupItems.map((item) => [Number(item.id), item]));
+  const pairs = currentGroupPairs.map((pair) => ({ pair, before: byId.get(Number(pair.before_id)), after: byId.get(Number(pair.after_id)) })).filter((entry) => entry.before && entry.after);
+  if (!pairs.length) { box.innerHTML = ''; return; }
+  box.innerHTML = `<div class="formhead" style="margin-top:18px">Before &amp; After Evidence</div>
+    <div class="status">Matched photos stay together in PDF, Word, and proposal exports.</div>
+    ${pairs.map(({ before, after }) => `<article class="card before-after-preview">
+      <div class="before-after-column"><strong>BEFORE</strong><img src="${photoSrc(before.photo_path)}" alt="Before photo"><div>${esc(before.note || '(no caption)')}</div><div class="meta">${esc(before.address || '')} · ${new Date(before.created_at).toLocaleDateString(uiLocale())}</div></div>
+      <div class="before-after-column"><strong>AFTER</strong><img src="${photoSrc(after.photo_path)}" alt="After photo"><div>${esc(after.note || '(no caption)')}</div><div class="meta">${esc(after.address || '')} · ${new Date(after.created_at).toLocaleDateString(uiLocale())}</div></div>
+    </article>`).join('')}`;
 }
 
 function moveItem(i, dir) {
