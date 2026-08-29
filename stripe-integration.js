@@ -120,8 +120,6 @@ function registerStripeWebhook(app, { pool, env = process.env } = {}) {
 }
 
 function registerStripeRoutes(app, { pool, requireAuth, requireAdmin, env = process.env } = {}) {
-  const integrationId = integrationIdentifier(env);
-
   app.get('/api/billing/config', requireAuth, (req, res) => {
     res.json({
       checkout_enabled: stripeConfigured(env) && Object.keys(parseOffers(env.STRIPE_CHECKOUT_OFFERS_JSON)).length > 0,
@@ -144,7 +142,6 @@ function registerStripeRoutes(app, { pool, requireAuth, requireAdmin, env = proc
       const session = await client.checkout.sessions.create({
         mode: 'payment',
         line_items: [{ price: offer.price_id, quantity }],
-        integration_identifier: integrationId,
         client_reference_id: String(req.user.id),
         customer_email: req.user.email,
         success_url: `${origin}/?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
