@@ -1,6 +1,6 @@
 # Stripe Payments and Invoicing Plan
 
-Stripe planner guide: `iguide_61VI25CRwN72mK7mj41ALTM9Al7QZ`
+Stripe planner guide: `iguide_61VJDhedSuKbT91mg41ALTM9Al7QZ` (accepted August 29, 2026). The connected MCP session currently exposes only the live Zukor, Inc. account, so no Stripe objects were created or modified during implementation. Test-mode access remains a release gate.
 
 ## Business shape
 
@@ -30,6 +30,7 @@ The initial integration supports one Stripe account with DBA identity recorded i
 - Default customer payment to Stripe's Hosted Invoice Page.
 - Create API-generated invoices as drafts with `auto_advance: false`; an administrator reviews and sends the legal invoice from Stripe Dashboard.
 - Use separate Stripe invoice rendering templates for Zukor Interactive, Zukor Marketing, and Zukor AI.
+- Map those template IDs through `STRIPE_INVOICE_TEMPLATES_JSON`; unknown DBA names and malformed template IDs are ignored.
 - Put DBA, application, project, job, and internal customer identifiers in metadata. Put customer-visible work detail in invoice line-item descriptions.
 
 ### Reconciliation and webhooks
@@ -68,3 +69,10 @@ The initial integration supports one Stripe account with DBA identity recorded i
 7. Verify valid webhooks are stored once and invalid signatures return HTTP 400.
 8. Confirm fulfillment and entitlement rules for every paid offer before enabling a customer-facing purchase button.
 9. Repeat the configuration with separate live-mode credentials only after the test-mode go-live review passes.
+
+## Delivered application controls
+
+- The Send page discovers server-allowlisted offers and redirects to Stripe-hosted Checkout.
+- The administrator page creates review-only draft invoices with DBA, due date, customer, and line-item information.
+- The server supports DBA-specific rendering templates, signed webhooks, idempotency, dynamic payment methods, and a restricted-key-first configuration.
+- The browser never receives secret keys, webhook secrets, Price IDs, or rendering-template IDs.

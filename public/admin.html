@@ -335,6 +335,14 @@
           <div class="helper">A safe operational check of the services Photo Notes needs. This shows configuration and availability without displaying passwords or API keys.</div>
           <div id="health"><p class="status">Checking...</p></div>
 
+          <label style="margin-top:22px">Stripe Invoicing</label>
+          <div class="helper">Create a draft invoice for review in Stripe. It will not be finalized or sent automatically.</div>
+          <div id="stripeStatus" class="helper">Checking Stripe configuration...</div>
+          <div class="admin-panel" id="stripeInvoicePanel">
+            <div class="edit-user-grid"><label>Customer Name<input id="stripeCustomerName" placeholder="Customer or company"></label><label>Customer Email<input id="stripeCustomerEmail" type="email" placeholder="billing@example.com"></label><label>DBA<select id="stripeDba"><option>Zukor AI</option><option>Zukor Interactive</option><option>Zukor Marketing</option></select></label><label>Payment Due<select id="stripeDue"><option value="15">15 days</option><option value="30" selected>30 days</option><option value="45">45 days</option><option value="60">60 days</option></select></label><label>Line Item Description<input id="stripeDescription" placeholder="Services or product"></label><label>Amount (USD)<input id="stripeAmount" type="number" min="0.50" step="0.01" placeholder="0.00"></label></div>
+            <button class="btn" type="button" id="stripeCreateInvoice">Create Draft Invoice</button><div id="stripeInvoiceResult" class="helper"></div>
+          </div>
+
           <details style="margin-top:16px"><summary style="font-weight:bold;cursor:pointer">Administrative Activity Log</summary><div class="helper">Account, password, plan, feature-access, and issue-management changes. Passwords and user content are never recorded.</div><div id="activity"><p class="status">Loading...</p></div></details>
 
           <label style="margin-top:22px">Issue Management Center</label>
@@ -372,6 +380,7 @@
       document.getElementById('issuePriorityFilter').onchange = renderIssues;
       document.getElementById('refreshIssues').onclick = loadIssues;
       loadHealth();
+      loadStripeBilling();
       loadActivity();
       loadIssues();
       loadUsers();
@@ -417,6 +426,9 @@
       try{const r=await api('/api/admin/health');if(!r.ok)throw new Error();const d=await r.json();box.innerHTML=`<div class="muted health-meta">Version ${esc(d.version)} · ${esc(d.environment)} · Checked ${fdatetime(d.checked_at)} · Uptime ${Math.floor((d.uptime_seconds||0)/60)} minutes</div><div class="health-grid">${d.services.map(s=>`<div class="health-card"><div class="health-name"><span class="health-dot ${s.status==='down'?'down':s.status==='not_configured'?'warning':''}"></span>${esc(s.name)}</div><div class="health-detail">${esc(s.detail)}</div></div>`).join('')}</div>`;}
       catch(e){box.innerHTML='<p class="status">System health could not be checked.</p>';}
     }
+
+    async function loadStripeBilling(){const status=document.getElementById('stripeStatus'),panel=document.getElementById('stripeInvoicePanel');try{const r=await api('/api/billing/config');if(!r.ok)throw new Error();const d=await r.json();status.textContent=d.invoicing_enabled?'Stripe test/live key is configured. Draft invoices are available.':'Stripe is not configured yet. Add the server key through the deployment environment before creating invoices.';panel.hidden=!d.invoicing_enabled;if(d.invoicing_enabled)document.getElementById('stripeCreateInvoice').onclick=createStripeInvoice;}catch(e){status.textContent='Stripe configuration could not be checked.';panel.hidden=true;}}
+    async function createStripeInvoice(){const button=document.getElementById('stripeCreateInvoice'),amount=Math.round(Number(document.getElementById('stripeAmount').value)*100),body={customer_name:document.getElementById('stripeCustomerName').value.trim(),email:document.getElementById('stripeCustomerEmail').value.trim(),dba:document.getElementById('stripeDba').value,due_days:Number(document.getElementById('stripeDue').value),items:[{description:document.getElementById('stripeDescription').value.trim(),quantity:1,unit_amount:amount}]};button.disabled=true;button.textContent='Creating...';try{const r=await api('/api/admin/billing/invoices',{method:'POST',headers:{'Content-Type':'application/json','Idempotency-Key':`invoice-${Date.now()}-${crypto.randomUUID()}`},body:JSON.stringify(body)}),d=await r.json();if(!r.ok)throw new Error(d.error||'failed');document.getElementById('stripeInvoiceResult').textContent=`Draft ${d.invoice_id} created. Review and send it from the Stripe Dashboard.`;toast('Stripe draft invoice created');}catch(e){toast('Draft invoice could not be created');}finally{button.disabled=false;button.textContent='Create Draft Invoice';}}
 
     function generatePassword(){
       const chars=strongPasswordCharacters(20);

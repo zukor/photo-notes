@@ -42,6 +42,12 @@ function publicOffers(env = process.env) {
   return Object.fromEntries(Object.entries(offers).map(([slug, item]) => [slug, { label: item.label, dba: item.dba }]));
 }
 
+function invoiceTemplates(env = process.env) {
+  let value={};try{value=JSON.parse(String(env.STRIPE_INVOICE_TEMPLATES_JSON||'{}'));}catch{return {};}
+  if(!value||typeof value!=='object'||Array.isArray(value))return {};
+  const out={};for(const dba of DBA_NAMES){const id=String(value[dba]||'');if(/^inrtem_[A-Za-z0-9]+$/.test(id))out[dba]=id;}return out;
+}
+
 function baseUrl(req, env = process.env) {
   const configured = String(env.PUBLIC_BASE_URL || '').trim().replace(/\/$/, '');
   if (/^https:\/\/[A-Za-z0-9.-]+(?::\d+)?$/.test(configured)) return configured;
@@ -170,6 +176,7 @@ function registerStripeRoutes(app, { pool, requireAuth, requireAdmin, env = proc
         auto_advance: false,
         description: `${input.dba} invoice draft`,
         metadata: { app: 'photo_notes', dba: input.dba, created_by_user_id: String(req.user.id) },
+        ...(invoiceTemplates(env)[input.dba] ? { rendering: { template: invoiceTemplates(env)[input.dba] } } : {}),
       }, { idempotencyKey: `${idem}:invoice` });
       for (let i = 0; i < input.items.length; i++) {
         const item = input.items[i];
@@ -195,6 +202,7 @@ module.exports = {
   idempotencyKey,
   integrationIdentifier,
   invoiceInput,
+  invoiceTemplates,
   parseOffers,
   publicOffers,
   registerStripeRoutes,
