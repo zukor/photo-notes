@@ -33,7 +33,7 @@ test('issue reporter stays recoverable and clear of primary page controls', () =
 });
 
 test('Android speech revisions replace interim text instead of appending duplicates', () => {
-  assert.match(app, /session\.continuous=!isIOS\(\)/);
+  assert.match(app, /session\.continuous=!ios/);
   assert.match(app, /for\(let i=0;i<e\.results\.length;i\+\+\)parts\.push/);
   assert.match(app, /ta\.value=\(issueDictationBase\+sessionText\)\.trimStart\(\)/);
   assert.match(app, /noteEl\.value=\(dictationBase\+sessionText\)\.trimStart\(\)/);

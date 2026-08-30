@@ -32,13 +32,21 @@ test('Tensor Man is hidden at phone and small-tablet widths and cannot cover con
 
 test('new app and style versions are cache-busted', () => {
   assert.match(index, /styles\.css\?v=87/);
-  assert.match(index, /app\.js\?v=95/);
+  assert.match(index, /app\.js\?v=96/);
 });
 
 test('Android issue-description dictation replaces revised results and restarts', () => {
   assert.match(app, /function startIssueDictationSession\(SR\)/);
   assert.match(app, /sessionText=parts\.filter\(Boolean\)\.join\(' '\)\.trim\(\)/);
   assert.match(app, /issueDictationRestartTimer=setTimeout\(\(\)=>startIssueDictationSession\(SR\),300\)/);
+});
+
+test('iPhone issue dictation avoids the conflicting microphone preflight and cannot hang forever', () => {
+  assert.match(app, /if\(!isIOS\(\)\)try\{if\(navigator\.mediaDevices/);
+  assert.match(app, /session\.interimResults=!ios/);
+  assert.match(app, /issueDictationWatchdog=setTimeout/);
+  assert.match(app, /No speech was received\. On iPhone/);
+  assert.match(app, /if\(issueDictationActive&&!ios\)/);
 });
 
 test('Android note dictation replaces revised results and restarts after silence', () => {
