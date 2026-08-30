@@ -242,6 +242,8 @@ textarea { min-height: 96px; resize: vertical; }
 .send-capture-row small { display:block; font-weight:normal; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-top:3px; }
 .card { background: #fff; border: 1px solid #000; border-radius: 10px; padding: 12px; margin-bottom: 14px; }
 .card img { width: 100%; border-radius: 6px; margin-bottom: 8px; }
+.capture-preview-actions { display:grid; grid-template-columns:1fr 1fr; gap:8px; padding:0 8px 8px; }
+.capture-preview-actions .btn { margin:0; }
 .card .addr { font-weight: bold; color: #000; }
 .card .meta { font-size: 13px; color: #000; margin: 4px 0; }
 .badge { display: inline-block; border: 1px solid #000; border-radius: 12px; padding: 2px 8px; font-size: 12px; margin-right: 6px; }

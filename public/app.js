@@ -414,7 +414,7 @@ function renderCapture() {
     ${isProClient() && ['ticket_scanner','camera_readers','before_after'].some(featureOn) ? `<button type="button" class="btn secondary" id="openCameraTools" style="margin-top:8px">Other Camera Tools</button>` : ''}
     <input type="file" accept="image/*" capture="environment" id="photoCam" style="display:none" />
     <input type="file" accept="image/*" id="photoLib" style="display:none" />
-    <div class="photo-box" id="previewBox" style="display:none;margin-top:12px"><img id="preview" alt="preview" style="display:block" /></div>
+    <div class="photo-box capture-preview" id="previewBox" style="display:none;margin-top:12px"><img id="preview" alt="Selected photo preview" style="display:block" /><div class="capture-preview-actions"><button type="button" class="btn secondary" id="retakePhoto">Retake Photo</button><button type="button" class="btn secondary" id="cancelPhoto">Cancel Photo</button></div></div>
     <div class="status" id="qualityStatus"></div>
 
     <div id="locwrap" style="display:none">
@@ -446,6 +446,8 @@ function renderCapture() {
   document.getElementById('choosephoto').onclick = () => document.getElementById('photoLib').click();
   document.getElementById('photoCam').onchange = (e) => { if (e.target.files[0]) onPhotoChosen(e.target.files[0]); };
   document.getElementById('photoLib').onchange = (e) => { if (e.target.files[0]) onPhotoChosen(e.target.files[0]); };
+  document.getElementById('retakePhoto').onclick = retakeCapturePhoto;
+  document.getElementById('cancelPhoto').onclick = cancelCapturePhoto;
   document.getElementById('save').onclick = saveCapture;
   document.getElementById('retryLocation').onclick = () => acquireLocation(true);
   if(isHoaClient()){document.getElementById('hoaCommunity').onchange=e=>state.communityId=e.target.value;document.getElementById('hoaType').onchange=e=>document.getElementById('hoaDirectedWrap').style.display=e.target.value==='information'?'block':'none';}else{
@@ -468,7 +470,7 @@ function renderCapture() {
   // if a photo is already chosen (e.g. re-render after picking an area), keep it and its location visible
   if (state.photoFile) {
     const box = document.getElementById('previewBox');
-    document.getElementById('preview').src = URL.createObjectURL(state.photoFile);
+    showCapturePreview(state.photoFile);
     box.style.display = 'block';
     document.getElementById('locwrap').style.display = 'block';
     if (state.location) {
@@ -719,11 +721,30 @@ function onPhotoChosen(file) {
     return result;
   });
   state._locationPromise = null;
-  const box = document.getElementById('previewBox');
-  document.getElementById('preview').src = URL.createObjectURL(file);
-  box.style.display = 'block';
+  showCapturePreview(file);
   document.getElementById('locwrap').style.display = 'block';
   acquireLocation();
+}
+
+function showCapturePreview(file){
+  const box=document.getElementById('previewBox'),img=document.getElementById('preview');
+  if(!box||!img||!file)return;
+  if(state._previewUrl)URL.revokeObjectURL(state._previewUrl);
+  state._previewUrl=URL.createObjectURL(file);img.src=state._previewUrl;box.style.display='block';
+}
+function retakeCapturePhoto(){
+  const input=document.getElementById('photoCam');
+  if(!input)return;input.value='';input.click();
+}
+function cancelCapturePhoto(){
+  if(state._previewUrl)URL.revokeObjectURL(state._previewUrl);
+  state._previewUrl=null;state.photoFile=null;state._qualityResult=null;state._qualityPromise=null;state.location=null;state.address=null;state._locationPromise=null;
+  for(const id of ['photoCam','photoLib']){const input=document.getElementById(id);if(input)input.value='';}
+  const preview=document.getElementById('preview');if(preview)preview.removeAttribute('src');
+  const box=document.getElementById('previewBox');if(box)box.style.display='none';
+  const loc=document.getElementById('locwrap');if(loc)loc.style.display='none';
+  const quality=document.getElementById('qualityStatus');if(quality)quality.textContent='';
+  toast('Photo cancelled');
 }
 
 async function analyzePhotoQuality(file){

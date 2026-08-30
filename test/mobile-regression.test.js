@@ -46,6 +46,15 @@ test('location failures expose a retry path without blocking photo save', () => 
   assert.match(app, /Location timed out or is unavailable/);
 });
 
+test('a newly selected capture can be retaken or cancelled before save', () => {
+  assert.match(app, /id="retakePhoto">Retake Photo/);
+  assert.match(app, /id="cancelPhoto">Cancel Photo/);
+  assert.match(app, /function retakeCapturePhoto\(\)/);
+  assert.match(app, /function cancelCapturePhoto\(\)/);
+  assert.match(app, /state\.photoFile=null/);
+  assert.match(css, /\.capture-preview-actions \{ display:grid; grid-template-columns:1fr 1fr/);
+});
+
 test('service-worker shell and document versions stay synchronized', () => {
   const appVersion = index.match(/app\.js\?v=(\d+)/)?.[1];
   const styleVersion = index.match(/styles\.css\?v=(\d+)/)?.[1];
