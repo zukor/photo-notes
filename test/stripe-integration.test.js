@@ -46,6 +46,8 @@ test('customer checkout and administrator draft invoicing are wired without expo
   assert.match(admin,/Create Draft Invoice/);
   assert.match(admin,/api\/admin\/billing\/invoices/);
   assert.match(stripe,/auto_advance: false/);
+  assert.match(stripe,/api\/admin\/billing\/status/);
+  assert.match(admin,/Sandbox.*webhook activity/);
   assert.doesNotMatch(app,/price_[A-Za-z0-9]+/);
   assert.doesNotMatch(admin,/price_[A-Za-z0-9]+/);
 });

@@ -35,4 +35,6 @@ test('Concrete batch tickets stay linked to placement photos and export with evi
   assert.match(app, /Attach Batch Ticket \/ Spec Photo/);
   assert.match(app, /Photo Evidence PDF/);
   assert.match(app, /Photo Evidence Word/);
+  assert.match(server, /concreteEvidenceChecklist/);
+  assert.match(app, /Photo evidence readiness/);
 });

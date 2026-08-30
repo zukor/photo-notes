@@ -133,6 +133,14 @@ function registerStripeRoutes(app, { pool, requireAuth, requireAdmin, env = proc
     });
   });
 
+  app.get('/api/admin/billing/status', requireAdmin, async (req, res) => {
+    try {
+      const events = (await pool.query(`SELECT event_type,object_id,livemode,processed_at FROM stripe_events ORDER BY processed_at DESC LIMIT 50`)).rows;
+      const counts = {}; for (const event of events) counts[event.event_type] = (counts[event.event_type] || 0) + 1;
+      res.json({ configured:stripeConfigured(env), webhook_configured:!!String(env.STRIPE_WEBHOOK_SECRET||'').trim(), environment:events.some(e=>e.livemode)?'live':'sandbox', counts, events });
+    } catch (error) { console.error('[stripe.admin-status]', error && error.message); res.status(500).json({ error:'Stripe activity could not be loaded' }); }
+  });
+
   app.post('/api/billing/checkout', requireAuth, async (req, res) => {
     const client = createStripeClient(env);
     const offers = parseOffers(env.STRIPE_CHECKOUT_OFFERS_JSON);

@@ -24,7 +24,8 @@ test('small Android widths keep header logo, tabs, and forms inside the viewport
 });
 
 test('issue reporter stays recoverable and clear of primary page controls', () => {
-  assert.match(css, /\.wrap \{[\s\S]*padding:[^;]*96px/);
+  assert.match(css, /@media \(max-width: 1100px\)[\s\S]*\.issue-fab \{[\s\S]*position:static/);
+  assert.match(css, /@media \(max-width: 1100px\)[\s\S]*\.wrap \{ padding-bottom:24px/);
   assert.match(css, /\.issue-fab \{[\s\S]*bottom:max\(14px,env\(safe-area-inset-bottom\)\)/);
   assert.match(css, /\.issue-dialog \{ max-height:calc\(100vh - 20px\)/);
   assert.match(app, /send\.disabled=false;send\.textContent='Send Issue Report'/);

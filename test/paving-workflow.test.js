@@ -18,9 +18,11 @@ test('delivery-ticket photos can be explicitly linked to an owned job',()=>{
 test('Paving job report remains photo-first and includes supporting ticket and extra-work evidence',()=>{
   assert.match(server,/app\.get\('\/api\/paving\/jobs\/:id\/report'/);
   assert.match(server,/captures WHERE user_id=\$1 AND job_id=\$2 AND photo_path IS NOT NULL/);
-  assert.match(server,/buildRenderUnits\(captures, await userPairs/);
+  assert.match(server,/pavingEvidenceChecklist/);
+  assert.match(server,/jobs\/:id\/completeness/);
   assert.match(server,/Delivery Ticket Evidence/);
   assert.match(server,/Photo-Backed Extra Work/);
   assert.match(app,/Job Evidence PDF/);
   assert.match(app,/Job Evidence Word/);
+  assert.match(app,/Photo evidence readiness/);
 });
