@@ -875,7 +875,7 @@ app.get('/api/captures/search', requireAuth, async (req,res)=>{
   try{
     const q=String(req.query.q||'').trim();
     const vals=[req.user.id],where=['c.user_id=$1'];
-    if(q){vals.push(`%${q}%`);const n=vals.length;where.push(`(COALESCE(c.note,'') ILIKE $${n} OR COALESCE(c.address,'') ILIKE $${n} OR COALESCE(c.captured_by,'') ILIKE $${n} OR COALESCE(array_to_string(c.area_tags,' '),'') ILIKE $${n} OR COALESCE(c.defect_type,'') ILIKE $${n} OR COALESCE(j.name,'') ILIKE $${n} OR COALESCE(j.job_number,'') ILIKE $${n} OR COALESCE(j.customer,'') ILIKE $${n} OR to_char(c.created_at,'MM/DD/YYYY HH12:MI AM') ILIKE $${n})`);}
+    if(q){vals.push(`%${q}%`);const n=vals.length;where.push(`(COALESCE(c.photo_title,'') ILIKE $${n} OR COALESCE(c.note,'') ILIKE $${n} OR COALESCE(c.address,'') ILIKE $${n} OR COALESCE(c.captured_by,'') ILIKE $${n} OR COALESCE(array_to_string(c.area_tags,' '),'') ILIKE $${n} OR COALESCE(c.defect_type,'') ILIKE $${n} OR COALESCE(j.name,'') ILIKE $${n} OR COALESCE(j.job_number,'') ILIKE $${n} OR COALESCE(j.customer,'') ILIKE $${n} OR to_char(c.created_at,'MM/DD/YYYY HH12:MI AM') ILIKE $${n})`);}
     if(Number.isInteger(Number(req.query.job_id))){vals.push(Number(req.query.job_id));where.push(`c.job_id=$${vals.length}`);}
     if(req.query.from){vals.push(String(req.query.from));where.push(`c.created_at >= $${vals.length}::date`);}
     if(req.query.to){vals.push(String(req.query.to));where.push(`c.created_at < ($${vals.length}::date + interval '1 day')`);}
@@ -1543,6 +1543,7 @@ app.post('/api/captures/:id', requireAuth, async (req, res) => {
     const b = req.body || {};
     const sets = [];
     const vals = [];
+    if (typeof b.photo_title === 'string') { vals.push(ticketText(b.photo_title, 200)); sets.push(`photo_title = $${vals.length}`); }
     if (typeof b.note === 'string') { vals.push(b.note); sets.push(`note = $${vals.length}`); }
     if (typeof b.address === 'string') { vals.push(b.address.trim() || null); sets.push(`address = $${vals.length}`); }
     if (Array.isArray(b.area_tags)) { vals.push(b.area_tags); sets.push(`area_tags = $${vals.length}`); }
@@ -1582,6 +1583,7 @@ app.post('/api/captures/:id', requireAuth, async (req, res) => {
       `UPDATE captures SET ${sets.join(', ')} WHERE id = $${vals.length - 1} AND user_id = $${vals.length} RETURNING *`, vals);
     if (!rows.length) return res.status(404).json({ error: 'not found' });
     const changed=[];
+    if (typeof b.photo_title === 'string') { logEvent(req.user.id, 'photo_title_edit', { chars: b.photo_title.trim().length }); changed.push('photo title'); }
     if (typeof b.note === 'string') { logEvent(req.user.id, 'note_edit', { chars: b.note.length }); changed.push('note'); }
     if (typeof b.address === 'string') { logEvent(req.user.id, 'address_edit', {}); changed.push('address'); }
     if (Array.isArray(b.area_tags)) changed.push('topics');

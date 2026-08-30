@@ -2019,11 +2019,16 @@ function captureCardHtml(c) {
   const measureRow = measurementOn() && state.view === 'edit' && c.photo_path
     ? `<button class="btn secondary slim editdims" data-id="${c.id}">Measurements</button>` : '';
   const supporting=(c.supporting_photos||[]).map(p=>`<div class="meta"><strong>${p.reference_type==='specification'?'Specification':'Batch ticket'}:</strong> linked photo</div>`).join(''),concreteRow=isConcreteClient()&&c.concrete_element?`<div class="concrete-evidence"><strong>${esc(String(c.concrete_element).replaceAll('_',' '))}</strong> · ${esc(String(c.concrete_stage||'photo').replaceAll('_',' '))}${c.concrete_condition?` · ${esc(String(c.concrete_condition).replaceAll('_',' '))}`:''}${c.concrete_severity&&c.concrete_severity!=='none'?` · ${esc(c.concrete_severity)} severity`:''}${c.concrete_location?`<div>${esc(c.concrete_location)}</div>`:''}${c.concrete_mix?`<div>Mix/spec: ${esc(c.concrete_mix)}</div>`:''}${supporting}</div>${c.concrete_stage!=='batch_ticket'?`<label class="btn secondary slim concrete-ticket-label">Attach Batch Ticket / Spec Photo<input class="concrete-ticket-file" data-id="${c.id}" type="file" accept="image/*" capture="environment" hidden></label>`:''}`:'';
+  const titleAction=state.view==='edit'?(c.photo_title?'Change Photo Title':'Add Photo Title'):(state.view==='organize'&&!c.photo_title?'Add Photo Title':'');
   return `<div class="card">
     <label style="display:flex;align-items:center;gap:8px;font-weight:bold;margin-bottom:8px;text-transform:none;letter-spacing:0;font-size:15px">
       <input type="checkbox" class="capchk" value="${c.id}" style="width:20px;height:20px"> Select
     </label>
     ${c.photo_path ? `<img src="${photoSrc(c.photo_path)}" alt="capture" />` : ''}
+    <div class="phototitlewrap" data-id="${c.id}">
+      <div class="photo-title">${esc(c.photo_title || 'Untitled photo')}</div>
+      ${titleAction?`<button class="editlink edittitle" data-id="${c.id}" type="button">${titleAction}</button>`:''}
+    </div>
     <div class="meta">${when}</div>
     ${c.job_name?`<div class="badge">${esc(c.job_number?c.job_number+' — '+c.job_name:c.job_name)}</div>`:''}
     <div class="rotaterow">${rotateButtons(c.id)}</div>
@@ -2068,12 +2073,14 @@ function pairCardHtml(before, after) {
   const side = (c, label) => {
     const dims = measurementOn() ? fmtDimsClient(c) : '';
     const badge = isProClient() && c.defect_type ? defectBadgeHtml(c) : '';
+    const titleAction=state.view==='edit'?(c.photo_title?'Change Photo Title':'Add Photo Title'):(state.view==='organize'&&!c.photo_title?'Add Photo Title':'');
     return `<div style="flex:1;min-width:0">
       <div style="font-weight:bold;font-size:13px">${label}</div>
       <label style="display:flex;align-items:center;gap:6px;text-transform:none;letter-spacing:0;font-size:13px;font-weight:bold">
         <input type="checkbox" class="capchk" value="${c.id}" style="width:18px;height:18px"> Select
       </label>
       ${c.photo_path ? `<img src="${photoSrc(c.photo_path)}" alt="${label}" />` : ''}
+      <div class="phototitlewrap" data-id="${c.id}"><div class="photo-title">${esc(c.photo_title||'Untitled photo')}</div>${titleAction?`<button class="editlink edittitle" data-id="${c.id}" type="button">${titleAction}</button>`:''}</div>
       <div class="rotaterow">${rotateButtons(c.id)}</div>
       ${badge ? `<div style="margin:4px 0">${badge}</div>` : ''}
       <div class="meta">${esc(c.address || 'No address')}</div>
@@ -2094,6 +2101,7 @@ function pairCardHtml(before, after) {
 function wireCards(cards, rows) {
   cards.querySelectorAll('.capchk').forEach(c => c.onchange = () => { if (c.checked) state.selectedIds.add(String(c.value)); else state.selectedIds.delete(String(c.value)); });
   wireRotate(cards);
+  cards.querySelectorAll('.edittitle').forEach(b => b.onclick = () => startEditPhotoTitle(parseInt(b.getAttribute('data-id'), 10), rows));
   cards.querySelectorAll('.editnote').forEach(b => b.onclick = () => startEditNote(parseInt(b.getAttribute('data-id'), 10), rows));
   cards.querySelectorAll('.editaddress').forEach(b => {
     b.onclick = () => { const c = rows.find(r => r.id === parseInt(b.getAttribute('data-id'), 10)); if (c) editCaptureAddress(c); };
@@ -2533,6 +2541,25 @@ function startEditNote(id, rows) {
   ta.focus();
   wrap.querySelector('.cancelnote').onclick = () => loadCards(document.getElementById('filter').value || '');
   wrap.querySelector('.savenote').onclick = () => saveNote(id, ta.value, () => loadCards(document.getElementById('filter').value || ''));
+}
+
+function startEditPhotoTitle(id, rows) {
+  const wrap = document.querySelector(`.phototitlewrap[data-id="${id}"]`);
+  if (!wrap) return;
+  const row = rows.find(r => r.id === id);
+  const current = row ? (row.photo_title || '') : '';
+  wrap.innerHTML = `<label for="photoTitle${id}">Photo Title</label><input id="photoTitle${id}" class="photo-title-input" maxlength="200" value="${esc(current)}" placeholder="Add a short descriptive title"><div class="row compact"><button class="btn slim savephototitle" type="button">Save Title</button><button class="btn secondary slim cancelphototitle" type="button">Cancel</button></div>`;
+  const input = wrap.querySelector('.photo-title-input');
+  titleCaseInput(input); input.focus(); input.select();
+  wrap.querySelector('.cancelphototitle').onclick = () => loadCards((document.getElementById('filter')||{}).value||'');
+  wrap.querySelector('.savephototitle').onclick = async () => {
+    const value=input.value.trim();
+    if(!value){toast('Enter a photo title');return;}
+    const r=await api(`/api/captures/${id}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({photo_title:value})});
+    if(r.ok){toast('Photo title saved');loadCards((document.getElementById('filter')||{}).value||'');}
+    else toast('Photo title could not be saved');
+  };
+  input.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();wrap.querySelector('.savephototitle').click();}if(e.key==='Escape')wrap.querySelector('.cancelphototitle').click();};
 }
 
 // ---- Map (Pro): satellite view of captures + measurement zones ----

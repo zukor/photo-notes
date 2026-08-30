@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS captures (
   photo_path   TEXT,
   photo_width  INTEGER,
   photo_height INTEGER,
+  photo_title  TEXT,
   note         TEXT,
   latitude     DOUBLE PRECISION,
   longitude    DOUBLE PRECISION,
@@ -510,6 +511,7 @@ async function init() {
   await pool.query(`UPDATE captures SET user_id = $1 WHERE user_id IS NULL`, [adminId]);
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS photo_width INTEGER`);
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS photo_height INTEGER`);
+  await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS photo_title TEXT`);
   // Pro-tier: user plan ('free'|'pro'), default 'free' for all existing users.
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS plan TEXT NOT NULL DEFAULT 'free'`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS pro_type TEXT NOT NULL DEFAULT 'paving'`);
