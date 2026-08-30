@@ -1,6 +1,6 @@
 # Photo Notes — Project State & Resume Guide
 
-_Last updated: 2026-08-24 (five-stage workflow and delivery center). This document is the single source of truth for
+_Last updated: 2026-08-29 (production naming, Stripe sandbox, and health gate). This document is the single source of truth for
 resuming work on the Photo Notes app after any delay. It captures what the
 app is, where it lives, how it is built and deployed, the full feature set,
 and everything still pending. If you are a Claude session picking this up
@@ -30,18 +30,19 @@ or photos, by design (privacy).
 - **Live URL:** https://photonotesapp.com
 - **GitHub repo:** `zukor/photo-notes` (branch `main`). This holds all code
   and full history.
-- **Railway project:** `cozy-purpose` (id `62580ecc-2e07-4e27-b2de-fedbb7bf263d`)
-  - **Service (the live app):** `selfless-youth`
+- **Railway project:** `Zukor Production Apps` (id `62580ecc-2e07-4e27-b2de-fedbb7bf263d`)
+  - **Service (the live app):** `Photo Notes Production`
     (id `f1c5c40a-c946-4c48-a750-a38a45ce4877`)
   - **Environment:** `production`
     (id `582f1452-88f5-4da5-9724-710c12d47215`)
   - Postgres runs as a separate service in the same project.
-- **Dud/leftover to delete when convenient:** a never-deployed service also
-  named `photo-notes` (id `6244cf58-03cb-4648-acc4-342cc0bd0234`) in
-  cozy-purpose, plus an empty separate project also called `photo-notes`
-  (id `93c5e666-...`). Neither is the live app; safe to remove.
+- **Legacy service:** `Photo Notes Legacy`
+  (id `6244cf58-03cb-4648-acc4-342cc0bd0234`). It is not the live app.
+- **Separate legacy project:** `photo-notes`
+  (id `93c5e666-eb84-4b4a-9428-1ebc47ddc9d6`). It is not the live app.
+  Do not deploy production changes to either legacy target.
 
-## 3. Required Railway environment variables (on selfless-youth)
+## 3. Required Railway environment variables (on Photo Notes Production)
 
 - `ADMIN_EMAIL` — the admin account's email (defaults to
   `turcotte@zukor.com` if unset). Seeded as the first user on a fresh DB.
@@ -53,12 +54,18 @@ or photos, by design (privacy).
 - `UPLOAD_DIR` — points at the mounted volume (photos persist there).
 - `PORT` = 8080 (domain targetPort is 8080).
 - `NODE_ENV` = production.
+- `PUBLIC_BASE_URL` = `https://photonotesapp.com`.
+- `UPLOAD_PERSISTENCE_CONFIRMED` = `true` (the live service has a Railway
+  volume mounted at `/data/uploads`).
+- `STRIPE_RESTRICTED_KEY`, `STRIPE_WEBHOOK_SECRET`, and
+  `STRIPE_CHECKOUT_OFFERS_JSON` configure the Stripe sandbox integration.
 - **`MAPBOX_TOKEN`** — NOT YET SET. Add a free Mapbox default public token
   (starts `pk.`) to get accurate US addresses. Until then the app falls back
   to free OpenStreetMap/Nominatim, which is inaccurate (wrong street/ZIP).
   Sam prefers Mapbox over Google. `GOOGLE_MAPS_API_KEY` is also supported by
   the code but intentionally unused.
 - A persistent **volume** is attached for `/data/uploads` (photo storage).
+  Railway also uses `/api/health` as the deployment health check.
 
 ## 4. How deploys work (IMPORTANT)
 
@@ -202,7 +209,8 @@ the top — tap it (or the smaller "A") until it reads **100%**.
    red accents, or black/white. Change `--accent` in styles.css (+ theme
    color in index.html/manifest.json) once decided. Logo brief exists in the
    fieldwork docs.
-5. **Delete the dud services** noted in §2.
+5. **Legacy cleanup:** delete the legacy service/project noted in §2 only
+   after a final data/source audit confirms nothing unique remains.
 6. **Board Hub integration** (embed into the Elm Creek Board Hub later).
 
 _(Done: multi-user / per-person logins with per-customer isolation and the

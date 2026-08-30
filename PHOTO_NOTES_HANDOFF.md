@@ -3,7 +3,7 @@
 **Product:** Photo Notes, a private multi-user photo-documentation web app (PWA) for paving and field work.
 **Live URL:** https://photonotesapp.com
 **Owner:** Zukor AI (Sam Turcotte)
-**Last updated:** 2026-08-24
+**Last updated:** 2026-08-29
 
 This document is the single source of truth for picking up development. It covers the architecture, how to deploy, the full feature set, the data model, environment configuration, known constraints, and the outstanding backlog. Where a detail is safety-critical or easy to get wrong, it is called out explicitly.
 
@@ -47,10 +47,14 @@ There is no build step for the frontend. `app.js` and `send.js` are served as-is
 **Repo:** `github.com/zukor/photo-notes`, branch `main`.
 
 **Host:** Railway.
-- Project: `photo-notes` (id `93c5e666-eb84-4b4a-9428-1ebc47ddc9d6`)
-- Service: `photo-notes` (id `d180b50f-555c-4869-8d0d-235e3cd56912`)
-- Environment: `production` (id `6cc1ac53-3920-4b74-ae32-87e5551e1bc6`)
+- Project: `Zukor Production Apps` (id `62580ecc-2e07-4e27-b2de-fedbb7bf263d`)
+- Service: `Photo Notes Production` (id `f1c5c40a-c946-4c48-a750-a38a45ce4877`)
+- Environment: `production` (id `582f1452-88f5-4da5-9724-710c12d47215`)
 - Railway auto-builds and deploys on every push to `main`.
+
+The separately hosted project `photo-notes`
+(`93c5e666-eb84-4b4a-9428-1ebc47ddc9d6`) and `Photo Notes Legacy` service
+are not production targets.
 
 **Deploy flow:** commit to `main` → Railway builds (`npm install` runs `postinstall` → `gen-icons.js`) → starts the service → app is live within ~60 to 120 seconds.
 
@@ -58,6 +62,7 @@ There is no build step for the frontend. `app.js` and `send.js` are served as-is
 1. `GET https://photonotesapp.com/` returns 200.
 2. `GET https://photonotesapp.com/api/me` returns 401 when unauthenticated (proves the Express app booted, not just static files).
 3. Railway build logs show the DB schema initialize and the server listen line.
+4. Railway marks `/api/health` healthy before promoting the deployment.
 
 ### 3.1 IMPORTANT: how files get pushed (read before deploying)
 
