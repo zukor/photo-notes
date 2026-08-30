@@ -5,7 +5,7 @@ body {
   margin: 0;
   font-family: Arial, Helvetica, sans-serif;
   color: #000;
-  background: #f6f7f9;
+  background: #fff;
   -webkit-text-size-adjust: 100%;
 }
 img { max-width: 100%; height: auto; }
@@ -194,8 +194,10 @@ textarea { min-height: 96px; resize: vertical; }
 @media (max-width:700px) { .before-after-preview { grid-template-columns:1fr; } }
 .workflow-organize .rotaterow, .workflow-organize .stampbtn, .workflow-organize .cropbtn,
 .workflow-organize .restorebtn, .workflow-organize .editnote, .workflow-organize .defectrow { display:none !important; }
-.delivery-actions { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; }
+.delivery-actions { display:grid; grid-template-columns:minmax(0,1fr) minmax(92px,.75fr) minmax(0,1fr); gap:8px; align-items:stretch; }
 .delivery-actions .btn, .delivery-grid .btn { margin-top:0; }
+.delivery-actions .btn { padding:10px 8px; font-size:15px; }
+.delivery-actions select { min-width:0; height:100%; padding:8px; font-size:15px; font-weight:700; }
 .delivery-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin-top:10px; }
 .send-capture-row { display:grid; grid-template-columns:24px 72px 1fr; gap:10px; align-items:center; padding:10px; margin:0; border:1px solid #000; border-radius:10px; background:#fff; text-transform:none; letter-spacing:0; font-size:14px; cursor:pointer; }
 .send-capture-row input { width:20px; height:20px; }
@@ -360,7 +362,7 @@ input.dimfield.suggested {
   .workflow-tabs .tab { min-width:0; padding:9px 2px; font-size:12px; }
   .workflow-tabs.hoa-tabs .tab { font-size:10px; line-height:1.15; overflow-wrap:anywhere; }
   .workflow-organize #cards, .workflow-edit #cards, #glist, .workflow-create #gitems, .send-capture-list { grid-template-columns:1fr; }
-  .delivery-actions, .delivery-grid { grid-template-columns:1fr 1fr; }
+  .delivery-grid { grid-template-columns:1fr 1fr; }
   .map-filter-row { flex-direction:column; gap:8px; align-items:stretch; }
   .organize-form-grid { grid-template-columns:1fr; }
   .ticket-entry { align-items:stretch; flex-direction:column; }

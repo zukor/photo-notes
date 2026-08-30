@@ -427,7 +427,7 @@ async function openIssueReporter() {
   if(description)description.value='';
   if(status)status.textContent='';
   try {
-    if(window.html2canvas){const canvas=await window.html2canvas(document.querySelector('.wrap'),{useCORS:true,allowTaint:false,backgroundColor:'#f4f7f8',scale:Math.min(window.devicePixelRatio||1,1.5),logging:false});issueScreenshotBlob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',0.78));}
+    if(window.html2canvas){const canvas=await window.html2canvas(document.querySelector('.wrap'),{useCORS:true,allowTaint:false,backgroundColor:'#ffffff',scale:Math.min(window.devicePixelRatio||1,1.5),logging:false});issueScreenshotBlob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',0.78));}
   } catch(e){issueScreenshotBlob=null;}
   const modal=document.getElementById('issueModal'); if(!modal)return; modal.hidden=false;
   document.getElementById('issueShotStatus').textContent=issueScreenshotBlob?'✓ Screenshot of this page attached':'Screenshot unavailable; your description will still be saved';
@@ -2850,9 +2850,9 @@ async function renderSend() {
     ${isMacClient() ? `<div class="share-requirement"><strong>Texting an Android phone from this Mac?</strong><span>Your iPhone must have Settings → Apps → Messages → Text Message Forwarding enabled for this Mac, plus MMS or RCS messaging.</span></div>` : ''}
     <div class="status" id="sendSelection">Loading captures...</div>
     <div class="delivery-actions">
-      <button class="btn" id="sharephotos">Share Photos</button>
-      <button class="btn secondary" id="sendpdf">Send as PDF</button>
-      <button class="btn secondary" id="sendword">Send as Word</button>
+      <button class="btn" id="sharephotos">Share</button>
+      <select id="sendformat" aria-label="Document format"><option value="pdf">PDF</option><option value="docx">Word</option></select>
+      <button class="btn secondary" id="senddocument">Send</button>
     </div>
     <div id="sendCaptures" class="send-capture-list"></div>
     <div class="formhead" style="margin-top:30px">Customer Approval Package</div>
@@ -2863,8 +2863,7 @@ async function renderSend() {
     <div id="sendDocs"><p class="status">Loading documents...</p></div>
     <div id="billingOffers"></div>`;
   document.getElementById('sharephotos').onclick = shareSelectedPhotos;
-  document.getElementById('sendpdf').onclick = () => deliverExport('pdf', null, true);
-  document.getElementById('sendword').onclick = () => deliverExport('docx', null, true);
+  document.getElementById('senddocument').onclick = () => deliverExport(document.getElementById('sendformat').value, null, true);
   document.getElementById('createApproval').onclick=createApprovalPackage;
   loadSendCenter();
   loadApprovalPackages();
