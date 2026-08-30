@@ -25,6 +25,11 @@ textarea { min-height: 96px; resize: vertical; }
 .photo-title { margin-top:9px; color:#000; font-size:18px; font-weight:800; line-height:1.2; }
 .phototitlewrap .editlink { padding-left:0; }
 .photo-title-input { margin-top:5px; font-size:17px; font-weight:700; }
+.topicwrap .editlink { padding-left:0; }
+.topic-editor { margin:8px 0; padding:10px; border:1px solid #000; border-radius:8px; }
+.topic-editor legend { padding:0 5px; font-weight:800; }
+.topic-editor label { display:block; margin:5px 0; text-transform:none; letter-spacing:0; font-size:15px; }
+.topic-editor input[type="checkbox"] { width:20px; height:20px; margin-right:6px; vertical-align:middle; }
 .btn {
   display: block; width: 100%; padding: 15px; font-size: 17px; font-weight: bold;
   color: #fff; background: var(--accent); border: none; border-radius: 10px; margin-top: 18px;

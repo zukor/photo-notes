@@ -460,7 +460,7 @@ CREATE TABLE IF NOT EXISTS hoa_completion_photo_requests (
 );
 `;
 
-const DEFAULT_AREAS = ['Roads', 'Maintenance', 'Walls', 'Security', 'Landscaping', 'Other'];
+const DEFAULT_AREAS = ['Roads', 'Maintenance', 'Fences & Walls', 'Security', 'Landscaping', 'Other'];
 
 async function seedUserAreas(userId) {
   for (let i = 0; i < DEFAULT_AREAS.length; i++) {
@@ -565,6 +565,10 @@ async function init() {
   await pool.query(`ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS admin_notes TEXT`);
   await pool.query(`ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now()`);
   await pool.query(`ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMPTZ`);
+
+  // This common property-maintenance topic is available to every existing and
+  // future account. Existing custom topics are preserved.
+  await pool.query(`INSERT INTO user_areas (user_id, name) SELECT id, 'Fences & Walls' FROM users ON CONFLICT DO NOTHING`);
 
   // 3. Move any legacy global areas into the admin's per-user area list.
   await pool.query(

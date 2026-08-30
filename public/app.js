@@ -59,7 +59,7 @@ function titleCaseInput(el) {
 async function loadAreas() {
   const r = await api('/api/areas');
   state.areas = r.ok ? await r.json() : [];
-  if (!state.area || !state.areas.includes(state.area)) state.area = state.areas[0] || '';
+  if (state.area && !state.areas.includes(state.area)) state.area = '';
 }
 async function loadJobs(){try{const r=await api('/api/jobs');state.jobs=r.ok?await r.json():[];if(state.jobId&&!state.jobs.some(j=>String(j.id)===String(state.jobId)))state.jobId='';}catch(e){state.jobs=[];}}
 async function loadHoaContext(){if(!isHoaClient())return;try{const [a,b,m,n]=await Promise.all([api('/api/hoa/company'),api('/api/hoa/communities'),api('/api/hoa/members'),api('/api/hoa/notifications')]);state.hoaCompany=a.ok?await a.json():null;state.communities=b.ok?await b.json():[];state.hoaMembers=m.ok?await m.json():[];const notes=n.ok?await n.json():[];state.hoaUnread=notes.filter(x=>!x.read_at).length;if(!state.communityId&&state.communities.length)state.communityId=String(state.communities[0].id);}catch(e){state.communities=[];state.hoaMembers=[];}}
@@ -82,7 +82,7 @@ async function deleteArea(name) {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name }),
   });
-  if (r.ok) { state.areas = await r.json(); if (state.area === name) state.area = state.areas[0] || ''; renderCapture(); }
+  if (r.ok) { state.areas = await r.json(); if (state.area === name) state.area = ''; renderCapture(); }
   else toast('Could not remove topic');
 }
 
@@ -467,8 +467,9 @@ async function submitIssueReport(){
 }
 
 function areaChips() {
-  if (!state.areas.length) return '<p class="status">No topics yet. Add one below.</p>';
-  return state.areas.map(a =>
+  const none=`<div class="pill ${state.area?'':'on'}" data-area="">No Topic</div>`;
+  if (!state.areas.length) return none+'<p class="status">No topics yet. Add one below.</p>';
+  return none+state.areas.map(a =>
     `<div class="pill ${state.area===a?'on':''}" data-area="${esc(a)}">${esc(a)} <span class="areax" data-del="${esc(a)}">&times;</span></div>`
   ).join('');
 }
@@ -1640,7 +1641,8 @@ async function renderList() {
         <label>File Selected Under a Topic</label>
         <div class="row compact">
           <select id="bulktopic"><option value="">Choose Topic</option>${state.areas.map(a => `<option value="${esc(a)}">${esc(a)}</option>`).join('')}</select>
-          <button class="btn secondary" id="applytopic">Apply</button>
+          <button class="btn secondary" id="applytopic">Add Topic</button>
+          <button class="btn secondary" id="replacetopic">Replace Topics</button>
         </div>
         <div class="row compact" style="margin-top:8px">
           <input id="organizenewtopic" type="text" placeholder="Create a new topic...">
@@ -1676,6 +1678,7 @@ async function renderList() {
   document.getElementById('selall').onclick = () => document.querySelectorAll('.capchk').forEach(c => { c.checked = true; state.selectedIds.add(String(c.value)); });
   document.getElementById('selnone').onclick = () => { state.selectedIds.clear(); document.querySelectorAll('.capchk').forEach(c => c.checked = false); };
   document.getElementById('applytopic').onclick = applyTopicToSelected;
+  document.getElementById('replacetopic').onclick = replaceTopicsOnSelected;
   document.getElementById('createtopic').onclick = createOrganizeTopic;
   document.getElementById('addtogroup').onclick = addSelectedToGroup;
   document.getElementById('createJobBtn').onclick=createJob;
@@ -1734,6 +1737,16 @@ async function applyTopicToSelected() {
   }
   toast(`Filed ${done} capture${done === 1 ? '' : 's'} under ${topic}`);
   loadCards((document.getElementById('filter') || {}).value || '');
+}
+
+async function replaceTopicsOnSelected() {
+  const topic=(document.getElementById('bulktopic')||{}).value||'',ids=Array.from(state.selectedIds);
+  if(!topic){toast('Choose a topic');return;}
+  if(!ids.length){toast('Select at least one capture');return;}
+  let done=0;
+  for(const id of ids){const r=await api(`/api/captures/${id}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({area_tags:[topic]})});if(r.ok)done++;}
+  toast(`Changed ${done} photo${done===1?'':'s'} to ${topic}`);
+  loadCards((document.getElementById('filter')||{}).value||'');
 }
 
 async function renderEdit() {
@@ -2020,6 +2033,7 @@ function captureCardHtml(c) {
     ? `<button class="btn secondary slim editdims" data-id="${c.id}">Measurements</button>` : '';
   const supporting=(c.supporting_photos||[]).map(p=>`<div class="meta"><strong>${p.reference_type==='specification'?'Specification':'Batch ticket'}:</strong> linked photo</div>`).join(''),concreteRow=isConcreteClient()&&c.concrete_element?`<div class="concrete-evidence"><strong>${esc(String(c.concrete_element).replaceAll('_',' '))}</strong> · ${esc(String(c.concrete_stage||'photo').replaceAll('_',' '))}${c.concrete_condition?` · ${esc(String(c.concrete_condition).replaceAll('_',' '))}`:''}${c.concrete_severity&&c.concrete_severity!=='none'?` · ${esc(c.concrete_severity)} severity`:''}${c.concrete_location?`<div>${esc(c.concrete_location)}</div>`:''}${c.concrete_mix?`<div>Mix/spec: ${esc(c.concrete_mix)}</div>`:''}${supporting}</div>${c.concrete_stage!=='batch_ticket'?`<label class="btn secondary slim concrete-ticket-label">Attach Batch Ticket / Spec Photo<input class="concrete-ticket-file" data-id="${c.id}" type="file" accept="image/*" capture="environment" hidden></label>`:''}`:'';
   const titleAction=state.view==='edit'?(c.photo_title?'Change Photo Title':'Add Photo Title'):(state.view==='organize'&&!c.photo_title?'Add Photo Title':'');
+  const topicAction=['organize','edit'].includes(state.view)?`<button class="editlink edittopics" data-id="${c.id}" type="button">Change Topics</button>`:'';
   return `<div class="card">
     <label style="display:flex;align-items:center;gap:8px;font-weight:bold;margin-bottom:8px;text-transform:none;letter-spacing:0;font-size:15px">
       <input type="checkbox" class="capchk" value="${c.id}" style="width:20px;height:20px"> Select
@@ -2034,7 +2048,7 @@ function captureCardHtml(c) {
     <div class="rotaterow">${rotateButtons(c.id)}</div>
     <div class="addr">${esc(c.address || (c.latitude ? c.latitude.toFixed(5)+', '+c.longitude.toFixed(5) : 'No location'))}</div>
     ${state.view === 'edit' ? `<button class="editlink editaddress" data-id="${c.id}" style="padding-left:0">Edit Address</button>` : ''}
-    <div class="meta">${kind}${tags}</div>
+    <div class="topicwrap" data-id="${c.id}"><div class="meta">${kind}${tags||'<span class="badge">No Topic</span>'}</div>${topicAction}</div>
     ${concreteRow}
     ${classifyRow}
     ${dims ? `<div class="meta"><strong>Dimensions:</strong> ${esc(dims)}</div>` : ''}
@@ -2074,6 +2088,7 @@ function pairCardHtml(before, after) {
     const dims = measurementOn() ? fmtDimsClient(c) : '';
     const badge = isProClient() && c.defect_type ? defectBadgeHtml(c) : '';
     const titleAction=state.view==='edit'?(c.photo_title?'Change Photo Title':'Add Photo Title'):(state.view==='organize'&&!c.photo_title?'Add Photo Title':'');
+    const tags=(c.area_tags||[]).map(t=>`<span class="badge">${esc(t)}</span>`).join('')||'<span class="badge">No Topic</span>';
     return `<div style="flex:1;min-width:0">
       <div style="font-weight:bold;font-size:13px">${label}</div>
       <label style="display:flex;align-items:center;gap:6px;text-transform:none;letter-spacing:0;font-size:13px;font-weight:bold">
@@ -2085,6 +2100,7 @@ function pairCardHtml(before, after) {
       ${badge ? `<div style="margin:4px 0">${badge}</div>` : ''}
       <div class="meta">${esc(c.address || 'No address')}</div>
       ${state.view === 'edit' ? `<button class="editlink editaddress" data-id="${c.id}" style="padding-left:0">Edit Address</button>` : ''}
+      <div class="topicwrap" data-id="${c.id}"><div class="meta">${tags}</div><button class="editlink edittopics" data-id="${c.id}" type="button">Change Topics</button></div>
       ${dims ? `<div class="meta"><strong>Dimensions:</strong> ${esc(dims)}</div>` : ''}
       ${measurementOn() && state.view === 'edit' && c.photo_path ? `<button class="btn secondary slim editdims" data-id="${c.id}">Measurements</button>` : ''}
       <button class="btn secondary slim evidencebtn" data-id="${c.id}">Verify Photo Evidence</button>
@@ -2102,6 +2118,7 @@ function wireCards(cards, rows) {
   cards.querySelectorAll('.capchk').forEach(c => c.onchange = () => { if (c.checked) state.selectedIds.add(String(c.value)); else state.selectedIds.delete(String(c.value)); });
   wireRotate(cards);
   cards.querySelectorAll('.edittitle').forEach(b => b.onclick = () => startEditPhotoTitle(parseInt(b.getAttribute('data-id'), 10), rows));
+  cards.querySelectorAll('.edittopics').forEach(b => b.onclick = () => startEditTopics(parseInt(b.getAttribute('data-id'), 10), rows));
   cards.querySelectorAll('.editnote').forEach(b => b.onclick = () => startEditNote(parseInt(b.getAttribute('data-id'), 10), rows));
   cards.querySelectorAll('.editaddress').forEach(b => {
     b.onclick = () => { const c = rows.find(r => r.id === parseInt(b.getAttribute('data-id'), 10)); if (c) editCaptureAddress(c); };
@@ -2560,6 +2577,14 @@ function startEditPhotoTitle(id, rows) {
     else toast('Photo title could not be saved');
   };
   input.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();wrap.querySelector('.savephototitle').click();}if(e.key==='Escape')wrap.querySelector('.cancelphototitle').click();};
+}
+
+function startEditTopics(id, rows) {
+  const wrap=document.querySelector(`.topicwrap[data-id="${id}"]`);if(!wrap)return;
+  const row=rows.find(r=>r.id===id),current=new Set(row&&row.area_tags||[]);
+  wrap.innerHTML=`<fieldset class="topic-editor"><legend>Topics for this photo</legend>${state.areas.map(a=>`<label><input type="checkbox" value="${esc(a)}" ${current.has(a)?'checked':''}> ${esc(a)}</label>`).join('')}<div class="row compact"><button class="btn slim savetopics" type="button">Save Topics</button><button class="btn secondary slim canceltopics" type="button">Cancel</button></div></fieldset>`;
+  wrap.querySelector('.canceltopics').onclick=()=>loadCards((document.getElementById('filter')||{}).value||'');
+  wrap.querySelector('.savetopics').onclick=async()=>{const area_tags=Array.from(wrap.querySelectorAll('input:checked')).map(x=>x.value);const r=await api(`/api/captures/${id}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({area_tags})});if(r.ok){toast('Photo topics saved');loadCards((document.getElementById('filter')||{}).value||'');}else toast('Photo topics could not be saved');};
 }
 
 // ---- Map (Pro): satellite view of captures + measurement zones ----
