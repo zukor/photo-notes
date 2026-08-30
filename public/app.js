@@ -17,6 +17,8 @@ function isMacClient() { return /Macintosh|MacIntel/.test(navigator.userAgent + 
 let recognizer = null;
 let dictationActive = false;
 let dictationRestartTimer = null;
+let dictationWatchdog = null;
+let dictationGeneration = 0;
 let dictationBase = '';
 let currentGroupItems = [];
 let currentGroup = null;
@@ -446,8 +448,8 @@ function renderCapture() {
   const cameraToolsButton = document.getElementById('openCameraTools');
   if (cameraToolsButton) cameraToolsButton.onclick = () => { state.view = 'camera-tools'; renderApp(); };
 
-  document.getElementById('takephoto').onclick = () => document.getElementById('photoCam').click();
-  document.getElementById('choosephoto').onclick = () => document.getElementById('photoLib').click();
+  document.getElementById('takephoto').onclick = () => { stopCaptureDictation(); const input=document.getElementById('photoCam');input.value='';input.click(); };
+  document.getElementById('choosephoto').onclick = () => { stopCaptureDictation(); const input=document.getElementById('photoLib');input.value='';input.click(); };
   document.getElementById('photoCam').onchange = (e) => { if (e.target.files[0]) onPhotoChosen(e.target.files[0]); };
   document.getElementById('photoLib').onchange = (e) => { if (e.target.files[0]) onPhotoChosen(e.target.files[0]); };
   document.getElementById('retakePhoto').onclick = retakeCapturePhoto;
@@ -716,6 +718,8 @@ async function loadTodayTickets() {
 }
 
 function onPhotoChosen(file) {
+  const replacing=!!state.photoFile;stopCaptureDictation();
+  if(replacing){state._note='';const note=document.getElementById('note');if(note)note.value='';}
   state.photoFile = file;
   state._qualityResult = null;
   state._qualityPromise = analyzePhotoQuality(file).then(result=>{
@@ -737,10 +741,12 @@ function showCapturePreview(file){
   state._previewUrl=URL.createObjectURL(file);img.src=state._previewUrl;box.style.display='block';
 }
 function retakeCapturePhoto(){
+  stopCaptureDictation();
   const input=document.getElementById('photoCam');
   if(!input)return;input.value='';input.click();
 }
 function cancelCapturePhoto(){
+  stopCaptureDictation();
   if(state._previewUrl)URL.revokeObjectURL(state._previewUrl);
   state._previewUrl=null;state.photoFile=null;state._qualityResult=null;state._qualityPromise=null;state.location=null;state.address=null;state._locationPromise=null;
   for(const id of ['photoCam','photoLib']){const input=document.getElementById(id);if(input)input.value='';}
@@ -826,11 +832,22 @@ function acquireLocation(force=false) {
 
 function cleanupDictation() {
   if (dictationRestartTimer) clearTimeout(dictationRestartTimer);
+  if (dictationWatchdog) clearTimeout(dictationWatchdog);
   dictationRestartTimer = null;
+  dictationWatchdog = null;
   dictationActive = false;
   recognizer = null;
   const btn = document.getElementById('dictate');
   if (btn) { btn.textContent = 'Record Note'; btn.classList.remove('on'); }
+}
+
+function stopCaptureDictation(){
+  dictationGeneration++;
+  if(dictationRestartTimer)clearTimeout(dictationRestartTimer);
+  if(dictationWatchdog)clearTimeout(dictationWatchdog);
+  dictationRestartTimer=null;dictationWatchdog=null;dictationActive=false;
+  const current=recognizer;recognizer=null;if(current)try{current.stop();}catch(e){}
+  const btn=document.getElementById('dictate');if(btn){btn.textContent='Record Note';btn.classList.remove('on');}
 }
 
 function isIOS() {
@@ -850,18 +867,14 @@ async function toggleDictation() {
     return;
   }
   if (dictationActive) {
-    dictationActive = false;
-    if (dictationRestartTimer) clearTimeout(dictationRestartTimer);
-    dictationRestartTimer = null;
-    if (recognizer) { try { recognizer.stop(); } catch (e) {} }
-    cleanupDictation();
+    stopCaptureDictation();
     return;
   }
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
     toast('This browser cannot access the microphone. Type the note or use the keyboard microphone');
     return;
   }
-  try {
+  if(!isIOS())try {
     // Ask for the site's microphone permission before starting Safari's speech
     // service. Safari can otherwise enter its recording state without ever
     // delivering words or showing the permission prompt.
@@ -881,13 +894,16 @@ async function toggleDictation() {
 function startDictationSession(SR) {
   if (!dictationActive) return;
   const noteEl = document.getElementById('note');
-  const session = new SR();
+  const session = new SR(), generation=++dictationGeneration, photoForSession=state.photoFile, ios=isIOS();
   recognizer = session;
   session.lang = uiSpeechLanguage();
-  session.continuous = !isIOS();
-  session.interimResults = true;
+  session.continuous = !ios;
+  session.interimResults = !ios;
   let sessionText = '';
+  if(dictationWatchdog)clearTimeout(dictationWatchdog);dictationWatchdog=setTimeout(()=>{if(generation!==dictationGeneration||sessionText)return;dictationActive=false;try{session.stop();}catch(e){}const status=document.getElementById('qualityStatus');if(status)status.textContent='No speech was received. On iPhone, tap the note box and use the keyboard microphone, or try Record Note again.';},10000);
   session.onresult = (ev) => {
+    if(generation!==dictationGeneration||state.photoFile!==photoForSession||document.getElementById('note')!==noteEl)return;
+    if(dictationWatchdog)clearTimeout(dictationWatchdog);dictationWatchdog=null;
     // Rebuild the current recognition session from its indexed result slots.
     // Android may revise a cumulative phrase and mark it final repeatedly;
     // appending each event produces duplicated/spammed words.
@@ -920,12 +936,14 @@ function startDictationSession(SR) {
     }
   };
   session.onend = () => {
+    if(generation!==dictationGeneration)return;
+    if(dictationWatchdog)clearTimeout(dictationWatchdog);dictationWatchdog=null;
     if (recognizer === session) recognizer=null;
     if (sessionText) {
       dictationBase=(dictationBase+sessionText).trim();
       if (dictationBase) dictationBase+=' ';
     }
-    if (dictationActive) {
+    if (dictationActive&&!ios) {
       const btn=document.getElementById('dictate');
       if (btn) btn.textContent='Listening... tap to stop';
       dictationRestartTimer=setTimeout(()=>startDictationSession(SR),300);
@@ -1406,6 +1424,7 @@ async function drainQueue() {
 }
 
 async function saveCapture() {
+  stopCaptureDictation();
   const note = document.getElementById('note').value.trim();
   if (!state.photoFile && !note) { toast('Take a photo or add a note first'); return; }
   if(isHoaClient()&&!state.communityId){toast('Select an HOA or community');return;}
