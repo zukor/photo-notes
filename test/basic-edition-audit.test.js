@@ -1,0 +1,35 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+
+const root = path.join(__dirname, '..');
+const app = fs.readFileSync(path.join(root, 'public', 'app.js'), 'utf8');
+const server = fs.readFileSync(path.join(root, 'server.js'), 'utf8');
+const admin = fs.readFileSync(path.join(root, 'public', 'admin.html'), 'utf8');
+
+test('Basic keeps its own help and issue reporting while Pro-only camera tools stay gated', () => {
+  assert.match(app, /!isProClient\(\) \? `<button class="issue-fab"/);
+  assert.match(app, /if \(isProClient\(\) \|\| !TENSOR_HELP_TOPICS\[state\.view\]\) return/);
+  assert.match(app, /isProClient\(\) && \['ticket_scanner','camera_readers','before_after'\]\.some\(featureOn\)/);
+  assert.match(server, /if \(await currentPlan\(req\.user\.id\) === 'pro'\)[\s\S]*error:'basic only'/);
+});
+
+test('Pro-only analytics and reports require a Pro plan on the server', () => {
+  const guards = server.match(/if \(await currentPlan\(req\.user\.id\) !== 'pro'\) return res\.status\(403\)\.json\(\{ error: 'pro only' \}\);/g) || [];
+  assert.ok(guards.length >= 1, 'expected server-side Pro plan guards');
+  assert.match(app, /isProClient\(\) && c\.defect_type/);
+  assert.match(app, /isProClient\(\) \? `<label style="margin-top:16px">Proposal Report/);
+});
+
+test('edition switching is never exposed to ordinary Basic testers', () => {
+  assert.match(app, /state\.me&&state\.me\.role==='admin'\?`<div class="edition-switcher"/);
+  assert.match(server, /app\.post\('\/api\/admin\/switch-edition', requireAdmin/);
+});
+
+test('admin issue center can compare tester and device reports', () => {
+  assert.match(admin, /id="issueTesterFilter"/);
+  assert.match(admin, /id="issueDeviceFilter"/);
+  assert.match(admin, /function issueDevice\(i\)/);
+  assert.match(admin, /Tester and device comparison/);
+});
