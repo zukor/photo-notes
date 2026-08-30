@@ -19,10 +19,27 @@ let dictationActive = false;
 let dictationRestartTimer = null;
 let dictationWatchdog = null;
 let dictationGeneration = 0;
+let captureLocationGeneration = 0;
 let dictationBase = '';
 let currentGroupItems = [];
 let currentGroup = null;
 let currentGroupPairs = [];
+let deferredInstallPrompt = null;
+let installOfferShown = false;
+const INSTALL_PROMPT_KEY = 'pn_install_prompt_dismissed_v1';
+
+window.addEventListener('beforeinstallprompt', event => {
+  event.preventDefault();
+  deferredInstallPrompt = event;
+  maybeOfferInstall();
+});
+window.addEventListener('appinstalled', () => {
+  deferredInstallPrompt = null;
+  localStorage.setItem(INSTALL_PROMPT_KEY, 'installed');
+  const modal = document.getElementById('installPrompt');
+  if (modal) modal.remove();
+  toast('Photo Notes added to your phone');
+});
 
 function uiT(text) { return window.photoNotesI18n ? window.photoNotesI18n.t(text) : text; }
 function uiLocale() { return window.photoNotesI18n && window.photoNotesI18n.getLanguage() === 'es' ? 'es-US' : undefined; }
@@ -136,7 +153,55 @@ async function boot() {
     // appearing only after another action refreshes the list.
     prefetchGroups();
     renderApp();
+    setTimeout(maybeOfferInstall, 700);
   } else renderLogin();
+}
+
+function isInstalledApp() {
+  return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
+}
+
+function isPhoneInstallCandidate() {
+  return IS_HANDHELD && window.innerWidth <= 700;
+}
+
+function dismissInstallOffer(value='dismissed') {
+  localStorage.setItem(INSTALL_PROMPT_KEY, value);
+  const modal = document.getElementById('installPrompt');
+  if (modal) modal.remove();
+}
+
+function maybeOfferInstall() {
+  if (!state.me || installOfferShown || isInstalledApp() || !isPhoneInstallCandidate()) return;
+  if (localStorage.getItem(INSTALL_PROMPT_KEY)) return;
+  const ios = isIOS();
+  if (!ios && !deferredInstallPrompt) return;
+  installOfferShown = true;
+  const modal = document.createElement('div');
+  modal.id = 'installPrompt';
+  modal.className = 'install-prompt';
+  modal.innerHTML = `<div class="install-prompt-card" role="dialog" aria-modal="true" aria-labelledby="installPromptTitle">
+    <h2 id="installPromptTitle">Add Photo Notes to your phone?</h2>
+    <p>${ios ? 'For one-tap access, open your browser’s Share menu, choose <strong>Add to Home Screen</strong>, then tap <strong>Add</strong>.' : 'Install an app icon so you can open Photo Notes directly from your phone’s Home screen.'}</p>
+    <div class="install-prompt-actions">
+      ${ios ? '<button class="btn" id="installGuideDone" type="button">Got It</button>' : '<button class="btn" id="installAppButton" type="button">Install App Icon</button>'}
+      <button class="btn secondary" id="installNotNow" type="button">Not Now</button>
+    </div>
+  </div>`;
+  document.body.appendChild(modal);
+  document.getElementById('installNotNow').onclick = () => dismissInstallOffer();
+  if (ios) {
+    document.getElementById('installGuideDone').onclick = () => dismissInstallOffer('instructions-seen');
+  } else {
+    document.getElementById('installAppButton').onclick = async () => {
+      if (!deferredInstallPrompt) return dismissInstallOffer();
+      const prompt = deferredInstallPrompt;
+      deferredInstallPrompt = null;
+      await prompt.prompt();
+      const choice = await prompt.userChoice.catch(() => ({ outcome:'dismissed' }));
+      dismissInstallOffer(choice.outcome === 'accepted' ? 'installed' : 'dismissed');
+    };
+  }
 }
 
 async function prefetchGroups() {
@@ -720,10 +785,12 @@ async function loadTodayTickets() {
 
 function onPhotoChosen(file) {
   const replacing=!!state.photoFile;stopCaptureDictation();
+  captureLocationGeneration++;
   if(replacing){state._note='';const note=document.getElementById('note');if(note)note.value='';}
   state.photoFile = file;
   state._qualityResult = null;
   state._qualityPromise = analyzePhotoQuality(file).then(result=>{
+    if(state.photoFile!==file)return result;
     state._qualityResult=result;
     const status=document.getElementById('qualityStatus');
     if(status)status.textContent=result.warnings.length?`${uiT('Photo quality check')}: ${result.warnings.map(uiT).join('; ')}.`:uiT('Photo quality check passed.');
@@ -748,6 +815,7 @@ function retakeCapturePhoto(){
 }
 function cancelCapturePhoto(){
   stopCaptureDictation();
+  captureLocationGeneration++;
   if(state._previewUrl)URL.revokeObjectURL(state._previewUrl);
   state._previewUrl=null;state.photoFile=null;state._qualityResult=null;state._qualityPromise=null;state.location=null;state.address=null;state._locationPromise=null;
   for(const id of ['photoCam','photoLib']){const input=document.getElementById(id);if(input)input.value='';}
@@ -792,7 +860,10 @@ function acquireLocation(force=false) {
   const gps = document.getElementById('gps');
   const addr = document.getElementById('addr');
   const retry = document.getElementById('retryLocation');
-  if (force) { state.location=null; state.address=null; state._locationPromise=null; }
+  if (force) { captureLocationGeneration++; state.location=null; state.address=null; state._locationPromise=null; }
+  const generation = captureLocationGeneration;
+  const photoForLocation = state.photoFile;
+  const isCurrent = () => generation === captureLocationGeneration && state.photoFile === photoForLocation;
   if (gps) gps.textContent = 'Getting location...';
   if (addr) addr.textContent = 'Waiting for GPS coordinates...';
   if (retry) retry.disabled = true;
@@ -814,16 +885,19 @@ function acquireLocation(force=false) {
       pos = await browserPosition({ enableHighAccuracy:false, timeout:15000, maximumAge:60000 });
     }
     try {
+      if (!isCurrent()) return;
       state.location = { lat: pos.coords.latitude, lng: pos.coords.longitude };
       if (gps) gps.textContent = state.location.lat.toFixed(5) + ', ' + state.location.lng.toFixed(5);
       if (addr) addr.textContent = 'Looking up address...';
       try {
         const r = await api(`/api/geocode?lat=${state.location.lat}&lng=${state.location.lng}`);
-        if (r.ok) { const d = await r.json(); state.address = d.address || null; if (addr) addr.textContent = d.address || 'Exact address not found. GPS coordinates will still be saved.'; }
+        if (!isCurrent()) return;
+        if (r.ok) { const d = await r.json(); if (!isCurrent()) return; state.address = d.address || null; if (addr) addr.textContent = d.address || 'Exact address not found. GPS coordinates will still be saved.'; }
         else if (addr) addr.textContent = 'Address lookup failed. GPS coordinates will still be saved.';
-      } catch (e) { if (addr) addr.textContent = 'Address lookup failed. GPS coordinates will still be saved.'; }
-    } finally { if (retry) retry.disabled=false; }
+      } catch (e) { if (isCurrent() && addr) addr.textContent = 'Address lookup failed. GPS coordinates will still be saved.'; }
+    } finally { if (isCurrent() && retry) retry.disabled=false; }
   })().catch(err => {
+    if (!isCurrent()) return;
     if (gps) gps.textContent = err && err.code===1 ? 'Location permission is blocked for this site.' : 'Location timed out or is unavailable.';
     if (addr) addr.textContent = 'Tap Retry location and address, or save without an address.';
     if (retry) retry.disabled=false;
@@ -1433,11 +1507,6 @@ async function saveCapture() {
   if(isHoaClient()&&!state.communityId){toast('Select an HOA or community');return;}
   if(isHoaClient()&&!document.getElementById('hoaTitle').value.trim()&&!note){toast('Enter an issue title or note');return;}
   if (!(await confirmPhotoQuality())) { toast('Photo kept for retaking'); return; }
-  const saveBtn = document.getElementById('save');
-  if (state.photoFile && state._locationPromise) {
-    saveBtn.disabled = true; saveBtn.textContent = 'Getting Full Address...';
-    await state._locationPromise;
-  }
   // Build the payload from the CURRENT state before we clear the form.
   const payload={photo:state.photoFile||null,photoName:state.photoFile&&state.photoFile.name||'offline-photo.jpg',note,area_tags:JSON.stringify(isHoaClient()?[document.getElementById('hoaArea').value]:(state.area?[state.area]:[])),kind:'note'};
   if(isHoaClient()){Object.assign(payload,{hoa_community_id:state.communityId,hoa_title:document.getElementById('hoaTitle').value.trim(),hoa_item_type:document.getElementById('hoaType').value,hoa_priority:document.getElementById('hoaPriority').value,hoa_area:document.getElementById('hoaArea').value,hoa_directed_to:(document.getElementById('hoaDirected')||{}).value||'',hoa_budget_source:'unassigned',hoa_photo_stage:'initial'});}
@@ -1446,11 +1515,12 @@ async function saveCapture() {
   if (state.location) { payload.latitude=state.location.lat;payload.longitude=state.location.lng; }
   if (state.address) payload.address=state.address;
   // Commit instantly: clear the form and hand the upload to the background.
+  captureLocationGeneration++;
   state.photoFile = null; state._note = ''; state.location = null; state.address = null; state._locationPromise = null;
   state._dims = freshDims(); state._measure = null;
   renderCapture();
   toast('Saved');
-  await enqueueUpload(payload, hadCoords);
+  void enqueueUpload(payload, hadCoords);
 }
 
 // ================= HOA Maintenance Pro =================

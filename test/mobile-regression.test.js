@@ -57,6 +57,25 @@ test('location failures expose a retry path without blocking photo save', () => 
   assert.match(app, /Location timed out or is unavailable/);
 });
 
+test('Save never waits for location and stale location cannot move to the next capture', () => {
+  assert.doesNotMatch(app, /Getting Full Address/);
+  assert.doesNotMatch(app, /await state\._locationPromise/);
+  assert.match(app, /let captureLocationGeneration = 0/);
+  assert.match(app, /generation === captureLocationGeneration && state\.photoFile === photoForLocation/);
+  assert.match(app, /void enqueueUpload\(payload, hadCoords\)/);
+});
+
+test('signed-in phone users receive a one-time install app icon offer', () => {
+  assert.match(app, /beforeinstallprompt/);
+  assert.match(app, /display-mode: standalone/);
+  assert.match(app, /window\.navigator\.standalone === true/);
+  assert.match(app, /pn_install_prompt_dismissed_v1/);
+  assert.match(app, /Install App Icon/);
+  assert.match(app, /Add to Home Screen/);
+  assert.match(app, /await prompt\.prompt\(\)/);
+  assert.match(css, /\.install-prompt \{/);
+});
+
 test('a newly selected capture can be retaken or cancelled before save', () => {
   assert.match(app, /id="retakePhoto">Retake Photo/);
   assert.match(app, /id="cancelPhoto">Cancel Photo/);
