@@ -433,6 +433,7 @@ function renderCapture() {
 
     <label>Note</label>
     <button type="button" class="btn" id="dictate" style="margin-bottom:8px">Record Note</button>
+    <div class="status" id="dictationStatus" aria-live="polite"></div>
     <textarea id="note" placeholder="Type what you're looking at, or tap Record Note"></textarea>
 
     ${isHoaClient()?`<label>Maintenance Category</label><select id="hoaArea">${HOA_AREAS.map(a=>`<option value="${esc(a)}">${esc(a)}</option>`).join('')}</select><div id="hoaDirectedWrap" style="display:none"><label>Directed To</label><input id="hoaDirected" placeholder="Person expected to answer"></div>`:`<label>Select Topic</label>
@@ -888,6 +889,7 @@ async function toggleDictation() {
   dictationBase = noteEl ? noteEl.value.trim() : '';
   if (dictationBase) dictationBase += ' ';
   if (btn) { btn.textContent = 'Recording... tap to stop'; btn.classList.add('on'); }
+  const status=document.getElementById('dictationStatus');if(status)status.textContent=isIOS()?'Listening. On iPhone, words may appear after you pause.':'Listening...';
   startDictationSession(SR);
 }
 
@@ -898,9 +900,9 @@ function startDictationSession(SR) {
   recognizer = session;
   session.lang = uiSpeechLanguage();
   session.continuous = !ios;
-  session.interimResults = !ios;
+  session.interimResults = true;
   let sessionText = '';
-  if(dictationWatchdog)clearTimeout(dictationWatchdog);dictationWatchdog=setTimeout(()=>{if(generation!==dictationGeneration||sessionText)return;dictationActive=false;try{session.stop();}catch(e){}const status=document.getElementById('qualityStatus');if(status)status.textContent='No speech was received. On iPhone, tap the note box and use the keyboard microphone, or try Record Note again.';},10000);
+  if(dictationWatchdog)clearTimeout(dictationWatchdog);dictationWatchdog=setTimeout(()=>{if(generation!==dictationGeneration||sessionText)return;dictationActive=false;try{session.stop();}catch(e){}const status=document.getElementById('dictationStatus');if(status)status.textContent='No speech was received. On iPhone, tap the note box and use the keyboard microphone, or try Record Note again.';},10000);
   session.onresult = (ev) => {
     if(generation!==dictationGeneration||state.photoFile!==photoForSession||document.getElementById('note')!==noteEl)return;
     if(dictationWatchdog)clearTimeout(dictationWatchdog);dictationWatchdog=null;
@@ -911,6 +913,7 @@ function startDictationSession(SR) {
     for (let i=0;i<ev.results.length;i++) parts.push(ev.results[i][0].transcript.trim());
     sessionText=parts.filter(Boolean).join(' ').trim();
     if (noteEl) { noteEl.value=(dictationBase+sessionText).trimStart(); state._note=noteEl.value; }
+    const status=document.getElementById('dictationStatus');if(status&&sessionText)status.textContent='Speech received.';
     if (isProClient()) applyExtraction(dictationBase+sessionText);
   };
   session.onerror = (e) => {

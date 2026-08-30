@@ -43,6 +43,8 @@ test('late speech results cannot move from one pending photo to the next', () =>
   assert.match(app, /let dictationGeneration = 0/);
   assert.match(app, /generation!==dictationGeneration\|\|state\.photoFile!==photoForSession/);
   assert.match(app, /document\.getElementById\('note'\)!==noteEl/);
+  assert.match(app, /id="dictationStatus" aria-live="polite"/);
+  assert.match(app, /words may appear after you pause/);
   assert.match(app, /const replacing=!!state\.photoFile;stopCaptureDictation\(\)/);
   assert.match(app, /if\(replacing\)\{state\._note=''/);
   assert.match(app, /async function saveCapture\(\) \{\s*stopCaptureDictation\(\)/);
