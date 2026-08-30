@@ -7,6 +7,7 @@ const root = path.join(__dirname, '..');
 const app = fs.readFileSync(path.join(root, 'public', 'app.js'), 'utf8');
 const server = fs.readFileSync(path.join(root, 'server.js'), 'utf8');
 const admin = fs.readFileSync(path.join(root, 'public', 'admin.html'), 'utf8');
+const styles = fs.readFileSync(path.join(root, 'public', 'styles.css'), 'utf8');
 
 test('Basic keeps its own help and issue reporting while Pro-only camera tools stay gated', () => {
   assert.match(app, /!isProClient\(\) \? `<button class="issue-fab"/);
@@ -25,6 +26,10 @@ test('Pro-only analytics and reports require a Pro plan on the server', () => {
 test('edition switching is never exposed to ordinary Basic testers', () => {
   assert.match(app, /state\.me&&state\.me\.role==='admin'\?`<div class="edition-switcher"/);
   assert.match(server, /app\.post\('\/api\/admin\/switch-edition', requireAdmin/);
+});
+
+test('Basic paints only the SVG wordmark, without duplicate live title text', () => {
+  assert.match(styles, /\.brand:not\(\.pro-edition-brand\) \.product-suite-name,[\s\S]*\.product-edition-name \{ display:none; \}/);
 });
 
 test('admin issue center can compare tester and device reports', () => {

@@ -76,6 +76,11 @@ textarea { min-height: 96px; resize: vertical; }
 }
 .product-suite-name { display:block; color:#1254a3; font:800 27px/1.05 Arial,Helvetica,sans-serif; letter-spacing:-.7px; }
 .product-edition-name { display:block; color:#000; font:800 20px/1.1 Arial,Helvetica,sans-serif; margin-top:2px; }
+/* Basic uses the complete SVG wordmark as its background. Keep the semantic
+   text in the DOM for assistive technology without painting a second title
+   over the artwork. Pro editions intentionally render their supplied SVGs. */
+.brand:not(.pro-edition-brand) .product-suite-name,
+.brand:not(.pro-edition-brand) .product-edition-name { display:none; }
 .edition-label { flex:0 0 auto; color:#000; font-size:12px; font-weight:bold; line-height:1.05; text-align:left; }
 .edition-label span { display:block; }
 @media (max-width: 380px) { .brand:not([style*="font-size"]) { height: 38px; } }
