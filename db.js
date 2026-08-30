@@ -512,6 +512,10 @@ async function init() {
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS photo_width INTEGER`);
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS photo_height INTEGER`);
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS photo_title TEXT`);
+  // ArcGIS sometimes abbreviates the street suffix Mill as "Ml". Expand that
+  // suffix in already-saved user-facing addresses without touching names that
+  // merely contain those letters elsewhere.
+  await pool.query(`UPDATE captures SET address = regexp_replace(address, ' Ml,', ' Mill,', 'i') WHERE address ~* ' Ml,'`);
   // Pro-tier: user plan ('free'|'pro'), default 'free' for all existing users.
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS plan TEXT NOT NULL DEFAULT 'free'`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS pro_type TEXT NOT NULL DEFAULT 'paving'`);

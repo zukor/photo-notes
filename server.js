@@ -627,6 +627,11 @@ const storage = multer.diskStorage({
 const upload = multer({ storage, limits: { fileSize: 25 * 1024 * 1024 } });
 
 // ---- reverse geocode (best effort) ----
+function normalizeGeocodedAddress(value) {
+  const parts=String(value||'').split(',');
+  if(parts.length)parts[0]=parts[0].replace(/\bMl\.?$/i,'Mill');
+  return parts.join(',').trim()||null;
+}
 async function reverseGeocode(lat, lng) {
   if (lat == null || lng == null) return null;
   const GOOGLE_KEY = process.env.GOOGLE_MAPS_API_KEY || '';
@@ -648,7 +653,7 @@ async function reverseGeocode(lat, lng) {
       const street = a.Address || '';
       const city = a.City || '';
       const regionZip = [a.RegionAbbr || a.Region, a.Postal].filter(Boolean).join(' ');
-      if (a.AddNum && street && city && regionZip) return [street, city, regionZip].join(', ');
+      if (a.AddNum && street && city && regionZip) return normalizeGeocodedAddress([street, city, regionZip].join(', '));
     }
     if (GOOGLE_KEY) {
       const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${GOOGLE_KEY}`;
@@ -657,7 +662,7 @@ async function reverseGeocode(lat, lng) {
         const d = await r.json();
         const first = d.status === 'OK' && d.results && d.results[0];
         const types = first && first.address_components ? first.address_components.flatMap(c => c.types || []) : [];
-        if (first && types.includes('street_number') && types.includes('locality') && types.includes('postal_code')) return first.formatted_address;
+        if (first && types.includes('street_number') && types.includes('locality') && types.includes('postal_code')) return normalizeGeocodedAddress(first.formatted_address);
       }
     }
     if (MAPBOX_TOKEN) {
@@ -666,7 +671,7 @@ async function reverseGeocode(lat, lng) {
       if (r.ok) {
         const d = await r.json();
         const first = d.features && d.features[0];
-        if (first && first.address && first.place_name) return first.place_name;
+        if (first && first.address && first.place_name) return normalizeGeocodedAddress(first.place_name);
       }
     }
     // zoom=18 asks Nominatim for building-level detail and addressdetails=1
@@ -682,7 +687,7 @@ async function reverseGeocode(lat, lng) {
     const line1 = [houseNo, a.road].filter(Boolean).join(' ');
     const city = a.city || a.town || a.village || a.hamlet || a.suburb || a.county || '';
     const parts = [line1, city, [a.state, a.postcode].filter(Boolean).join(' ')].filter(Boolean);
-    return houseNo && a.road && city && a.postcode ? parts.join(', ') : null;
+    return houseNo && a.road && city && a.postcode ? normalizeGeocodedAddress(parts.join(', ')) : null;
   } catch {
     return null;
   }
