@@ -632,6 +632,29 @@ function normalizeGeocodedAddress(value) {
   if(parts.length)parts[0]=parts[0].replace(/\bMl\.?$/i,'Mill');
   return parts.join(',').trim()||null;
 }
+// Reverse geocoders will otherwise "snap" a field location to the nearest
+// house, even when that house is hundreds of yards away. A street address is
+// only useful here when its mapped point is genuinely close to the photo.
+const MAX_ADDRESS_DISTANCE_METERS = 100;
+function geocodeCandidateIsNearby(lat, lng, candidateLat, candidateLng) {
+  const distance = haversineMeters(lat, lng, candidateLat, candidateLng);
+  return distance != null && distance <= MAX_ADDRESS_DISTANCE_METERS;
+}
+function geographicAreaLabel(data) {
+  const a = data && data.address ? data.address : {};
+  const naturalKeys = [
+    'forest', 'nature_reserve', 'protected_area', 'wood', 'park',
+    'river', 'water', 'waterway', 'wetland', 'mountain', 'valley', 'beach',
+  ];
+  let feature = naturalKeys.map(key => a[key]).find(Boolean) || '';
+  const nonStreetCategories = ['natural', 'waterway', 'leisure', 'boundary', 'place'];
+  if (!feature && nonStreetCategories.includes(String(data && data.category || '').toLowerCase())) {
+    feature = data.name || (data.namedetails && data.namedetails.name) || '';
+  }
+  const locality = a.suburb || a.neighbourhood || a.city || a.town || a.village || a.hamlet || a.county || '';
+  const region = a.state || a.region || '';
+  return [...new Set([feature, locality, region].filter(Boolean))].join(', ') || null;
+}
 async function reverseGeocode(lat, lng) {
   if (lat == null || lng == null) return null;
   const GOOGLE_KEY = process.env.GOOGLE_MAPS_API_KEY || '';
@@ -653,7 +676,10 @@ async function reverseGeocode(lat, lng) {
       const street = a.Address || '';
       const city = a.City || '';
       const regionZip = [a.RegionAbbr || a.Region, a.Postal].filter(Boolean).join(' ');
-      if (a.AddNum && street && city && regionZip) return normalizeGeocodedAddress([street, city, regionZip].join(', '));
+      const match = data.location || {};
+      if (a.AddNum && street && city && regionZip && geocodeCandidateIsNearby(lat, lng, match.y, match.x)) {
+        return normalizeGeocodedAddress([street, city, regionZip].join(', '));
+      }
     }
     if (GOOGLE_KEY) {
       const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${GOOGLE_KEY}`;
@@ -662,7 +688,13 @@ async function reverseGeocode(lat, lng) {
         const d = await r.json();
         const first = d.status === 'OK' && d.results && d.results[0];
         const types = first && first.address_components ? first.address_components.flatMap(c => c.types || []) : [];
-        if (first && types.includes('street_number') && types.includes('locality') && types.includes('postal_code')) return normalizeGeocodedAddress(first.formatted_address);
+        const point = first && first.geometry && first.geometry.location;
+        const locationType = first && first.geometry && first.geometry.location_type;
+        const preciseLocation = locationType === 'ROOFTOP' || locationType === 'RANGE_INTERPOLATED';
+        if (first && preciseLocation && point && geocodeCandidateIsNearby(lat, lng, point.lat, point.lng)
+          && types.includes('street_number') && types.includes('locality') && types.includes('postal_code')) {
+          return normalizeGeocodedAddress(first.formatted_address);
+        }
       }
     }
     if (MAPBOX_TOKEN) {
@@ -671,7 +703,11 @@ async function reverseGeocode(lat, lng) {
       if (r.ok) {
         const d = await r.json();
         const first = d.features && d.features[0];
-        if (first && first.address && first.place_name) return normalizeGeocodedAddress(first.place_name);
+        const center = first && first.center;
+        if (first && first.address && first.place_name && Array.isArray(center)
+          && geocodeCandidateIsNearby(lat, lng, center[1], center[0])) {
+          return normalizeGeocodedAddress(first.place_name);
+        }
       }
     }
     // zoom=18 asks Nominatim for building-level detail and addressdetails=1
@@ -687,7 +723,18 @@ async function reverseGeocode(lat, lng) {
     const line1 = [houseNo, a.road].filter(Boolean).join(' ');
     const city = a.city || a.town || a.village || a.hamlet || a.suburb || a.county || '';
     const parts = [line1, city, [a.state, a.postcode].filter(Boolean).join(' ')].filter(Boolean);
-    return houseNo && a.road && city && a.postcode ? normalizeGeocodedAddress(parts.join(', ')) : null;
+    if (houseNo && a.road && city && a.postcode
+      && geocodeCandidateIsNearby(lat, lng, data.lat, data.lon)) {
+      return normalizeGeocodedAddress(parts.join(', '));
+    }
+
+    // No trustworthy street address is close enough. Ask for a broader map
+    // feature and return a named forest, river, park, neighborhood, or locality
+    // instead. Never use the nearest road as a substitute for the photo site.
+    const areaUrl = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=14&addressdetails=1&namedetails=1&extratags=1&lat=${lat}&lon=${lng}`;
+    const areaResponse = await fetch(areaUrl, { headers: { 'User-Agent': 'PhotoNotes/1.0 (turcotte@zukor.com)' } });
+    if (!areaResponse.ok) return null;
+    return geographicAreaLabel(await areaResponse.json());
   } catch {
     return null;
   }
