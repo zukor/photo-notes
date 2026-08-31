@@ -11,6 +11,7 @@ function isConcreteClient(){return isProClient()&&state.proType==='concrete';}
 function isPavingClient(){return isProClient()&&(state.proType==='paving'||state.proType==='asphalt');}
 function isRoadIssuesClient(){return !isProClient()&&state.proType==='roads';}
 function productName(){return isRoadIssuesClient()?'Road Issues Reporting':isHoaClient()?'HOA Maintenance Pro':isConcreteClient()?'Concrete Pro':isPavingClient()?'Paving Pro':'Photo Notes';}
+function issueFabLabel(){return isRoadIssuesClient()?'Report Issue':'Report an Issue';}
 function featureOn(name) { return isPavingClient() && (!state.me || !state.me.feature_access || state.me.feature_access[name] !== false); }
 function measurementOn(){return isConcreteClient()||featureOn('measurements');}
 function beforeAfterOn(){return isConcreteClient()||featureOn('before_after');}
@@ -248,7 +249,7 @@ function renderApp() {
       <div class="app-header">
         <img class="zukor-corner-logo" src="/zukor-logo.svg" alt="Zukor AI" />
         <div class="brandrow">
-          <div class="brand ${isProClient() ? 'pro-edition-brand' : ''} ${isRoadIssuesClient()?'road-issues-brand':''} ${isPavingClient()?'paving-pro-brand':''} ${isConcreteClient()?'concrete-pro-brand':''} ${isHoaClient()?'hoa-pro-brand':''}">${isRoadIssuesClient()?'<span class="road-issues-logo" role="img" aria-label="Photo Notes AI"></span>':'<span class="product-suite-name">Photo Notes</span>'}<span class="product-edition-name">${isProClient()||isRoadIssuesClient()?esc(productName()):''}</span></div>
+          <div class="brand ${isProClient() ? 'pro-edition-brand' : ''} ${isRoadIssuesClient()?'road-issues-brand':''} ${isPavingClient()?'paving-pro-brand':''} ${isConcreteClient()?'concrete-pro-brand':''} ${isHoaClient()?'hoa-pro-brand':''}" aria-label="${esc(isProClient()||isRoadIssuesClient()?productName():'Photo Notes AI')}">${isRoadIssuesClient()?'<span class="road-issues-logo" role="img" aria-label="Photo Notes AI"></span><span class="product-edition-name">Road Issues Reporting</span>':isProClient()?'':'<span class="product-suite-name">Photo Notes</span>'}</div>
         </div>
         ${state.me&&state.me.role==='admin'?`<div class="edition-switcher" aria-label="Switch Photo Notes edition"><button data-edition="basic" class="${!isProClient()&&!isRoadIssuesClient()?'active':''}">PNAI</button><button data-edition="roads" class="${isRoadIssuesClient()?'active':''}">RIR</button><button data-edition="paving" class="${isPavingClient()?'active':''}">PP</button><button data-edition="hoa" class="${isHoaClient()?'active':''}">HMP</button><button data-edition="concrete" class="${isConcreteClient()?'active':''}">CP</button></div>`:''}
         <div class="header-controls">
@@ -275,7 +276,7 @@ function renderApp() {
       <div id="body"></div>
       <div class="footer">&copy; ${new Date().getFullYear()} Zukor AI. All Rights Reserved.</div>
     </div>
-    ${!isProClient() ? `<button class="issue-fab" id="issueFab" type="button" data-html2canvas-ignore="true" aria-label="Report an issue">Report an Issue</button>
+    ${!isProClient() ? `<button class="issue-fab ${isRoadIssuesClient()?'road-issue-fab':''}" id="issueFab" type="button" data-html2canvas-ignore="true" aria-label="${isRoadIssuesClient()?'Report issue':'Report an issue'}">${issueFabLabel()}</button>
     <div class="issue-modal" id="issueModal" hidden data-html2canvas-ignore="true">
       <div class="issue-dialog" role="dialog" aria-modal="true" aria-labelledby="issueTitle">
         <button class="issue-close" id="issueClose" type="button" aria-label="Close">×</button>
@@ -437,7 +438,7 @@ async function openIssueReporter() {
   document.getElementById('issueRecord').onclick=toggleIssueDictation;
   document.getElementById('issueSend').onclick=submitIssueReport;
   description.focus();
-  if(fab){fab.disabled=false;fab.textContent='Report an Issue';}
+  if(fab){fab.disabled=false;fab.textContent=issueFabLabel();}
 }
 function closeIssueReporter(){issueDictationActive=false;if(issueDictationRestartTimer)clearTimeout(issueDictationRestartTimer);if(issueDictationWatchdog)clearTimeout(issueDictationWatchdog);issueDictationRestartTimer=null;issueDictationWatchdog=null;if(issueRecognizer){try{issueRecognizer.stop();}catch(e){}}const m=document.getElementById('issueModal');if(m)m.hidden=true;issueScreenshotBlob=null;issueRecognizer=null;}
 async function toggleIssueDictation(){

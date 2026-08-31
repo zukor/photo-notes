@@ -10,7 +10,7 @@ const admin = fs.readFileSync(path.join(root, 'public', 'admin.html'), 'utf8');
 const styles = fs.readFileSync(path.join(root, 'public', 'styles.css'), 'utf8');
 
 test('Basic keeps its own help and issue reporting while Pro-only camera tools stay gated', () => {
-  assert.match(app, /!isProClient\(\) \? `<button class="issue-fab"/);
+  assert.match(app, /!isProClient\(\) \? `<button class="issue-fab \$\{isRoadIssuesClient\(\)\?'road-issue-fab':''\}"/);
   assert.match(app, /if \(isProClient\(\) \|\| !TENSOR_HELP_TOPICS\[state\.view\]\) return/);
   assert.match(app, /isProClient\(\) && \['ticket_scanner','camera_readers','before_after'\]\.some\(featureOn\)/);
   assert.match(server, /if \(await currentPlan\(req\.user\.id\) === 'pro'\)[\s\S]*error:'basic only'/);

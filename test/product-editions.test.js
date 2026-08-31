@@ -25,6 +25,11 @@ test('HOA Maintenance Pro uses its edition logo',()=>{
   assert.match(logo,/aria-label="Photo Notes AI HOA Maintenance Pro logo"/);
 });
 
+test('Pro headers render only their supplied edition logos',()=>{
+  assert.match(app,/isRoadIssuesClient\(\)\?'<span class="road-issues-logo"[\s\S]*':isProClient\(\)\?'':'<span class="product-suite-name">Photo Notes<\/span>'/);
+  assert.doesNotMatch(app,/isProClient\(\)\|\|isRoadIssuesClient\(\)\?esc\(productName\(\)\)/);
+});
+
 test('Paving classification covers broader visible pavement failures',()=>{
   for(const defect of ['joint_failure','utility_cut_failure','surface_deformation','drainage_damage','base_failure'])assert.match(server,new RegExp(defect));
 });

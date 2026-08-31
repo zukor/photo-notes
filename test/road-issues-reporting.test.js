@@ -34,6 +34,13 @@ test('road reporter header shows the cropped Photo Notes AI mark with its own su
   assert.match(styles,/\.road-issues-logo[^}]*aspect-ratio:940\/118[^}]*overflow:hidden[^}]*photo-notes-ai-paving-pro-animated\.svg/);
 });
 
+test('road reporter uses the shorter red-outlined issue button',()=>{
+  assert.match(app,/function issueFabLabel\(\)\{return isRoadIssuesClient\(\)\?'Report Issue':'Report an Issue';\}/);
+  assert.match(app,/issue-fab \$\{isRoadIssuesClient\(\)\?'road-issue-fab':''\}/);
+  const styles=fs.readFileSync(path.join(root,'public/styles.css'),'utf8');
+  assert.match(styles,/\.issue-fab\.road-issue-fab \{ border-color:#e8231a; \}/);
+});
+
 test('road reports are stored before an attached-photo email is attempted',()=>{
   assert.match(db,/CREATE TABLE IF NOT EXISTS road_issue_reports/);
   assert.match(db,/photo_path\s+TEXT NOT NULL/);

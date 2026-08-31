@@ -35,7 +35,7 @@ test('issue reporter stays recoverable and clear of primary page controls', () =
   assert.match(css, /\.issue-fab \{[\s\S]*bottom:max\(14px,env\(safe-area-inset-bottom\)\)/);
   assert.match(css, /\.issue-dialog \{ max-height:calc\(100vh - 20px\)/);
   assert.match(app, /send\.disabled=false;send\.textContent='Send Issue Report'/);
-  assert.match(app, /fab\.disabled=false;fab\.textContent='Report an Issue'/);
+  assert.match(app, /fab\.disabled=false;fab\.textContent=issueFabLabel\(\)/);
 });
 
 test('Android speech revisions replace interim text instead of appending duplicates', () => {
