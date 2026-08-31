@@ -95,9 +95,9 @@ textarea { min-height: 96px; resize: vertical; }
   height:60px; background-image:url('/photo-notes-ai-hoa-maintenance-pro-animated.svg?v=81');
   background-position:center; background-size:contain; background-repeat:no-repeat;
 }
-.brandrow .brand.road-issues-brand { position:relative; height:88px; aspect-ratio:auto; background-size:100% auto; margin-bottom:2px; }
-.brandrow .brand.road-issues-brand .product-suite-name { display:none; }
-.brandrow .brand.road-issues-brand .product-edition-name { display:block; position:absolute; inset:auto 0 2px; color:#000; font:800 19px/1.1 Arial,Helvetica,sans-serif; letter-spacing:.2px; text-transform:none; }
+.brandrow .brand.road-issues-brand { display:flex; flex-direction:column; align-items:center; gap:3px; width:min(420px,72vw); height:auto; aspect-ratio:auto; margin-bottom:2px; background:none; }
+.brandrow .brand.road-issues-brand .road-issues-logo { display:block; width:100%; aspect-ratio:940/118; overflow:hidden; background:url('/photo-notes-ai-paving-pro-animated.svg?v=79') center top/100% auto no-repeat; }
+.brandrow .brand.road-issues-brand .product-edition-name { display:block; color:#000; font:800 19px/1.1 Arial,Helvetica,sans-serif; letter-spacing:.2px; text-transform:none; }
 .product-suite-name { display:block; color:#1254a3; font:800 27px/1.05 Arial,Helvetica,sans-serif; letter-spacing:-.7px; }
 .product-edition-name { display:block; color:#000; font:800 20px/1.1 Arial,Helvetica,sans-serif; margin-top:2px; }
 /* Basic uses the complete SVG wordmark as its background. Keep the semantic
@@ -374,7 +374,8 @@ input.dimfield.suggested {
   .app-header { grid-template-columns:auto minmax(0,1fr) auto; column-gap:6px; row-gap:1px; margin-top:6px; }
   .app-header .zukor-corner-logo { width:92.5px; min-width:0; }
   .app-header .brand:not([style*="font-size"]):not(.road-issues-brand) { height:42px; }
-  .app-header .brand.road-issues-brand { height:82px; }
+  .app-header .brand.road-issues-brand { width:min(390px,76vw); height:auto; }
+  .brandrow .brand.road-issues-brand .product-edition-name { font-size:17px; }
   .app-header .brandrow { width:100%; }
   .app-header .brandrow .brand.pro-edition-brand { width:100%; max-width:calc(100vw - 28px); height:auto; }
   .workflow-tabs { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:4px; overflow:visible; padding-bottom:0; }

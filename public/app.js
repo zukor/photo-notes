@@ -248,7 +248,7 @@ function renderApp() {
       <div class="app-header">
         <img class="zukor-corner-logo" src="/zukor-logo.svg" alt="Zukor AI" />
         <div class="brandrow">
-          <div class="brand ${isProClient() ? 'pro-edition-brand' : ''} ${isRoadIssuesClient()?'road-issues-brand':''} ${isPavingClient()?'paving-pro-brand':''} ${isConcreteClient()?'concrete-pro-brand':''} ${isHoaClient()?'hoa-pro-brand':''}"><span class="product-suite-name">Photo Notes</span><span class="product-edition-name">${isProClient()||isRoadIssuesClient()?esc(productName()):''}</span></div>
+          <div class="brand ${isProClient() ? 'pro-edition-brand' : ''} ${isRoadIssuesClient()?'road-issues-brand':''} ${isPavingClient()?'paving-pro-brand':''} ${isConcreteClient()?'concrete-pro-brand':''} ${isHoaClient()?'hoa-pro-brand':''}">${isRoadIssuesClient()?'<span class="road-issues-logo" role="img" aria-label="Photo Notes AI"></span>':'<span class="product-suite-name">Photo Notes</span>'}<span class="product-edition-name">${isProClient()||isRoadIssuesClient()?esc(productName()):''}</span></div>
         </div>
         ${state.me&&state.me.role==='admin'?`<div class="edition-switcher" aria-label="Switch Photo Notes edition"><button data-edition="basic" class="${!isProClient()&&!isRoadIssuesClient()?'active':''}">PNAI</button><button data-edition="roads" class="${isRoadIssuesClient()?'active':''}">RIR</button><button data-edition="paving" class="${isPavingClient()?'active':''}">PP</button><button data-edition="hoa" class="${isHoaClient()?'active':''}">HMP</button><button data-edition="concrete" class="${isConcreteClient()?'active':''}">CP</button></div>`:''}
         <div class="header-controls">
@@ -487,7 +487,7 @@ function renderRoadIssueReport() {
     <label>Road Issue Photo</label>
     <button type="button" class="btn" id="takephoto">Take Photo</button>
     <input type="file" accept="image/*" capture="environment" id="photoCam" style="display:none">
-    <div class="photo-box capture-preview" id="previewBox" style="display:none;margin-top:12px"><img id="preview" alt="Road issue photo preview"><div class="capture-preview-actions"><button type="button" class="btn secondary" id="retakePhoto">Retake Photo</button><button type="button" class="btn secondary" id="cancelPhoto">Cancel Photo</button></div></div>
+    <div class="photo-box capture-preview" id="previewBox" style="display:none;margin-top:12px"><img id="preview" alt="Road issue photo preview" style="display:block"><div class="capture-preview-actions"><button type="button" class="btn secondary" id="retakePhoto">Retake Photo</button><button type="button" class="btn secondary" id="cancelPhoto">Cancel Photo</button></div></div>
     <div class="status" id="qualityStatus"></div>
     <div id="locwrap" style="display:none"><label>GPS Coordinates</label><div class="status" id="gps"></div><label>Address or Geographic Area</label><div class="status" id="addr"></div><button type="button" class="btn secondary slim" id="retryLocation">Retry location</button></div>
     <button type="button" class="btn road-send" id="roadIssueSend">Send</button>

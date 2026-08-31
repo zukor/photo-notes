@@ -21,9 +21,17 @@ test('road reporter is one camera-only form with the requested issue choices',()
   assert.match(form,/id="roadIssueType"/);
   assert.match(form,/id="photoCam"/);
   assert.match(form,/capture="environment"/);
+  assert.match(form,/alt="Road issue photo preview" style="display:block"/);
   assert.match(form,/id="roadIssueSend">Send<\/button>/);
   assert.doesNotMatch(form,/photoLib|Choose from library|Record Note|id="note"|Select Topic/);
   assert.match(app,/isRoadIssuesClient\(\)\?'':`<div class="tabs workflow-tabs/);
+});
+
+test('road reporter header shows the cropped Photo Notes AI mark with its own subtitle',()=>{
+  assert.match(app,/road-issues-logo" role="img" aria-label="Photo Notes AI"/);
+  assert.match(app,/isRoadIssuesClient\(\)\?'Road Issues Reporting'/);
+  const styles=fs.readFileSync(path.join(root,'public/styles.css'),'utf8');
+  assert.match(styles,/\.road-issues-logo[^}]*aspect-ratio:940\/118[^}]*overflow:hidden[^}]*photo-notes-ai-paving-pro-animated\.svg/);
 });
 
 test('road reports are stored before an attached-photo email is attempted',()=>{
