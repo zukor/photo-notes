@@ -22,7 +22,7 @@ input[type=text], input[type=email], input[type=password], input:not([type]), te
   border: 1px solid #000; border-radius: 8px; font-family: inherit;
 }
 textarea { min-height: 96px; resize: vertical; }
-.photo-title { margin-top:9px; color:#000; font-size:18px; font-weight:800; line-height:1.2; }
+.photo-title { margin:9px 0 7px; color:#000; font-size:18px; font-weight:800; line-height:1.2; }
 .phototitlewrap .editlink { padding-left:0; }
 .photo-title-input { margin-top:5px; font-size:17px; font-weight:700; }
 .topicwrap .editlink { padding-left:0; }

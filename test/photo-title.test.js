@@ -20,6 +20,7 @@ test('Organize can add missing titles and Edit can add or change titles', () => 
   assert.match(app, /state\.view==='organize'&&!c\.photo_title\?'Add Photo Title'/);
   assert.match(app, /state\.view==='edit'\?\(c\.photo_title\?'Change Photo Title':'Add Photo Title'\)/);
   assert.match(app, /class="phototitlewrap" data-id=/);
+  assert.match(app, /class="phototitlewrap"[\s\S]*class="photo-title"[\s\S]*<img src="\$\{photoSrc\(c\.photo_path\)\}" alt="capture"/);
   assert.match(app, /function startEditPhotoTitle\(id, rows\)/);
   assert.match(app, /JSON\.stringify\(\{photo_title:value\}\)/);
 });
