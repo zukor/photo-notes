@@ -2088,6 +2088,33 @@ async function showEvidence(id){
 function fEvidenceDate(value){try{return new Date(value).toLocaleString(uiLocale());}catch(e){return '—';}}
 function formatEvidenceBytes(n){n=Number(n)||0;if(n<1024)return n+' B';if(n<1048576)return (n/1024).toFixed(1)+' KB';return (n/1048576).toFixed(1)+' MB';}
 
+function openPhotoViewer(src,title='Photo'){
+  const old=document.getElementById('photoViewerModal');if(old)old.remove();
+  const modal=document.createElement('div');modal.id='photoViewerModal';modal.className='photo-viewer-modal';modal.setAttribute('data-html2canvas-ignore','true');
+  modal.innerHTML=`<section class="photo-viewer-dialog" role="dialog" aria-modal="true" aria-labelledby="photoViewerTitle"><div class="photo-viewer-head"><strong id="photoViewerTitle">${esc(title||'Photo')}</strong><button class="iconbtn" id="photoViewerClose" aria-label="Close photo viewer">×</button></div><p class="status">Viewing only. Drag the photo with a finger or mouse, or use the controls below.</p><div class="photo-viewer-viewport"><img src="${esc(src)}" alt="${esc(title||'Photo')}" draggable="false"></div><div class="photo-viewer-controls"><button class="btn secondary slim" data-view-action="zoom-in">Zoom In</button><button class="btn secondary slim" data-view-action="zoom-out">Zoom Out</button><button class="btn secondary slim" data-view-action="left">Move Left</button><button class="btn secondary slim" data-view-action="right">Move Right</button><button class="btn secondary slim" data-view-action="up">Move Up</button><button class="btn secondary slim" data-view-action="down">Move Down</button></div><button class="btn secondary" id="photoViewerReset">Reset Photo</button></section>`;
+  document.body.appendChild(modal);
+  const viewport=modal.querySelector('.photo-viewer-viewport'),img=viewport.querySelector('img');let scale=1,x=0,y=0,drag=null,pinch=null;
+  const paint=()=>{img.style.transform=`translate(${x}px, ${y}px) scale(${scale})`;};
+  const zoom=factor=>{scale=Math.max(1,Math.min(5,scale*factor));if(scale===1){x=0;y=0;}paint();};
+  const reset=()=>{scale=1;x=0;y=0;paint();};
+  modal.querySelectorAll('[data-view-action]').forEach(b=>b.onclick=()=>{switch(b.dataset.viewAction){case'zoom-in':zoom(1.3);break;case'zoom-out':zoom(1/1.3);break;case'left':x-=50;break;case'right':x+=50;break;case'up':y-=50;break;case'down':y+=50;break;}paint();});
+  viewport.onpointerdown=e=>{if(e.pointerType==='touch'&&e.isPrimary===false)return;drag={id:e.pointerId,startX:e.clientX,startY:e.clientY,x,y};viewport.setPointerCapture(e.pointerId);};
+  viewport.onpointermove=e=>{if(!drag||drag.id!==e.pointerId)return;x=drag.x+e.clientX-drag.startX;y=drag.y+e.clientY-drag.startY;paint();};
+  const endDrag=e=>{if(drag&&drag.id===e.pointerId)drag=null;};viewport.onpointerup=endDrag;viewport.onpointercancel=endDrag;
+  viewport.addEventListener('wheel',e=>{e.preventDefault();zoom(e.deltaY<0?1.15:1/1.15);},{passive:false});
+  viewport.addEventListener('touchstart',e=>{if(e.touches.length===2){const [a,b]=e.touches;pinch={distance:Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY),scale};}},{passive:true});
+  viewport.addEventListener('touchmove',e=>{if(e.touches.length!==2||!pinch)return;e.preventDefault();const [a,b]=e.touches,distance=Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);scale=Math.max(1,Math.min(5,pinch.scale*(distance/pinch.distance)));paint();},{passive:false});
+  viewport.addEventListener('touchend',()=>{pinch=null;},{passive:true});
+  const close=()=>{document.removeEventListener('keydown',onKey);modal.remove();},onKey=e=>{if(e.key==='Escape')close();};
+  modal.querySelector('#photoViewerClose').onclick=close;modal.querySelector('#photoViewerReset').onclick=reset;modal.onclick=e=>{if(e.target===modal)close();};document.addEventListener('keydown',onKey);paint();
+}
+
+function installPhotoViewerButtons(root=document){
+  root.querySelectorAll('.card img').forEach(img=>{if(img.closest('.photo-viewer-modal')||img.nextElementSibling?.classList.contains('photo-viewer-button'))return;const button=document.createElement('button');button.type='button';button.className='btn secondary slim photo-viewer-button';button.textContent='View & Zoom';button.onclick=e=>{e.stopPropagation();const card=img.closest('.card'),title=card&&card.querySelector('.photo-title');openPhotoViewer(img.currentSrc||img.src,title&&title.textContent||img.alt||'Photo');};img.insertAdjacentElement('afterend',button);img.style.cursor='zoom-in';img.onclick=()=>button.click();});
+}
+const photoViewerObserver=new MutationObserver(records=>{for(const record of records)for(const node of record.addedNodes)if(node.nodeType===1){installPhotoViewerButtons(node.matches&&node.matches('.card')?node:node);}});
+photoViewerObserver.observe(document.body,{childList:true,subtree:true});
+
 // A combined before/after card: two photos side by side with labels + Unpair.
 function pairCardHtml(before, after) {
   const side = (c, label) => {
