@@ -23,6 +23,7 @@ if (process.env.NODE_ENV === 'production' && (!process.env.SESSION_SECRET || SES
 }
 
 function normalizeProType(value) {
+  if (value === 'roads') return 'roads';
   if (value === 'hoa') return 'hoa';
   if (value === 'concrete') return 'concrete';
   return 'paving';
@@ -102,7 +103,7 @@ function isPro(user) { return !!(user && user.plan === 'pro'); }
 app.post('/api/admin/switch-edition', requireAdmin, async (req,res) => {
   try {
     const edition=String(req.body&&req.body.edition||'');
-    const choices={basic:{plan:'free',pro_type:'paving'},paving:{plan:'pro',pro_type:'paving'},hoa:{plan:'pro',pro_type:'hoa'},concrete:{plan:'pro',pro_type:'concrete'}};
+    const choices={basic:{plan:'free',pro_type:'paving'},roads:{plan:'free',pro_type:'roads'},paving:{plan:'pro',pro_type:'paving'},hoa:{plan:'pro',pro_type:'hoa'},concrete:{plan:'pro',pro_type:'concrete'}};
     const choice=choices[edition];
     if(!choice)return res.status(400).json({error:'invalid edition'});
     const user=(await pool.query(`UPDATE users SET plan=$1,pro_type=$2 WHERE id=$3 AND role='admin' RETURNING *`,[choice.plan,choice.pro_type,req.user.id])).rows[0];
@@ -1299,6 +1300,35 @@ app.get('/api/camera-readings', requireAuth, async (req, res) => {
   } catch (err) { console.error('[camera-reader.list]', err); res.status(500).json({ error:'list failed' }); }
 });
 
+// ---- Road Issues Reporting (simplified non-Pro edition) ----
+const ROAD_ISSUE_TYPES = ['Crack','Pothole','Curb','Water Pooling','Road Marking','Sign','Other Road Surface Issue'];
+async function roadIssuesAllowed(userId){const row=(await pool.query(`SELECT plan,pro_type FROM users WHERE id=$1 AND active=true`,[userId])).rows[0];return !!row&&row.plan!=='pro'&&normalizeProType(row.pro_type)==='roads';}
+async function emailRoadIssueReport(report,user){
+  const key=process.env.RESEND_API_KEY;if(!key)return {status:'pending',error:'Email delivery is not configured'};
+  const recipient=process.env.ROAD_ISSUE_EMAIL||'zukor@earthlink.net';
+  const from=process.env.ISSUE_REPORT_FROM||'Photo Notes Issues <issues@photonotesapp.com>';
+  const when=new Date(report.created_at).toLocaleString('en-US',{timeZone:'America/Chicago'});
+  const gps=report.latitude!=null&&report.longitude!=null?`${Number(report.latitude).toFixed(6)}, ${Number(report.longitude).toFixed(6)}`:'Not available';
+  const body={from,to:[recipient],subject:`Road Issue #${report.id}: ${report.issue_type}`,html:`<h2>Road Issue #${report.id}</h2><p><strong>Type:</strong> ${escXml(report.issue_type)}</p><p><strong>Submitted by:</strong> ${escXml(user.name||'')} (${escXml(user.email||'')})</p><p><strong>Submitted:</strong> ${escXml(when)} CT</p><p><strong>GPS:</strong> ${escXml(gps)}</p><p><strong>Address or geographic area:</strong> ${escXml(report.address||'Not available')}</p>`};
+  const local=localPhoto(report.photo_path);if(local&&fs.existsSync(local))body.attachments=[{filename:`road-issue-${report.id}${path.extname(local)||'.jpg'}`,content:fs.readFileSync(local).toString('base64')}];
+  try{const response=await fetch('https://api.resend.com/emails',{method:'POST',headers:{'content-type':'application/json','authorization':`Bearer ${key}`},body:JSON.stringify(body)});if(!response.ok)return {status:'failed',error:`Mail service returned ${response.status}`};return {status:'sent',error:null};}catch(e){return {status:'failed',error:ticketText(e&&e.message,200)||'Mail request failed'};}
+}
+app.post('/api/road-issues',requireAuth,upload.single('photo'),async(req,res)=>{
+  try{
+    if(!(await roadIssuesAllowed(req.user.id))){if(req.file)try{fs.unlinkSync(req.file.path)}catch(e){}return res.status(403).json({error:'Road Issues Reporting access required'});}
+    const issueType=ROAD_ISSUE_TYPES.includes(req.body&&req.body.issue_type)?req.body.issue_type:null;if(!issueType||!req.file){if(req.file)try{fs.unlinkSync(req.file.path)}catch(e){}return res.status(400).json({error:'road issue type and photo are required'});}
+    const hasLat=req.body.latitude!==undefined&&req.body.latitude!=='',hasLng=req.body.longitude!==undefined&&req.body.longitude!=='';
+    const lat=Number(req.body.latitude),lng=Number(req.body.longitude),latitude=hasLat&&Number.isFinite(lat)?lat:null,longitude=hasLng&&Number.isFinite(lng)?lng:null;
+    let address=ticketText(req.body.address,500);if(!address&&latitude!=null&&longitude!=null)address=await reverseGeocode(latitude,longitude);
+    const photoPath=`/uploads/${path.basename(req.file.path)}`;
+    const report=(await pool.query(`INSERT INTO road_issue_reports(user_id,issue_type,photo_path,latitude,longitude,address) VALUES($1,$2,$3,$4,$5,$6) RETURNING *`,[req.user.id,issueType,photoPath,latitude,longitude,address])).rows[0];
+    const user=(await pool.query(`SELECT name,email FROM users WHERE id=$1`,[req.user.id])).rows[0]||req.user,delivery=await emailRoadIssueReport(report,user);
+    await pool.query(`UPDATE road_issue_reports SET email_status=$1,email_error=$2 WHERE id=$3`,[delivery.status,delivery.error,report.id]);
+    logEvent(req.user.id,'road_issue_report',{road_issue_id:report.id,issue_type:issueType,email_status:delivery.status,has_location:latitude!=null&&longitude!=null});
+    res.json({ok:true,id:report.id,email_status:delivery.status});
+  }catch(e){console.error('[road-issues.create]',e);res.status(500).json({error:'road issue report failed'});}
+});
+
 // ---- Basic tester issue reports ----
 async function emailIssueReport(report, user) {
   const key = process.env.RESEND_API_KEY;
@@ -2426,7 +2456,7 @@ app.post('/api/admin/users', requireAdmin, async (req, res) => {
     const industry = b.industry ? String(b.industry).trim() : null;
     const password = String(b.password || '');
     const requestedProduct = b.product === 'asphalt' ? 'paving' : b.product;
-    const proType=['paving','hoa','concrete'].includes(requestedProduct)?requestedProduct:'paving',plan=['paving','hoa','concrete'].includes(requestedProduct)?'pro':'free';
+    const proType=['roads','paving','hoa','concrete'].includes(requestedProduct)?requestedProduct:'paving',plan=['paving','hoa','concrete'].includes(requestedProduct)?'pro':'free';
     if (name.split(/\s+/).filter(Boolean).length < 2) return res.status(400).json({ error: 'first and last name are required' });
     if (!email || !password) return res.status(400).json({ error: 'email and password are required' });
     const hash = bcrypt.hashSync(password, 10);
@@ -2463,7 +2493,7 @@ app.post('/api/admin/users/:id', requireAdmin, async (req, res) => {
     if (typeof b.active === 'boolean') { vals.push(b.active); sets.push(`active = $${vals.length}`); changed.push('active'); }
     if (b.role === 'admin' || b.role === 'user') { vals.push(b.role); sets.push(`role = $${vals.length}`); changed.push('role'); }
     if (b.plan === 'pro' || b.plan === 'free') { vals.push(b.plan); sets.push(`plan = $${vals.length}`); changed.push('plan'); }
-    if (['asphalt','paving','hoa','concrete'].includes(b.pro_type)) { vals.push(normalizeProType(b.pro_type)); sets.push(`pro_type = $${vals.length}`); changed.push('pro_type'); }
+    if (['asphalt','roads','paving','hoa','concrete'].includes(b.pro_type)) { vals.push(normalizeProType(b.pro_type)); sets.push(`pro_type = $${vals.length}`); changed.push('pro_type'); }
     if (b.feature_access && typeof b.feature_access === 'object' && !Array.isArray(b.feature_access)) {
       const clean={}; MANAGED_FEATURES.forEach(k=>{if(typeof b.feature_access[k]==='boolean')clean[k]=b.feature_access[k];});
       vals.push(JSON.stringify(clean));sets.push(`feature_access=$${vals.length}`);changed.push('feature_access');

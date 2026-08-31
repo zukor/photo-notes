@@ -64,8 +64,9 @@ test('location failures expose a retry path without blocking photo save', () => 
 });
 
 test('Save never waits for location and stale location cannot move to the next capture', () => {
+  const saveCapture=app.slice(app.indexOf('async function saveCapture()'),app.indexOf('// ================= HOA Maintenance Pro'));
   assert.doesNotMatch(app, /Getting Full Address/);
-  assert.doesNotMatch(app, /await state\._locationPromise/);
+  assert.doesNotMatch(saveCapture, /await state\._locationPromise/);
   assert.match(app, /let captureLocationGeneration = 0/);
   assert.match(app, /generation === captureLocationGeneration && state\.photoFile === photoForLocation/);
   assert.match(app, /void enqueueUpload\(payload, hadCoords\)/);

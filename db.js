@@ -277,6 +277,21 @@ CREATE TABLE IF NOT EXISTS issue_reports (
   created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS issue_reports_created_idx ON issue_reports (created_at DESC);
+-- Simplified Road Issues Reporting edition. The photograph and its location
+-- are the report; submissions are stored before notification is attempted.
+CREATE TABLE IF NOT EXISTS road_issue_reports (
+  id             SERIAL PRIMARY KEY,
+  user_id        INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  issue_type     TEXT NOT NULL,
+  photo_path     TEXT NOT NULL,
+  latitude       DOUBLE PRECISION,
+  longitude      DOUBLE PRECISION,
+  address        TEXT,
+  email_status   TEXT NOT NULL DEFAULT 'pending',
+  email_error    TEXT,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS road_issue_reports_created_idx ON road_issue_reports (created_at DESC);
 -- Tamper-evident fingerprint and content-free edit history for each capture.
 CREATE TABLE IF NOT EXISTS capture_evidence (
   capture_id      INTEGER PRIMARY KEY REFERENCES captures(id) ON DELETE CASCADE,

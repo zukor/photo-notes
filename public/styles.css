@@ -95,13 +95,16 @@ textarea { min-height: 96px; resize: vertical; }
   height:60px; background-image:url('/photo-notes-ai-hoa-maintenance-pro-animated.svg?v=81');
   background-position:center; background-size:contain; background-repeat:no-repeat;
 }
+.brandrow .brand.road-issues-brand { position:relative; height:88px; aspect-ratio:auto; background-size:100% auto; margin-bottom:2px; }
+.brandrow .brand.road-issues-brand .product-suite-name { display:none; }
+.brandrow .brand.road-issues-brand .product-edition-name { display:block; position:absolute; inset:auto 0 2px; color:#000; font:800 19px/1.1 Arial,Helvetica,sans-serif; letter-spacing:.2px; text-transform:none; }
 .product-suite-name { display:block; color:#1254a3; font:800 27px/1.05 Arial,Helvetica,sans-serif; letter-spacing:-.7px; }
 .product-edition-name { display:block; color:#000; font:800 20px/1.1 Arial,Helvetica,sans-serif; margin-top:2px; }
 /* Basic uses the complete SVG wordmark as its background. Keep the semantic
    text in the DOM for assistive technology without painting a second title
    over the artwork. Pro editions intentionally render their supplied SVGs. */
 .brand:not(.pro-edition-brand) .product-suite-name,
-.brand:not(.pro-edition-brand) .product-edition-name { display:none; }
+.brand:not(.pro-edition-brand):not(.road-issues-brand) .product-edition-name { display:none; }
 .edition-label { flex:0 0 auto; color:#000; font-size:12px; font-weight:bold; line-height:1.05; text-align:left; }
 .edition-label span { display:block; }
 @media (max-width: 380px) { .brand:not([style*="font-size"]) { width:min(280px, 100%); } }
@@ -117,6 +120,8 @@ textarea { min-height: 96px; resize: vertical; }
 .app-header .brandrow { grid-column:1 / -1; grid-row:2; min-width:0; width:min(500px,100%); justify-self:center; }
 .app-header .brandrow .brand { width:100%; max-width:100%; }
 .app-header .header-controls { grid-column:2 / 4; grid-row:1; justify-self:end; display:flex; align-items:center; gap:10px; }
+.workflow-road-report { width:min(620px,100%); margin:0 auto; }
+.workflow-road-report .road-send { margin-top:22px; }
 .edition-switcher { grid-column:2; grid-row:1; justify-self:center; display:flex; gap:3px; padding:2px 4px; border:1px solid #b8c7dc; border-radius:10px; background:#fff; }
 .edition-switcher button { border:0; border-radius:7px; background:transparent; color:#334155; padding:3px 5px; font:800 9px/1 Arial,Helvetica,sans-serif; cursor:pointer; }
 .edition-switcher button.active { background:#1254a3; color:#fff; }
@@ -368,7 +373,8 @@ input.dimfield.suggested {
   #body, .workflow-organize, .workflow-edit, .workflow-create, .workflow-send { max-width:640px !important; }
   .app-header { grid-template-columns:auto minmax(0,1fr) auto; column-gap:6px; row-gap:1px; margin-top:6px; }
   .app-header .zukor-corner-logo { width:92.5px; min-width:0; }
-  .app-header .brand:not([style*="font-size"]) { height:42px; }
+  .app-header .brand:not([style*="font-size"]):not(.road-issues-brand) { height:42px; }
+  .app-header .brand.road-issues-brand { height:82px; }
   .app-header .brandrow { width:100%; }
   .app-header .brandrow .brand.pro-edition-brand { width:100%; max-width:calc(100vw - 28px); height:auto; }
   .workflow-tabs { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:4px; overflow:visible; padding-bottom:0; }

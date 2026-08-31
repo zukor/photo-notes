@@ -9,7 +9,8 @@ function isProClient() { return state.plan === 'pro'; }
 function isHoaClient(){return isProClient()&&state.proType==='hoa';}
 function isConcreteClient(){return isProClient()&&state.proType==='concrete';}
 function isPavingClient(){return isProClient()&&(state.proType==='paving'||state.proType==='asphalt');}
-function productName(){return isHoaClient()?'HOA Maintenance Pro':isConcreteClient()?'Concrete Pro':isPavingClient()?'Paving Pro':'Photo Notes';}
+function isRoadIssuesClient(){return !isProClient()&&state.proType==='roads';}
+function productName(){return isRoadIssuesClient()?'Road Issues Reporting':isHoaClient()?'HOA Maintenance Pro':isConcreteClient()?'Concrete Pro':isPavingClient()?'Paving Pro':'Photo Notes';}
 function featureOn(name) { return isPavingClient() && (!state.me || !state.me.feature_access || state.me.feature_access[name] !== false); }
 function measurementOn(){return isConcreteClient()||featureOn('measurements');}
 function beforeAfterOn(){return isConcreteClient()||featureOn('before_after');}
@@ -247,9 +248,9 @@ function renderApp() {
       <div class="app-header">
         <img class="zukor-corner-logo" src="/zukor-logo.svg" alt="Zukor AI" />
         <div class="brandrow">
-          <div class="brand ${isProClient() ? 'pro-edition-brand' : ''} ${isPavingClient()?'paving-pro-brand':''} ${isConcreteClient()?'concrete-pro-brand':''} ${isHoaClient()?'hoa-pro-brand':''}"><span class="product-suite-name">Photo Notes</span><span class="product-edition-name">${isProClient()?esc(productName()):''}</span></div>
+          <div class="brand ${isProClient() ? 'pro-edition-brand' : ''} ${isRoadIssuesClient()?'road-issues-brand':''} ${isPavingClient()?'paving-pro-brand':''} ${isConcreteClient()?'concrete-pro-brand':''} ${isHoaClient()?'hoa-pro-brand':''}"><span class="product-suite-name">Photo Notes</span><span class="product-edition-name">${isProClient()||isRoadIssuesClient()?esc(productName()):''}</span></div>
         </div>
-        ${state.me&&state.me.role==='admin'?`<div class="edition-switcher" aria-label="Switch Photo Notes edition"><button data-edition="basic" class="${!isProClient()?'active':''}">PNAI</button><button data-edition="paving" class="${isPavingClient()?'active':''}">PP</button><button data-edition="hoa" class="${isHoaClient()?'active':''}">HMP</button><button data-edition="concrete" class="${isConcreteClient()?'active':''}">CP</button></div>`:''}
+        ${state.me&&state.me.role==='admin'?`<div class="edition-switcher" aria-label="Switch Photo Notes edition"><button data-edition="basic" class="${!isProClient()&&!isRoadIssuesClient()?'active':''}">PNAI</button><button data-edition="roads" class="${isRoadIssuesClient()?'active':''}">RIR</button><button data-edition="paving" class="${isPavingClient()?'active':''}">PP</button><button data-edition="hoa" class="${isHoaClient()?'active':''}">HMP</button><button data-edition="concrete" class="${isConcreteClient()?'active':''}">CP</button></div>`:''}
         <div class="header-controls">
           <div class="language-switch" aria-label="Language"><button type="button" data-language="en">EN</button><span> </span><button type="button" data-language="es">ES</button></div>
           <div class="account-menu-wrap">
@@ -257,20 +258,20 @@ function renderApp() {
             <div class="profile-menu" id="profileMenu" hidden>
               <div class="profile-name">${esc((state.me && state.me.name) || 'Photo Notes User')}</div>
               <div class="profile-email">${esc((state.me && state.me.email) || '')}</div>
-              <div class="profile-plan">${isProClient()?esc(productName()):'Basic Plan'}</div>
+              <div class="profile-plan">${isRoadIssuesClient()?'Road Issues Reporting':isProClient()?esc(productName()):'Basic Plan'}</div>
               ${state.me && state.me.role === 'admin' ? '<a href="/admin">Admin Dashboard</a>' : ''}
               <button type="button" id="signout">Sign Out</button>
             </div>
           </div>
         </div>
       </div>
-      <div class="tabs workflow-tabs ${isHoaClient()?'hoa-tabs':isConcreteClient()?'concrete-tabs':''}" aria-label="Photo Notes workflow">
+      ${isRoadIssuesClient()?'':`<div class="tabs workflow-tabs ${isHoaClient()?'hoa-tabs':isConcreteClient()?'concrete-tabs':''}" aria-label="Photo Notes workflow">
         <div class="tab ${['capture','camera-tools','ticket','camera-reader','alignment'].includes(state.view)?'on':''}" id="tabCapture">Capture</div>
         <div class="tab ${['organize','hoa-visits','hoa-visit'].includes(state.view)?'on':''}" id="tabOrganize">${isHoaClient()?'Visits':isConcreteClient()?'Projects':'Organize'}</div>
         <div class="tab ${['edit','hoa-assets','hoa-asset'].includes(state.view)?'on':''}" id="tabEdit">${isHoaClient()?'Assets':'Edit'}</div>
         <div class="tab ${['create','hoa-inspections','concrete-report'].includes(state.view)?'on':''}" id="tabCreate">${isHoaClient()?'Inspections':isConcreteClient()?'Reports':'Create'}</div>
         <div class="tab ${['send','hoa-maintenance'].includes(state.view)?'on':''}" id="tabSend">${isHoaClient()?'Records':'Send'}</div>
-      </div>
+      </div>`}
       <div id="body"></div>
       <div class="footer">&copy; ${new Date().getFullYear()} Zukor AI. All Rights Reserved.</div>
     </div>
@@ -302,14 +303,15 @@ function renderApp() {
     }
   };
   document.getElementById('signout').onclick = async () => { await api('/api/logout', { method: 'POST' }); state.me = null; renderLogin(); };
-  document.querySelectorAll('[data-edition]').forEach(button=>button.onclick=async()=>{if(button.classList.contains('active'))return;document.querySelectorAll('[data-edition]').forEach(b=>b.disabled=true);const r=await api('/api/admin/switch-edition',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({edition:button.dataset.edition})});if(!r.ok){toast('Edition could not be switched');return renderApp();}state.view=IS_HANDHELD?'capture':'organize';state.photoFile=null;state._note='';await boot();toast('Edition switched');});
+  document.querySelectorAll('[data-edition]').forEach(button=>button.onclick=async()=>{if(button.classList.contains('active'))return;document.querySelectorAll('[data-edition]').forEach(b=>b.disabled=true);const r=await api('/api/admin/switch-edition',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({edition:button.dataset.edition})});if(!r.ok){toast('Edition could not be switched');return renderApp();}state.view=button.dataset.edition==='roads'?'road-report':(IS_HANDHELD?'capture':'organize');state.photoFile=null;state._note='';await boot();toast('Edition switched');});
   const issueFab = document.getElementById('issueFab'); if (issueFab) issueFab.onclick = openIssueReporter;
-  document.getElementById('tabCapture').onclick = () => { state.view='capture'; renderApp(); };
-  document.getElementById('tabOrganize').onclick = () => { state.view=isHoaClient()?'hoa-visits':'organize'; renderApp(); };
-  document.getElementById('tabEdit').onclick = () => { state.view=isHoaClient()?'hoa-assets':'edit'; renderApp(); };
-  document.getElementById('tabCreate').onclick = () => { state.view=isHoaClient()?'hoa-inspections':isConcreteClient()?'concrete-report':'create'; state.groupId=null; renderApp(); };
-  document.getElementById('tabSend').onclick = () => { state.view=isHoaClient()?'hoa-maintenance':'send'; renderApp(); };
-  if (state.view === 'capture') renderCapture();
+  const tabCapture=document.getElementById('tabCapture');if(tabCapture)tabCapture.onclick = () => { state.view='capture'; renderApp(); };
+  const tabOrganize=document.getElementById('tabOrganize');if(tabOrganize)tabOrganize.onclick = () => { state.view=isHoaClient()?'hoa-visits':'organize'; renderApp(); };
+  const tabEdit=document.getElementById('tabEdit');if(tabEdit)tabEdit.onclick = () => { state.view=isHoaClient()?'hoa-assets':'edit'; renderApp(); };
+  const tabCreate=document.getElementById('tabCreate');if(tabCreate)tabCreate.onclick = () => { state.view=isHoaClient()?'hoa-inspections':isConcreteClient()?'concrete-report':'create'; state.groupId=null; renderApp(); };
+  const tabSend=document.getElementById('tabSend');if(tabSend)tabSend.onclick = () => { state.view=isHoaClient()?'hoa-maintenance':'send'; renderApp(); };
+  if (isRoadIssuesClient()) { state.view='road-report'; renderRoadIssueReport(); }
+  else if (state.view === 'capture') renderCapture();
   else if (state.view === 'camera-tools') renderCameraTools();
   else if (state.view === 'ticket') renderTicketScanner();
   else if (state.view === 'camera-reader') renderCameraReader();
@@ -474,6 +476,44 @@ function areaChips() {
   ).join('');
 }
 const HOA_AREAS=['Streets and Pavement','Sidewalks and Curbs','Drainage','Walls and Fencing','Gates and Access Control','Landscaping and Irrigation','Lighting and Electrical','Signs and Pavement Markings','Pools and Recreation','Clubhouse and Buildings','Mailboxes','Security','Trees','Utilities','General Appearance','Other'];
+
+const ROAD_ISSUE_TYPES = ['Crack','Pothole','Curb','Water Pooling','Road Marking','Sign','Other Road Surface Issue'];
+function renderRoadIssueReport() {
+  const body=document.getElementById('body');
+  body.className='workflow-road-report';
+  body.innerHTML=`
+    <label for="roadIssueType">Road Issue Type</label>
+    <select id="roadIssueType">${ROAD_ISSUE_TYPES.map(type=>`<option value="${esc(type)}">${esc(type)}</option>`).join('')}</select>
+    <label>Road Issue Photo</label>
+    <button type="button" class="btn" id="takephoto">Take Photo</button>
+    <input type="file" accept="image/*" capture="environment" id="photoCam" style="display:none">
+    <div class="photo-box capture-preview" id="previewBox" style="display:none;margin-top:12px"><img id="preview" alt="Road issue photo preview"><div class="capture-preview-actions"><button type="button" class="btn secondary" id="retakePhoto">Retake Photo</button><button type="button" class="btn secondary" id="cancelPhoto">Cancel Photo</button></div></div>
+    <div class="status" id="qualityStatus"></div>
+    <div id="locwrap" style="display:none"><label>GPS Coordinates</label><div class="status" id="gps"></div><label>Address or Geographic Area</label><div class="status" id="addr"></div><button type="button" class="btn secondary slim" id="retryLocation">Retry location</button></div>
+    <button type="button" class="btn road-send" id="roadIssueSend">Send</button>
+    <div class="status" id="roadIssueStatus" aria-live="polite"></div>`;
+  document.getElementById('takephoto').onclick=()=>{const input=document.getElementById('photoCam');input.value='';input.click();};
+  document.getElementById('photoCam').onchange=e=>{if(e.target.files&&e.target.files[0])onPhotoChosen(e.target.files[0]);};
+  document.getElementById('retakePhoto').onclick=retakeCapturePhoto;
+  document.getElementById('cancelPhoto').onclick=cancelCapturePhoto;
+  document.getElementById('retryLocation').onclick=()=>acquireLocation(true);
+  document.getElementById('roadIssueSend').onclick=sendRoadIssueReport;
+  if(state.photoFile){showCapturePreview(state.photoFile);document.getElementById('locwrap').style.display='block';if(state.location){document.getElementById('gps').textContent=`${state.location.lat.toFixed(5)}, ${state.location.lng.toFixed(5)}`;document.getElementById('addr').textContent=state.address||'Exact address not found';}else acquireLocation();}
+}
+async function sendRoadIssueReport(){
+  const btn=document.getElementById('roadIssueSend'),status=document.getElementById('roadIssueStatus');
+  if(!state.photoFile){toast('Take a road issue photo first');return;}
+  if(!(await confirmPhotoQuality())){toast('Photo kept for retaking');return;}
+  btn.disabled=true;btn.textContent='Sending...';status.textContent='Saving the report and sending the photo.';
+  try{
+    if(state._locationPromise)await state._locationPromise;
+    const fd=new FormData();fd.append('issue_type',document.getElementById('roadIssueType').value);fd.append('photo',state.photoFile);
+    if(state.location){fd.append('latitude',state.location.lat);fd.append('longitude',state.location.lng);}if(state.address)fd.append('address',state.address);
+    const r=await api('/api/road-issues',{method:'POST',body:fd}),d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||'send failed');
+    captureLocationGeneration++;if(state._previewUrl)URL.revokeObjectURL(state._previewUrl);state._previewUrl=null;state.photoFile=null;state.location=null;state.address=null;state._locationPromise=null;state._qualityPromise=null;state._qualityResult=null;
+    renderRoadIssueReport();const next=document.getElementById('roadIssueStatus');if(next)next.textContent=d.email_status==='sent'?`Road issue #${d.id} sent.`:`Road issue #${d.id} saved. Email delivery is pending.`;toast('Road issue sent');
+  }catch(e){status.textContent='The road issue could not be sent. Check your connection and try again.';btn.disabled=false;btn.textContent='Send';}
+}
 
 function renderCapture() {
   const body = document.getElementById('body');
