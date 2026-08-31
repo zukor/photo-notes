@@ -23,6 +23,12 @@ test('small Android widths keep header logo, tabs, and forms inside the viewport
   assert.match(css, /\.workflow-organize #cards[\s\S]*grid-template-columns:1fr/);
 });
 
+test('the upper-left Zukor AI mark is 25 percent larger at every breakpoint', () => {
+  assert.match(css, /\.app-header \.zukor-corner-logo \{[^}]*width:140px; min-width:140px/);
+  assert.match(css, /@media \(max-width: 700px\)[\s\S]*\.app-header \.zukor-corner-logo \{ width:92\.5px; min-width:0; \}/);
+  assert.match(css, /@media \(max-width: 380px\)[\s\S]*\.app-header \.zukor-corner-logo \{ width:78\.75px; min-width:0; \}/);
+});
+
 test('issue reporter stays recoverable and clear of primary page controls', () => {
   assert.match(css, /@media \(max-width: 1100px\)[\s\S]*\.issue-fab \{[\s\S]*position:static/);
   assert.match(css, /@media \(max-width: 1100px\)[\s\S]*\.wrap \{ padding-bottom:24px/);
