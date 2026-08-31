@@ -30,6 +30,11 @@ test('edition switching is never exposed to ordinary Basic testers', () => {
 
 test('Basic paints only the SVG wordmark, without duplicate live title text', () => {
   assert.match(styles, /\.brand:not\(\.pro-edition-brand\) \.product-suite-name,[\s\S]*\.product-edition-name \{ display:none; \}/);
+  assert.match(styles, /background-image: url\('\/photo-notes-ai-basic-animated\.svg\?v=92'\)/);
+  const basicLogo=fs.readFileSync(path.join(root,'public','photo-notes-ai-basic-animated.svg'),'utf8');
+  assert.match(basicLogo,/aria-label="Photo Notes AI logo"/);
+  assert.match(basicLogo,/photo-notes-ai-paving-pro-animated\.svg\?v=79/);
+  assert.match(basicLogo,/viewBox="0 0 940 140"/);
 });
 
 test('admin issue center can compare tester and device reports', () => {

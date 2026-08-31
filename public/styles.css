@@ -58,14 +58,14 @@ textarea { min-height: 96px; resize: vertical; }
   font-size: 0; line-height: 0; height: 46px;
   /* Use one asset only. Multiple background URLs are composited, not used as
      fallbacks, and can expose overlapping logo revisions from mobile caches. */
-  background-image: url('/logo-animated.svg?v=83');
+  background-image: url('/photo-notes-ai-basic-animated.svg?v=92');
   background-position: center;
   background-size: contain;
   background-repeat: no-repeat;
   margin: 10px auto 6px;
 }
 .brandrow { display:flex; justify-content:center; align-items:center; gap:8px; }
-.brandrow .brand { flex:0 1 260px; width:260px; margin-left:0; margin-right:0; }
+.brandrow .brand { flex:0 1 300px; width:300px; margin-left:0; margin-right:0; }
 .brandrow .brand.pro-edition-brand {
   flex-basis: 500px; width: 500px; max-width: calc(100vw - 110px); height:auto;
   background-image:none; font-size:0; line-height:1; text-align:center; margin:2px auto 3px;
