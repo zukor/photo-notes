@@ -55,12 +55,13 @@ textarea { min-height: 96px; resize: vertical; }
    wordmark renders as a centered background image. The :not() excludes the
    Extra Work Record heading (it has an inline font-size). */
 .brand:not([style*="font-size"]) {
-  font-size: 0; line-height: 0; height: 46px;
+  font-size: 0; line-height: 0; height: auto; width: min(300px, 100%);
+  aspect-ratio: 940 / 140;
   /* Use one asset only. Multiple background URLs are composited, not used as
      fallbacks, and can expose overlapping logo revisions from mobile caches. */
-  background-image: url('/photo-notes-ai-basic-animated.svg?v=92');
-  background-position: center;
-  background-size: contain;
+  background-image: url('/photo-notes-ai-paving-pro-animated.svg?v=79');
+  background-position: center top;
+  background-size: 100% auto;
   background-repeat: no-repeat;
   margin: 10px auto 6px;
 }
@@ -91,7 +92,7 @@ textarea { min-height: 96px; resize: vertical; }
 .brand:not(.pro-edition-brand) .product-edition-name { display:none; }
 .edition-label { flex:0 0 auto; color:#000; font-size:12px; font-weight:bold; line-height:1.05; text-align:left; }
 .edition-label span { display:block; }
-@media (max-width: 380px) { .brand:not([style*="font-size"]) { height: 38px; } }
+@media (max-width: 380px) { .brand:not([style*="font-size"]) { width:min(280px, 100%); } }
 @media (max-width: 520px) { .brandrow .brand.pro-edition-brand { max-width:calc(100vw - 80px); } }
 @media (max-width: 520px) { .brandrow .brand.pro-edition-brand.paving-pro-brand { height:57px; } }
 @media (max-width: 520px) { .brandrow .brand.pro-edition-brand.concrete-pro-brand { height:57px; } }
