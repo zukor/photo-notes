@@ -22,7 +22,7 @@
     'Select Topic': 'Seleccionar tema', 'Add a topic...': 'Agregar un tema...', 'Add': 'Agregar', 'Save': 'Guardar', 'Send & Save': 'Enviar y guardar',
     'Topic added': 'Tema agregado', 'Could not add topic': 'No se pudo agregar el tema', 'Could not remove topic': 'No se pudo eliminar el tema',
     'No topics yet. Add one below.': 'Todavía no hay temas. Agregue uno abajo.', 'No topics yet': 'Todavía no hay temas',
-    'GPS Coordinates': 'Coordenadas GPS', 'Address': 'Dirección', 'Getting location...': 'Obteniendo ubicación...',
+    'GPS Coordinates': 'Coordenadas GPS', 'GPS': 'GPS', 'Address': 'Dirección', 'Not available': 'No disponible', 'Getting location...': 'Obteniendo ubicación...',
     'Getting Full Address...': 'Obteniendo la dirección completa...', 'Looking up address...': 'Buscando la dirección...',
     'Address not found': 'No se encontró la dirección', 'Address lookup failed': 'Falló la búsqueda de la dirección',
     'Location not available on this device.': 'La ubicación no está disponible en este dispositivo.',

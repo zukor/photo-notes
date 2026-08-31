@@ -40,6 +40,9 @@ textarea { min-height: 96px; resize: vertical; }
 .row > * { flex: 1; }
 .photo-box { border: 1px solid #000; border-radius: 10px; padding: 10px; text-align: center; background: #fff; }
 .photo-box img { max-width: 100%; border-radius: 6px; display: none; }
+.photo-location { margin:8px 0; color:#000; }
+.photo-location-label { margin-top:6px; font-size:12px; font-weight:800; letter-spacing:.04em; text-transform:uppercase; }
+.photo-gps, .photo-location .addr { margin-top:2px; overflow-wrap:anywhere; }
 .pill-group { display: flex; gap: 8px; flex-wrap: wrap; }
 .pill { border: 1px solid #000; border-radius: 20px; padding: 8px 14px; font-size: 15px; color: #000; background: #fff; }
 .pill.on { background: var(--accent); color: #fff; }
