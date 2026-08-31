@@ -31,7 +31,7 @@ test('Tensor Man is hidden at phone and small-tablet widths and cannot cover con
 });
 
 test('new app and style versions are cache-busted', () => {
-  assert.match(index, /styles\.css\?v=99/);
+  assert.match(index, /styles\.css\?v=100/);
   assert.match(index, /app\.js\?v=112/);
 });
 

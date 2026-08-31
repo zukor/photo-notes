@@ -21,8 +21,9 @@ test('HOA Maintenance Pro uses its edition logo',()=>{
   const css=fs.readFileSync(path.join(root,'public','styles.css'),'utf8');
   const logo=fs.readFileSync(path.join(root,'public','photo-notes-ai-hoa-maintenance-pro-animated.svg'),'utf8');
   assert.match(css,/hoa-pro-brand[\s\S]*photo-notes-ai-hoa-maintenance-pro-animated\.svg/);
-  assert.match(logo,/HOA MAINTENANCE PRO/);
-  assert.match(logo,/aria-label="Photo Notes AI HOA Maintenance Pro logo"/);
+  assert.match(logo,/aria-label="Photo Notes AI Hoa Maintenance Pro logo"/);
+  assert.doesNotMatch(logo,/<image href=/);
+  assert.ok(logo.length > 30000, 'expected the complete supplied self-contained HOA SVG');
 });
 
 test('Pro headers render only their supplied edition logos',()=>{
