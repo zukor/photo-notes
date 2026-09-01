@@ -125,6 +125,15 @@ textarea { min-height: 96px; resize: vertical; }
 .edition-switcher { grid-column:2; grid-row:1; justify-self:center; display:flex; gap:3px; padding:2px 4px; border:1px solid #b8c7dc; border-radius:10px; background:#fff; }
 .edition-switcher button { border:0; border-radius:7px; background:transparent; color:#334155; padding:3px 5px; font:800 9px/1 Arial,Helvetica,sans-serif; cursor:pointer; }
 .edition-switcher button.active { background:#1254a3; color:#fff; }
+/* Wide browser header: give the company mark and product-edition artwork more
+   presence, and center the admin edition switcher across the full page rather
+   than within the header's middle grid track. Phone sizing stays unchanged. */
+@media (min-width: 701px) {
+  .app-header { grid-template-columns:280px minmax(0,1fr) auto; }
+  .app-header .zukor-corner-logo { width:280px; min-width:280px; }
+  .app-header .brandrow { width:min(750px,100%); }
+  .edition-switcher { grid-column:1 / -1; }
+}
 .language-switch { display:flex; align-items:center; gap:5px; color:#000; font:700 12px Arial,Helvetica,sans-serif; white-space:nowrap; }
 .language-switch button { appearance:none; border:0; border-bottom:2px solid transparent; padding:2px 1px; background:transparent; color:#555; font:700 12px Arial,Helvetica,sans-serif; cursor:pointer; }
 .language-switch button.active { color:#1d4ed8; border-bottom-color:#1d4ed8; }
