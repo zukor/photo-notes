@@ -24,6 +24,7 @@ test('small Android widths keep header logo, tabs, and forms inside the viewport
 });
 
 test('the wide-browser header enlarges its brands while phone sizes stay compact', () => {
+  assert.match(css, /\.app-header \{[^}]*max-width:820px/);
   assert.match(css, /\.app-header \.zukor-corner-logo \{[^}]*width:140px; min-width:140px/);
   assert.match(css, /@media \(min-width: 701px\)[\s\S]*\.app-header \.zukor-corner-logo \{ width:280px; min-width:280px; \}/);
   assert.match(css, /@media \(min-width: 701px\)[\s\S]*\.app-header \.brandrow \{ width:min\(750px,100%\); \}/);
