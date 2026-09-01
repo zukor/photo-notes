@@ -31,6 +31,14 @@ test('Pro headers render only their supplied edition logos',()=>{
   assert.doesNotMatch(app,/isProClient\(\)\|\|isRoadIssuesClient\(\)\?esc\(productName\(\)\)/);
 });
 
+test('Concrete Pro uses the supplied blue subtitle trial logo',()=>{
+  const css=fs.readFileSync(path.join(root,'public','styles.css'),'utf8');
+  const logo=fs.readFileSync(path.join(root,'public','photo-notes-ai-concrete-pro-animated.svg'),'utf8');
+  assert.match(css,/concrete-pro-brand[\s\S]*photo-notes-ai-concrete-pro-animated\.svg\?v=78/);
+  assert.match(logo,/aria-label="Photo Notes AI Concrete Pro logo, animated, blue subtitle trial"/);
+  assert.match(logo,/fill="#1d4ed8"/);
+});
+
 test('Paving classification covers broader visible pavement failures',()=>{
   for(const defect of ['joint_failure','utility_cut_failure','surface_deformation','drainage_damage','base_failure'])assert.match(server,new RegExp(defect));
 });
