@@ -21,4 +21,5 @@ test('all rendered card photos receive a discoverable viewer without changing fi
   assert.match(app,/new MutationObserver/);
   assert.doesNotMatch(app,/photoViewer[\s\S]{0,500}api\(/);
   assert.match(css,/\.photo-viewer-viewport \{[\s\S]*touch-action:none/);
+  assert.match(css,/\.photo-viewer-button,[\s\S]*\.evidencebtn[\s\S]*width:auto/);
 });

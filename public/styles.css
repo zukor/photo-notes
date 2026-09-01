@@ -43,7 +43,19 @@ textarea { min-height: 96px; resize: vertical; }
 .photo-location { margin:8px 0; color:#000; }
 .photo-location-label { margin-top:6px; font-size:12px; font-weight:800; letter-spacing:.04em; text-transform:uppercase; }
 .photo-gps, .photo-location .addr { margin-top:2px; overflow-wrap:anywhere; }
-.photo-viewer-button { margin:0 0 8px; }
+.photo-viewer-button,
+.evidencebtn {
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:auto;
+  max-width:100%;
+  margin:4px 8px 8px 0;
+}
+.photo-notes-panel { margin-top:12px; }
+.photo-notes-heading { margin-bottom:5px; font-size:13px; font-weight:800; letter-spacing:.5px; text-transform:uppercase; }
+.photo-notes-box { min-height:64px; padding:10px 12px; border:1px solid #000; border-radius:8px; background:#fff; line-height:1.4; white-space:pre-wrap; overflow-wrap:anywhere; }
+.photo-notes-panel .editnote { display:inline-flex; width:auto; margin:6px 0 0; }
 .photo-viewer-modal { position:fixed; inset:0; z-index:120; padding:14px; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,.78); }
 .photo-viewer-dialog { width:min(960px,100%); max-height:calc(100vh - 28px); overflow:auto; padding:14px; border-radius:12px; background:#fff; color:#000; }
 .photo-viewer-head { display:flex; align-items:center; justify-content:space-between; gap:12px; font-size:20px; }
