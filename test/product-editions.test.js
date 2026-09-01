@@ -22,6 +22,12 @@ test('every edition uses Organize for the shared workflow tab',()=>{
   assert.doesNotMatch(app,/id="tabOrganize">\$\{isHoaClient\(\)\?'Visits':isConcreteClient\(\)\?'Projects':'Organize'\}<\/div>/);
 });
 
+test('Concrete keeps Create as the flexible document-building workflow',()=>{
+  assert.match(app,/id="tabCreate">\$\{isHoaClient\(\)\?'Inspections':'Create'\}<\/div>/);
+  assert.match(app,/state\.view=isHoaClient\(\)\?'hoa-inspections':'create'/);
+  assert.doesNotMatch(app,/id="tabCreate">\$\{isHoaClient\(\)\?'Inspections':isConcreteClient\(\)\?'Reports':'Create'\}<\/div>/);
+});
+
 test('HOA Maintenance Pro uses its edition logo',()=>{
   const css=fs.readFileSync(path.join(root,'public','styles.css'),'utf8');
   const logo=fs.readFileSync(path.join(root,'public','photo-notes-ai-hoa-maintenance-pro-animated.svg'),'utf8');

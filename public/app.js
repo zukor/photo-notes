@@ -270,7 +270,7 @@ function renderApp() {
         <div class="tab ${['capture','camera-tools','ticket','camera-reader','alignment'].includes(state.view)?'on':''}" id="tabCapture">Capture</div>
         <div class="tab ${['organize','hoa-visits','hoa-visit'].includes(state.view)?'on':''}" id="tabOrganize">Organize</div>
         <div class="tab ${['edit','hoa-assets','hoa-asset'].includes(state.view)?'on':''}" id="tabEdit">${isHoaClient()?'Assets':'Edit'}</div>
-        <div class="tab ${['create','hoa-inspections','concrete-report'].includes(state.view)?'on':''}" id="tabCreate">${isHoaClient()?'Inspections':isConcreteClient()?'Reports':'Create'}</div>
+        <div class="tab ${['create','hoa-inspections'].includes(state.view)?'on':''}" id="tabCreate">${isHoaClient()?'Inspections':'Create'}</div>
         <div class="tab ${['send','hoa-maintenance'].includes(state.view)?'on':''}" id="tabSend">${isHoaClient()?'Records':'Send'}</div>
       </div>`}
       <div id="body"></div>
@@ -309,7 +309,7 @@ function renderApp() {
   const tabCapture=document.getElementById('tabCapture');if(tabCapture)tabCapture.onclick = () => { state.view='capture'; renderApp(); };
   const tabOrganize=document.getElementById('tabOrganize');if(tabOrganize)tabOrganize.onclick = () => { state.view=isHoaClient()?'hoa-visits':'organize'; renderApp(); };
   const tabEdit=document.getElementById('tabEdit');if(tabEdit)tabEdit.onclick = () => { state.view=isHoaClient()?'hoa-assets':'edit'; renderApp(); };
-  const tabCreate=document.getElementById('tabCreate');if(tabCreate)tabCreate.onclick = () => { state.view=isHoaClient()?'hoa-inspections':isConcreteClient()?'concrete-report':'create'; state.groupId=null; renderApp(); };
+  const tabCreate=document.getElementById('tabCreate');if(tabCreate)tabCreate.onclick = () => { state.view=isHoaClient()?'hoa-inspections':'create'; state.groupId=null; renderApp(); };
   const tabSend=document.getElementById('tabSend');if(tabSend)tabSend.onclick = () => { state.view=isHoaClient()?'hoa-maintenance':'send'; renderApp(); };
   if (isRoadIssuesClient()) { state.view='road-report'; renderRoadIssueReport(); }
   else if (state.view === 'capture') renderCapture();

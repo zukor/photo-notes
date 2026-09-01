@@ -21,10 +21,11 @@ test('Concrete Pro report is product protected and photo backed', () => {
   assert.match(server, /'c\.photo_path IS NOT NULL'/);
 });
 
-test('Concrete Pro has photo context capture and evidence reporting UI', () => {
+test('Concrete Pro keeps photo context and report generation without replacing Create', () => {
   assert.match(app, /Concrete Photo Evidence/);
   assert.match(app, /Concrete Photo Evidence Report/);
-  assert.match(app, /isConcreteClient\(\).*concrete-report/);
+  assert.match(app, /id="tabCreate">\$\{isHoaClient\(\)\?'Inspections':'Create'\}<\/div>/);
+  assert.match(app, /async function renderConcreteReport/);
 });
 
 test('Concrete batch tickets stay linked to placement photos and export with evidence', () => {
