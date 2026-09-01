@@ -30,12 +30,12 @@ test('edition switching is never exposed to ordinary Basic testers', () => {
 
 test('Basic paints only the SVG wordmark, without duplicate live title text', () => {
   assert.match(styles, /\.brand:not\(\.pro-edition-brand\) \.product-suite-name,[\s\S]*\.product-edition-name \{ display:none; \}/);
-  assert.match(styles, /background-image: url\('\/photo-notes-ai-paving-pro-animated\.svg\?v=79'\)/);
-  assert.match(styles, /aspect-ratio: 940 \/ 140/);
+  assert.match(styles, /background-image: url\('\/photo-notes-ai-basic-animated\.svg\?v=118'\)/);
+  assert.match(styles, /aspect-ratio: 940 \/ 214/);
   assert.match(styles, /background-position: center top/);
   assert.match(styles, /background-size: 100% auto/);
-  const suppliedLogo=fs.readFileSync(path.join(root,'public','photo-notes-ai-paving-pro-animated.svg'),'utf8');
-  assert.match(suppliedLogo,/aria-label="Photo Notes AI Paving Pro logo"/);
+  const suppliedLogo=fs.readFileSync(path.join(root,'public','photo-notes-ai-basic-animated.svg'),'utf8');
+  assert.match(suppliedLogo,/aria-label="Photo Notes AI Basic logo"/);
   assert.match(suppliedLogo,/<rect x="818\.5" y="24" width="61" height="61" rx="10" fill="#e8231a"\/>/);
 });
 

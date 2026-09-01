@@ -12,7 +12,7 @@ test('Road Issues Reporting is a separate non-Pro administrator-selectable editi
   assert.match(server,/roads:\{plan:'free',pro_type:'roads'\}/);
   assert.match(app,/function isRoadIssuesClient\(\)/);
   assert.match(app,/data-edition="roads"[\s\S]*>RIR</);
-  assert.match(admin,/<option value="roads">Road Issues Reporting<\/option>/);
+  assert.match(admin,/<option value="roads">Road Issue Reporter<\/option>/);
 });
 
 test('road reporter is one camera-only form with the requested issue choices',()=>{
@@ -27,11 +27,10 @@ test('road reporter is one camera-only form with the requested issue choices',()
   assert.match(app,/isRoadIssuesClient\(\)\?'':`<div class="tabs workflow-tabs/);
 });
 
-test('road reporter header shows the cropped Photo Notes AI mark with its own subtitle',()=>{
-  assert.match(app,/road-issues-logo" role="img" aria-label="Photo Notes AI"/);
-  assert.match(app,/isRoadIssuesClient\(\)\?'Road Issues Reporting'/);
+test('road reporter header shows the complete supplied Road Issue Reporter logo',()=>{
+  assert.match(app,/isRoadIssuesClient\(\)\?'Road Issue Reporter'/);
   const styles=fs.readFileSync(path.join(root,'public/styles.css'),'utf8');
-  assert.match(styles,/\.road-issues-logo[^}]*aspect-ratio:940\/118[^}]*overflow:hidden[^}]*photo-notes-ai-paving-pro-animated\.svg/);
+  assert.match(styles,/\.brandrow \.brand\.road-issues-brand[^}]*photo-notes-ai-road-issue-reporter-animated\.svg\?v=118/);
 });
 
 test('road reporter uses the shorter red-outlined issue button',()=>{

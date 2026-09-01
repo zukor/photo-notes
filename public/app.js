@@ -9,8 +9,9 @@ function isProClient() { return state.plan === 'pro'; }
 function isHoaClient(){return isProClient()&&state.proType==='hoa';}
 function isConcreteClient(){return isProClient()&&state.proType==='concrete';}
 function isPavingClient(){return isProClient()&&(state.proType==='paving'||state.proType==='asphalt');}
+function isRooferClient(){return isProClient()&&state.proType==='roofer';}
 function isRoadIssuesClient(){return !isProClient()&&state.proType==='roads';}
-function productName(){return isRoadIssuesClient()?'Road Issues Reporting':isHoaClient()?'HOA Maintenance Pro':isConcreteClient()?'Concrete Pro':isPavingClient()?'Paving Pro':'Photo Notes';}
+function productName(){return isRoadIssuesClient()?'Road Issue Reporter':isHoaClient()?'HOA Maintenance Pro':isConcreteClient()?'Concrete Pro':isRooferClient()?'Roofer Pro':isPavingClient()?'Paving Pro':'Photo Notes';}
 function issueFabLabel(){return isRoadIssuesClient()?'Report Issue':'Report an Issue';}
 function featureOn(name) { return isPavingClient() && (!state.me || !state.me.feature_access || state.me.feature_access[name] !== false); }
 function measurementOn(){return isConcreteClient()||featureOn('measurements');}
@@ -249,9 +250,9 @@ function renderApp() {
       <div class="app-header">
         <img class="zukor-corner-logo" src="/zukor-logo.svg" alt="Zukor AI" />
         <div class="brandrow">
-          <div class="brand ${isProClient() ? 'pro-edition-brand' : ''} ${isRoadIssuesClient()?'road-issues-brand':''} ${isPavingClient()?'paving-pro-brand':''} ${isConcreteClient()?'concrete-pro-brand':''} ${isHoaClient()?'hoa-pro-brand':''}" aria-label="${esc(isProClient()||isRoadIssuesClient()?productName():'Photo Notes AI')}">${isRoadIssuesClient()?'<span class="road-issues-logo" role="img" aria-label="Photo Notes AI"></span><span class="product-edition-name">Road Issues Reporting</span>':isProClient()?'':'<span class="product-suite-name">Photo Notes</span>'}</div>
+          <div class="brand ${isProClient() ? 'pro-edition-brand' : ''} ${isRoadIssuesClient()?'road-issues-brand':''} ${isPavingClient()?'paving-pro-brand':''} ${isConcreteClient()?'concrete-pro-brand':''} ${isHoaClient()?'hoa-pro-brand':''} ${isRooferClient()?'roofer-pro-brand':''}" aria-label="${esc(isProClient()||isRoadIssuesClient()?productName():'Photo Notes AI')}">${isProClient()||isRoadIssuesClient()?'':'<span class="product-suite-name">Photo Notes</span>'}</div>
         </div>
-        ${state.me&&state.me.role==='admin'?`<div class="edition-switcher" aria-label="Switch Photo Notes edition"><button data-edition="basic" class="${!isProClient()&&!isRoadIssuesClient()?'active':''}">PNAI</button><button data-edition="roads" class="${isRoadIssuesClient()?'active':''}">RIR</button><button data-edition="paving" class="${isPavingClient()?'active':''}">PP</button><button data-edition="hoa" class="${isHoaClient()?'active':''}">HMP</button><button data-edition="concrete" class="${isConcreteClient()?'active':''}">CP</button></div>`:''}
+        ${state.me&&state.me.role==='admin'?`<div class="edition-switcher" aria-label="Switch Photo Notes edition"><button data-edition="basic" class="${!isProClient()&&!isRoadIssuesClient()?'active':''}">PNAI</button><button data-edition="roads" class="${isRoadIssuesClient()?'active':''}">RIR</button><button data-edition="paving" class="${isPavingClient()?'active':''}">PP</button><button data-edition="hoa" class="${isHoaClient()?'active':''}">HMP</button><button data-edition="concrete" class="${isConcreteClient()?'active':''}">CP</button><button data-edition="roofer" class="${isRooferClient()?'active':''}">RP</button></div>`:''}
         <div class="header-controls">
           <div class="language-switch" aria-label="Language"><button type="button" data-language="en">EN</button><span> </span><button type="button" data-language="es">ES</button></div>
           <div class="account-menu-wrap">
@@ -259,7 +260,7 @@ function renderApp() {
             <div class="profile-menu" id="profileMenu" hidden>
               <div class="profile-name">${esc((state.me && state.me.name) || 'Photo Notes User')}</div>
               <div class="profile-email">${esc((state.me && state.me.email) || '')}</div>
-              <div class="profile-plan">${isRoadIssuesClient()?'Road Issues Reporting':isProClient()?esc(productName()):'Basic Plan'}</div>
+              <div class="profile-plan">${isRoadIssuesClient()?'Road Issue Reporter':isProClient()?esc(productName()):'Basic Plan'}</div>
               ${state.me && state.me.role === 'admin' ? '<a href="/admin">Admin Dashboard</a>' : ''}
               <button type="button" id="signout">Sign Out</button>
             </div>
