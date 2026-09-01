@@ -17,6 +17,11 @@ test('only administrators see the compact edition switcher',()=>{
   for(const label of ['PNAI','PP','HMP','CP'])assert.match(app,new RegExp(`>${label}<`));
 });
 
+test('every edition uses Organize for the shared workflow tab',()=>{
+  assert.match(app,/id="tabOrganize">Organize<\/div>/);
+  assert.doesNotMatch(app,/id="tabOrganize">\$\{isHoaClient\(\)\?'Visits':isConcreteClient\(\)\?'Projects':'Organize'\}<\/div>/);
+});
+
 test('HOA Maintenance Pro uses its edition logo',()=>{
   const css=fs.readFileSync(path.join(root,'public','styles.css'),'utf8');
   const logo=fs.readFileSync(path.join(root,'public','photo-notes-ai-hoa-maintenance-pro-animated.svg'),'utf8');

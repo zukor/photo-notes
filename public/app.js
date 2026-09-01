@@ -268,7 +268,7 @@ function renderApp() {
       </div>
       ${isRoadIssuesClient()?'':`<div class="tabs workflow-tabs ${isHoaClient()?'hoa-tabs':isConcreteClient()?'concrete-tabs':''}" aria-label="Photo Notes workflow">
         <div class="tab ${['capture','camera-tools','ticket','camera-reader','alignment'].includes(state.view)?'on':''}" id="tabCapture">Capture</div>
-        <div class="tab ${['organize','hoa-visits','hoa-visit'].includes(state.view)?'on':''}" id="tabOrganize">${isHoaClient()?'Visits':isConcreteClient()?'Projects':'Organize'}</div>
+        <div class="tab ${['organize','hoa-visits','hoa-visit'].includes(state.view)?'on':''}" id="tabOrganize">Organize</div>
         <div class="tab ${['edit','hoa-assets','hoa-asset'].includes(state.view)?'on':''}" id="tabEdit">${isHoaClient()?'Assets':'Edit'}</div>
         <div class="tab ${['create','hoa-inspections','concrete-report'].includes(state.view)?'on':''}" id="tabCreate">${isHoaClient()?'Inspections':isConcreteClient()?'Reports':'Create'}</div>
         <div class="tab ${['send','hoa-maintenance'].includes(state.view)?'on':''}" id="tabSend">${isHoaClient()?'Records':'Send'}</div>
