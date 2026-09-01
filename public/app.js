@@ -1650,34 +1650,35 @@ async function renderList() {
   const body = document.getElementById('body');
   body.className = 'workflow-organize';
   body.innerHTML = `
-    <div class="workflow-intro"><strong>Organize your captures</strong><span>Choose photos, file them by topic, and place them in the order you need.</span></div>
-    <details class="pair-builder" open><summary><span>Projects &amp; Jobs</span><span class="pair-expand">Manage Jobs</span></summary>
-      <div class="organize-form-grid"><section class="organize-panel"><label>Current Job</label><select id="jobFilter"><option value="">All Jobs</option>${state.jobs.map(j=>`<option value="${j.id}">${esc(j.job_number?j.job_number+' — '+j.name:j.name)} (${j.photo_count||0})</option>`).join('')}</select><button class="btn secondary slim" id="timelineBtn" type="button">View Job Timeline</button>${isPavingClient()?`<div id="pavingReadiness" class="evidence-readiness">Choose a job to check its photo evidence.</div><div class="row compact" style="margin-top:8px"><button class="btn secondary slim" id="pavingJobPdf" type="button">Job Evidence PDF</button><button class="btn secondary slim" id="pavingJobWord" type="button">Job Evidence Word</button></div>`:''}</section>
-      <section class="organize-panel"><label>Create a Job</label><input id="newJobName" placeholder="Job name"><div class="row compact"><input id="newJobNumber" placeholder="Job number"><input id="newJobCustomer" placeholder="Customer"></div><input id="newJobAddress" placeholder="Job address"><button class="btn secondary slim" id="createJobBtn" type="button">Create Job</button></section></div>
-    </details>
-    <label>Filter by Topic</label>
-    <select id="filter">
-      <option value="">All Topics</option>
-      ${state.areas.map(a => `<option value="${esc(a)}">${esc(a)}</option>`).join('')}
-    </select>
-    <label>Smart Photo Search</label>
-    <div class="row compact"><input id="photoSearch" type="search" placeholder="Search notes, jobs, customers, addresses, topics, dates, or defects"><button class="btn secondary" id="photoSearchBtn" type="button">Search</button><button class="btn secondary" id="photoSearchClear" type="button">Clear</button></div>
-    <details><summary>Search Filters</summary><div class="row compact"><input id="searchFrom" type="date" title="From date"><input id="searchTo" type="date" title="To date"></div><label style="text-transform:none;letter-spacing:0"><input id="searchMissingAddress" type="checkbox" style="width:auto"> Missing address only</label></details>
-    <div class="status" id="photoSearchStatus"></div>
-    <div class="organize-action-row">
-      <button class="btn secondary" id="selall">Select All</button>
-      <button class="btn secondary" id="selnone">Clear</button>
-      <button class="btn secondary" id="compareSelected">Compare 2 Photos</button>
-      ${featureOn('measurements') ? `<button class="btn secondary" id="classifybatch">Classify Selected (AI)</button>` : ''}
-    </div>
-    ${beforeAfterOn() ? `<div class="status" id="classifyprog"></div>
-    <details class="pair-builder">
-      <summary><span>Before &amp; After Photos</span><span class="pair-expand">Search for Pairs</span></summary>
-      <p>When work is complete, select one photo from before the job and one photo from after the job. The older photo will be marked Before by default.</p>
-      <button class="btn secondary slim" id="pairbtn">Create Pair From 2 Selected Photos</button>
-    </details>` : ''}
+    <div class="workflow-intro organize-intro"><strong>Organize your Photo Notes</strong><span>Find the photos you need, select them, and choose what you want to do with them.</span></div>
 
-    <div class="organize-form-grid">
+    <section class="organize-workspace-section organize-context-section">
+      <div class="organize-step-head"><span class="organize-step-number">1</span><div><h2>Choose a job</h2><p>Show Photo Notes from one job, review its timeline, or create a new job.</p></div></div>
+      <details class="pair-builder organize-job-builder" open><summary><span>Job controls</span><span class="pair-expand">Open or close</span></summary>
+        <div class="organize-form-grid"><section class="organize-panel"><label>Current Job</label><select id="jobFilter"><option value="">All Jobs</option>${state.jobs.map(j=>`<option value="${j.id}">${esc(j.job_number?j.job_number+' — '+j.name:j.name)} (${j.photo_count||0})</option>`).join('')}</select><button class="btn secondary slim" id="timelineBtn" type="button">View Job Timeline</button>${isPavingClient()?`<div id="pavingReadiness" class="evidence-readiness">Choose a job to check its photo evidence.</div><div class="row compact" style="margin-top:8px"><button class="btn secondary slim" id="pavingJobPdf" type="button">Job Evidence PDF</button><button class="btn secondary slim" id="pavingJobWord" type="button">Job Evidence Word</button></div>`:''}</section>
+        <section class="organize-panel"><label>Create a New Job</label><input id="newJobName" placeholder="Job name"><div class="row compact"><input id="newJobNumber" placeholder="Job number"><input id="newJobCustomer" placeholder="Customer"></div><input id="newJobAddress" placeholder="Job address"><button class="btn secondary slim" id="createJobBtn" type="button">Create Job</button></section></div>
+      </details>
+    </section>
+
+    <section class="organize-workspace-section organize-search-section">
+      <div class="organize-step-head"><span class="organize-step-number">2</span><div><h2>Find Photo Notes</h2><p>Filter by topic or search the details saved with each photo.</p></div></div>
+      <div class="organize-search-grid">
+        <div><label>Filter by Topic</label><select id="filter"><option value="">All Topics</option>${state.areas.map(a => `<option value="${esc(a)}">${esc(a)}</option>`).join('')}</select></div>
+        <div class="organize-search-box"><label>Search Photo Notes</label><div class="row compact"><input id="photoSearch" type="search" placeholder="Notes, jobs, customers, addresses, topics, dates, or defects"><button class="btn" id="photoSearchBtn" type="button">Search</button><button class="btn secondary" id="photoSearchClear" type="button">Clear</button></div></div>
+      </div>
+      <details class="organize-search-filters"><summary>More search filters</summary><div class="row compact"><input id="searchFrom" type="date" title="From date"><input id="searchTo" type="date" title="To date"></div><label style="text-transform:none;letter-spacing:0"><input id="searchMissingAddress" type="checkbox" style="width:auto"> Missing address only</label></details>
+      <div class="status" id="photoSearchStatus"></div>
+    </section>
+
+    <section class="organize-workspace-section organize-actions-section">
+      <div class="organize-step-head"><span class="organize-step-number">3</span><div><h2>Work with selected Photo Notes</h2><p>Select photos in the library below, then use only the action you need.</p></div></div>
+      <div class="organize-selection-toolbar" aria-label="Photo Note selection controls">
+        <strong>Selection</strong>
+        <div class="organize-action-row"><button class="btn secondary" id="selall">Select All</button><button class="btn secondary" id="selnone">Clear Selection</button><button class="btn secondary" id="compareSelected">Compare 2 Photos</button>${featureOn('measurements') ? `<button class="btn secondary" id="classifybatch">Classify Selected (AI)</button>` : ''}</div>
+      </div>
+      ${beforeAfterOn() ? `<div class="status" id="classifyprog"></div><details class="pair-builder"><summary><span>Before &amp; After Photos</span><span class="pair-expand">Create a comparison</span></summary><p>When work is complete, select one photo from before the job and one photo from after the job. The older photo will be marked Before by default.</p><button class="btn secondary slim" id="pairbtn">Create Pair From 2 Selected Photos</button></details>` : ''}
+
+    <div class="organize-form-grid organize-batch-grid">
       <section class="organize-panel">
         <label>File Selected Under a Topic</label>
         <div class="row compact">
@@ -1701,16 +1702,18 @@ async function renderList() {
       </section>
 
       <section class="organize-panel">
-        <label>Batch Process Selected Photos</label>
+        <label>Apply Batch Changes</label>
         <select id="batchJob"><option value="">Move to Job...</option>${state.jobs.map(j=>`<option value="${j.id}">${esc(j.name)}</option>`).join('')}</select>
         <select id="batchTemplate" style="margin-top:8px"><option value="">Apply Annotation Template...</option><option value="date_address">Date + Address</option><option value="evidence">Evidence Details</option><option value="copyright">Copyright Only</option></select>
         <button class="btn secondary slim" id="runBatch" type="button">Apply Batch Changes</button>
       </section>
     </div>
+    </section>
 
     ${featureOn('measurements') ? `<div class="organize-footer-actions"><button class="btn secondary" id="openmap">Open Job Site Map</button></div>` : ''}
 
-    <div id="cards" style="margin-top:16px"></div>`;
+    <div class="organize-library-heading"><div><span class="organize-library-kicker">Your library</span><h2>Current Photo Notes</h2></div><p>Saved Photo Notes appear here. Select any photos you want to organize or compare.</p></div>
+    <div id="cards"></div>`;
   document.getElementById('filter').onchange = e => runSmartSearch();
   const runSearch=()=>runSmartSearch();
   document.getElementById('photoSearchBtn').onclick=runSearch;
