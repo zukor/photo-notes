@@ -27,6 +27,7 @@ test('the wide-browser header enlarges its brands while phone sizes stay compact
   assert.match(css, /\.app-header \.zukor-corner-logo \{[^}]*width:140px; min-width:140px/);
   assert.match(css, /@media \(min-width: 701px\)[\s\S]*\.app-header \.zukor-corner-logo \{ width:280px; min-width:280px; \}/);
   assert.match(css, /@media \(min-width: 701px\)[\s\S]*\.app-header \.brandrow \{ width:min\(750px,100%\); \}/);
+  assert.match(css, /@media \(min-width: 701px\)[\s\S]*\.app-header \.brandrow \.brand\.pro-edition-brand \{ flex-basis:750px; width:750px; max-width:100%; height:90px; \}/);
   assert.match(css, /@media \(min-width: 701px\)[\s\S]*\.edition-switcher \{ grid-column:1 \/ -1; \}/);
   assert.match(css, /@media \(max-width: 700px\)[\s\S]*\.app-header \.zukor-corner-logo \{ width:92\.5px; min-width:0; \}/);
   assert.match(css, /@media \(max-width: 380px\)[\s\S]*\.app-header \.zukor-corner-logo \{ width:78\.75px; min-width:0; \}/);

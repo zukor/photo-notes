@@ -132,6 +132,9 @@ textarea { min-height: 96px; resize: vertical; }
   .app-header { grid-template-columns:280px minmax(0,1fr) auto; }
   .app-header .zukor-corner-logo { width:280px; min-width:280px; }
   .app-header .brandrow { width:min(750px,100%); }
+  .app-header .brandrow .brand { flex-basis:450px; width:450px; }
+  .app-header .brandrow .brand.pro-edition-brand { flex-basis:750px; width:750px; max-width:100%; height:90px; }
+  .app-header .brandrow .brand.road-issues-brand { width:min(630px,100%); }
   .edition-switcher { grid-column:1 / -1; }
 }
 .language-switch { display:flex; align-items:center; gap:5px; color:#000; font:700 12px Arial,Helvetica,sans-serif; white-space:nowrap; }
