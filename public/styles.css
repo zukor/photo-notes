@@ -96,7 +96,7 @@ textarea { min-height: 96px; resize: vertical; }
   top:8%;
   right:.6%;
   color:#000;
-  font:700 clamp(7px,1vw,11px)/1 Arial,Helvetica,sans-serif;
+  font:700 8px/1 Arial,Helvetica,sans-serif;
   letter-spacing:0;
 }
 .brandrow { display:flex; justify-content:center; align-items:center; gap:8px; }
@@ -139,11 +139,11 @@ textarea { min-height: 96px; resize: vertical; }
 @media (max-width: 520px) { .brandrow .brand.pro-edition-brand.roofer-pro-brand { height:57px; } }
 .app-header {
   display:grid; grid-template-columns:112px minmax(0,1fr) 30px; grid-template-rows:auto auto;
-  width:100%; max-width:820px; align-items:center; column-gap:12px; row-gap:4px; margin:8px auto 0;
+  width:100%; max-width:820px; align-items:center; column-gap:12px; row-gap:2px; margin:8px auto 5px;
 }
 .app-header .zukor-corner-logo { display:block; grid-column:1; grid-row:1; width:175px; min-width:175px; max-width:none; height:28.125px; object-fit:contain; object-position:left center; justify-self:start; }
-.app-header .brandrow { grid-column:1 / -1; grid-row:2; min-width:0; width:min(750px,100%); margin:0; justify-self:center; }
-.app-header .brandrow .brand:not([style*="font-size"]) { flex:0 1 750px; width:100%; max-width:100%; height:auto; aspect-ratio:940/214; margin:0; background-position:center; background-size:contain; }
+.app-header .brandrow { grid-column:1 / -1; grid-row:2; min-width:0; width:min(500px,100%); justify-self:center; }
+.app-header .brandrow .brand { width:100%; max-width:100%; }
 .app-header .header-controls { grid-column:2 / 4; grid-row:1; justify-self:end; display:flex; align-items:center; gap:10px; }
 .workflow-road-report { width:min(620px,100%); margin:0 auto; }
 .workflow-road-report .road-send { margin-top:22px; }
@@ -157,7 +157,11 @@ textarea { min-height: 96px; resize: vertical; }
   .app-header { grid-template-columns:350px minmax(0,1fr) auto; }
   .app-header .zukor-corner-logo { width:350px; min-width:350px; height:56.25px; }
   .app-header .brandrow { width:min(750px,100%); }
-  .app-header .brandrow .brand:not([style*="font-size"]) { flex-basis:750px; width:100%; max-width:100%; height:auto; aspect-ratio:940/214; }
+  .app-header .brandrow .brand { flex-basis:450px; width:450px; }
+  .app-header .brandrow .brand.pro-edition-brand { flex-basis:750px; width:750px; max-width:100%; height:90px; }
+  .app-header .brandrow .brand.road-issues-brand { flex-basis:750px; width:750px; max-width:100%; height:90px; }
+  .app-header .brandrow .brand.pro-edition-brand::after,
+  .app-header .brandrow .brand.road-issues-brand::after { right:calc(50% - 203px); }
   .edition-switcher { grid-column:1 / -1; }
 }
 .language-switch { display:flex; align-items:center; gap:5px; color:#000; font:700 12px Arial,Helvetica,sans-serif; white-space:nowrap; }
@@ -214,7 +218,7 @@ textarea { min-height: 96px; resize: vertical; }
 .tabs { display: flex; gap: 8px; margin: 8px 0 16px; }
 .tab { flex: 1; text-align: center; padding: 10px; border: 1px solid #000; border-radius: 8px; color: #000; background: #fff; font-weight: bold; }
 .tab.on { background: #000; color: #fff; }
-.workflow-tabs { max-width: 820px; margin: 10px auto 16px; }
+.workflow-tabs { max-width: 820px; margin: 4px auto 16px; }
 .asset-card img { width:100%; max-height:280px; object-fit:cover; border-radius:9px; margin-bottom:10px; }
 .visit-progress,.visit-next,.success-box { border:2px solid #2455d9; border-radius:12px; padding:16px; margin:14px 0; background:#f4f7ff; }
 .success-box { border-color:#238636; background:#effaf1; }
@@ -432,10 +436,10 @@ input.dimfield.suggested {
   #body, .workflow-organize, .workflow-edit, .workflow-create, .workflow-send { max-width:640px !important; }
   .app-header { grid-template-columns:auto minmax(0,1fr) auto; column-gap:6px; row-gap:1px; margin-top:6px; }
   .app-header .zukor-corner-logo { width:115px; min-width:0; height:18.48px; }
-  .app-header .brand:not([style*="font-size"]):not(.road-issues-brand) { height:auto; }
-  .app-header .brand.road-issues-brand { width:100%; max-width:100%; height:auto; }
+  .app-header .brand:not([style*="font-size"]):not(.road-issues-brand) { height:42px; }
+  .app-header .brand.road-issues-brand { width:100%; max-width:calc(100vw - 28px); height:57px; }
   .app-header .brandrow { width:100%; }
-  .app-header .brandrow .brand.pro-edition-brand { width:100%; max-width:100%; height:auto; }
+  .app-header .brandrow .brand.pro-edition-brand { width:100%; max-width:calc(100vw - 28px); height:auto; }
   .workflow-tabs { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:4px; overflow:visible; padding-bottom:0; }
   .workflow-tabs .tab { min-width:0; padding:9px 2px; font-size:12px; }
   .workflow-tabs.hoa-tabs .tab { font-size:10px; line-height:1.15; overflow-wrap:anywhere; }

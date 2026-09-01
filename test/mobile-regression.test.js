@@ -18,7 +18,7 @@ test('phone and coarse-pointer devices start in Capture', () => {
 test('small Android widths keep header logo, tabs, and forms inside the viewport', () => {
   assert.match(css, /@media \(max-width: 380px\)/);
   assert.match(css, /grid-template-columns:auto minmax\(0,1fr\) auto/);
-  assert.match(css, /\.app-header \.brandrow \.brand\.pro-edition-brand \{ width:100%; max-width:100%; height:auto/);
+  assert.match(css, /\.app-header \.brandrow \.brand\.pro-edition-brand \{ width:100%; max-width:calc\(100vw - 28px\)/);
   assert.match(css, /\.workflow-tabs \{ display:grid; grid-template-columns:repeat\(5,minmax\(0,1fr\)\)/);
   assert.match(css, /\.workflow-organize #cards[\s\S]*grid-template-columns:1fr/);
 });
@@ -28,7 +28,7 @@ test('the wide-browser header enlarges its brands while phone sizes stay compact
   assert.match(css, /\.app-header \.zukor-corner-logo \{[^}]*width:175px; min-width:175px;[^}]*height:28\.125px/);
   assert.match(css, /@media \(min-width: 701px\)[\s\S]*\.app-header \.zukor-corner-logo \{ width:350px; min-width:350px; height:56\.25px; \}/);
   assert.match(css, /@media \(min-width: 701px\)[\s\S]*\.app-header \.brandrow \{ width:min\(750px,100%\); \}/);
-  assert.match(css, /\.app-header \.brandrow \.brand:not\(\[style\*="font-size"\]\) \{[^}]*aspect-ratio:940\/214/);
+  assert.match(css, /@media \(min-width: 701px\)[\s\S]*\.app-header \.brandrow \.brand\.pro-edition-brand \{ flex-basis:750px; width:750px; max-width:100%; height:90px; \}/);
   assert.match(css, /\.brand:not\(\[style\*="font-size"\]\)::after \{[\s\S]*content:"TM"/);
   assert.match(css, /@media \(min-width: 701px\)[\s\S]*\.edition-switcher \{ grid-column:1 \/ -1; \}/);
   assert.match(css, /@media \(max-width: 700px\)[\s\S]*\.app-header \.zukor-corner-logo \{ width:115px; min-width:0; height:18\.48px; \}/);
