@@ -21,6 +21,11 @@ CREATE TABLE IF NOT EXISTS users (
   pro_type      TEXT NOT NULL DEFAULT 'paving',
   industry      TEXT,
   feature_access JSONB NOT NULL DEFAULT '{}'::jsonb,
+  document_branding JSONB NOT NULL DEFAULT '{}'::jsonb,
+  document_logo_path TEXT,
+  document_logo_name TEXT,
+  word_template_path TEXT,
+  word_template_name TEXT,
   active        BOOLEAN NOT NULL DEFAULT true,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
   last_login_at TIMESTAMPTZ
@@ -97,7 +102,8 @@ CREATE TABLE IF NOT EXISTS groups (
   id          SERIAL PRIMARY KEY,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
   title       TEXT,
-  description TEXT
+  description TEXT,
+  layout JSONB NOT NULL DEFAULT '{}'::jsonb
 );
 CREATE TABLE IF NOT EXISTS group_items (
   group_id    INTEGER NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
@@ -540,6 +546,11 @@ async function init() {
   await pool.query(`ALTER TABLE users ALTER COLUMN pro_type SET DEFAULT 'paving'`);
   await pool.query(`ALTER TABLE hoa_communities ADD COLUMN IF NOT EXISTS assignment_rules JSONB NOT NULL DEFAULT '{}'::jsonb`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS feature_access JSONB NOT NULL DEFAULT '{}'::jsonb`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS document_branding JSONB NOT NULL DEFAULT '{}'::jsonb`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS document_logo_path TEXT`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS document_logo_name TEXT`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS word_template_path TEXT`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS word_template_name TEXT`);
   // Pro-tier: capture dimension fields (see SCHEMA above for semantics).
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS dim_length_in DOUBLE PRECISION`);
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS dim_length_unit TEXT`);
@@ -576,6 +587,7 @@ async function init() {
   await pool.query(`CREATE TABLE IF NOT EXISTS concrete_ticket_links (id SERIAL PRIMARY KEY,user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,placement_capture_id INTEGER NOT NULL REFERENCES captures(id) ON DELETE CASCADE,ticket_capture_id INTEGER NOT NULL REFERENCES captures(id) ON DELETE CASCADE,reference_type TEXT NOT NULL DEFAULT 'batch_ticket',created_at TIMESTAMPTZ NOT NULL DEFAULT now(),UNIQUE(placement_capture_id,ticket_capture_id))`);
   await pool.query(`CREATE INDEX IF NOT EXISTS concrete_ticket_links_user_idx ON concrete_ticket_links (user_id,placement_capture_id)`);
   await pool.query(`ALTER TABLE groups ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id)`);
+  await pool.query(`ALTER TABLE groups ADD COLUMN IF NOT EXISTS layout JSONB NOT NULL DEFAULT '{}'::jsonb`);
   await pool.query(`UPDATE groups SET user_id = $1 WHERE user_id IS NULL`, [adminId]);
   // Tester issue triage. These ALTERs upgrade existing production databases
   // without changing or losing previously submitted reports.

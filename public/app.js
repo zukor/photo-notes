@@ -27,6 +27,7 @@ let dictationBase = '';
 let currentGroupItems = [];
 let currentGroup = null;
 let currentGroupPairs = [];
+let currentDocumentSettings = { branding:{}, logo_path:null, logo_name:null, template_name:null, template_ready:false };
 let deferredInstallPrompt = null;
 let installOfferShown = false;
 const INSTALL_PROMPT_KEY = 'pn_install_prompt_dismissed_v1';
@@ -3312,12 +3313,13 @@ async function deleteGroup(id) {
 async function renderGroupDetail(id) {
   const body = document.getElementById('body');
   body.innerHTML = '<p class="status">Loading...</p>';
-  const r = await api(`/api/groups/${id}`);
+  const [r,settingsResponse] = await Promise.all([api(`/api/groups/${id}`),api('/api/document-settings')]);
   if (!r.ok) { body.innerHTML = '<p class="status">Could not load group.</p>'; return; }
   const data = await r.json();
   currentGroup = data.group;
   currentGroupItems = data.items || [];
   currentGroupPairs = data.pairs || [];
+  if(settingsResponse.ok)currentDocumentSettings=await settingsResponse.json();
   const score = data.score || null;
   const zsum = data.zones || null;
   let scoreHtml = '';
@@ -3346,7 +3348,14 @@ async function renderGroupDetail(id) {
 
     ${scoreHtml}
 
-    <div class="formhead" style="margin-top:24px">2. Document Contents</div>
+    <div class="formhead" style="margin-top:24px">2. Company Branding &amp; Word Template</div>
+    <div class="document-setup-panel" id="documentSetup"></div>
+
+    <div class="formhead" style="margin-top:24px">3. Page Layout &amp; Preview</div>
+    <div class="document-layout-controls" id="documentLayoutControls"></div>
+    <div class="document-preview" id="documentPreview" aria-label="Document preview"></div>
+
+    <div class="formhead" style="margin-top:24px">4. Document Contents</div>
     <div class="status">These photos and captions are the document preview. Edit captions, change their order, or remove anything you do not want included.</div>
     <div id="gpairpreview"></div>
     <div id="gitems" style="margin-top:12px"></div>
@@ -3364,6 +3373,9 @@ async function renderGroupDetail(id) {
   const en = document.getElementById('ewrNew'); if (en) en.onclick = () => { state.ewrId = 'new'; renderGroups(); };
   renderTitleView();
   renderDescView();
+  renderDocumentSetup();
+  renderDocumentLayoutControls();
+  renderDocumentPreview();
   renderGroupPairPreview();
   renderGroupItems();
   if (featureOn('extra_work')) loadEwrList();
@@ -3655,6 +3667,46 @@ function renderEwrView(body, data) {
   });
 }
 
+function normalizedDocumentLayout(){return{cover_page:true,header:true,footer:true,page_numbers:true,font:'Arial',photo_layout:'one_per_page',accent:'#1d4ed8',...(currentGroup&&currentGroup.layout||{})};}
+function renderDocumentSetup(){
+  const box=document.getElementById('documentSetup');if(!box)return;const b=currentDocumentSettings.branding||{};
+  box.innerHTML=`
+    <div class="document-brand-grid">
+      <label>Company Name<input id="documentCompanyName" value="${esc(b.company_name||'')}" placeholder="Company name"></label>
+      <label>Header Text<input id="documentHeaderText" value="${esc(b.header_text||'')}" placeholder="Optional header"></label>
+      <label class="document-brand-wide">Footer Text<input id="documentFooterText" value="${esc(b.footer_text||'')}" placeholder="Optional footer or contact information"></label>
+    </div>
+    <button class="btn slim document-compact-action" id="saveDocumentBranding">Save Branding Text</button>
+    <div class="document-asset-row">
+      <div><strong>Company Logo</strong><div class="meta">${currentDocumentSettings.logo_name?esc(currentDocumentSettings.logo_name):'No logo uploaded'}</div>${currentDocumentSettings.logo_path?`<img class="document-logo-preview" src="${esc(currentDocumentSettings.logo_path)}" alt="Uploaded company logo">`:''}</div>
+      <div><label class="file-action">Upload Logo<input type="file" id="documentLogoFile" accept="image/png,image/jpeg,image/webp"></label>${currentDocumentSettings.logo_path?'<button class="btn secondary slim document-remove-asset" data-remove-document-asset="logo">Remove</button>':''}</div>
+    </div>
+    <div class="document-asset-row">
+      <div><strong>Word Template</strong><div class="meta">${currentDocumentSettings.template_name?esc(currentDocumentSettings.template_name):'No template uploaded'}</div><div class="document-template-help">Use a .docx file containing <code>{{PHOTO_NOTES_CONTENT}}</code>. Optional placeholders: <code>{{TITLE}}</code>, <code>{{DESCRIPTION}}</code>, and <code>{{COMPANY_NAME}}</code>.</div></div>
+      <div><a class="btn secondary slim document-compact-action" href="/api/document-settings/template-starter">Download Starter Template</a><label class="file-action">Import Word Template<input type="file" id="documentTemplateFile" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"></label>${currentDocumentSettings.template_ready?'<button class="btn secondary slim document-remove-asset" data-remove-document-asset="template">Remove</button>':''}</div>
+    </div>`;
+  document.getElementById('saveDocumentBranding').onclick=saveDocumentBranding;
+  document.getElementById('documentLogoFile').onchange=e=>uploadDocumentAsset('logo',e.target.files[0]);
+  document.getElementById('documentTemplateFile').onchange=e=>uploadDocumentAsset('template',e.target.files[0]);
+  box.querySelectorAll('[data-remove-document-asset]').forEach(button=>button.onclick=()=>removeDocumentAsset(button.dataset.removeDocumentAsset));
+}
+async function saveDocumentBranding(){const payload={company_name:document.getElementById('documentCompanyName').value,header_text:document.getElementById('documentHeaderText').value,footer_text:document.getElementById('documentFooterText').value};const r=await api('/api/document-settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});if(r.ok){const d=await r.json();currentDocumentSettings.branding=d.branding;toast('Branding saved');renderDocumentPreview();}else toast('Branding could not be saved');}
+async function uploadDocumentAsset(kind,file){if(!file)return;const fd=new FormData();fd.append(kind,file);const r=await api(`/api/document-settings/${kind}`,{method:'POST',body:fd});const d=await r.json().catch(()=>({}));if(!r.ok){toast(d.error||'Upload failed');return;}if(kind==='logo'){currentDocumentSettings.logo_path=d.logo_path;currentDocumentSettings.logo_name=d.logo_name;}else{currentDocumentSettings.template_name=d.template_name;currentDocumentSettings.template_ready=true;}toast(kind==='logo'?'Logo uploaded':'Word template imported');renderDocumentSetup();renderDocumentPreview();}
+async function removeDocumentAsset(kind){const r=await api('/api/document-settings/remove-asset',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({kind})});if(!r.ok){toast('Remove failed');return;}if(kind==='logo'){currentDocumentSettings.logo_path=null;currentDocumentSettings.logo_name=null;}else{currentDocumentSettings.template_name=null;currentDocumentSettings.template_ready=false;}renderDocumentSetup();renderDocumentPreview();toast(kind==='logo'?'Logo removed':'Template removed');}
+function renderDocumentLayoutControls(){const box=document.getElementById('documentLayoutControls');if(!box)return;const l=normalizedDocumentLayout();box.innerHTML=`<div class="document-layout-grid">
+  <label>Typeface<select id="documentFont">${['Arial','Aptos','Calibri','Georgia','Times New Roman'].map(f=>`<option${l.font===f?' selected':''}>${f}</option>`).join('')}</select></label>
+  <label>Photo Arrangement<select id="documentPhotoLayout"><option value="one_per_page"${l.photo_layout==='one_per_page'?' selected':''}>One photo per page</option><option value="two_per_page"${l.photo_layout==='two_per_page'?' selected':''}>Two photos per page</option></select></label>
+  <label>Accent Color<input type="color" id="documentAccent" value="${esc(l.accent)}"></label>
+  <label class="document-layout-check"><input type="checkbox" id="documentCover"${l.cover_page?' checked':''}> Cover page</label>
+  <label class="document-layout-check"><input type="checkbox" id="documentHeader"${l.header?' checked':''}> Header</label>
+  <label class="document-layout-check"><input type="checkbox" id="documentFooter"${l.footer?' checked':''}> Footer</label>
+  <label class="document-layout-check"><input type="checkbox" id="documentPageNumbers"${l.page_numbers?' checked':''}> Page numbers</label>
+  </div><button class="btn slim document-compact-action" id="saveDocumentLayout">Save Layout</button>`;document.getElementById('saveDocumentLayout').onclick=saveDocumentLayout;box.querySelectorAll('input,select').forEach(el=>el.onchange=renderDocumentPreviewFromControls);}
+function layoutFromControls(){return{cover_page:document.getElementById('documentCover').checked,header:document.getElementById('documentHeader').checked,footer:document.getElementById('documentFooter').checked,page_numbers:document.getElementById('documentPageNumbers').checked,font:document.getElementById('documentFont').value,photo_layout:document.getElementById('documentPhotoLayout').value,accent:document.getElementById('documentAccent').value};}
+function renderDocumentPreviewFromControls(){renderDocumentPreview(layoutFromControls());}
+async function saveDocumentLayout(){const layout=layoutFromControls(),r=await api(`/api/groups/${currentGroup.id}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({layout})});if(r.ok){currentGroup.layout=layout;toast('Layout saved');renderDocumentPreview(layout);}else toast('Layout could not be saved');}
+function renderDocumentPreview(layoutOverride){const box=document.getElementById('documentPreview');if(!box)return;const l=layoutOverride||normalizedDocumentLayout(),b=currentDocumentSettings.branding||{},perPage=l.photo_layout==='two_per_page'?2:1,pages=[];for(let i=0;i<currentGroupItems.length;i+=perPage)pages.push(currentGroupItems.slice(i,i+perPage));let pageNo=0;const chrome=(content)=>{pageNo++;return `<article class="document-preview-page" style="font-family:${esc(l.font)}"><div class="document-preview-header">${l.header?esc(b.header_text||b.company_name||''):''}</div><div class="document-preview-content">${content}</div><div class="document-preview-footer">${l.footer?esc(b.footer_text||''):''}${l.page_numbers?`${l.footer&&b.footer_text?' · ':''}Page ${pageNo}`:''}</div></article>`;};let html='';if(l.cover_page)html+=chrome(`<div class="document-preview-cover">${currentDocumentSettings.logo_path?`<img src="${esc(currentDocumentSettings.logo_path)}" alt="Company logo">`:''}<div class="document-preview-company" style="color:${esc(l.accent)}">${esc(b.company_name||'')}</div><h2>${esc(currentGroup.title||'Untitled Document')}</h2><p>${esc(currentGroup.description||'')}</p></div>`);if(!pages.length)html+=chrome(`<div class="document-preview-empty">Add photos from Organize to preview the document.</div>`);for(const page of pages)html+=chrome(`<div class="document-preview-photos ${perPage===2?'two-up':''}">${page.map(c=>`<section><h3>${esc(c.photo_title||'Untitled Photo')}</h3>${c.photo_path?`<img src="${photoSrc(c.photo_path)}" alt="${esc(c.photo_title||'Photo')}">`:''}<div class="document-preview-location">${esc(c.address||'No location')}</div><p>${esc(c.note||'No notes')}</p></section>`).join('')}</div>`);box.innerHTML=html;}
+
 function renderTitleView() {
   const box = document.getElementById('titleview');
   if (!box) return;
@@ -3677,7 +3729,7 @@ async function saveTitle() {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ title: v }),
   });
-  if (r.ok) { currentGroup.title = v; toast('Saved'); renderTitleView(); } else toast('Save failed');
+  if (r.ok) { currentGroup.title = v; toast('Saved'); renderTitleView(); renderDocumentPreview(); } else toast('Save failed');
 }
 
 function renderDescView() {
@@ -3702,7 +3754,7 @@ async function saveDesc() {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ description: v }),
   });
-  if (r.ok) { currentGroup.description = v; toast('Saved'); renderDescView(); } else toast('Save failed');
+  if (r.ok) { currentGroup.description = v; toast('Saved'); renderDescView(); renderDocumentPreview(); } else toast('Save failed');
 }
 
 function renderGroupItems() {
@@ -3735,7 +3787,7 @@ function renderGroupItems() {
     if (!item || !field) return;
     b.disabled = true; b.textContent = 'Saving...';
     const r = await api(`/api/captures/${item.id}`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ note:field.value }) });
-    if (r.ok) { item.note = field.value; toast('Caption saved'); }
+    if (r.ok) { item.note = field.value; toast('Caption saved'); renderDocumentPreview(); }
     else toast('Caption could not be saved');
     b.disabled = false; b.textContent = 'Save Caption';
   });
@@ -3764,12 +3816,14 @@ function moveItem(i, dir) {
   if (j < 0 || j >= arr.length) return;
   const tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp;
   renderGroupItems();
+  renderDocumentPreview();
   persistOrder();
 }
 
 function reverseItems() {
   currentGroupItems.reverse();
   renderGroupItems();
+  renderDocumentPreview();
   persistOrder();
 }
 
@@ -3788,7 +3842,7 @@ async function removeItem(i) {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ids: [c.id] }),
   });
-  if (r.ok) { currentGroupItems.splice(i, 1); renderGroupItems(); toast('Removed'); }
+  if (r.ok) { currentGroupItems.splice(i, 1); renderGroupItems(); renderDocumentPreview(); toast('Removed'); }
   else toast('Remove failed');
 }
 
