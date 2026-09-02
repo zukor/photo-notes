@@ -2106,7 +2106,7 @@ function captureCardHtml(c) {
     ${measureRow}
     ${c.photo_path ? `<button class="btn secondary slim stampbtn" data-id="${c.id}">Mark Up Photo${(c.overlays && c.overlays.length) ? ' (' + c.overlays.length + ')' : ''}</button>` : ''}
     ${c.photo_path ? `<button class="btn secondary slim cropbtn" data-id="${c.id}">Crop Photo</button>` : ''}
-    <button class="btn secondary slim evidencebtn" data-id="${c.id}">Photo History</button>
+    <button class="btn secondary slim evidencebtn" data-id="${c.id}">Photo Details &amp; History</button>
     ${c.photo_original_path ? `<button class="btn secondary slim restorebtn" data-id="${c.id}">Restore Original Photo</button>` : ''}
     <div class="notewrap photo-notes-panel" data-id="${c.id}">
       <div class="photo-notes-heading">Notes</div>
@@ -2129,10 +2129,11 @@ async function showEvidence(id){
     const modal=document.createElement('div');modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.58);z-index:80;padding:18px;overflow:auto';
     const fileStatus=d.fingerprint_verified===true?'Original photo matches':d.fingerprint_verified===false?'Original photo does not match':'File check unavailable';
     modal.innerHTML=`<section style="max-width:620px;margin:30px auto;background:#fff;border-radius:12px;padding:18px;color:#000"><div style="display:flex;justify-content:space-between;gap:12px"><div class="brand" style="font-size:21px">Photo History</div><button class="iconbtn" id="evidenceClose" aria-label="Close">×</button></div><p class="helper">See when this photo note was saved and what was changed later. Your private note text is not shown in this history.</p><div class="card"><strong>Original photo saved</strong><div class="muted">${fEvidenceDate(d.evidence&&d.evidence.captured_at||d.capture.created_at)}</div><div class="muted" style="margin-top:7px">Photo size: ${d.evidence?formatEvidenceBytes(d.evidence.original_bytes):'Unknown'}</div><div class="muted">Location saved: ${d.capture.latitude!=null&&d.capture.longitude!=null?'Yes':'No'} · Address saved: ${d.capture.address?'Yes':'No'}</div><div class="muted" style="margin-top:7px"><strong>${fileStatus}</strong></div><details style="margin-top:10px"><summary>Technical file details</summary><div class="muted" style="margin-top:7px">SHA-256 file ID</div><div style="font-family:monospace;word-break:break-all;margin-top:5px">${esc(hash||'Not available for this older photo')}</div><div class="muted" style="margin-top:7px">Original backup: ${d.original_preserved?'Preserved':'Not currently needed'}</div></details></div><h3 style="font-size:16px">Changes</h3>${d.history.length?`<div>${d.history.map(h=>`<div style="border-bottom:1px solid #ddd;padding:8px 0"><strong>${esc(labels[h.action]||h.action)}</strong><div class="muted">${fEvidenceDate(h.created_at)}${h.detail&&Array.isArray(h.detail.fields)&&h.detail.fields.length?' · '+esc(h.detail.fields.join(', ')):''}</div></div>`).join('')}</div>`:'<p class="helper">No change history is available for this older photo.</p>'}</section>`;
+    modal.querySelector('.brand').textContent='Photo Details & History';
     const photoSizeRow=[...modal.querySelectorAll('.card .muted')].find(row=>row.textContent.startsWith('Photo size:'));
     if(photoSizeRow){const formatRow=document.createElement('div');formatRow.className='muted';formatRow.textContent=`Current file format: ${d.current_file_format||'Unknown'}`;photoSizeRow.insertAdjacentElement('afterend',formatRow);}
     document.body.appendChild(modal);modal.querySelector('#evidenceClose').onclick=()=>modal.remove();modal.onclick=e=>{if(e.target===modal)modal.remove();};
-  }catch(e){toast('Photo history could not be loaded');}
+  }catch(e){toast('Photo details and history could not be loaded');}
 }
 function fEvidenceDate(value){try{return new Date(value).toLocaleString(uiLocale());}catch(e){return '—';}}
 function formatEvidenceBytes(n){n=Number(n)||0;if(n<1024)return n+' B';if(n<1048576)return (n/1024).toFixed(1)+' KB';return (n/1048576).toFixed(1)+' MB';}
@@ -2185,7 +2186,7 @@ function pairCardHtml(before, after) {
       <div class="topicwrap" data-id="${c.id}"><div class="meta">${tags}</div><button class="editlink edittopics" data-id="${c.id}" type="button">Change Topics</button></div>
       ${dims ? `<div class="meta"><strong>Dimensions:</strong> ${esc(dims)}</div>` : ''}
       ${measurementOn() && state.view === 'edit' && c.photo_path ? `<button class="btn secondary slim editdims" data-id="${c.id}">Measurements</button>` : ''}
-      <button class="btn secondary slim evidencebtn" data-id="${c.id}">Photo History</button>
+      <button class="btn secondary slim evidencebtn" data-id="${c.id}">Photo Details &amp; History</button>
       <div class="photo-notes-panel"><div class="photo-notes-heading">Notes</div><div class="photo-notes-box">${esc(c.note || 'No notes added.')}</div></div>
       ${state.view === 'organize' ? `<button class="btn secondary slim organize-delete-capture" data-delete-organize="${c.id}" type="button">Delete Photo Note</button>` : ''}
     </div>`;
