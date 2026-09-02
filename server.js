@@ -1687,6 +1687,20 @@ app.get('/api/captures/:id/evidence', requireAuth, async (req,res)=>{
     if(!capture)return res.status(404).json({error:'not found'});
     const evidence=(await pool.query(`SELECT original_sha256,original_bytes,original_name,captured_at FROM capture_evidence WHERE capture_id=$1 AND user_id=$2`,[id,req.user.id])).rows[0]||null;
     const history=(await pool.query(`SELECT action,detail,created_at FROM capture_history WHERE capture_id=$1 AND user_id=$2 ORDER BY created_at ASC`,[id,req.user.id])).rows;
+    const currentFile=localPhoto(capture.photo_path);
+    let current_file_format=null;
+    if(currentFile&&fs.existsSync(currentFile)){
+      try{
+        const detected=String((await sharp(currentFile).metadata()).format||'').toLowerCase();
+        const ext=path.extname(currentFile).toLowerCase();
+        const labels={jpeg:'JPEG',jpg:'JPEG',png:'PNG',webp:'WebP',gif:'GIF',tiff:'TIFF',avif:'AVIF',heif:ext==='.heic'?'HEIC':'HEIF'};
+        current_file_format=labels[detected]||(detected?detected.toUpperCase():null);
+      }catch(e){}
+      if(!current_file_format){
+        const ext=path.extname(currentFile).replace(/^\./,'').toLowerCase();
+        current_file_format=({jpg:'JPEG',jpeg:'JPEG',png:'PNG',webp:'WebP',heic:'HEIC',heif:'HEIF',gif:'GIF',tif:'TIFF',tiff:'TIFF',avif:'AVIF'})[ext]||(ext?ext.toUpperCase():null);
+      }
+    }
     let fingerprint_verified=null;
     if(evidence&&evidence.original_sha256){
       const originalFile=localPhoto(capture.photo_original_path)||localPhoto(capture.photo_path);
@@ -1694,7 +1708,7 @@ app.get('/api/captures/:id/evidence', requireAuth, async (req,res)=>{
         try{fingerprint_verified=crypto.createHash('sha256').update(fs.readFileSync(originalFile)).digest('hex')===evidence.original_sha256;}catch(e){}
       }
     }
-    res.json({capture,evidence,history,original_preserved:!!capture.photo_original_path,current_photo_present:!!localPhoto(capture.photo_path),fingerprint_verified});
+    res.json({capture,evidence,history,original_preserved:!!capture.photo_original_path,current_photo_present:!!currentFile,current_file_format,fingerprint_verified});
   }catch(err){console.error('[evidence.get]',err);res.status(500).json({error:'evidence failed'});}
 });
 
