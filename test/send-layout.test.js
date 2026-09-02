@@ -29,6 +29,19 @@ test('Send selection supports select all and clear all actions',()=>{
   assert.match(app,/function selectAllSendCaptures\(\) \{[\s\S]*?window\._sendCaptures[\s\S]*?state\.selectedIds\.add/);
   assert.match(app,/function clearSendSelection\(\) \{[\s\S]*?state\.selectedIds\.clear\(\);[\s\S]*?querySelectorAll\('\.sendchk'\)/);
   assert.match(css,/\.send-selection-bar \{/);
+  assert.match(css,/\.send-selection-bar \{[^}]*flex-wrap:wrap/);
+  assert.match(css,/\.send-selection-actions \{[^}]*max-width:100%/);
+});
+
+test('Send cards use identifiable previews and allow a confirmed Photo Note deletion',()=>{
+  assert.match(app,/class="send-capture-details"/);
+  assert.match(app,/c\.photo_title \|\| 'Untitled Photo'/);
+  assert.match(app,/data-delete-capture="\$\{c\.id\}"[^>]*>Delete Photo Note<\/button>/);
+  assert.match(app,/async function deleteSendCapture\(id, button\)/);
+  assert.match(app,/Delete this Photo Note\? This can't be undone\./);
+  assert.match(app,/JSON\.stringify\(\{ ids: \[id\] \}\)/);
+  assert.match(css,/\.send-capture-row \{[^}]*minmax\(120px,150px\)/);
+  assert.match(css,/\.send-capture-row img, \.send-no-photo \{[^}]*aspect-ratio:4\/3/);
 });
 
 test('photo sharing is sized, bounded, visible, and recoverable',()=>{

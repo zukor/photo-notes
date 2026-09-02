@@ -275,19 +275,24 @@ textarea { min-height: 96px; resize: vertical; }
 .workflow-organize .rotaterow, .workflow-organize .stampbtn, .workflow-organize .cropbtn,
 .workflow-organize .restorebtn, .workflow-organize .editnote, .workflow-organize .defectrow { display:none !important; }
 .delivery-actions { display:grid; grid-template-columns:minmax(0,1fr) minmax(92px,.75fr) minmax(0,1fr); gap:8px; align-items:stretch; }
-.send-selection-bar { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:4px 0 10px; }
-.send-selection-bar .status { margin:0; }
+.send-selection-bar { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px 12px; margin:4px 0 10px; max-width:100%; }
+.send-selection-bar .status { flex:1 1 320px; min-width:0; margin:0; }
 .send-selection-bar .btn { flex:none; margin:0; }
-.send-selection-actions { display:flex; flex:none; gap:8px; }
+.send-selection-actions { display:flex; flex:0 1 auto; max-width:100%; gap:8px; }
 .delivery-actions .btn, .delivery-grid .btn { margin-top:0; }
 .delivery-actions .btn { padding:10px 8px; font-size:15px; }
 .delivery-actions select { min-width:0; height:100%; padding:8px; font-size:15px; font-weight:700; }
 .share-action-status { min-height:22px; margin:8px 0 12px; color:#174f91; font-size:14px; font-weight:700; line-height:1.35; }
 .share-action-status.error { color:#a61b16; }
 .delivery-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin-top:10px; }
-.send-capture-row { display:grid; grid-template-columns:24px 72px 1fr; gap:10px; align-items:center; padding:10px; margin:0; border:1px solid #000; border-radius:10px; background:#fff; text-transform:none; letter-spacing:0; font-size:14px; cursor:pointer; }
+.send-capture-row { display:grid; grid-template-columns:24px minmax(120px,150px) minmax(0,1fr); grid-template-areas:"check photo details" ". photo delete"; gap:8px 12px; align-items:start; padding:12px; margin:0; border:1px solid #000; border-radius:10px; background:#fff; text-transform:none; letter-spacing:0; font-size:14px; }
 .send-capture-row input { width:20px; height:20px; }
-.send-capture-row img, .send-no-photo { width:72px; height:58px; object-fit:cover; border-radius:6px; margin:0; background:#eee; display:flex; align-items:center; justify-content:center; }
+.send-capture-row .sendchk { grid-area:check; align-self:start; }
+.send-capture-row img, .send-no-photo { grid-area:photo; width:100%; height:auto; aspect-ratio:4/3; object-fit:cover; border:1px solid #aab3bf; border-radius:7px; margin:0; background:#eee; display:flex; align-items:center; justify-content:center; }
+.send-capture-details { grid-area:details; min-width:0; }
+.send-capture-details strong { display:block; margin-bottom:5px; font-size:16px; line-height:1.2; }
+.send-delete-capture { grid-area:delete; align-self:end; justify-self:start; max-width:100%; padding:6px 9px; border:1px solid #b3261e; border-radius:7px; background:#fff; color:#b3261e; font:800 12px/1.15 Arial,Helvetica,sans-serif; cursor:pointer; }
+.send-delete-capture:disabled { opacity:.55; cursor:wait; }
 .share-requirement { display:flex; flex-direction:column; gap:4px; margin:10px 0 14px; padding:12px 14px; border:2px solid #1d4ed8; border-radius:10px; background:#eef4ff; color:#000; font-size:14px; line-height:1.35; }
 .share-requirement strong { font-size:15px; }
 .ticket-entry { display:flex; align-items:center; justify-content:space-between; gap:16px; margin:0 0 18px; padding:14px; border:2px solid #1d4ed8; border-radius:10px; background:#eef4ff; }
@@ -452,6 +457,10 @@ input.dimfield.suggested {
   .workflow-tabs .tab { min-width:0; padding:9px 2px; font-size:12px; }
   .workflow-tabs.hoa-tabs .tab { font-size:10px; line-height:1.15; overflow-wrap:anywhere; }
   .workflow-organize #cards, .workflow-edit #cards, #glist, .workflow-create #gitems, .send-capture-list { grid-template-columns:1fr; }
+  .send-selection-bar { align-items:stretch; flex-direction:column; }
+  .send-selection-bar .status { flex-basis:auto; }
+  .send-selection-actions { width:100%; }
+  .send-selection-actions .btn { flex:1 1 0; min-width:0; }
   .delivery-grid { grid-template-columns:1fr 1fr; }
   .map-filter-row { flex-direction:column; gap:8px; align-items:stretch; }
   .organize-form-grid { grid-template-columns:1fr; }

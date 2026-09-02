@@ -2974,12 +2974,14 @@ async function loadSendCenter() {
   const capBox = document.getElementById('sendCaptures');
   const visible = captures.slice(0, 40);
   capBox.innerHTML = visible.length ? visible.map(c => `
-    <label class="send-capture-row">
-      <input type="checkbox" class="sendchk" value="${c.id}" ${state.selectedIds.has(String(c.id)) ? 'checked' : ''}>
-      ${c.photo_path ? `<img src="${photoSrc(c.photo_path)}" alt="">` : '<span class="send-no-photo">Note</span>'}
-      <span><strong>${esc((c.area_tags || []).join(', ') || 'Unfiled')}</strong><small>${esc(c.note || 'No caption')}</small></span>
-    </label>`).join('') : '<p class="empty">Nothing has been captured yet.</p>';
+    <article class="send-capture-row">
+      <input type="checkbox" class="sendchk" value="${c.id}" aria-label="Select ${esc(c.photo_title || 'Photo Note')}" ${state.selectedIds.has(String(c.id)) ? 'checked' : ''}>
+      ${c.photo_path ? `<img src="${photoSrc(c.photo_path)}" alt="${esc(c.photo_title || 'Photo Note')}">` : '<span class="send-no-photo">Note</span>'}
+      <span class="send-capture-details"><strong>${esc(c.photo_title || 'Untitled Photo')}</strong><small>${esc((c.area_tags || []).join(', ') || 'Unfiled')}</small><small>${esc(c.note || 'No notes')}</small></span>
+      <button class="send-delete-capture" type="button" data-delete-capture="${c.id}">Delete Photo Note</button>
+    </article>`).join('') : '<p class="empty">Nothing has been captured yet.</p>';
   capBox.querySelectorAll('.sendchk').forEach(c => c.onchange = () => { if (c.checked) state.selectedIds.add(String(c.value)); else state.selectedIds.delete(String(c.value)); updateSendCount(); });
+  capBox.querySelectorAll('[data-delete-capture]').forEach(button => button.onclick = () => deleteSendCapture(button.dataset.deleteCapture, button));
   updateSendCount();
   const docs = document.getElementById('sendDocs');
   docs.innerHTML = groups.length ? groups.map(g => `
@@ -2994,6 +2996,26 @@ async function loadSendCenter() {
       </div>
     </div>`).join('') : '<p class="empty">Create a document first, or send selected captures above.</p>';
   docs.querySelectorAll('[data-deliver]').forEach(b => b.onclick = () => deliverExport(b.getAttribute('data-deliver'), b.getAttribute('data-group'), false));
+}
+
+async function deleteSendCapture(id, button) {
+  if (!id || !confirm(uiT(`Delete this Photo Note? This can't be undone.`))) return;
+  button.disabled = true;
+  button.textContent = 'Deleting...';
+  try {
+    const r = await api('/api/captures/delete', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: [id] }),
+    });
+    if (!r.ok) throw new Error('delete failed');
+    state.selectedIds.delete(String(id));
+    toast('Photo Note deleted');
+    await loadSendCenter();
+  } catch (e) {
+    button.disabled = false;
+    button.textContent = 'Delete Photo Note';
+    toast('Delete failed');
+  }
 }
 
 function updateSendCount() {
