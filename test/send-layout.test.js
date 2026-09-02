@@ -19,8 +19,22 @@ test('Send actions distinguish original-photo sharing from document downloads',(
   assert.match(app,/id="sendformat"[^>]*><option value="pdf">PDF<\/option><option value="docx">Word<\/option><option value="bundle">Markdown \+ Photos<\/option>/);
   assert.match(app,/id="senddocument">Download<\/button>/);
   assert.doesNotMatch(app,/Send as PDF|Send as Word/);
-  assert.match(app,/deliverExport\(document\.getElementById\('sendformat'\)\.value, null, false\)/);
+  assert.match(app,/deliverExport\(document\.getElementById\('sendformat'\)\.value, null, 'download'\)/);
   assert.match(css,/\.delivery-actions \{[^}]*grid-template-columns:minmax\(0,1fr\) minmax\(92px,\.75fr\) minmax\(0,1fr\)/);
+});
+
+test('Document delivery separates file format from share, download, and print actions',()=>{
+  assert.match(app,/class="document-delivery-format"/);
+  assert.match(app,/<option value="pdf">PDF<\/option>/);
+  assert.match(app,/<option value="docx">Word<\/option>/);
+  assert.match(app,/<option value="bundle">Markdown \+ Photos \(\.zip\)<\/option>/);
+  assert.match(app,/data-document-action="share">Share<\/button>/);
+  assert.match(app,/data-document-action="download">Download<\/button>/);
+  assert.match(app,/data-document-action="print">Print<\/button>/);
+  assert.match(app,/print\.disabled = !printable/);
+  assert.match(app,/deliverExport\(format\.value, control\.dataset\.group, button\.dataset\.documentAction\)/);
+  assert.doesNotMatch(app,/Share PDF|Save PDF|Save Word|>AI ZIP</);
+  assert.match(css,/\.document-delivery-actions \.btn \{[^}]*width:auto/);
 });
 
 test('Send selection supports select all and clear all actions',()=>{

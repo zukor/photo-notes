@@ -295,6 +295,12 @@ textarea { min-height: 96px; resize: vertical; }
 .share-action-status { min-height:22px; margin:8px 0 12px; color:#174f91; font-size:14px; font-weight:700; line-height:1.35; }
 .share-action-status.error { color:#a61b16; }
 .delivery-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin-top:10px; }
+.document-delivery-controls { margin-top:12px; padding-top:12px; border-top:1px solid #c5cbd4; }
+.document-delivery-controls label { margin:0 0 6px; font-size:12px; }
+.document-delivery-format { margin:0; }
+.document-format-help { margin-top:7px; color:#333; font-size:13px; line-height:1.35; }
+.document-delivery-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+.document-delivery-actions .btn { display:inline-flex; width:auto; min-width:96px; align-items:center; justify-content:center; margin:0; padding:9px 18px; font-size:15px; }
 .send-capture-row { display:grid; grid-template-columns:24px minmax(120px,150px) minmax(0,1fr); grid-template-areas:"check photo details" ". photo delete"; gap:8px 12px; align-items:start; padding:12px; margin:0; border:1px solid #000; border-radius:10px; background:#fff; text-transform:none; letter-spacing:0; font-size:14px; }
 .send-capture-row input { width:20px; height:20px; }
 .send-capture-row .sendchk { grid-area:check; align-self:start; }

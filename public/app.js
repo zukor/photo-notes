@@ -363,7 +363,7 @@ const TENSOR_HELP_TOPICS = {
   create: [
     ['Document setup', 'Create turns selected photos into an ordered business document. Add a clear title and short description so the reader knows what the photos document.'],
     ['Photo order and captions', 'Arrange photos in the sequence that tells the clearest story. Captions explain why each image matters without replacing the visible evidence.'],
-    ['PDF / Word / AI ZIP export', 'Export packages the chosen photos and their context for delivery or further work. Pick PDF for a finished document, Word for editing, or AI ZIP for a structured photo package.'],
+    ['PDF, Word, or Markdown + Photos', 'Choose PDF for a finished document, Word for editing, or Markdown + Photos for a ZIP file containing an AI-readable Markdown document and its photos.'],
     ['Export quality and format', 'Quality and format settings balance image clarity against file size. Use higher quality when small visual details are important to the reader.']
   ],
   send: [
@@ -2978,7 +2978,7 @@ async function renderSend() {
     <div id="sendDocs"><p class="status">Loading documents...</p></div>
     <div id="billingOffers"></div>`;
   document.getElementById('sharephotos').onclick = shareSelectedPhotos;
-  document.getElementById('senddocument').onclick = () => deliverExport(document.getElementById('sendformat').value, null, false);
+  document.getElementById('senddocument').onclick = () => deliverExport(document.getElementById('sendformat').value, null, 'download');
   document.getElementById('selectAllSendCaptures').onclick = selectAllSendCaptures;
   document.getElementById('clearSendSelection').onclick = clearSendSelection;
   document.getElementById('createApproval').onclick=createApprovalPackage;
@@ -3015,15 +3015,33 @@ async function loadSendCenter() {
   docs.innerHTML = groups.length ? groups.map(g => `
     <div class="card delivery-card">
       <div><strong>${esc(g.title || 'Untitled document')}</strong><div class="meta">${g.item_count} photo${g.item_count === 1 ? '' : 's'}</div></div>
-      <div class="delivery-grid">
-        <button class="btn slim" data-deliver="share" data-group="${g.id}">Share PDF</button>
-        <button class="btn secondary slim" data-deliver="print" data-group="${g.id}">Print</button>
-        <button class="btn secondary slim" data-deliver="pdf" data-group="${g.id}">Save PDF</button>
-        <button class="btn secondary slim" data-deliver="docx" data-group="${g.id}">Save Word</button>
-        <button class="btn secondary slim" data-deliver="bundle" data-group="${g.id}">AI ZIP</button>
+      <div class="document-delivery-controls" data-group="${g.id}">
+        <label for="documentFormat${g.id}">File format</label>
+        <select class="document-delivery-format" id="documentFormat${g.id}" aria-label="File format for ${esc(g.title || 'Untitled document')}">
+          <option value="pdf">PDF</option>
+          <option value="docx">Word</option>
+          <option value="bundle">Markdown + Photos (.zip)</option>
+        </select>
+        <div class="document-format-help">Markdown + Photos downloads one ZIP file containing an AI-readable Markdown document and the original photos.</div>
+        <div class="document-delivery-actions">
+          <button class="btn slim" data-document-action="share">Share</button>
+          <button class="btn secondary slim" data-document-action="download">Download</button>
+          <button class="btn secondary slim" data-document-action="print">Print</button>
+        </div>
       </div>
     </div>`).join('') : '<p class="empty">Create a document first, or send selected captures above.</p>';
-  docs.querySelectorAll('[data-deliver]').forEach(b => b.onclick = () => deliverExport(b.getAttribute('data-deliver'), b.getAttribute('data-group'), false));
+  docs.querySelectorAll('.document-delivery-controls').forEach(control => {
+    const format = control.querySelector('.document-delivery-format');
+    const print = control.querySelector('[data-document-action="print"]');
+    const syncActions = () => {
+      const printable = format.value === 'pdf';
+      print.disabled = !printable;
+      print.title = printable ? 'Open the PDF for printing' : 'Printing is available for PDF documents';
+    };
+    format.onchange = syncActions;
+    syncActions();
+    control.querySelectorAll('[data-document-action]').forEach(button => button.onclick = () => deliverExport(format.value, control.dataset.group, button.dataset.documentAction));
+  });
 }
 
 async function deleteSendCapture(id, button) {
@@ -3103,10 +3121,9 @@ function safeSharedFileName(action, groupId, ext) {
   return `${base}.${ext}`;
 }
 
-async function deliverExport(action, groupId, selectedOnly) {
-  const format = action === 'share' || action === 'print' ? 'pdf' : action;
+async function deliverExport(format, groupId, action = 'download') {
   const ext = format === 'bundle' ? 'zip' : format;
-  const name = safeSharedFileName(action, groupId, ext);
+  const name = safeSharedFileName(format, groupId, ext);
   try {
     const blob = await exportBlob(format, groupId);
     if (action === 'print') {
@@ -3115,11 +3132,12 @@ async function deliverExport(action, groupId, selectedOnly) {
       else downloadBlob(blob, name);
       return;
     }
-    if (action === 'share' || selectedOnly) {
+    if (action === 'share') {
       const file = new File([blob], name, { type: blob.type || (format === 'pdf' ? 'application/pdf' : 'application/octet-stream') });
       if (navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
         await navigator.share({ files: [file] }); return;
       }
+      toast('This browser cannot share that file directly. Downloading it instead.');
     }
     downloadBlob(blob, name);
     toast('File ready. Attach it to email, text, or upload it to Drive.');
