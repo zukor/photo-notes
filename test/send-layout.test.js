@@ -30,7 +30,8 @@ test('Send selection supports select all and clear all actions',()=>{
   assert.match(app,/function clearSendSelection\(\) \{[\s\S]*?state\.selectedIds\.clear\(\);[\s\S]*?querySelectorAll\('\.sendchk'\)/);
   assert.match(css,/\.send-selection-bar \{/);
   assert.match(css,/\.send-selection-bar \{[^}]*flex-wrap:wrap/);
-  assert.match(css,/\.send-selection-actions \{[^}]*max-width:100%/);
+  assert.match(css,/\.send-selection-actions \{[^}]*flex:1 1 100%;[^}]*width:100%;[^}]*max-width:100%/);
+  assert.match(css,/\.send-selection-actions \.btn \{[^}]*flex:1 1 0;[^}]*min-width:0/);
 });
 
 test('Send cards use identifiable previews and allow a confirmed Photo Note deletion',()=>{

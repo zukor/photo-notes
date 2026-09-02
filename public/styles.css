@@ -278,7 +278,8 @@ textarea { min-height: 96px; resize: vertical; }
 .send-selection-bar { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px 12px; margin:4px 0 10px; max-width:100%; }
 .send-selection-bar .status { flex:1 1 320px; min-width:0; margin:0; }
 .send-selection-bar .btn { flex:none; margin:0; }
-.send-selection-actions { display:flex; flex:0 1 auto; max-width:100%; gap:8px; }
+.send-selection-actions { display:flex; flex:1 1 100%; width:100%; max-width:100%; gap:8px; }
+.send-selection-actions .btn { flex:1 1 0; min-width:0; }
 .delivery-actions .btn, .delivery-grid .btn { margin-top:0; }
 .delivery-actions .btn { padding:10px 8px; font-size:15px; }
 .delivery-actions select { min-width:0; height:100%; padding:8px; font-size:15px; font-weight:700; }
