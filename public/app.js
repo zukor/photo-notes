@@ -2113,6 +2113,7 @@ function captureCardHtml(c) {
       <div class="notetext photo-notes-box">${esc(c.note || 'No notes added.')}</div>
       <button class="btn secondary editnote" data-id="${c.id}" style="margin-top:6px">Edit Note</button>
     </div>
+    ${state.view === 'organize' ? `<button class="btn secondary slim organize-delete-capture" data-delete-organize="${c.id}" type="button">Delete Photo Note</button>` : ''}
   </div>`;
 }
 
@@ -2184,6 +2185,7 @@ function pairCardHtml(before, after) {
       ${measurementOn() && state.view === 'edit' && c.photo_path ? `<button class="btn secondary slim editdims" data-id="${c.id}">Measurements</button>` : ''}
       <button class="btn secondary slim evidencebtn" data-id="${c.id}">Photo History</button>
       <div class="photo-notes-panel"><div class="photo-notes-heading">Notes</div><div class="photo-notes-box">${esc(c.note || 'No notes added.')}</div></div>
+      ${state.view === 'organize' ? `<button class="btn secondary slim organize-delete-capture" data-delete-organize="${c.id}" type="button">Delete Photo Note</button>` : ''}
     </div>`;
   };
   return `<div class="card">
@@ -2219,7 +2221,28 @@ function wireCards(cards, rows) {
   cards.querySelectorAll('.cropbtn').forEach(b => b.onclick = () => { const c = rows.find(r => r.id === parseInt(b.getAttribute('data-id'), 10)); if (c) renderCropEditor(c); });
   cards.querySelectorAll('.evidencebtn').forEach(b=>b.onclick=()=>showEvidence(Number(b.dataset.id)));
   cards.querySelectorAll('.restorebtn').forEach(b => b.onclick = () => restoreOriginal(parseInt(b.getAttribute('data-id'), 10)));
+  cards.querySelectorAll('[data-delete-organize]').forEach(button => button.onclick = () => deleteOrganizePhotoNote(button.dataset.deleteOrganize, button));
   cards.querySelectorAll('.concrete-ticket-file').forEach(input=>input.onchange=()=>attachConcreteTicket(Number(input.dataset.id),input));
+}
+
+async function deleteOrganizePhotoNote(id, button) {
+  if (!id || !confirm(uiT(`Delete this Photo Note? This can't be undone.`))) return;
+  button.disabled = true;
+  button.textContent = 'Deleting...';
+  try {
+    const r = await api('/api/captures/delete', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: [id] }),
+    });
+    if (!r.ok) throw new Error('delete failed');
+    state.selectedIds.delete(String(id));
+    toast('Photo Note deleted');
+    runSmartSearch();
+  } catch (e) {
+    button.disabled = false;
+    button.textContent = 'Delete Photo Note';
+    toast('Delete failed');
+  }
 }
 
 async function attachConcreteTicket(id,input){const file=input.files&&input.files[0];if(!file)return;const label=input.closest('label'),old=label.firstChild.textContent;label.firstChild.textContent='Uploading...';input.disabled=true;try{const fd=new FormData();fd.append('photo',file);const r=await api(`/api/concrete/captures/${id}/ticket`,{method:'POST',body:fd});if(!r.ok)throw new Error();toast('Batch ticket photo linked');if(state.view==='concrete-report')loadConcreteReport();else loadCards((document.getElementById('filter')||{}).value||'');}catch(e){toast('Batch ticket photo could not be linked');input.disabled=false;label.firstChild.textContent=old;}}

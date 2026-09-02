@@ -274,6 +274,8 @@ textarea { min-height: 96px; resize: vertical; }
 @media (max-width:700px) { .before-after-preview { grid-template-columns:1fr; } }
 .workflow-organize .rotaterow, .workflow-organize .stampbtn, .workflow-organize .cropbtn,
 .workflow-organize .restorebtn, .workflow-organize .editnote, .workflow-organize .defectrow { display:none !important; }
+.organize-delete-capture { width:auto; margin-top:12px; border-color:#b3261e; color:#b3261e; }
+.organize-delete-capture:disabled { opacity:.55; cursor:wait; }
 .delivery-actions { display:grid; grid-template-columns:minmax(0,1fr) minmax(92px,.75fr) minmax(0,1fr); gap:8px; align-items:stretch; }
 .send-selection-bar { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px 12px; margin:4px 0 10px; max-width:100%; }
 .send-selection-bar .status { flex:1 1 320px; min-width:0; margin:0; }
