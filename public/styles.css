@@ -281,6 +281,8 @@ textarea { min-height: 96px; resize: vertical; }
 .delivery-actions .btn, .delivery-grid .btn { margin-top:0; }
 .delivery-actions .btn { padding:10px 8px; font-size:15px; }
 .delivery-actions select { min-width:0; height:100%; padding:8px; font-size:15px; font-weight:700; }
+.share-action-status { min-height:22px; margin:8px 0 12px; color:#174f91; font-size:14px; font-weight:700; line-height:1.35; }
+.share-action-status.error { color:#a61b16; }
 .delivery-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin-top:10px; }
 .send-capture-row { display:grid; grid-template-columns:24px 72px 1fr; gap:10px; align-items:center; padding:10px; margin:0; border:1px solid #000; border-radius:10px; background:#fff; text-transform:none; letter-spacing:0; font-size:14px; cursor:pointer; }
 .send-capture-row input { width:20px; height:20px; }

@@ -2770,6 +2770,28 @@ async function renderImageStamped(localPath, imgRes, imgFmt, c) {
   return r;
 }
 
+// Owner-scoped, share-sized copies avoid asking a phone to load and hand off
+// many multi-megabyte originals at once. Stored originals are never changed.
+app.get('/api/captures/:id/share-photo', requireAuth, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'invalid capture' });
+    const capture = (await pool.query(`SELECT * FROM captures WHERE id=$1 AND user_id=$2 AND photo_path IS NOT NULL`, [id, req.user.id])).rows[0];
+    if (!capture) return res.status(404).json({ error: 'photo not found' });
+    const local = localPhoto(capture.photo_path);
+    if (!local) return res.status(404).json({ error: 'photo file not found' });
+    const rendered = await renderImageStamped(local, 'web', 'jpeg', capture);
+    if (!rendered) return res.status(500).json({ error: 'photo could not be prepared' });
+    res.setHeader('Content-Type', 'image/jpeg');
+    res.setHeader('Content-Disposition', `inline; filename="photo-${id}.jpg"`);
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.send(rendered.buffer);
+  } catch (err) {
+    console.error('[share.photo]', err);
+    if (!res.headersSent) res.status(500).json({ error: 'photo could not be prepared' });
+  }
+});
+
 app.get('/api/export/pdf', requireAuth, async (req, res) => {
   try {
     const { imgRes, imgFmt, heading, desc, fnameBase, rows, scope } = await resolveExport(req);

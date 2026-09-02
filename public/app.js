@@ -2940,6 +2940,7 @@ async function renderSend() {
       <select id="sendformat" aria-label="Download format"><option value="pdf">PDF</option><option value="docx">Word</option><option value="bundle">Markdown + Photos</option></select>
       <button class="btn secondary" id="senddocument">Download</button>
     </div>
+    <div class="share-action-status" id="shareActionStatus" role="status" aria-live="polite"></div>
     <div id="sendCaptures" class="send-capture-list"></div>
     <div class="formhead" style="margin-top:30px">Customer Approval Package</div>
     <p class="status">Create a private, expiring review link for the selected photos. The customer can approve them or request changes.</p>
@@ -3077,21 +3078,79 @@ async function deliverExport(action, groupId, selectedOnly) {
 
 async function shareSelectedPhotos() {
   const rows = (window._sendCaptures || []).filter(c => state.selectedIds.has(String(c.id)));
-  if (!rows.length) { toast('Select at least one capture'); return; }
-  try {
-    const files = [];
-    for (const c of rows) {
-      if (!c.photo_path) continue;
-      const r = await fetch(c.photo_path, { credentials: 'same-origin' });
-      if (r.ok) { const b = await r.blob(); files.push(new File([b], `photo-${c.id}.${b.type.includes('png') ? 'png' : 'jpg'}`, { type: b.type || 'image/jpeg' })); }
+  const photoRows = rows.filter(c => c.photo_path);
+  const status = document.getElementById('shareActionStatus');
+  const button = document.getElementById('sharephotos');
+  const setStatus = (message, isError = false) => {
+    if (!status) return;
+    status.textContent = message;
+    status.classList.toggle('error', isError);
+  };
+  if (!rows.length) { setStatus('Select at least one capture first.', true); return; }
+  if (!photoRows.length) { setStatus('The current selection does not contain a photo.', true); return; }
+  if (photoRows.length > 20) {
+    setStatus(`${photoRows.length} photos is too many for one phone share. Select 20 or fewer, or use Download with Markdown + Photos.`, true);
+    return;
+  }
+  const signature = photoRows.map(c => c.id).join(',');
+  // If preparation outlasted the browser's permitted user gesture, the next
+  // tap reaches navigator.share immediately with the already-prepared files.
+  if (preparedPhotoShare.signature === signature && preparedPhotoShare.files.length) {
+    try {
+      setStatus(`Opening the share menu for ${preparedPhotoShare.files.length} photo${preparedPhotoShare.files.length === 1 ? '' : 's'}...`);
+      await navigator.share({ title: 'Photo Notes', text: preparedPhotoShare.text, files: preparedPhotoShare.files });
+      setStatus('Photos handed to the share menu.');
+    } catch (e) {
+      if (e && e.name === 'AbortError') setStatus('Sharing was canceled. Your photos remain selected.');
+      else setStatus('The share menu did not open. Tap Share Photos once more, or select fewer photos.', true);
     }
+    return;
+  }
+  if (!navigator.share) { setStatus('This browser cannot share photo files. Use Download instead.', true); return; }
+  try {
+    button.disabled = true;
+    button.textContent = 'Preparing...';
+    setStatus(`Preparing 0 of ${photoRows.length} share-sized photos...`);
+    const files = new Array(photoRows.length);
+    let next = 0, complete = 0;
+    const worker = async () => {
+      while (next < photoRows.length) {
+        const index = next++;
+        const c = photoRows[index];
+        const r = await api(`/api/captures/${c.id}/share-photo`);
+        if (!r.ok) throw new Error(`Photo ${index + 1} could not be prepared`);
+        const blob = await r.blob();
+        files[index] = new File([blob], `photo-${c.id}.jpg`, { type: 'image/jpeg' });
+        complete += 1;
+        setStatus(`Preparing ${complete} of ${photoRows.length} share-sized photos...`);
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(4, photoRows.length) }, worker));
     // A shared photo starts with the job-site address, followed by its note.
     // Topics are organizational metadata and do not belong in the message.
     const text = rows.map(c => [shareAddress(c.address), c.note].filter(Boolean).join('\n')).join('\n\n');
-    if (navigator.share && files.length && (!navigator.canShare || navigator.canShare({ files }))) { await navigator.share({ title: 'Photo Notes', text, files }); return; }
-    await deliverExport('share', null, true);
-  } catch (e) { if (!(e && e.name === 'AbortError')) toast('Could not share photos'); }
+    if (navigator.canShare && !navigator.canShare({ files })) {
+      setStatus('This phone cannot share these photos together. Select fewer photos, or use Download.', true);
+      return;
+    }
+    preparedPhotoShare = { signature, files, text };
+    setStatus('Photos are ready. Opening the share menu...');
+    try {
+      await navigator.share({ title: 'Photo Notes', text, files });
+      setStatus('Photos handed to the share menu.');
+    } catch (e) {
+      if (e && e.name === 'AbortError') setStatus('Sharing was canceled. Your photos remain selected.');
+      else setStatus('Photos are ready. Tap Share Photos again to open the share menu.', true);
+    }
+  } catch (e) {
+    setStatus(e && e.message ? e.message : 'The photos could not be prepared. Try a smaller selection.', true);
+  } finally {
+    button.disabled = false;
+    button.textContent = 'Share Photos';
+  }
 }
+
+let preparedPhotoShare = { signature: '', files: [], text: '' };
 
 // ---- Create (ordered documents, stored as groups) ----
 async function renderGroups() {

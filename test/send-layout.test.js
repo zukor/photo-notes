@@ -5,6 +5,7 @@ const path=require('node:path');
 const root=path.join(__dirname,'..');
 const app=fs.readFileSync(path.join(root,'public','app.js'),'utf8');
 const css=fs.readFileSync(path.join(root,'public','styles.css'),'utf8');
+const server=fs.readFileSync(path.join(root,'server.js'),'utf8');
 const manifest=fs.readFileSync(path.join(root,'public','manifest.json'),'utf8');
 
 test('app shell and installed-app launch background use pure white',()=>{
@@ -28,4 +29,17 @@ test('Send selection supports select all and clear all actions',()=>{
   assert.match(app,/function selectAllSendCaptures\(\) \{[\s\S]*?window\._sendCaptures[\s\S]*?state\.selectedIds\.add/);
   assert.match(app,/function clearSendSelection\(\) \{[\s\S]*?state\.selectedIds\.clear\(\);[\s\S]*?querySelectorAll\('\.sendchk'\)/);
   assert.match(css,/\.send-selection-bar \{/);
+});
+
+test('photo sharing is sized, bounded, visible, and recoverable',()=>{
+  assert.match(app,/id="shareActionStatus" role="status" aria-live="polite"/);
+  assert.match(app,/photoRows\.length > 20/);
+  assert.match(app,/Preparing \$\{complete\} of \$\{photoRows\.length\} share-sized photos/);
+  assert.match(app,/preparedPhotoShare\.signature === signature/);
+  assert.match(app,/Tap Share Photos again to open the share menu/);
+  assert.match(app,/api\/captures\/\$\{c\.id\}\/share-photo/);
+  assert.match(css,/\.share-action-status\.error/);
+  assert.match(server,/app\.get\('\/api\/captures\/:id\/share-photo', requireAuth/);
+  assert.match(server,/WHERE id=\$1 AND user_id=\$2 AND photo_path IS NOT NULL/);
+  assert.match(server,/renderImageStamped\(local, 'web', 'jpeg', capture\)/);
 });
