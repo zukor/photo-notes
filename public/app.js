@@ -2968,10 +2968,12 @@ async function renderSend() {
     </div>
     <div class="share-action-status" id="shareActionStatus" role="status" aria-live="polite"></div>
     <div id="sendCaptures" class="send-capture-list"></div>
-    <div class="formhead" style="margin-top:30px">Customer Approval Package</div>
-    <p class="status">Create a private, expiring review link for the selected photos. The customer can approve them or request changes.</p>
-    <input id="approvalTitle" placeholder="Review title"><textarea id="approvalMessage" placeholder="Message to customer (optional)"></textarea>
-    <button class="btn" id="createApproval">Create Customer Review Link</button><div id="approvalResult"></div><div id="approvalList"></div>
+    <section class="send-feature-panel" aria-labelledby="customerApprovalHeading">
+      <div class="send-feature-heading" id="customerApprovalHeading">Customer Approval Package</div>
+      <p class="status">Create a private, expiring review link for the selected photos. The customer can approve them or request changes.</p>
+      <input id="approvalTitle" placeholder="Review title"><textarea id="approvalMessage" placeholder="Message to customer (optional)"></textarea>
+      <button class="btn slim send-feature-action" id="createApproval">Create Customer Review Link</button><div id="approvalResult"></div><div id="approvalList"></div>
+    </section>
     <div class="formhead" style="margin-top:30px">Send a Document</div>
     <div id="sendDocs"><p class="status">Loading documents...</p></div>
     <div id="billingOffers"></div>`;
@@ -2985,7 +2987,7 @@ async function renderSend() {
   loadBillingOffers();
 }
 
-async function loadBillingOffers(){const box=document.getElementById('billingOffers');if(!box)return;try{const r=await api('/api/billing/config');if(!r.ok)return;const d=await r.json(),offers=Object.entries(d.offers||{});if(!d.checkout_enabled||!offers.length){box.innerHTML='';return;}box.innerHTML=`<div class="formhead" style="margin-top:30px">Payments</div><p class="status">Pay securely on Stripe’s hosted checkout page.</p>${offers.map(([slug,o])=>`<div class="card delivery-card"><div><strong>${esc(o.label)}</strong><div class="meta">Provided by ${esc(o.dba)}</div></div><button class="btn slim billing-checkout" data-offer="${esc(slug)}">Pay with Stripe</button></div>`).join('')}`;box.querySelectorAll('.billing-checkout').forEach(button=>button.onclick=()=>startStripeCheckout(button));}catch(e){box.innerHTML='';}}
+async function loadBillingOffers(){const box=document.getElementById('billingOffers');if(!box)return;try{const r=await api('/api/billing/config');if(!r.ok)return;const d=await r.json(),offers=Object.entries(d.offers||{});if(!d.checkout_enabled||!offers.length){box.innerHTML='';return;}box.innerHTML=`<section class="send-feature-panel" aria-labelledby="paymentsHeading"><div class="send-feature-heading" id="paymentsHeading">Payments</div><p class="status">Pay securely on Stripe’s hosted checkout page.</p>${offers.map(([slug,o])=>`<div class="card delivery-card"><div><strong>${esc(o.label)}</strong><div class="meta">Provided by ${esc(o.dba)}</div></div><button class="btn slim billing-checkout" data-offer="${esc(slug)}">Pay with Stripe</button></div>`).join('')}</section>`;box.querySelectorAll('.billing-checkout').forEach(button=>button.onclick=()=>startStripeCheckout(button));}catch(e){box.innerHTML='';}}
 async function startStripeCheckout(button){button.disabled=true;button.textContent='Opening Stripe...';try{const r=await api('/api/billing/checkout',{method:'POST',headers:{'Content-Type':'application/json','Idempotency-Key':`checkout-${Date.now()}-${crypto.randomUUID()}`},body:JSON.stringify({offer:button.dataset.offer,quantity:1})}),d=await r.json();if(!r.ok||!d.url)throw new Error();location.assign(d.url);}catch(e){toast('Stripe checkout could not be opened');button.disabled=false;button.textContent='Pay with Stripe';}}
 
 async function createApprovalPackage(){const ids=Array.from(state.selectedIds).map(Number);if(!ids.length){toast('Select at least one capture');return;}const title=document.getElementById('approvalTitle').value.trim()||'Photo Review',message=document.getElementById('approvalMessage').value.trim();const r=await api('/api/approvals',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids,title,message})});const d=await r.json().catch(()=>({}));if(!r.ok){toast(d.error||'Review link could not be created');return;}const box=document.getElementById('approvalResult');box.innerHTML=`<div class="card"><strong>Customer review link ready</strong><input id="approvalUrl" readonly value="${esc(d.url)}"><button class="btn secondary slim" id="copyApproval">Copy Link</button><div class="meta">Expires in 14 days</div></div>`;document.getElementById('copyApproval').onclick=async()=>{try{await navigator.clipboard.writeText(d.url);toast('Link copied');}catch(e){document.getElementById('approvalUrl').select();}};loadApprovalPackages();}

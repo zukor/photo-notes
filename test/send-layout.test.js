@@ -34,6 +34,16 @@ test('Send selection supports select all and clear all actions',()=>{
   assert.match(css,/\.send-selection-actions \.btn \{[^}]*flex:1 1 0;[^}]*min-width:0/);
 });
 
+test('Customer approval and Stripe payment actions are grouped and compact',()=>{
+  assert.match(app,/class="send-feature-panel" aria-labelledby="customerApprovalHeading"/);
+  assert.match(app,/class="send-feature-heading" id="customerApprovalHeading">Customer Approval Package/);
+  assert.match(app,/class="btn slim send-feature-action" id="createApproval">Create Customer Review Link/);
+  assert.match(app,/aria-labelledby="paymentsHeading"/);
+  assert.match(app,/class="btn slim billing-checkout"[^>]*>Pay with Stripe/);
+  assert.match(css,/\.send-feature-panel \{[^}]*border:2px solid #2455d9/);
+  assert.match(css,/\.send-feature-panel \.send-feature-action, \.send-feature-panel \.billing-checkout \{[^}]*width:auto/);
+});
+
 test('Send cards use identifiable previews and allow a confirmed Photo Note deletion',()=>{
   assert.match(app,/class="send-capture-details"/);
   assert.match(app,/c\.photo_title \|\| 'Untitled Photo'/);

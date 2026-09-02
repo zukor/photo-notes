@@ -286,6 +286,12 @@ textarea { min-height: 96px; resize: vertical; }
 .delivery-actions .btn, .delivery-grid .btn { margin-top:0; }
 .delivery-actions .btn { padding:10px 8px; font-size:15px; }
 .delivery-actions select { min-width:0; height:100%; padding:8px; font-size:15px; font-weight:700; }
+.send-feature-panel { margin-top:30px; padding:18px; border:2px solid #2455d9; border-radius:12px; background:#fff; }
+.send-feature-heading { margin:0 0 6px; color:#000; font-size:20px; font-weight:800; line-height:1.25; }
+.send-feature-panel .status { margin:0 0 12px; }
+.send-feature-panel .send-feature-action, .send-feature-panel .billing-checkout { display:inline-flex; width:auto; max-width:100%; align-items:center; justify-content:center; padding-left:20px; padding-right:20px; }
+.send-feature-panel .delivery-card { display:flex; align-items:center; justify-content:space-between; gap:16px; margin:12px 0 0; }
+.send-feature-panel .delivery-card .billing-checkout { flex:0 0 auto; margin:0; }
 .share-action-status { min-height:22px; margin:8px 0 12px; color:#174f91; font-size:14px; font-weight:700; line-height:1.35; }
 .share-action-status.error { color:#a61b16; }
 .delivery-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin-top:10px; }
@@ -466,6 +472,8 @@ input.dimfield.suggested {
   .send-selection-actions { width:100%; }
   .send-selection-actions .btn { flex:1 1 0; min-width:0; }
   .delivery-grid { grid-template-columns:1fr 1fr; }
+  .send-feature-panel { padding:14px; }
+  .send-feature-panel .delivery-card { align-items:flex-start; flex-direction:column; }
   .map-filter-row { flex-direction:column; gap:8px; align-items:stretch; }
   .organize-form-grid { grid-template-columns:1fr; }
   .organize-workspace-section { padding:14px; margin:12px 0; }
