@@ -277,6 +277,7 @@ textarea { min-height: 96px; resize: vertical; }
 .send-selection-bar { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:4px 0 10px; }
 .send-selection-bar .status { margin:0; }
 .send-selection-bar .btn { flex:none; margin:0; }
+.send-selection-actions { display:flex; flex:none; gap:8px; }
 .delivery-actions .btn, .delivery-grid .btn { margin-top:0; }
 .delivery-actions .btn { padding:10px 8px; font-size:15px; }
 .delivery-actions select { min-width:0; height:100%; padding:8px; font-size:15px; font-weight:700; }

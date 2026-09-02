@@ -2930,7 +2930,10 @@ async function renderSend() {
     ${isMacClient() ? `<div class="share-requirement"><strong>Texting an Android phone from this Mac?</strong><span>Your iPhone must have Settings → Apps → Messages → Text Message Forwarding enabled for this Mac, plus MMS or RCS messaging.</span></div>` : ''}
     <div class="send-selection-bar">
       <div class="status" id="sendSelection">Loading captures...</div>
-      <button class="btn secondary slim" id="clearSendSelection" type="button">Clear All</button>
+      <div class="send-selection-actions">
+        <button class="btn secondary slim" id="selectAllSendCaptures" type="button">Select All</button>
+        <button class="btn secondary slim" id="clearSendSelection" type="button">Clear All</button>
+      </div>
     </div>
     <div class="delivery-actions">
       <button class="btn" id="sharephotos">Share Photos</button>
@@ -2947,6 +2950,7 @@ async function renderSend() {
     <div id="billingOffers"></div>`;
   document.getElementById('sharephotos').onclick = shareSelectedPhotos;
   document.getElementById('senddocument').onclick = () => deliverExport(document.getElementById('sendformat').value, null, false);
+  document.getElementById('selectAllSendCaptures').onclick = selectAllSendCaptures;
   document.getElementById('clearSendSelection').onclick = clearSendSelection;
   document.getElementById('createApproval').onclick=createApprovalPackage;
   loadSendCenter();
@@ -2997,6 +3001,18 @@ function updateSendCount() {
   if (s) s.textContent = n ? `${n} capture${n === 1 ? '' : 's'} selected. Change the selection below or return to Organize.` : 'Select one or more captures below, or return to Organize.';
   const clear = document.getElementById('clearSendSelection');
   if (clear) clear.disabled = !n;
+  const selectAll = document.getElementById('selectAllSendCaptures');
+  const available = (window._sendCaptures || []).filter(capture => capture && capture.id != null);
+  if (selectAll) selectAll.disabled = !available.length || available.every(capture => state.selectedIds.has(String(capture.id)));
+}
+
+function selectAllSendCaptures() {
+  (window._sendCaptures || []).forEach(capture => {
+    if (capture && capture.id != null) state.selectedIds.add(String(capture.id));
+  });
+  document.querySelectorAll('.sendchk').forEach(checkbox => { checkbox.checked = true; });
+  updateSendCount();
+  toast('All captures selected');
 }
 
 function clearSendSelection() {

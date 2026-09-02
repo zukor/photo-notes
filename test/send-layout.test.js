@@ -22,8 +22,10 @@ test('Send actions distinguish original-photo sharing from document downloads',(
   assert.match(css,/\.delivery-actions \{[^}]*grid-template-columns:minmax\(0,1fr\) minmax\(92px,\.75fr\) minmax\(0,1fr\)/);
 });
 
-test('Send selection can be cleared in one action',()=>{
+test('Send selection supports select all and clear all actions',()=>{
+  assert.match(app,/id="selectAllSendCaptures"[^>]*>Select All<\/button>/);
   assert.match(app,/id="clearSendSelection"[^>]*>Clear All<\/button>/);
+  assert.match(app,/function selectAllSendCaptures\(\) \{[\s\S]*?window\._sendCaptures[\s\S]*?state\.selectedIds\.add/);
   assert.match(app,/function clearSendSelection\(\) \{[\s\S]*?state\.selectedIds\.clear\(\);[\s\S]*?querySelectorAll\('\.sendchk'\)/);
   assert.match(css,/\.send-selection-bar \{/);
 });
