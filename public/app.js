@@ -2925,14 +2925,17 @@ async function renderSend() {
   const body = document.getElementById('body');
   body.className = 'workflow-send';
   body.innerHTML = `
-    <div class="workflow-intro"><strong>Send your finished work</strong><span>Share photos directly, download a document, email it, upload it, or print it.</span></div>
-    <div class="formhead">Send Selected Captures</div>
+    <div class="workflow-intro"><strong>Send your finished work</strong><span>Share the original photos, or download a PDF, Word document, or AI-ready package.</span></div>
+    <div class="formhead">Share or Download Selected Captures</div>
     ${isMacClient() ? `<div class="share-requirement"><strong>Texting an Android phone from this Mac?</strong><span>Your iPhone must have Settings → Apps → Messages → Text Message Forwarding enabled for this Mac, plus MMS or RCS messaging.</span></div>` : ''}
-    <div class="status" id="sendSelection">Loading captures...</div>
+    <div class="send-selection-bar">
+      <div class="status" id="sendSelection">Loading captures...</div>
+      <button class="btn secondary slim" id="clearSendSelection" type="button">Clear All</button>
+    </div>
     <div class="delivery-actions">
-      <button class="btn" id="sharephotos">Share</button>
-      <select id="sendformat" aria-label="Document format"><option value="pdf">PDF</option><option value="docx">Word</option></select>
-      <button class="btn secondary" id="senddocument">Send</button>
+      <button class="btn" id="sharephotos">Share Photos</button>
+      <select id="sendformat" aria-label="Download format"><option value="pdf">PDF</option><option value="docx">Word</option><option value="bundle">Markdown + Photos</option></select>
+      <button class="btn secondary" id="senddocument">Download</button>
     </div>
     <div id="sendCaptures" class="send-capture-list"></div>
     <div class="formhead" style="margin-top:30px">Customer Approval Package</div>
@@ -2943,7 +2946,8 @@ async function renderSend() {
     <div id="sendDocs"><p class="status">Loading documents...</p></div>
     <div id="billingOffers"></div>`;
   document.getElementById('sharephotos').onclick = shareSelectedPhotos;
-  document.getElementById('senddocument').onclick = () => deliverExport(document.getElementById('sendformat').value, null, true);
+  document.getElementById('senddocument').onclick = () => deliverExport(document.getElementById('sendformat').value, null, false);
+  document.getElementById('clearSendSelection').onclick = clearSendSelection;
   document.getElementById('createApproval').onclick=createApprovalPackage;
   loadSendCenter();
   loadApprovalPackages();
@@ -2991,6 +2995,15 @@ function updateSendCount() {
   const n = state.selectedIds.size;
   const s = document.getElementById('sendSelection');
   if (s) s.textContent = n ? `${n} capture${n === 1 ? '' : 's'} selected. Change the selection below or return to Organize.` : 'Select one or more captures below, or return to Organize.';
+  const clear = document.getElementById('clearSendSelection');
+  if (clear) clear.disabled = !n;
+}
+
+function clearSendSelection() {
+  state.selectedIds.clear();
+  document.querySelectorAll('.sendchk').forEach(checkbox => { checkbox.checked = false; });
+  updateSendCount();
+  toast('Selection cleared');
 }
 
 function downloadBlob(blob, name) {

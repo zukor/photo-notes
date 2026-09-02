@@ -13,11 +13,17 @@ test('app shell and installed-app launch background use pure white',()=>{
   assert.match(app,/backgroundColor:'#ffffff'/);
 });
 
-test('Send actions use one compact row with a document-format selector',()=>{
-  assert.match(app,/id="sharephotos">Share<\/button>/);
-  assert.match(app,/id="sendformat"[^>]*><option value="pdf">PDF<\/option><option value="docx">Word<\/option>/);
-  assert.match(app,/id="senddocument">Send<\/button>/);
-  assert.doesNotMatch(app,/Share Photos|Send as PDF|Send as Word/);
-  assert.match(app,/deliverExport\(document\.getElementById\('sendformat'\)\.value, null, true\)/);
+test('Send actions distinguish original-photo sharing from document downloads',()=>{
+  assert.match(app,/id="sharephotos">Share Photos<\/button>/);
+  assert.match(app,/id="sendformat"[^>]*><option value="pdf">PDF<\/option><option value="docx">Word<\/option><option value="bundle">Markdown \+ Photos<\/option>/);
+  assert.match(app,/id="senddocument">Download<\/button>/);
+  assert.doesNotMatch(app,/Send as PDF|Send as Word/);
+  assert.match(app,/deliverExport\(document\.getElementById\('sendformat'\)\.value, null, false\)/);
   assert.match(css,/\.delivery-actions \{[^}]*grid-template-columns:minmax\(0,1fr\) minmax\(92px,\.75fr\) minmax\(0,1fr\)/);
+});
+
+test('Send selection can be cleared in one action',()=>{
+  assert.match(app,/id="clearSendSelection"[^>]*>Clear All<\/button>/);
+  assert.match(app,/function clearSendSelection\(\) \{[\s\S]*?state\.selectedIds\.clear\(\);[\s\S]*?querySelectorAll\('\.sendchk'\)/);
+  assert.match(css,/\.send-selection-bar \{/);
 });
