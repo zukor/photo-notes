@@ -20,7 +20,7 @@ test('Pro-only analytics and reports require a Pro plan on the server', () => {
   const guards = server.match(/if \(await currentPlan\(req\.user\.id\) !== 'pro'\) return res\.status\(403\)\.json\(\{ error: 'pro only' \}\);/g) || [];
   assert.ok(guards.length >= 1, 'expected server-side Pro plan guards');
   assert.match(app, /isProClient\(\) && c\.defect_type/);
-  assert.match(app, /isProClient\(\) \? `<label style="margin-top:16px">Proposal Report/);
+  assert.match(server, /app\.get\('\/api\/export\/proposal', requireAuth,[\s\S]*?currentPlan\(req\.user\.id\) !== 'pro'/);
 });
 
 test('edition switching is never exposed to ordinary Basic testers', () => {

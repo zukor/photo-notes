@@ -3317,7 +3317,7 @@ async function renderGroupDetail(id) {
   }
   body.innerHTML = `
     <button class="backlink" id="gback">‹ All Documents</button>
-    <div class="workflow-intro"><strong>Build Your Document</strong><span>Review the title, arrange the photos and captions, then download the finished document when it looks right.</span></div>
+    <div class="workflow-intro"><strong>Build Your Document</strong><span>Review the title, arrange the photos and captions, and remove anything you do not want included.</span></div>
     <div class="formhead">1. Document Details</div>
     <label>Title</label>
     <div id="titleview"></div>
@@ -3332,23 +3332,6 @@ async function renderGroupDetail(id) {
     <div id="gitems" style="margin-top:12px"></div>
     <button class="btn secondary slim" id="greverse" style="margin-top:10px">Reverse Photo Order</button>
 
-    <div class="formhead" style="margin-top:28px">3. Download Finished Document</div>
-    <label style="margin-top:8px">Formats</label>
-    <div class="status">Choose one or more file types.</div>
-    <div class="pill-group" id="gfmts">
-      <div class="pill" data-fmt="pdf">PDF</div>
-      <div class="pill" data-fmt="docx">Word</div>
-      <div class="pill" data-fmt="bundle">For AI (.zip)</div>
-    </div>
-    ${qualityBlock('gimgres', 'gimgfmt')}
-    <button class="btn" id="gexport">Download Selected Formats</button>
-    <button class="btn secondary slim" id="continueSend">More Sharing Options</button>
-    ${isProClient() ? `<label style="margin-top:16px">Proposal Report</label>
-    <div class="row">
-      <button class="btn secondary slim" id="proppdf">Proposal PDF</button>
-      <button class="btn secondary slim" id="propdocx">Proposal Word</button>
-    </div>` : ''}
-
     ${featureOn('extra_work') ? `<label style="margin-top:16px">Extra Work Records</label>
     <div class="status">Document added scope, unexpected conditions, or customer-requested work.</div>
     <button class="btn slim" id="ewrNew" style="margin-top:6px">+ Extra Work Record</button>
@@ -3357,11 +3340,6 @@ async function renderGroupDetail(id) {
     `;
   document.getElementById('gback').onclick = () => { state.groupId = null; renderGroups(); };
   document.getElementById('greverse').onclick = reverseItems;
-  document.getElementById('gexport').onclick = groupExport;
-  document.getElementById('continueSend').onclick = () => { state.view = 'send'; renderApp(); };
-  document.getElementById('gfmts').onclick = (e) => { const p = e.target.closest('.pill'); if (p) p.classList.toggle('on'); };
-  const pp = document.getElementById('proppdf'); if (pp) pp.onclick = () => exportProposal('pdf');
-  const pw = document.getElementById('propdocx'); if (pw) pw.onclick = () => exportProposal('docx');
   const gm = document.getElementById('gotoMap'); if (gm) gm.onclick = () => { state.view = 'map'; state.groupId = null; renderApp(); };
   const en = document.getElementById('ewrNew'); if (en) en.onclick = () => { state.ewrId = 'new'; renderGroups(); };
   renderTitleView();
