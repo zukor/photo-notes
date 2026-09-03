@@ -23,6 +23,15 @@ test('small Android widths keep header logo, tabs, and forms inside the viewport
   assert.match(css, /\.workflow-organize #cards[\s\S]*grid-template-columns:1fr/);
 });
 
+test('workflow navigation uses keyboard-accessible buttons with current-page state', () => {
+  for (const id of ['Capture', 'Organize', 'Edit', 'Create', 'Send']) {
+    assert.match(app, new RegExp(`<button type="button" class="tab \\$\\{[^}]+\\}" id="tab${id}" aria-current=`));
+  }
+  assert.match(app, /<nav class="tabs workflow-tabs/);
+  assert.match(app, /aria-current="\$\{[^}]+\?'page':'false'\}"/);
+  assert.match(css, /\.tab:focus-visible \{ outline:3px solid #2455d9/);
+});
+
 test('the wide-browser header enlarges its brands while phone sizes stay compact', () => {
   assert.match(css, /\.app-header \{[^}]*max-width:980px/);
   assert.match(css, /\.app-header \.zukor-corner-logo \{[^}]*width:160px; min-width:160px;[^}]*height:auto !important; aspect-ratio:448 \/ 72/);

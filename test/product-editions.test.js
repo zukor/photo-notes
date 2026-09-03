@@ -18,14 +18,14 @@ test('only administrators see the compact edition switcher',()=>{
 });
 
 test('every edition uses Organize for the shared workflow tab',()=>{
-  assert.match(app,/id="tabOrganize">Organize<\/div>/);
-  assert.doesNotMatch(app,/id="tabOrganize">\$\{isHoaClient\(\)\?'Visits':isConcreteClient\(\)\?'Projects':'Organize'\}<\/div>/);
+  assert.match(app,/id="tabOrganize"[^>]*>Organize<\/button>/);
+  assert.doesNotMatch(app,/id="tabOrganize"[^>]*>\$\{isHoaClient\(\)\?'Visits':isConcreteClient\(\)\?'Projects':'Organize'\}<\/button>/);
 });
 
 test('Concrete keeps Create as the flexible document-building workflow',()=>{
-  assert.match(app,/id="tabCreate">\$\{isHoaClient\(\)\?'Inspections':'Create'\}<\/div>/);
+  assert.match(app,/id="tabCreate"[^>]*>\$\{isHoaClient\(\)\?'Inspections':'Create'\}<\/button>/);
   assert.match(app,/state\.view=isHoaClient\(\)\?'hoa-inspections':'create'/);
-  assert.doesNotMatch(app,/id="tabCreate">\$\{isHoaClient\(\)\?'Inspections':isConcreteClient\(\)\?'Reports':'Create'\}<\/div>/);
+  assert.doesNotMatch(app,/id="tabCreate"[^>]*>\$\{isHoaClient\(\)\?'Inspections':isConcreteClient\(\)\?'Reports':'Create'\}<\/button>/);
 });
 
 test('HOA Maintenance Pro uses its edition logo',()=>{

@@ -268,13 +268,13 @@ function renderApp() {
           </div>
         </div>
       </div>
-      ${isRoadIssuesClient()?'':`<div class="tabs workflow-tabs ${isHoaClient()?'hoa-tabs':isConcreteClient()?'concrete-tabs':''}" aria-label="Photo Notes workflow">
-        <div class="tab ${['capture','camera-tools','ticket','camera-reader','alignment'].includes(state.view)?'on':''}" id="tabCapture">Capture</div>
-        <div class="tab ${['organize','hoa-visits','hoa-visit'].includes(state.view)?'on':''}" id="tabOrganize">Organize</div>
-        <div class="tab ${['edit','hoa-assets','hoa-asset'].includes(state.view)?'on':''}" id="tabEdit">${isHoaClient()?'Assets':'Edit'}</div>
-        <div class="tab ${['create','hoa-inspections'].includes(state.view)?'on':''}" id="tabCreate">${isHoaClient()?'Inspections':'Create'}</div>
-        <div class="tab ${['send','hoa-maintenance'].includes(state.view)?'on':''}" id="tabSend">${isHoaClient()?'Records':'Send'}</div>
-      </div>`}
+      ${isRoadIssuesClient()?'':`<nav class="tabs workflow-tabs ${isHoaClient()?'hoa-tabs':isConcreteClient()?'concrete-tabs':''}" aria-label="Photo Notes workflow">
+        <button type="button" class="tab ${['capture','camera-tools','ticket','camera-reader','alignment'].includes(state.view)?'on':''}" id="tabCapture" aria-current="${['capture','camera-tools','ticket','camera-reader','alignment'].includes(state.view)?'page':'false'}">Capture</button>
+        <button type="button" class="tab ${['organize','hoa-visits','hoa-visit'].includes(state.view)?'on':''}" id="tabOrganize" aria-current="${['organize','hoa-visits','hoa-visit'].includes(state.view)?'page':'false'}">Organize</button>
+        <button type="button" class="tab ${['edit','hoa-assets','hoa-asset'].includes(state.view)?'on':''}" id="tabEdit" aria-current="${['edit','hoa-assets','hoa-asset'].includes(state.view)?'page':'false'}">${isHoaClient()?'Assets':'Edit'}</button>
+        <button type="button" class="tab ${['create','hoa-inspections'].includes(state.view)?'on':''}" id="tabCreate" aria-current="${['create','hoa-inspections'].includes(state.view)?'page':'false'}">${isHoaClient()?'Inspections':'Create'}</button>
+        <button type="button" class="tab ${['send','hoa-maintenance'].includes(state.view)?'on':''}" id="tabSend" aria-current="${['send','hoa-maintenance'].includes(state.view)?'page':'false'}">${isHoaClient()?'Records':'Send'}</button>
+      </nav>`}
       <div id="body"></div>
       <div class="footer">&copy; ${new Date().getFullYear()} Zukor AI. All Rights Reserved.</div>
     </div>
