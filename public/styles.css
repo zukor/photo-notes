@@ -147,7 +147,7 @@ textarea { min-height: 96px; resize: vertical; }
   display:grid; grid-template-columns:112px minmax(0,1fr) 30px; grid-template-rows:auto auto;
   width:100%; max-width:980px; align-items:center; column-gap:12px; row-gap:2px; margin:8px auto 5px;
 }
-.app-header .zukor-corner-logo { display:block; grid-column:1; grid-row:1; width:160px; min-width:160px; max-width:none; height:auto !important; aspect-ratio:448 / 72; object-fit:contain; object-position:left center; justify-self:start; margin:0; }
+.app-header .zukor-corner-logo { display:block; grid-column:1; grid-row:1; width:175px; min-width:175px; max-width:none; height:auto !important; aspect-ratio:448 / 72; object-fit:contain; object-position:left center; justify-self:start; margin:0; }
 .app-header .brandrow { grid-column:1 / -1; grid-row:2; min-width:0; width:min(500px,100%); justify-self:center; }
 .app-header .brandrow { --product-logo-height:60px; }
 .app-header .brandrow .brand { flex-basis:500px; width:500px; max-width:100%; height:var(--product-logo-height) !important; aspect-ratio:auto; margin:2px auto 3px; background-position:center; background-size:contain; background-repeat:no-repeat; }
@@ -162,8 +162,8 @@ textarea { min-height: 96px; resize: vertical; }
    Every product edition uses the HOA Maintenance Pro 750x90 reference box so
    switching editions never changes the header geometry. */
 @media (min-width: 701px) {
-  .app-header { grid-template-columns:160px minmax(0,1fr) auto; }
-  .app-header .zukor-corner-logo { width:160px; min-width:160px; }
+  .app-header { grid-template-columns:175px minmax(0,1fr) auto; }
+  .app-header .zukor-corner-logo { width:175px; min-width:175px; }
   .app-header .brandrow { width:min(750px,100%); }
   .app-header .brandrow { --product-logo-height:90px; }
   .app-header .brandrow .brand,
