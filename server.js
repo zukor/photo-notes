@@ -638,7 +638,7 @@ function normalizeGeocodedAddress(value) {
 // Reverse geocoders will otherwise "snap" a field location to the nearest
 // house, even when that house is hundreds of yards away. A street address is
 // only useful here when its mapped point is genuinely close to the photo.
-const MAX_ADDRESS_DISTANCE_METERS = 100;
+const MAX_ADDRESS_DISTANCE_METERS = 35;
 function geocodeCandidateIsNearby(lat, lng, candidateLat, candidateLng) {
   const distance = haversineMeters(lat, lng, candidateLat, candidateLng);
   return distance != null && distance <= MAX_ADDRESS_DISTANCE_METERS;

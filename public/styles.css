@@ -39,6 +39,11 @@ textarea { min-height: 96px; resize: vertical; }
 .workflow-create #gcreate { width:max-content; max-width:100%; padding-left:20px; padding-right:20px; }
 .row { display: flex; gap: 10px; }
 .row > * { flex: 1; }
+.capture-location-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
+.capture-location-actions .btn { width:auto; margin-top:0; }
+.row:has(#jobStatusBtn) { align-items:center; margin:8px 0 14px; }
+.row:has(#jobStatusBtn) .badge { flex:0 0 auto; display:inline-flex; align-items:center; justify-content:center; min-height:34px; margin:0; text-align:center; text-transform:capitalize; line-height:1; }
+.row:has(#jobStatusBtn) .btn { flex:0 1 auto; width:auto; margin:0; }
 .photo-box { border: 1px solid #000; border-radius: 10px; padding: 10px; text-align: center; background: #fff; }
 .photo-box img { max-width: 100%; border-radius: 6px; display: none; }
 .photo-location { margin:8px 0; color:#000; }

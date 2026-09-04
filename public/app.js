@@ -443,6 +443,29 @@ async function openIssueReporter() {
   if(fab){fab.disabled=false;fab.textContent=issueFabLabel();}
 }
 function closeIssueReporter(){issueDictationActive=false;if(issueDictationRestartTimer)clearTimeout(issueDictationRestartTimer);if(issueDictationWatchdog)clearTimeout(issueDictationWatchdog);issueDictationRestartTimer=null;issueDictationWatchdog=null;if(issueRecognizer){try{issueRecognizer.stop();}catch(e){}}const m=document.getElementById('issueModal');if(m)m.hidden=true;issueScreenshotBlob=null;issueRecognizer=null;}
+function cleanSpeechTranscript(value){
+  let words=String(value||'').trim().split(/\s+/).filter(Boolean);
+  // Android speech services occasionally return the same short fragment three
+  // or more times inside one result. Ordinary two-word emphasis is preserved.
+  for(let size=6;size>=1;size--){
+    const cleaned=[];
+    for(let i=0;i<words.length;){
+      const phrase=words.slice(i,i+size),key=phrase.map(w=>w.toLowerCase()).join('\u0000');
+      if(phrase.length<size){cleaned.push(...phrase);break;}
+      let repeats=1;
+      while(i+(repeats+1)*size<=words.length&&words.slice(i+repeats*size,i+(repeats+1)*size).map(w=>w.toLowerCase()).join('\u0000')===key)repeats++;
+      cleaned.push(...phrase);i+=size*(repeats>=3?repeats:1);
+    }
+    words=cleaned;
+  }
+  return words.join(' ');
+}
+function mergeSpeechTranscript(base,incoming){
+  const left=String(base||'').trim().split(/\s+/).filter(Boolean),right=cleanSpeechTranscript(incoming).split(/\s+/).filter(Boolean);
+  let overlap=0,max=Math.min(16,left.length,right.length);
+  for(let size=1;size<=max;size++)if(left.slice(-size).map(w=>w.toLowerCase()).join('\u0000')===right.slice(0,size).map(w=>w.toLowerCase()).join('\u0000'))overlap=size;
+  return cleanSpeechTranscript([...left,...right.slice(overlap)].join(' '));
+}
 async function toggleIssueDictation(){
   const ta=document.getElementById('issueDescription'),btn=document.getElementById('issueRecord'),SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   if(!SR){ta.focus();toast('Use the microphone key on your keyboard to dictate');return;}
@@ -457,9 +480,9 @@ function startIssueDictationSession(SR){
   if(!issueDictationActive)return;
   const ta=document.getElementById('issueDescription'),session=new SR(),ios=isIOS();issueRecognizer=session;session.lang=uiSpeechLanguage();session.continuous=!ios;session.interimResults=!ios;let sessionText='';
   if(issueDictationWatchdog)clearTimeout(issueDictationWatchdog);issueDictationWatchdog=setTimeout(()=>{if(issueRecognizer!==session||sessionText)return;issueDictationActive=false;try{session.stop();}catch(e){}const b=document.getElementById('issueRecord'),s=document.getElementById('issueStatus');if(b){b.textContent='Speak Description';b.classList.remove('on');}if(s)s.textContent='No speech was received. On iPhone, tap the text box and use the microphone on the keyboard, or try again.';},10000);
-  session.onresult=e=>{if(issueDictationWatchdog)clearTimeout(issueDictationWatchdog);issueDictationWatchdog=null;const parts=[];for(let i=0;i<e.results.length;i++)parts.push(e.results[i][0].transcript.trim());sessionText=parts.filter(Boolean).join(' ').trim();if(ta)ta.value=(issueDictationBase+sessionText).trimStart();};
+  session.onresult=e=>{if(issueDictationWatchdog)clearTimeout(issueDictationWatchdog);issueDictationWatchdog=null;const parts=[];for(let i=0;i<e.results.length;i++)parts.push(e.results[i][0].transcript.trim());sessionText=cleanSpeechTranscript(parts.filter(Boolean).join(' '));if(ta)ta.value=mergeSpeechTranscript(issueDictationBase,sessionText);};
   session.onerror=e=>{const err=e&&e.error;if(err==='not-allowed'||err==='service-not-allowed'){toast('Allow microphone access for this website, then try again');issueDictationActive=false;}else if(err==='audio-capture'||err==='network'){toast('Recording stopped. You can continue by typing or try again');issueDictationActive=false;}else if(err!=='aborted'&&err!=='no-speech'){toast('Recording stopped. You can continue by typing or try again');issueDictationActive=false;}};
-  session.onend=()=>{if(issueDictationWatchdog)clearTimeout(issueDictationWatchdog);issueDictationWatchdog=null;if(issueRecognizer===session)issueRecognizer=null;if(sessionText){issueDictationBase=(issueDictationBase+sessionText).trim();if(issueDictationBase)issueDictationBase+=' ';}if(issueDictationActive&&!ios){const b=document.getElementById('issueRecord');if(b)b.textContent='Listening... tap to stop';issueDictationRestartTimer=setTimeout(()=>startIssueDictationSession(SR),300);}else{issueDictationActive=false;const b=document.getElementById('issueRecord');if(b){b.textContent='Speak Description';b.classList.remove('on');}if(ios&&sessionText){const s=document.getElementById('issueStatus');if(s)s.textContent='Description added. Tap Speak Description to continue.';}}};
+  session.onend=()=>{if(issueDictationWatchdog)clearTimeout(issueDictationWatchdog);issueDictationWatchdog=null;if(issueRecognizer===session)issueRecognizer=null;if(sessionText){issueDictationBase=mergeSpeechTranscript(issueDictationBase,sessionText);if(issueDictationBase)issueDictationBase+=' ';}if(issueDictationActive&&!ios){const b=document.getElementById('issueRecord');if(b)b.textContent='Listening... tap to stop';issueDictationRestartTimer=setTimeout(()=>startIssueDictationSession(SR),300);}else{issueDictationActive=false;const b=document.getElementById('issueRecord');if(b){b.textContent='Speak Description';b.classList.remove('on');}if(ios&&sessionText){const s=document.getElementById('issueStatus');if(s)s.textContent='Description added. Tap Speak Description to continue.';}}};
   try{session.start();}catch(e){issueDictationActive=false;issueRecognizer=null;const b=document.getElementById('issueRecord');if(b){b.textContent='Speak Description';b.classList.remove('on');}}
 }
 async function submitIssueReport(){
@@ -492,7 +515,7 @@ function renderRoadIssueReport() {
     <input type="file" accept="image/*" capture="environment" id="photoCam" style="display:none">
     <div class="photo-box capture-preview" id="previewBox" style="display:none;margin-top:12px"><img id="preview" alt="Road issue photo preview" style="display:block"><div class="capture-preview-actions"><button type="button" class="btn secondary" id="retakePhoto">Retake Photo</button><button type="button" class="btn secondary" id="cancelPhoto">Cancel Photo</button></div></div>
     <div class="status" id="qualityStatus"></div>
-    <div id="locwrap" style="display:none"><label>GPS Coordinates</label><div class="status" id="gps"></div><label>Address or Geographic Area</label><div class="status" id="addr"></div><button type="button" class="btn secondary slim" id="retryLocation">Retry location</button></div>
+    <div id="locwrap" style="display:none"><label>GPS Coordinates</label><div class="status" id="gps"></div><label>Address or Geographic Area</label><div class="status" id="addr"></div><div class="capture-location-actions"><button type="button" class="btn secondary slim" id="retryLocation">Retry location</button><button type="button" class="btn secondary slim" id="correctAddress">Correct address</button></div></div>
     <button type="button" class="btn road-send" id="roadIssueSend">Send</button>
     <div class="status" id="roadIssueStatus" aria-live="polite"></div>`;
   document.getElementById('takephoto').onclick=()=>{const input=document.getElementById('photoCam');input.value='';input.click();};
@@ -500,6 +523,7 @@ function renderRoadIssueReport() {
   document.getElementById('retakePhoto').onclick=retakeCapturePhoto;
   document.getElementById('cancelPhoto').onclick=cancelCapturePhoto;
   document.getElementById('retryLocation').onclick=()=>acquireLocation(true);
+  document.getElementById('correctAddress').onclick=correctCaptureAddress;
   document.getElementById('roadIssueSend').onclick=sendRoadIssueReport;
   if(state.photoFile){showCapturePreview(state.photoFile);document.getElementById('locwrap').style.display='block';if(state.location){document.getElementById('gps').textContent=`${state.location.lat.toFixed(5)}, ${state.location.lng.toFixed(5)}`;document.getElementById('addr').textContent=state.address||'Exact address not found';}else acquireLocation();}
 }
@@ -538,6 +562,7 @@ function renderCapture() {
       <label>Address</label>
       <div class="status" id="addr"></div>
       <button type="button" class="btn secondary slim" id="retryLocation">Retry location and address</button>
+      <button type="button" class="btn secondary slim" id="correctAddress">Correct address</button>
     </div>
 
     <label>Note</label>
@@ -566,6 +591,7 @@ function renderCapture() {
   document.getElementById('cancelPhoto').onclick = cancelCapturePhoto;
   document.getElementById('save').onclick = saveCapture;
   document.getElementById('retryLocation').onclick = () => acquireLocation(true);
+  document.getElementById('correctAddress').onclick = correctCaptureAddress;
   if(isHoaClient()){document.getElementById('hoaCommunity').onchange=e=>state.communityId=e.target.value;document.getElementById('hoaType').onchange=e=>document.getElementById('hoaDirectedWrap').style.display=e.target.value==='information'?'block':'none';}else{
   document.getElementById('addarea').onclick = addArea;
   document.getElementById('newarea').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addArea(); } });
@@ -899,6 +925,14 @@ function browserPosition(options) {
   return new Promise((resolve,reject) => navigator.geolocation.getCurrentPosition(resolve,reject,options));
 }
 
+function correctCaptureAddress(){
+  const corrected=prompt('Enter the correct address or geographic area:',state.address||'');
+  if(corrected===null)return;
+  state.address=corrected.trim()||null;
+  const addr=document.getElementById('addr');
+  if(addr)addr.textContent=state.address||'No address entered. GPS coordinates will still be saved.';
+}
+
 function acquireLocation(force=false) {
   if (state._locationPromise && !force) return state._locationPromise;
   const gps = document.getElementById('gps');
@@ -1029,8 +1063,8 @@ function startDictationSession(SR) {
     // appending each event produces duplicated/spammed words.
     const parts=[];
     for (let i=0;i<ev.results.length;i++) parts.push(ev.results[i][0].transcript.trim());
-    sessionText=parts.filter(Boolean).join(' ').trim();
-    if (noteEl) { noteEl.value=(dictationBase+sessionText).trimStart(); state._note=noteEl.value; }
+    sessionText=cleanSpeechTranscript(parts.filter(Boolean).join(' '));
+    if (noteEl) { noteEl.value=mergeSpeechTranscript(dictationBase,sessionText); state._note=noteEl.value; }
     const status=document.getElementById('dictationStatus');if(status&&sessionText)status.textContent='Speech received.';
     if (isProClient()) applyExtraction(dictationBase+sessionText);
   };
@@ -1061,7 +1095,7 @@ function startDictationSession(SR) {
     if(dictationWatchdog)clearTimeout(dictationWatchdog);dictationWatchdog=null;
     if (recognizer === session) recognizer=null;
     if (sessionText) {
-      dictationBase=(dictationBase+sessionText).trim();
+      dictationBase=mergeSpeechTranscript(dictationBase,sessionText);
       if (dictationBase) dictationBase+=' ';
     }
     if (dictationActive&&!ios) {

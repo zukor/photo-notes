@@ -57,8 +57,8 @@ test('issue reporter stays recoverable and clear of primary page controls', () =
 test('Android speech revisions replace interim text instead of appending duplicates', () => {
   assert.match(app, /session\.continuous=!ios/);
   assert.match(app, /for\(let i=0;i<e\.results\.length;i\+\+\)parts\.push/);
-  assert.match(app, /ta\.value=\(issueDictationBase\+sessionText\)\.trimStart\(\)/);
-  assert.match(app, /noteEl\.value=\(dictationBase\+sessionText\)\.trimStart\(\)/);
+  assert.match(app, /ta\.value=mergeSpeechTranscript\(issueDictationBase,sessionText\)/);
+  assert.match(app, /noteEl\.value=mergeSpeechTranscript\(dictationBase,sessionText\)/);
 });
 
 test('late speech results cannot move from one pending photo to the next', () => {

@@ -6,7 +6,7 @@ const path = require('node:path');
 const server = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
 
 test('street-address reverse geocoding is limited to a nearby mapped point', () => {
-  assert.match(server, /const MAX_ADDRESS_DISTANCE_METERS = 100/);
+  assert.match(server, /const MAX_ADDRESS_DISTANCE_METERS = 35/);
   assert.match(server, /function geocodeCandidateIsNearby\(lat, lng, candidateLat, candidateLng\)/);
   assert.match(server, /haversineMeters\(lat, lng, candidateLat, candidateLng\)/);
   assert.match(server, /geocodeCandidateIsNearby\(lat, lng, match\.y, match\.x\)/);

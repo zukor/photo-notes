@@ -31,13 +31,14 @@ test('Tensor Man is hidden at phone and small-tablet widths and cannot cover con
 });
 
 test('new app and style versions are cache-busted', () => {
-  assert.match(index, /styles\.css\?v=121/);
-  assert.match(index, /app\.js\?v=136/);
+  assert.match(index, /styles\.css\?v=122/);
+  assert.match(index, /app\.js\?v=137/);
 });
 
 test('Android issue-description dictation replaces revised results and restarts', () => {
   assert.match(app, /function startIssueDictationSession\(SR\)/);
-  assert.match(app, /sessionText=parts\.filter\(Boolean\)\.join\(' '\)\.trim\(\)/);
+  assert.match(app, /sessionText=cleanSpeechTranscript\(parts\.filter\(Boolean\)\.join\(' '\)\)/);
+  assert.match(app, /mergeSpeechTranscript\(issueDictationBase,sessionText\)/);
   assert.match(app, /issueDictationRestartTimer=setTimeout\(\(\)=>startIssueDictationSession\(SR\),300\)/);
 });
 
@@ -54,6 +55,13 @@ test('Android note dictation replaces revised results and restarts after silence
   assert.doesNotMatch(app, /if \(finalText\) base \+= finalText/);
   assert.match(app, /dictationRestartTimer=setTimeout\(\(\)=>startDictationSession\(SR\),300\)/);
   assert.match(app, /Listening\.\.\. tap to stop/);
+  assert.match(app, /mergeSpeechTranscript\(dictationBase,sessionText\)/);
+});
+
+test('speech cleanup collapses only obvious repeated recognition fragments', () => {
+  assert.match(app, /function cleanSpeechTranscript\(value\)/);
+  assert.match(app, /repeats>=3/);
+  assert.match(app, /function mergeSpeechTranscript\(base,incoming\)/);
 });
 
 test('Android location lookup retries and remains recoverable', () => {
@@ -61,6 +69,8 @@ test('Android location lookup retries and remains recoverable', () => {
   assert.match(app, /enableHighAccuracy:false, timeout:15000, maximumAge:60000/);
   assert.match(app, /Exact address not found\. GPS coordinates will still be saved\./);
   assert.match(app, /Tap Retry location and address, or save without an address\./);
+  assert.match(app, /id="correctAddress">Correct address/);
+  assert.match(app, /function correctCaptureAddress\(\)/);
 });
 
 test('opening a new issue report restores the form after a previous send', () => {
