@@ -8,6 +8,7 @@ const app = fs.readFileSync(path.join(root, 'public', 'app.js'), 'utf8');
 const css = fs.readFileSync(path.join(root, 'public', 'styles.css'), 'utf8');
 const index = fs.readFileSync(path.join(root, 'public', 'index.html'), 'utf8');
 const sw = fs.readFileSync(path.join(root, 'public', 'sw.js'), 'utf8');
+const send = fs.readFileSync(path.join(root, 'public', 'send.js'), 'utf8');
 
 test('phone and coarse-pointer devices start in Capture', () => {
   assert.match(index, /width=device-width, initial-scale=1, viewport-fit=cover/);
@@ -45,6 +46,8 @@ test('the wide-browser header enlarges its brands while phone sizes stay compact
   assert.match(css, /@media \(max-width: 380px\)[\s\S]*\.app-header \.zukor-corner-logo \{ width:82px; min-width:0; \}/);
   assert.ok(css.lastIndexOf('@media (max-width: 380px)') > css.lastIndexOf('@media (max-width: 700px)'));
   assert.match(app, /serviceWorker\.register\('\/sw\.js', \{ updateViaCache:'none' \}\)/);
+  assert.match(send, /if \(p\.classList\.contains\('app-header'\)\) \{[\s\S]*removeProperty\('height'\)[\s\S]*removeProperty\('width'\)[\s\S]*return;/);
+  assert.ok(send.indexOf("p.classList.contains('app-header')") < send.indexOf("img.style.height = '12px'"));
 });
 
 test('issue reporter stays recoverable and clear of primary page controls', () => {

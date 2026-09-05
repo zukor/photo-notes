@@ -101,11 +101,17 @@
   function fixLogo() {
     var img = document.querySelector('img[src="/zukor-logo.svg"]');
     if (!img) return;
-    img.style.height = '12px'; // corner logo height
-    img.style.width = 'auto';
     var p = img.parentElement;
     if (!p) return;
-    if (p.classList.contains('app-header')) return;
+    // The current app header owns its responsive logo dimensions in CSS.
+    // Do not leave legacy inline dimensions that override the iPhone rules.
+    if (p.classList.contains('app-header')) {
+      img.style.removeProperty('height');
+      img.style.removeProperty('width');
+      return;
+    }
+    img.style.height = '12px'; // legacy non-app header logo height
+    img.style.width = 'auto';
     var logout = q('logout');
     var account = p.querySelector('.account-menu-wrap');
     if ((logout && p.contains(logout)) || account) {
