@@ -41,7 +41,8 @@ test('the wide-browser header enlarges its brands while phone sizes stay compact
   assert.match(css, /@media \(min-width: 701px\)[\s\S]*--product-logo-height:90px[\s\S]*\.brand\.road-issues-brand \{ flex-basis:750px; width:750px; max-width:100%; height:var\(--product-logo-height\) !important; \}/);
   assert.match(css, /\.app-header \.brandrow \.brand::after \{ left:calc\(50% \+ var\(--product-logo-height\) \* 2\.04\); right:auto; \}/);
   assert.match(css, /\.brand:not\(\[style\*="font-size"\]\)::after \{[\s\S]*content:"TM"/);
-  assert.match(css, /@media \(min-width: 701px\)[\s\S]*\.edition-switcher \{ grid-column:1 \/ -1; \}/);
+  assert.match(css, /\.app-header \{\s*position:relative;/);
+  assert.match(css, /\.edition-switcher \{ position:absolute; z-index:2; top:16px; left:50%; transform:translateX\(-50%\)/);
   assert.match(css, /\.edition-switcher select \{ width:min\(190px,32vw\); min-width:112px/);
   assert.match(css, /@media \(max-width: 380px\)[\s\S]*\.edition-switcher select \{ width:106px; min-width:0/);
   assert.match(css, /@media \(max-width: 700px\)[\s\S]*\.app-header \.zukor-corner-logo \{ width:92px; min-width:0; \}/);
