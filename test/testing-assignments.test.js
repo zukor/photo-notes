@@ -23,7 +23,7 @@ test('tester checklist and completion APIs are authenticated', () => {
   assert.match(server, /\/api\/admin\/testing-assignments', requireAdmin/);
 });
 
-test('Basic account menu exposes assignment UI and admin shows live progress', () => {
+test('general Pro account menu exposes assignment UI and admin shows live progress', () => {
   const app = read('public/app.js');
   const admin = read('public/admin.html');
   assert.match(app, /My Testing Assignment/);
