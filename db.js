@@ -271,6 +271,7 @@ CREATE TABLE IF NOT EXISTS issue_reports (
   page_name      TEXT,
   page_url       TEXT,
   screenshot_path TEXT,
+  voice_path      TEXT,
   viewport       TEXT,
   user_agent     TEXT,
   email_status   TEXT NOT NULL DEFAULT 'pending',
@@ -632,17 +633,20 @@ async function init() {
   await pool.query(`ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS tester_result TEXT`);
   await pool.query(`ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS tester_notes TEXT`);
   await pool.query(`ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS tester_retested_at TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS voice_path TEXT`);
   await pool.query(`ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now()`);
   await pool.query(`ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMPTZ`);
 
+  // Retire the superseded full-workflow assignments without touching a tester's
+  // submitted history. Basic is now the capture-only edition.
+  await pool.query(`DELETE FROM testing_assignments WHERE assignment_key IN ('basic-rolando-capture-2026-09','basic-hassan-organize-2026-09','basic-gabby-create-send-2026-09') AND status<>'submitted'`);
   const sharedSteps = [
     {id:'sign-in',title:'Sign in and open Basic',instruction:'Sign in on your normal phone and confirm Photo Notes Basic opens without an error.'},
     {id:'photo-controls',title:'Take, retake, and cancel a photo',instruction:'Take a photo, use Retake Photo once, then cancel it. Take a new photo to continue.'},
-    {id:'paired-capture',title:'Save a complete Photo Note',instruction:'Take a photo, record a voice note, and save it. Confirm the photo, note, GPS, address, and topic remain together.'},
-    {id:'organize',title:'Find and organize it',instruction:'Open Organize, find the Photo Note, add a title, change its topic, and confirm the changes remain after refresh.'},
-    {id:'view',title:'View and zoom',instruction:'Open View and Zoom, move around the enlarged photo, then use Reset Photo.'},
-    {id:'send',title:'Share one Photo Note',instruction:'Select the Photo Note in Send and use Share. Confirm the phone share sheet opens.'},
-    {id:'report',title:'Report one test issue',instruction:'Open Report an Issue and submit a clearly labeled test report so the reporting workflow is checked too.'}
+    {id:'paired-capture',title:'Save a complete Photo Note',instruction:'Take a photo, record a voice note, and save it. Confirm the preview, note, GPS, address, and topic belong to this capture.'},
+    {id:'typed-note',title:'Test a typed note',instruction:'Take another photo, type a short note instead of recording it, then save.'},
+    {id:'next-capture',title:'Continue while saving',instruction:'After Save, immediately begin the next capture. Confirm the previous upload does not block the camera or move its note onto the new photo.'},
+    {id:'report',title:'Report one labeled test issue',instruction:'Open Report an Issue, submit a report beginning with TEST, close it, then open the form again and confirm it is ready for a new report.'}
   ];
   const rounds = [
     {key:'basic-jose-regression-2026-09',name:'Jose',email:null,title:'Photo Notes Pro — Regression and Reliability',summary:'Recheck previously reported Android problems, then complete a longer mixed capture session.',extra:[
@@ -652,25 +656,21 @@ async function init() {
       {id:'jose-repeat-report',title:'Submit two issue reports',instruction:'Submit two labeled test reports in succession and confirm the second Send button works.'},
       {id:'jose-session',title:'Complete a 20-photo mixed session',instruction:'Capture 20 varied Photo Notes. Mix voice and typed notes and confirm no photo, note, or location crosses into another item.'}
     ]},
-    {key:'basic-rolando-capture-2026-09',name:'Rolando',email:'espinoza@zukor.com',title:'Photo Notes Pro — Android Capture Reliability',summary:'Focus on repeated field capture, voice behavior, and saving when the connection changes.',extra:[
+    {key:'basic-weekend-rolando-2026-09',name:'Rolando',email:'espinoza@zukor.com',title:'Photo Notes Basic — Weekend Capture Test',summary:'Test the capture-only Basic edition on your normal phone. Report each problem separately with Report an Issue.',extra:[
       {id:'rolando-sequence',title:'Capture 15 consecutive Photo Notes',instruction:'Take 15 different photos with short voice notes. Confirm every note stays with the photo on which it was recorded.'},
       {id:'rolando-pauses',title:'Test pauses and background noise',instruction:'Record one note after waiting three seconds and another with ordinary background noise. Confirm recording stays usable and does not spam repeated words.'},
       {id:'rolando-network',title:'Test a weak connection',instruction:'With a weak or changing connection, save several Photo Notes and continue working. Confirm uploads finish without blocking the next capture.'},
       {id:'rolando-reopen',title:'Leave and reopen Photo Notes',instruction:'After saving, switch to another app and return. Confirm saved and waiting-to-upload items are still present.'}
     ]},
-    {key:'basic-hassan-organize-2026-09',name:'Hassan',email:null,title:'Photo Notes Pro — Organize and Edit',summary:'Focus on keeping a larger library understandable and correcting captured information.',extra:[
-      {id:'hassan-library',title:'Review at least 15 Photo Notes',instruction:'Inspect at least 15 library cards and confirm each photo is large enough to identify and matches its title and notes.'},
-      {id:'hassan-fields',title:'Edit titles, topics, notes, and addresses',instruction:'Change each type of information on different Photo Notes, refresh, and confirm every change remains.'},
-      {id:'hassan-selection',title:'Test selection controls',instruction:'Use Select All and Clear All, then select individual Photo Notes. Confirm the count and checkmarks are correct.'},
-      {id:'hassan-delete',title:'Test deletion safely',instruction:'Create a disposable test Photo Note, delete it from Organize, and confirm only that item is removed.'},
-      {id:'hassan-history',title:'Review Photo Details & History',instruction:'Open details for an edited Photo Note and confirm file format, original capture, and later changes are understandable.'}
+    {key:'basic-weekend-hassan-2026-09',name:'Hassan',email:null,title:'Photo Notes Basic — Weekend Capture Test',summary:'Test the capture-only Basic edition on your normal phone. Report each problem separately with Report an Issue.',extra:[
+      {id:'hassan-sequence',title:'Capture 12 different Photo Notes',instruction:'Use different subjects and alternate between voice and typed notes. Confirm each saved capture resets cleanly for the next one.'},
+      {id:'hassan-location',title:'Test location results',instruction:'Take photos in two different places. Confirm GPS appears and the displayed address or named location makes sense; use Retry once.'},
+      {id:'hassan-permissions',title:'Test phone permissions',instruction:'Close and reopen Photo Notes, then confirm camera, microphone, and location permissions behave clearly without trapping the page.'}
     ]},
-    {key:'basic-gabby-create-send-2026-09',name:'Gabby',email:null,title:'Photo Notes Pro — Create and Send',summary:'Focus on turning selected Photo Notes into a polished document and sharing it.',extra:[
-      {id:'gabby-document',title:'Build a document',instruction:'Create a document from several Photo Notes, change their order and captions, and review the paginated preview.'},
-      {id:'gabby-branding',title:'Add company branding',instruction:'Upload a test company logo and confirm it appears in the document preview.'},
-      {id:'gabby-template',title:'Try a Word template',instruction:'Import a simple Word template and confirm Photo Notes recognizes it without changing the original file.'},
-      {id:'gabby-edit',title:'Edit the document layout',instruction:'Change the cover, heading, spacing, and basic layout controls, then confirm the preview updates.'},
-      {id:'gabby-formats',title:'Download and share formats',instruction:'Create PDF, Word, and Markdown outputs. Test Download, Share, and Print where available and note any confusing wording.'}
+    {key:'basic-weekend-gabby-2026-09',name:'Gabby',email:null,title:'Photo Notes Basic — English and Spanish Weekend Test',summary:'Test every checklist item once in English and once in Spanish. Report each problem separately with Report an Issue.',extra:[
+      {id:'gabby-english',title:'Complete one English capture sequence',instruction:'With EN selected, take, retake, cancel, record, type, save, and report a labeled test issue.'},
+      {id:'gabby-spanish',title:'Repeat the sequence in Spanish',instruction:'Select ES and repeat the same sequence. Report unclear, missing, or incorrect Spanish text as a separate issue.'},
+      {id:'gabby-layout',title:'Compare both language layouts',instruction:'Confirm buttons, labels, and the issue form fit the phone screen in both languages without being cut off.'}
     ]}
   ];
   for (const round of rounds) {
@@ -681,9 +681,6 @@ async function init() {
   }
   await pool.query(`UPDATE testing_assignments a SET user_id=u.id,updated_at=now() FROM users u
     WHERE a.user_id IS NULL AND (lower(COALESCE(a.assignee_email,''))=lower(u.email) OR lower(COALESCE(u.name,'')) LIKE lower(a.assignee_name)||'%')`);
-  // The current tester assignments exercise the full workflow, which now lives
-  // in general Photo Notes Pro rather than capture-only Basic.
-  await pool.query(`UPDATE users u SET plan='pro',pro_type='general' FROM testing_assignments a WHERE a.user_id=u.id AND a.status<>'submitted'`);
 
   // This common property-maintenance topic is available to every existing and
   // future account. Existing custom topics are preserved.

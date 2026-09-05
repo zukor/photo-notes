@@ -10,7 +10,7 @@ test('Basic is capture-only while general Pro owns the complete workflow',()=>{
 });
 test('general Pro retains the former Basic help, issue, and assignment workflows',()=>{
   assert.match(app,/!isIndustryProClient\(\) \? `<button class="issue-fab/);
-  assert.match(app,/isGeneralProClient\(\)\?'<button type="button" id="myAssignment"/);
+  assert.match(app,/isBasicClient\(\)\|\|isGeneralProClient\(\)\?'<button type="button" id="myAssignment"/);
   assert.match(app,/if \(isIndustryProClient\(\) \|\| isRoadIssuesClient\(\)/);
   assert.match(server,/currentProduct\(req\.user\.id\) !== 'general'/);
 });
@@ -18,7 +18,7 @@ test('administrators can create, assign, and switch to general Pro',()=>{
   assert.match(admin,/<option value="general"[^>]*>Photo Notes Pro<\/option>/);
   assert.match(admin,/\{plan,pro_type:'general'\}/);
   assert.match(server,/\['roads','general','contractor','paving','hoa','concrete','roofer'\]/);
-  assert.match(db,/SET plan='pro',pro_type='general' FROM testing_assignments/);
+  assert.doesNotMatch(db,/SET plan='pro',pro_type='general' FROM testing_assignments/);
 });
 test('supplied Pro branding replaces the temporary treatment',()=>{
   assert.match(styles,/general-pro-brand/);

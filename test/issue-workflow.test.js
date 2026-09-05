@@ -14,6 +14,11 @@ test('tester report form collects structured reproduction details and automatic 
   assert.match(app,/Trying to do:/);assert.match(app,/What happened:/);assert.match(app,/Expected:/);assert.match(app,/Frequency:/);
 });
 
+test('iPhone issue reports attach a real voice recording instead of relying on short Safari recognition sessions',()=>{
+  assert.match(app,/toggleIssueVoiceRecording/);assert.match(app,/new MediaRecorder/);assert.match(app,/fd\.append\('voice'/);
+  assert.match(server,/upload\.fields\(\[\{name:'screenshot'/);assert.match(server,/voice_path/);assert.match(admin,/Voice description/);
+});
+
 test('testers can see only their reports and return a retest result',()=>{
   assert.match(server,/app\.get\('\/api\/issues\/mine', requireAuth/);
   assert.match(server,/WHERE user_id=\$1 ORDER BY created_at DESC/);
@@ -22,10 +27,10 @@ test('testers can see only their reports and return a retest result',()=>{
   assert.match(app,/My Issue Reports/);assert.match(app,/Fixed on my device/);assert.match(app,/Still happening/);
 });
 
-test('ready-to-test issues carry fix details and notify the tester',()=>{
+test('ready-to-test issues carry fix details while Sam controls tester contact',()=>{
   for(const field of ['fix_summary','release_reference','retest_instructions','tester_notification_status','tester_result'])assert.match(db,new RegExp(field));
-  assert.match(server,/emailIssueReadyForRetest/);
   assert.match(server,/management_status==='ready_to_test'/);
-  assert.match(server,/notify-tester/);
-  assert.match(admin,/What Was Fixed/);assert.match(admin,/Release or Commit/);assert.match(admin,/Retest Instructions/);assert.match(admin,/Notify Tester/);
+  assert.match(server,/mark-tester-notified/);
+  assert.doesNotMatch(server,/emailIssueReadyForRetest/);
+  assert.match(admin,/What Was Fixed/);assert.match(admin,/Release or Commit/);assert.match(admin,/Retest Instructions/);assert.match(admin,/Copy Retest Message/);assert.match(admin,/Mark Tester Notified/);
 });

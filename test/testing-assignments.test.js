@@ -23,10 +23,11 @@ test('tester checklist and completion APIs are authenticated', () => {
   assert.match(server, /\/api\/admin\/testing-assignments', requireAdmin/);
 });
 
-test('general Pro account menu exposes assignment UI and admin shows live progress', () => {
+test('Basic and general Pro account menus expose assignment UI and admin shows live progress', () => {
   const app = read('public/app.js');
   const admin = read('public/admin.html');
   assert.match(app, /My Testing Assignment/);
+  assert.match(app, /isBasicClient\(\)\|\|isGeneralProClient\(\)/);
   assert.match(app, /Submit Assignment Complete/);
   assert.match(app, /data-assignment-check/);
   assert.match(admin, /Testing Assignments/);

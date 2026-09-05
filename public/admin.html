@@ -354,12 +354,12 @@
           <details style="margin-top:16px"><summary style="font-weight:bold;cursor:pointer">Administrative Activity Log</summary><div class="helper">Account, password, plan, feature-access, and issue-management changes. Passwords and user content are never recorded.</div><div id="activity"><p class="status">Loading...</p></div></details>
 
           <label style="margin-top:22px">Testing Assignments</label>
-          <div class="helper">Live progress for the four Photo Notes Pro assignments. A submitted assignment needs no separate email or message from the tester.</div>
+          <div class="helper">Live progress for Photo Notes Basic testing. A submitted assignment needs no separate email or message from the tester.</div>
           <button class="btn secondary" id="refreshAssignments" type="button" style="width:auto;margin:0 0 10px">Refresh Assignments</button>
           <div id="assignments"><p class="status">Loading...</p></div>
 
           <label style="margin-top:22px">Issue Management Center</label>
-          <div class="helper">Review tester reports, set priority, track repair and retesting, add private administrator notes, and confirm email delivery.</div>
+          <div class="helper">Review every tester report, see who submitted it and when, track the repair, then copy the retest message and contact the tester yourself.</div>
           <div class="issue-toolbar">
             <label>Status Filter<select id="issueStatusFilter"><option value="open">All Open Issues</option><option value="all">All Issues</option><option value="new">New</option><option value="reviewing">Reviewing</option><option value="fixing">Fixing</option><option value="ready_to_test">Ready to Test</option><option value="tester_confirmed">Tester Confirmed</option><option value="resolved">Resolved</option><option value="wont_fix">Won’t Fix</option></select></label>
             <label>Priority Filter<select id="issuePriorityFilter"><option value="all">All Priorities</option><option value="urgent">Urgent</option><option value="high">High</option><option value="normal">Normal</option><option value="low">Low</option></select></label>
@@ -427,11 +427,18 @@
       document.getElementById('issueSummary').innerHTML=`<span class="pill basic">${counts.open} open</span><span class="pill basic">${counts.new} new</span><span class="pill ${counts.urgent?'role':'basic'}">${counts.urgent} urgent</span><span class="pill pro">${counts.resolved} resolved</span>`;
       renderIssueComparison(rows);
       box.innerHTML=rows.length?rows.map(issueCard).join(''):'<p class="helper">No issue reports match these filters.</p>';
+      for(const issue of rows.filter(i=>i.voice_path)){
+        const save=box.querySelector(`[data-issue-save="${issue.id}"]`);if(!save)continue;
+        const player=document.createElement('div');player.className='admin-panel';player.innerHTML=`<b>Voice description</b><audio controls preload="metadata" src="${esc(issue.voice_path)}" style="display:block;width:100%;margin-top:6px"></audio>`;save.closest('.issue-actions').before(player);
+      }
       box.querySelectorAll('[data-issue-save]').forEach(b=>b.onclick=()=>saveIssue(Number(b.dataset.issueSave),b));
       box.querySelectorAll('[data-issue-retry]').forEach(b=>b.onclick=()=>retryIssueEmail(Number(b.dataset.issueRetry),b));
-      for(const issue of rows.filter(i=>i.management_status==='ready_to_test'&&i.tester_notification_status!=='sent')){
-        const save=box.querySelector(`[data-issue-save="${issue.id}"]`),button=document.createElement('button');
-        if(!save)continue;button.className='btn secondary';button.type='button';button.textContent='Notify Tester';button.onclick=()=>notifyIssueTester(issue.id,button);save.parentElement.appendChild(button);
+      for(const issue of rows.filter(i=>i.management_status==='ready_to_test')){
+        const save=box.querySelector(`[data-issue-save="${issue.id}"]`);if(!save)continue;
+        const copy=document.createElement('button');copy.className='btn secondary';copy.type='button';copy.textContent='Copy Retest Message';copy.onclick=()=>copyRetestMessage(issue);save.parentElement.appendChild(copy);
+        if(issue.tester_notification_status!=='marked_by_sam'){
+          const mark=document.createElement('button');mark.className='btn secondary';mark.type='button';mark.textContent='Mark Tester Notified';mark.onclick=()=>markTesterNotified(issue.id,mark);save.parentElement.appendChild(mark);
+        }
       }
     }
     function issueCard(i){
@@ -455,10 +462,14 @@
       try{const r=await api(`/api/admin/issues/${id}/retry-email`,{method:'POST'});const d=await r.json();if(!r.ok)throw new Error();toast(d.status==='sent'?'Issue email sent':'Email is still not configured');await loadIssues();loadActivity();}
       catch(e){toast('Issue email could not be sent');btn.disabled=false;btn.textContent='Retry Email';}
     }
-    async function notifyIssueTester(id,btn){
-      btn.disabled=true;btn.textContent='Sending...';
-      try{const r=await api(`/api/admin/issues/${id}/notify-tester`,{method:'POST'}),d=await r.json();if(!r.ok)throw new Error();toast(d.status==='sent'?'Tester notified':'Tester notification is pending');await loadIssues();loadActivity();}
-      catch(e){toast('Tester could not be notified');btn.disabled=false;btn.textContent='Notify Tester';}
+    async function copyRetestMessage(i){
+      const message=`Photo Notes issue #${i.id} is ready for you to retest.\n\nWhat changed: ${i.fix_summary||'A correction has been deployed.'}\n\nPlease retest: ${i.retest_instructions||'Refresh Photo Notes and repeat the steps that caused the problem.'}\n\nAfterward, open My Issue Reports and choose Fixed on my device or Still happening.`;
+      try{await navigator.clipboard.writeText(message);toast('Retest message copied — you decide when and how to send it');}catch(e){toast('Retest message could not be copied');}
+    }
+    async function markTesterNotified(id,btn){
+      btn.disabled=true;btn.textContent='Saving...';
+      try{const r=await api(`/api/admin/issues/${id}/mark-tester-notified`,{method:'POST'});if(!r.ok)throw new Error();toast('Recorded that Sam notified the tester');await loadIssues();loadActivity();}
+      catch(e){toast('Notification status could not be saved');btn.disabled=false;btn.textContent='Mark Tester Notified';}
     }
     async function loadHealth(){
       const box=document.getElementById('health'); if(!box)return;

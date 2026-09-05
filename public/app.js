@@ -266,7 +266,7 @@ function renderApp() {
               <div class="profile-name">${esc((state.me && state.me.name) || 'Photo Notes User')}</div>
               <div class="profile-email">${esc((state.me && state.me.email) || '')}</div>
               <div class="profile-plan">${isRoadIssuesClient()?'Road Issue Reporter':isGeneralProClient()?'Photo Notes Pro':isProClient()?esc(productName()):'Photo Notes Basic'}</div>
-              ${isGeneralProClient()?'<button type="button" id="myAssignment">My Testing Assignment</button>':''}
+              ${isBasicClient()||isGeneralProClient()?'<button type="button" id="myAssignment">My Testing Assignment</button>':''}
               ${!isIndustryProClient()?'<button type="button" id="myIssues">My Issue Reports</button>':''}
               ${state.me && state.me.role === 'admin' ? '<a href="/admin">Admin Dashboard</a>' : ''}
               <button type="button" id="signout">Sign Out</button>
@@ -328,6 +328,8 @@ function renderApp() {
   const tabCreate=document.getElementById('tabCreate');if(tabCreate)tabCreate.onclick = () => { state.view=isHoaClient()?'hoa-inspections':'create'; state.groupId=null; renderApp(); };
   const tabSend=document.getElementById('tabSend');if(tabSend)tabSend.onclick = () => { state.view=isHoaClient()?'hoa-maintenance':'send'; renderApp(); };
   if (isRoadIssuesClient()) { state.view='road-report'; renderRoadIssueReport(); }
+  else if (state.view === 'my-assignment') renderMyTestingAssignment();
+  else if (state.view === 'my-issues') renderMyIssueReports();
   else if (isBasicClient()) { state.view='capture'; renderCapture(); }
   else if (state.view === 'capture') renderCapture();
   else if (state.view === 'camera-tools') renderCameraTools();
@@ -349,8 +351,6 @@ function renderApp() {
   else if (state.view === 'hoa-reports') renderHoaReports();
   else if (state.view === 'concrete-report') renderConcreteReport();
   else if (state.view === 'map') renderMap();
-  else if (state.view === 'my-issues') renderMyIssueReports();
-  else if (state.view === 'my-assignment') renderMyTestingAssignment();
   else { state.view = 'organize'; renderList(); }
   renderTensorHelp();
 }
@@ -485,12 +485,12 @@ function renderTensorHelp() {
 }
 
 // ================= Basic issue reporter =================
-let issueScreenshotBlob = null, issuePageName = '', issueRecognizer = null;
+let issueScreenshotBlob = null, issueVoiceBlob = null, issuePageName = '', issueRecognizer = null, issueMediaRecorder = null, issueMediaStream = null;
 let issueDictationActive = false, issueDictationBase = '', issueDictationRestartTimer = null, issueDictationWatchdog = null;
 const issuePageLabels = { capture:'Capture', organize:'Organize', edit:'Edit', create:'Create', send:'Send', map:'Job Site Map' };
 async function openIssueReporter() {
   const fab=document.getElementById('issueFab'); if(fab){fab.disabled=true;fab.textContent='Capturing...';}
-  issuePageName=issuePageLabels[state.view]||state.view||'Photo Notes'; issueScreenshotBlob=null;
+  issuePageName=issuePageLabels[state.view]||state.view||'Photo Notes'; issueScreenshotBlob=null;issueVoiceBlob=null;
   const send=document.getElementById('issueSend'),description=document.getElementById('issueDescription'),status=document.getElementById('issueStatus');
   if(send){send.disabled=false;send.textContent='Send Issue Report';}
   if(description)description.value='';for(const id of ['issueAction','issueExpected','issueFrequency']){const field=document.getElementById(id);if(field)field.value='';}
@@ -506,7 +506,8 @@ async function openIssueReporter() {
   description.focus();
   if(fab){fab.disabled=false;fab.textContent=issueFabLabel();}
 }
-function closeIssueReporter(){issueDictationActive=false;if(issueDictationRestartTimer)clearTimeout(issueDictationRestartTimer);if(issueDictationWatchdog)clearTimeout(issueDictationWatchdog);issueDictationRestartTimer=null;issueDictationWatchdog=null;if(issueRecognizer){try{issueRecognizer.stop();}catch(e){}}const m=document.getElementById('issueModal');if(m)m.hidden=true;issueScreenshotBlob=null;issueRecognizer=null;}
+function stopIssueMediaStream(){if(issueMediaStream){issueMediaStream.getTracks().forEach(track=>track.stop());issueMediaStream=null;}issueMediaRecorder=null;}
+function closeIssueReporter(){issueDictationActive=false;if(issueDictationRestartTimer)clearTimeout(issueDictationRestartTimer);if(issueDictationWatchdog)clearTimeout(issueDictationWatchdog);issueDictationRestartTimer=null;issueDictationWatchdog=null;if(issueRecognizer){try{issueRecognizer.stop();}catch(e){}}if(issueMediaRecorder&&issueMediaRecorder.state==='recording'){try{issueMediaRecorder.stop();}catch(e){}}stopIssueMediaStream();const m=document.getElementById('issueModal');if(m)m.hidden=true;issueScreenshotBlob=null;issueVoiceBlob=null;issueRecognizer=null;}
 function cleanSpeechTranscript(value){
   let words=String(value||'').trim().split(/\s+/).filter(Boolean);
   // Android speech services occasionally return the same short fragment three
@@ -532,6 +533,7 @@ function mergeSpeechTranscript(base,incoming){
 }
 async function toggleIssueDictation(){
   const ta=document.getElementById('issueDescription'),btn=document.getElementById('issueRecord'),SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(isIOS()&&window.MediaRecorder&&navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)return toggleIssueVoiceRecording(btn);
   if(!SR){ta.focus();toast('Use the microphone key on your keyboard to dictate');return;}
   if(issueDictationActive){issueDictationActive=false;if(issueDictationRestartTimer)clearTimeout(issueDictationRestartTimer);if(issueDictationWatchdog)clearTimeout(issueDictationWatchdog);issueDictationRestartTimer=null;issueDictationWatchdog=null;if(issueRecognizer){try{issueRecognizer.stop();}catch(e){}}btn.textContent='Speak Description';btn.classList.remove('on');return;}
   // Safari owns the microphone permission prompt for webkitSpeechRecognition.
@@ -539,6 +541,19 @@ async function toggleIssueDictation(){
   // microphone while returning no recognition results.
   if(!isIOS())try{if(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia){const stream=await navigator.mediaDevices.getUserMedia({audio:true});stream.getTracks().forEach(t=>t.stop());}}catch(e){toast('Allow microphone access for this website, then try again');return;}
   issueDictationActive=true;issueDictationBase=ta.value.trim();if(issueDictationBase)issueDictationBase+=' ';btn.textContent='Recording... tap to stop';btn.classList.add('on');startIssueDictationSession(SR);
+}
+async function toggleIssueVoiceRecording(btn){
+  const status=document.getElementById('issueStatus');
+  if(issueMediaRecorder&&issueMediaRecorder.state==='recording'){btn.disabled=true;btn.textContent='Saving voice recording...';issueMediaRecorder.stop();return;}
+  try{
+    issueVoiceBlob=null;const stream=await navigator.mediaDevices.getUserMedia({audio:true});issueMediaStream=stream;
+    const preferred=['audio/mp4','audio/webm;codecs=opus','audio/webm'].find(type=>MediaRecorder.isTypeSupported(type));
+    const chunks=[],recorder=new MediaRecorder(stream,preferred?{mimeType:preferred}:undefined);issueMediaRecorder=recorder;
+    recorder.ondataavailable=e=>{if(e.data&&e.data.size)chunks.push(e.data);};
+    recorder.onstop=()=>{issueVoiceBlob=new Blob(chunks,{type:recorder.mimeType||'audio/mp4'});stopIssueMediaStream();btn.disabled=false;btn.textContent='Record Again';btn.classList.remove('on');status.textContent=issueVoiceBlob.size?'Voice recording attached. You may also type a description.':'No voice recording was captured. Please try again.';};
+    recorder.onerror=()=>{stopIssueMediaStream();btn.disabled=false;btn.textContent='Record Voice Description';btn.classList.remove('on');status.textContent='Voice recording stopped unexpectedly. Please try again or type the description.';};
+    recorder.start(250);btn.textContent='Recording... tap to stop';btn.classList.add('on');status.textContent='Recording your voice. Tap the blue button when you are finished.';
+  }catch(e){stopIssueMediaStream();btn.disabled=false;btn.textContent='Record Voice Description';btn.classList.remove('on');status.textContent='Microphone access is required. On iPhone, allow microphone access for photonotesapp.com, then try again.';}
 }
 function startIssueDictationSession(SR){
   if(!issueDictationActive)return;
@@ -554,9 +569,9 @@ async function submitIssueReport(){
   if(issueRecognizer){try{issueRecognizer.stop();}catch(e){}}
   const ta=document.getElementById('issueDescription'),whatHappened=ta.value.trim(),action=document.getElementById('issueAction').value.trim(),expected=document.getElementById('issueExpected').value.trim(),frequency=document.getElementById('issueFrequency').value,btn=document.getElementById('issueSend'),st=document.getElementById('issueStatus');
   const description=[action&&`Trying to do: ${action}`,whatHappened&&`What happened: ${whatHappened}`,expected&&`Expected: ${expected}`,frequency&&`Frequency: ${frequency}`].filter(Boolean).join('\n');
-  if(!whatHappened){st.textContent='Please tell us what went wrong before sending.';ta.focus();return;}
+  if(!whatHappened&&!issueVoiceBlob){st.textContent='Please type what went wrong or attach a voice recording before sending.';ta.focus();return;}
   btn.disabled=true;btn.textContent='Sending...';st.textContent='Saving your report...';
-  try{const fd=new FormData();fd.append('description',description);fd.append('page_name',issuePageName);fd.append('page_url',location.href);fd.append('viewport',`${window.innerWidth} × ${window.innerHeight}`);fd.append('user_agent',navigator.userAgent);if(issueScreenshotBlob)fd.append('screenshot',issueScreenshotBlob,'issue-screen.jpg');const r=await api('/api/issues',{method:'POST',body:fd});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error();st.textContent=d.email_status==='sent'?`Issue #${d.id} sent. Thank you.`:`Issue #${d.id} saved. Thank you.`;btn.textContent='Sent';setTimeout(closeIssueReporter,1800);}catch(e){st.textContent='The report could not be sent. Check your connection and try again.';btn.disabled=false;btn.textContent='Send Issue Report';}
+  try{const fd=new FormData();fd.append('description',description||'Voice recording attached for review.');fd.append('page_name',issuePageName);fd.append('page_url',location.href);fd.append('viewport',`${window.innerWidth} × ${window.innerHeight}`);fd.append('user_agent',navigator.userAgent);if(issueScreenshotBlob)fd.append('screenshot',issueScreenshotBlob,'issue-screen.jpg');if(issueVoiceBlob)fd.append('voice',issueVoiceBlob,issueVoiceBlob.type.includes('webm')?'issue-voice.webm':'issue-voice.m4a');const r=await api('/api/issues',{method:'POST',body:fd});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error();st.textContent=d.email_status==='sent'?`Issue #${d.id} sent. Thank you.`:`Issue #${d.id} saved. Thank you.`;btn.textContent='Sent';setTimeout(closeIssueReporter,1800);}catch(e){st.textContent='The report could not be sent. Check your connection and try again.';btn.disabled=false;btn.textContent='Send Issue Report';}
 }
 
 function areaChips() {
