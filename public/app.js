@@ -3988,6 +3988,11 @@ async function exportProposal(doc) {
 }
 
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(()=>{}));
+  window.addEventListener('load', async () => {
+    try {
+      const registration = await navigator.serviceWorker.register('/sw.js', { updateViaCache:'none' });
+      await registration.update();
+    } catch (_) {}
+  });
 }
 boot();
