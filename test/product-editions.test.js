@@ -15,6 +15,7 @@ test('edition switching is restricted to administrators',()=>{
 test('only administrators see the compact edition switcher',()=>{
   assert.match(app,/state\.me&&state\.me\.role==='admin'/);
   assert.match(app,/<select id="editionSwitcher" aria-label="Switch Photo Notes version">/);
+  assert.doesNotMatch(app,/<span>Version<\/span>/);
   for(const label of ['Photo Notes Basic','Photo Notes Pro','General Contractor Pro','Road Issue Reporter','Paving Pro','HOA Maintenance Pro','Concrete Pro','Roofer Pro'])assert.match(app,new RegExp(`>${label}<\\/option>`));
   assert.match(app,/editionSwitcher\.onchange=async/);
 });
