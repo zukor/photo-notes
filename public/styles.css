@@ -175,9 +175,9 @@ textarea { min-height: 96px; resize: vertical; }
 .app-header .header-controls { grid-column:2 / 4; grid-row:1; justify-self:end; display:flex; align-items:center; gap:10px; }
 .workflow-road-report { width:min(620px,100%); margin:0 auto; }
 .workflow-road-report .road-send { margin-top:22px; }
-.edition-switcher { grid-column:2; grid-row:1; justify-self:center; display:flex; gap:3px; padding:2px 4px; border:1px solid #b8c7dc; border-radius:10px; background:#fff; }
-.edition-switcher button { border:0; border-radius:7px; background:transparent; color:#334155; padding:3px 5px; font:800 9px/1 Arial,Helvetica,sans-serif; cursor:pointer; }
-.edition-switcher button.active { background:#1254a3; color:#fff; }
+.edition-switcher { grid-column:2; grid-row:1; justify-self:center; display:flex; align-items:center; gap:5px; color:#334155; font:800 10px/1 Arial,Helvetica,sans-serif; white-space:nowrap; }
+.edition-switcher select { width:min(190px,32vw); min-width:112px; padding:5px 24px 5px 8px; border:1px solid #9db0ca; border-radius:8px; background:#fff; color:#111827; font:700 11px/1.2 Arial,Helvetica,sans-serif; cursor:pointer; }
+.edition-switcher select:focus-visible { outline:2px solid #1d4ed8; outline-offset:2px; }
 /* Wide browser header: the company mark is approximately one workflow-tab wide.
    Every product edition uses the HOA Maintenance Pro 750x90 reference box so
    switching editions never changes the header geometry. */
@@ -562,5 +562,7 @@ input.dimfield.suggested {
    after the 700px phone rule so the cascade cannot enlarge it again. */
 @media (max-width: 380px) {
   .app-header .zukor-corner-logo { width:82px; min-width:0; }
+  .edition-switcher span { display:none; }
+  .edition-switcher select { width:106px; min-width:0; padding-left:6px; font-size:10px; }
 }
 .evidence-comparison{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-bottom:18px}.evidence-comparison .card img{width:100%;max-height:340px;object-fit:contain;background:#f1f3f5;margin-top:8px}@media(max-width:700px){.evidence-comparison{grid-template-columns:1fr}}

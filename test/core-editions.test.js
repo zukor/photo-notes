@@ -5,7 +5,7 @@ test('Basic is capture-only while general Pro owns the complete workflow',()=>{
   assert.match(app,/function isGeneralProClient\(\)/);
   assert.match(app,/isRoadIssuesClient\(\)\|\|isBasicClient\(\)\?'':`<nav class="tabs workflow-tabs/);
   assert.match(app,/else if \(isBasicClient\(\)\) \{ state\.view='capture'; renderCapture\(\); \}/);
-  assert.match(app,/button\.dataset\.edition==='basic'\?'capture'/);
+  assert.match(app,/edition==='basic'\?'capture'/);
   assert.match(server,/pro:\{plan:'pro',pro_type:'general'\}/);
 });
 test('general Pro retains the former Basic help, issue, and assignment workflows',()=>{
@@ -24,5 +24,5 @@ test('supplied Pro branding replaces the temporary treatment',()=>{
   assert.match(styles,/general-pro-brand/);
   assert.match(styles,/photo-notes-ai-pro-animated\.svg\?v=127/);
   assert.doesNotMatch(styles,/content:"PRO"/);
-  assert.match(app,/>PRO<\/button>/);
+  assert.match(app,/>Photo Notes Pro<\/option>/);
 });

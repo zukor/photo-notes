@@ -24,7 +24,7 @@ test('Pro-only analytics and reports require a Pro plan on the server', () => {
 });
 
 test('edition switching is never exposed to ordinary Basic testers', () => {
-  assert.match(app, /state\.me&&state\.me\.role==='admin'\?`<div class="edition-switcher"/);
+  assert.match(app, /state\.me&&state\.me\.role==='admin'\?`<label class="edition-switcher"/);
   assert.match(server, /app\.post\('\/api\/admin\/switch-edition', requireAdmin/);
 });
 

@@ -11,7 +11,7 @@ const admin=fs.readFileSync(path.join(root,'public/admin.html'),'utf8');
 test('Road Issues Reporting is a separate non-Pro administrator-selectable edition',()=>{
   assert.match(server,/roads:\{plan:'free',pro_type:'roads'\}/);
   assert.match(app,/function isRoadIssuesClient\(\)/);
-  assert.match(app,/data-edition="roads"[\s\S]*>RIR</);
+  assert.match(app,/<option value="roads"[\s\S]*>Road Issue Reporter<\/option>/);
   assert.match(admin,/<option value="roads">Road Issue Reporter<\/option>/);
 });
 

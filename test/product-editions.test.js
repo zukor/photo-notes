@@ -14,7 +14,9 @@ test('edition switching is restricted to administrators',()=>{
 
 test('only administrators see the compact edition switcher',()=>{
   assert.match(app,/state\.me&&state\.me\.role==='admin'/);
-  for(const label of ['BASIC','PRO','GCP','RIR','PP','HMP','CP','RP'])assert.match(app,new RegExp(`>${label}<`));
+  assert.match(app,/<select id="editionSwitcher" aria-label="Switch Photo Notes version">/);
+  for(const label of ['Photo Notes Basic','Photo Notes Pro','General Contractor Pro','Road Issue Reporter','Paving Pro','HOA Maintenance Pro','Concrete Pro','Roofer Pro'])assert.match(app,new RegExp(`>${label}<\\/option>`));
+  assert.match(app,/editionSwitcher\.onchange=async/);
 });
 
 test('every edition uses Organize for the shared workflow tab',()=>{
@@ -53,7 +55,7 @@ test('new supplied Basic, Paving, Road Issue Reporter, and Roofer artwork is wir
   const crypto=require('node:crypto');
   for(const [name,label,hash] of expected){const file=fs.readFileSync(path.join(root,'public',`photo-notes-ai-${name}-animated.svg`));assert.match(file.toString(),new RegExp(`aria-label="${label}"`));assert.equal(crypto.createHash('sha256').update(file).digest('hex'),hash);assert.match(css,new RegExp(`photo-notes-ai-${name}-animated\\.svg\\?v=118`));}
   assert.match(server,/roofer:\{plan:'pro',pro_type:'roofer'\}/);
-  assert.match(app,/data-edition="roofer"[\s\S]*>RP<\/button>/);
+  assert.match(app,/<option value="roofer"[\s\S]*>Roofer Pro<\/option>/);
 });
 
 test('Concrete Pro uses the supplied blue subtitle trial logo',()=>{
@@ -75,7 +77,7 @@ test('Photo Notes Pro and General Contractor Pro use all supplied logo variants'
   ];
   for(const [name,label,hash] of expected){const file=fs.readFileSync(path.join(root,'public',`photo-notes-ai-${name}.svg`));assert.match(file.toString(),new RegExp(`aria-label="${label}"`));assert.equal(crypto.createHash('sha256').update(file).digest('hex'),hash);assert.match(css,new RegExp(`photo-notes-ai-${name}\\.svg\\?v=127`));}
   assert.match(server,/contractor:\{plan:'pro',pro_type:'contractor'\}/);
-  assert.match(app,/data-edition="contractor"[\s\S]*>GCP<\/button>/);
+  assert.match(app,/<option value="contractor"[\s\S]*>General Contractor Pro<\/option>/);
 });
 
 test('Paving classification covers broader visible pavement failures',()=>{
