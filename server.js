@@ -1351,6 +1351,19 @@ async function emailIssueReport(report, user) {
   } catch (e) { return { status:'failed', error:ticketText(e && e.message, 200) || 'Mail request failed' }; }
 }
 
+async function emailIssueReadyForRetest(report, user) {
+  const key=process.env.RESEND_API_KEY;
+  if(!key)return {status:'pending',error:'Email delivery is not configured'};
+  const from=process.env.ISSUE_REPORT_FROM||'Photo Notes Issues <issues@photonotesapp.com>';
+  const appUrl=process.env.APP_URL||'https://photonotesapp.com';
+  const body={
+    from,to:[user.email],subject:`Photo Notes issue #${report.id} is ready to retest`,
+    html:`<h2>Your Photo Notes issue is ready to retest</h2><p><strong>Issue #${report.id}:</strong> ${escXml(report.description||'')}</p><p><strong>What changed:</strong> ${escXml(report.fix_summary||'A correction has been deployed.')}</p>${report.release_reference?`<p><strong>Release:</strong> ${escXml(report.release_reference)}</p>`:''}<p><strong>How to retest:</strong></p><p style="white-space:pre-wrap">${escXml(report.retest_instructions||'Refresh Photo Notes and repeat the steps that originally caused the problem.')}</p><p><a href="${escXml(appUrl)}">Open Photo Notes</a>, then open your account menu and choose <strong>My Issue Reports</strong> to tell us whether it is fixed.</p>`,
+  };
+  try{const r=await fetch('https://api.resend.com/emails',{method:'POST',headers:{'content-type':'application/json','authorization':`Bearer ${key}`},body:JSON.stringify(body)});if(!r.ok)return {status:'failed',error:`Mail service returned ${r.status}`};return {status:'sent',error:null};}
+  catch(e){return {status:'failed',error:ticketText(e&&e.message,200)||'Mail request failed'};}
+}
+
 app.post('/api/issues', requireAuth, upload.single('screenshot'), async (req, res) => {
   try {
     if (await currentPlan(req.user.id) === 'pro') {
@@ -1387,6 +1400,25 @@ app.get('/api/admin/issues', requireAdmin, async (req, res) => {
   } catch (err) { console.error('[issues.admin-list]', err); res.status(500).json({ error:'failed' }); }
 });
 
+app.get('/api/issues/mine', requireAuth, async (req,res)=>{
+  try{
+    const rows=(await pool.query(`SELECT id,description,page_name,screenshot_path,management_status,fix_summary,release_reference,retest_instructions,tester_notification_status,tester_notified_at,tester_result,tester_notes,tester_retested_at,created_at,updated_at FROM issue_reports WHERE user_id=$1 ORDER BY created_at DESC LIMIT 100`,[req.user.id])).rows;
+    res.json(rows);
+  }catch(e){console.error('[issues.mine]',e);res.status(500).json({error:'failed'});}
+});
+
+app.post('/api/issues/:id/retest',requireAuth,async(req,res)=>{
+  try{
+    const id=parseInt(req.params.id,10),result=req.body&&req.body.result;
+    if(!Number.isInteger(id)||!['fixed','still_happening'].includes(result))return res.status(400).json({error:'bad retest result'});
+    const notes=ticketText(req.body&&req.body.notes,2000);
+    const nextStatus=result==='fixed'?'tester_confirmed':'fixing';
+    const row=(await pool.query(`UPDATE issue_reports SET tester_result=$1,tester_notes=$2,tester_retested_at=now(),management_status=$3,updated_at=now(),resolved_at=CASE WHEN $1='fixed' THEN now() ELSE NULL END WHERE id=$4 AND user_id=$5 AND management_status IN ('ready_to_test','tester_confirmed','fixing') RETURNING *`,[result,notes,nextStatus,id,req.user.id])).rows[0];
+    if(!row)return res.status(404).json({error:'issue is not ready for retesting'});
+    logEvent(req.user.id,'issue_retest',{issue_id:id,result});res.json({ok:true,status:nextStatus});
+  }catch(e){console.error('[issues.retest]',e);res.status(500).json({error:'retest failed'});}
+});
+
 const ISSUE_MANAGEMENT_STATUSES = ['new', 'reviewing', 'fixing', 'ready_to_test', 'tester_confirmed', 'resolved', 'wont_fix'];
 const ISSUE_PRIORITIES = ['low', 'normal', 'high', 'urgent'];
 
@@ -1394,6 +1426,8 @@ app.post('/api/admin/issues/:id', requireAdmin, async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     if (!Number.isInteger(id)) return res.status(400).json({ error:'bad id' });
+    const before=(await pool.query(`SELECT management_status FROM issue_reports WHERE id=$1`,[id])).rows[0];
+    if(!before)return res.status(404).json({error:'not found'});
     const b = req.body || {}, sets = [], vals = [];
     if (typeof b.management_status === 'string') {
       if (!ISSUE_MANAGEMENT_STATUSES.includes(b.management_status)) return res.status(400).json({ error:'bad status' });
@@ -1405,10 +1439,17 @@ app.post('/api/admin/issues/:id', requireAdmin, async (req, res) => {
       vals.push(b.priority); sets.push(`priority=$${vals.length}`);
     }
     if (typeof b.admin_notes === 'string') { vals.push(ticketText(b.admin_notes, 10000)); sets.push(`admin_notes=$${vals.length}`); }
+    for(const field of ['fix_summary','release_reference','retest_instructions'])if(typeof b[field]==='string'){vals.push(ticketText(b[field],field==='release_reference'?300:5000));sets.push(`${field}=$${vals.length}`);}
     if (!sets.length) return res.status(400).json({ error:'nothing to update' });
     sets.push('updated_at=now()'); vals.push(id);
     const row = (await pool.query(`UPDATE issue_reports SET ${sets.join(', ')} WHERE id=$${vals.length} RETURNING *`, vals)).rows[0];
     if (!row) return res.status(404).json({ error:'not found' });
+    if(row.management_status==='ready_to_test'&&before.management_status!=='ready_to_test'){
+      const user=(await pool.query(`SELECT name,email FROM users WHERE id=$1`,[row.user_id])).rows[0]||{};
+      const delivery=user.email?await emailIssueReadyForRetest(row,user):{status:'failed',error:'Tester email unavailable'};
+      await pool.query(`UPDATE issue_reports SET tester_notification_status=$1,tester_notification_error=$2,tester_notified_at=CASE WHEN $1='sent' THEN now() ELSE tester_notified_at END WHERE id=$3`,[delivery.status,delivery.error,id]);
+      row.tester_notification_status=delivery.status;row.tester_notification_error=delivery.error;
+    }
     logEvent(req.user.id, 'admin_issue_update', { issue_id:id, status:row.management_status, priority:row.priority });
     res.json(row);
   } catch (err) { console.error('[issues.admin-update]', err); res.status(500).json({ error:'update failed' }); }
@@ -1426,6 +1467,18 @@ app.post('/api/admin/issues/:id/retry-email', requireAdmin, async (req, res) => 
     logEvent(req.user.id, 'admin_issue_email_retry', { issue_id:id, email_status:delivery.status });
     res.json(delivery);
   } catch (err) { console.error('[issues.admin-retry]', err); res.status(500).json({ error:'retry failed' }); }
+});
+
+app.post('/api/admin/issues/:id/notify-tester',requireAdmin,async(req,res)=>{
+  try{
+    const id=parseInt(req.params.id,10);if(!Number.isInteger(id))return res.status(400).json({error:'bad id'});
+    const report=(await pool.query(`SELECT * FROM issue_reports WHERE id=$1`,[id])).rows[0];
+    if(!report||report.management_status!=='ready_to_test')return res.status(400).json({error:'issue is not ready to test'});
+    const user=(await pool.query(`SELECT name,email FROM users WHERE id=$1`,[report.user_id])).rows[0]||{};
+    const delivery=user.email?await emailIssueReadyForRetest(report,user):{status:'failed',error:'Tester email unavailable'};
+    await pool.query(`UPDATE issue_reports SET tester_notification_status=$1,tester_notification_error=$2,tester_notified_at=CASE WHEN $1='sent' THEN now() ELSE tester_notified_at END,updated_at=now() WHERE id=$3`,[delivery.status,delivery.error,id]);
+    logEvent(req.user.id,'issue_tester_notification',{issue_id:id,email_status:delivery.status});res.json(delivery);
+  }catch(e){console.error('[issues.notify-tester]',e);res.status(500).json({error:'notification failed'});}
 });
 
 app.get('/api/admin/health', requireAdmin, async (req, res) => {

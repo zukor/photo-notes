@@ -278,6 +278,15 @@ CREATE TABLE IF NOT EXISTS issue_reports (
   management_status TEXT NOT NULL DEFAULT 'new',
   priority       TEXT NOT NULL DEFAULT 'normal',
   admin_notes    TEXT,
+  fix_summary    TEXT,
+  release_reference TEXT,
+  retest_instructions TEXT,
+  tester_notification_status TEXT,
+  tester_notification_error TEXT,
+  tester_notified_at TIMESTAMPTZ,
+  tester_result  TEXT,
+  tester_notes   TEXT,
+  tester_retested_at TIMESTAMPTZ,
   updated_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
   resolved_at    TIMESTAMPTZ,
   created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -594,6 +603,15 @@ async function init() {
   await pool.query(`ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS management_status TEXT NOT NULL DEFAULT 'new'`);
   await pool.query(`ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS priority TEXT NOT NULL DEFAULT 'normal'`);
   await pool.query(`ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS admin_notes TEXT`);
+  await pool.query(`ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS fix_summary TEXT`);
+  await pool.query(`ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS release_reference TEXT`);
+  await pool.query(`ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS retest_instructions TEXT`);
+  await pool.query(`ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS tester_notification_status TEXT`);
+  await pool.query(`ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS tester_notification_error TEXT`);
+  await pool.query(`ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS tester_notified_at TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS tester_result TEXT`);
+  await pool.query(`ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS tester_notes TEXT`);
+  await pool.query(`ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS tester_retested_at TIMESTAMPTZ`);
   await pool.query(`ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now()`);
   await pool.query(`ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMPTZ`);
 

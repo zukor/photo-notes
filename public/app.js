@@ -262,6 +262,7 @@ function renderApp() {
               <div class="profile-name">${esc((state.me && state.me.name) || 'Photo Notes User')}</div>
               <div class="profile-email">${esc((state.me && state.me.email) || '')}</div>
               <div class="profile-plan">${isRoadIssuesClient()?'Road Issue Reporter':isProClient()?esc(productName()):'Basic Plan'}</div>
+              ${!isProClient()?'<button type="button" id="myIssues">My Issue Reports</button>':''}
               ${state.me && state.me.role === 'admin' ? '<a href="/admin">Admin Dashboard</a>' : ''}
               <button type="button" id="signout">Sign Out</button>
             </div>
@@ -283,11 +284,17 @@ function renderApp() {
       <div class="issue-dialog" role="dialog" aria-modal="true" aria-labelledby="issueTitle">
         <button class="issue-close" id="issueClose" type="button" aria-label="Close">×</button>
         <h2 id="issueTitle">Report an Issue</h2>
-        <p class="status">Tell us what happened, what you expected, and what you were doing when it happened.</p>
+        <p class="status">Answer these short questions. Photo Notes attaches the page and device details automatically.</p>
         <div class="issue-shot-status" id="issueShotStatus">Capturing this page...</div>
+        <label for="issueAction">What were you trying to do?</label>
+        <input id="issueAction" type="text" placeholder="For example: record a note after taking a photo">
         <label for="issueDescription">What went wrong?</label>
         <button class="btn" id="issueRecord" type="button">Speak Description</button>
         <textarea id="issueDescription" placeholder="Describe the problem in detail..."></textarea>
+        <label for="issueExpected">What did you expect to happen?</label>
+        <input id="issueExpected" type="text" placeholder="Tell us what should have happened">
+        <label for="issueFrequency">How often does it happen?</label>
+        <select id="issueFrequency"><option value="">Choose one</option><option>Every time</option><option>Sometimes</option><option>Only happened once</option><option>Not sure</option></select>
         <button class="btn" id="issueSend" type="button">Send Issue Report</button>
         <div class="status" id="issueStatus"></div>
       </div>
@@ -306,6 +313,7 @@ function renderApp() {
     }
   };
   document.getElementById('signout').onclick = async () => { await api('/api/logout', { method: 'POST' }); state.me = null; renderLogin(); };
+  const myIssues=document.getElementById('myIssues');if(myIssues)myIssues.onclick=()=>{state.view='my-issues';renderApp();};
   document.querySelectorAll('[data-edition]').forEach(button=>button.onclick=async()=>{if(button.classList.contains('active'))return;document.querySelectorAll('[data-edition]').forEach(b=>b.disabled=true);const r=await api('/api/admin/switch-edition',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({edition:button.dataset.edition})});if(!r.ok){toast('Edition could not be switched');return renderApp();}state.view=button.dataset.edition==='roads'?'road-report':(IS_HANDHELD?'capture':'organize');state.photoFile=null;state._note='';await boot();toast('Edition switched');});
   const issueFab = document.getElementById('issueFab'); if (issueFab) issueFab.onclick = openIssueReporter;
   const tabCapture=document.getElementById('tabCapture');if(tabCapture)tabCapture.onclick = () => { state.view='capture'; renderApp(); };
@@ -334,8 +342,28 @@ function renderApp() {
   else if (state.view === 'hoa-reports') renderHoaReports();
   else if (state.view === 'concrete-report') renderConcreteReport();
   else if (state.view === 'map') renderMap();
+  else if (state.view === 'my-issues') renderMyIssueReports();
   else { state.view = 'organize'; renderList(); }
   renderTensorHelp();
+}
+
+const MY_ISSUE_STATUS={new:'Received',reviewing:'Under review',fixing:'Being fixed',ready_to_test:'Ready to retest',tester_confirmed:'Fixed — you confirmed',resolved:'Resolved',wont_fix:'Closed'};
+async function renderMyIssueReports(){
+  const body=document.getElementById('body');
+  body.innerHTML='<button class="backlink" id="issuesBack">← Back</button><div class="workflow-intro"><strong>My Issue Reports</strong><span>See what you reported, whether it has been fixed, and what needs another test.</span></div><div id="myIssueList"><p class="status">Loading your reports...</p></div>';
+  document.getElementById('issuesBack').onclick=()=>{state.view=IS_HANDHELD?'capture':'organize';renderApp();};
+  const r=await api('/api/issues/mine'),box=document.getElementById('myIssueList');
+  if(!r.ok){box.innerHTML='<p class="status">Your issue reports could not be loaded.</p>';return;}
+  const rows=await r.json();
+  box.innerHTML=rows.length?rows.map(i=>`<article class="card tester-issue-card"><div class="tester-issue-head"><strong>Issue #${i.id}: ${esc(i.page_name||'Photo Notes')}</strong><span class="badge issue-status-${esc(i.management_status||'new')}">${esc(MY_ISSUE_STATUS[i.management_status]||'Received')}</span></div><div class="meta">Reported ${new Date(i.created_at).toLocaleString(uiLocale())}</div><p>${esc(i.description)}</p>${i.fix_summary?`<div class="issue-fix-summary"><strong>What changed</strong><span>${esc(i.fix_summary)}</span></div>`:''}${i.release_reference?`<div class="meta">Release: ${esc(i.release_reference)}</div>`:''}${i.management_status==='ready_to_test'?`<div class="issue-retest"><strong>How to retest</strong><p>${esc(i.retest_instructions||'Refresh Photo Notes and repeat the steps that caused the problem.')}</p><label for="retestNotes-${i.id}">Optional retest note</label><textarea id="retestNotes-${i.id}" placeholder="Tell us only if something is still wrong."></textarea><div class="issue-retest-actions"><button class="btn" type="button" data-retest-fixed="${i.id}">Fixed on my device</button><button class="btn secondary" type="button" data-retest-broken="${i.id}">Still happening</button></div></div>`:i.tester_result?`<div class="meta">Your retest: ${i.tester_result==='fixed'?'Fixed':'Still happening'}${i.tester_notes?' — '+esc(i.tester_notes):''}</div>`:''}</article>`).join(''):'<p class="status">You have not submitted any issue reports yet.</p>';
+  box.querySelectorAll('[data-retest-fixed]').forEach(b=>b.onclick=()=>submitIssueRetest(Number(b.dataset.retestFixed),'fixed',b));
+  box.querySelectorAll('[data-retest-broken]').forEach(b=>b.onclick=()=>submitIssueRetest(Number(b.dataset.retestBroken),'still_happening',b));
+}
+async function submitIssueRetest(id,result,button){
+  button.disabled=true;const notes=(document.getElementById(`retestNotes-${id}`)||{}).value||'';
+  const r=await api(`/api/issues/${id}/retest`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({result,notes})});
+  if(r.ok){toast(result==='fixed'?'Thank you. The fix is confirmed.':'Thank you. The issue was reopened.');renderMyIssueReports();}
+  else{toast('Your retest result could not be saved');button.disabled=false;}
 }
 
 // ================= Tensor Man page help (Basic, desktop only) =================
@@ -429,7 +457,7 @@ async function openIssueReporter() {
   issuePageName=issuePageLabels[state.view]||state.view||'Photo Notes'; issueScreenshotBlob=null;
   const send=document.getElementById('issueSend'),description=document.getElementById('issueDescription'),status=document.getElementById('issueStatus');
   if(send){send.disabled=false;send.textContent='Send Issue Report';}
-  if(description)description.value='';
+  if(description)description.value='';for(const id of ['issueAction','issueExpected','issueFrequency']){const field=document.getElementById(id);if(field)field.value='';}
   if(status)status.textContent='';
   try {
     if(window.html2canvas){const canvas=await window.html2canvas(document.querySelector('.wrap'),{useCORS:true,allowTaint:false,backgroundColor:'#ffffff',scale:Math.min(window.devicePixelRatio||1,1.5),logging:false});issueScreenshotBlob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',0.78));}
@@ -488,8 +516,9 @@ function startIssueDictationSession(SR){
 async function submitIssueReport(){
   issueDictationActive=false;if(issueDictationRestartTimer)clearTimeout(issueDictationRestartTimer);if(issueDictationWatchdog)clearTimeout(issueDictationWatchdog);issueDictationRestartTimer=null;issueDictationWatchdog=null;
   if(issueRecognizer){try{issueRecognizer.stop();}catch(e){}}
-  const ta=document.getElementById('issueDescription'),description=ta.value.trim(),btn=document.getElementById('issueSend'),st=document.getElementById('issueStatus');
-  if(!description){st.textContent='Please describe the problem before sending.';ta.focus();return;}
+  const ta=document.getElementById('issueDescription'),whatHappened=ta.value.trim(),action=document.getElementById('issueAction').value.trim(),expected=document.getElementById('issueExpected').value.trim(),frequency=document.getElementById('issueFrequency').value,btn=document.getElementById('issueSend'),st=document.getElementById('issueStatus');
+  const description=[action&&`Trying to do: ${action}`,whatHappened&&`What happened: ${whatHappened}`,expected&&`Expected: ${expected}`,frequency&&`Frequency: ${frequency}`].filter(Boolean).join('\n');
+  if(!whatHappened){st.textContent='Please tell us what went wrong before sending.';ta.focus();return;}
   btn.disabled=true;btn.textContent='Sending...';st.textContent='Saving your report...';
   try{const fd=new FormData();fd.append('description',description);fd.append('page_name',issuePageName);fd.append('page_url',location.href);fd.append('viewport',`${window.innerWidth} × ${window.innerHeight}`);fd.append('user_agent',navigator.userAgent);if(issueScreenshotBlob)fd.append('screenshot',issueScreenshotBlob,'issue-screen.jpg');const r=await api('/api/issues',{method:'POST',body:fd});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error();st.textContent=d.email_status==='sent'?`Issue #${d.id} sent. Thank you.`:`Issue #${d.id} saved. Thank you.`;btn.textContent='Sent';setTimeout(closeIssueReporter,1800);}catch(e){st.textContent='The report could not be sent. Check your connection and try again.';btn.disabled=false;btn.textContent='Send Issue Report';}
 }
