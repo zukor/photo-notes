@@ -292,6 +292,26 @@ CREATE TABLE IF NOT EXISTS issue_reports (
   created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS issue_reports_created_idx ON issue_reports (created_at DESC);
+-- Named Basic-version testing assignments. Steps and progress are JSON so an
+-- assignment remains an exact historical checklist even as later rounds change.
+CREATE TABLE IF NOT EXISTS testing_assignments (
+  id                   SERIAL PRIMARY KEY,
+  assignment_key       TEXT UNIQUE NOT NULL,
+  assignee_name        TEXT NOT NULL,
+  assignee_email        TEXT,
+  user_id               INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  title                 TEXT NOT NULL,
+  summary               TEXT,
+  steps                 JSONB NOT NULL DEFAULT '[]'::jsonb,
+  completed_step_ids    JSONB NOT NULL DEFAULT '[]'::jsonb,
+  tester_notes          TEXT,
+  status                TEXT NOT NULL DEFAULT 'assigned',
+  started_at            TIMESTAMPTZ,
+  submitted_at          TIMESTAMPTZ,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS testing_assignments_user_idx ON testing_assignments (user_id, status, created_at DESC);
 -- Simplified Road Issues Reporting edition. The photograph and its location
 -- are the report; submissions are stored before notification is attempted.
 CREATE TABLE IF NOT EXISTS road_issue_reports (
@@ -614,6 +634,53 @@ async function init() {
   await pool.query(`ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS tester_retested_at TIMESTAMPTZ`);
   await pool.query(`ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now()`);
   await pool.query(`ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMPTZ`);
+
+  const sharedSteps = [
+    {id:'sign-in',title:'Sign in and open Basic',instruction:'Sign in on your normal phone and confirm Photo Notes Basic opens without an error.'},
+    {id:'photo-controls',title:'Take, retake, and cancel a photo',instruction:'Take a photo, use Retake Photo once, then cancel it. Take a new photo to continue.'},
+    {id:'paired-capture',title:'Save a complete Photo Note',instruction:'Take a photo, record a voice note, and save it. Confirm the photo, note, GPS, address, and topic remain together.'},
+    {id:'organize',title:'Find and organize it',instruction:'Open Organize, find the Photo Note, add a title, change its topic, and confirm the changes remain after refresh.'},
+    {id:'view',title:'View and zoom',instruction:'Open View and Zoom, move around the enlarged photo, then use Reset Photo.'},
+    {id:'send',title:'Share one Photo Note',instruction:'Select the Photo Note in Send and use Share. Confirm the phone share sheet opens.'},
+    {id:'report',title:'Report one test issue',instruction:'Open Report an Issue and submit a clearly labeled test report so the reporting workflow is checked too.'}
+  ];
+  const rounds = [
+    {key:'basic-jose-regression-2026-09',name:'Jose',email:null,title:'Photo Notes Basic — Regression and Reliability',summary:'Recheck previously reported Android problems, then complete a longer mixed capture session.',extra:[
+      {id:'jose-voice',title:'Recheck Android voice transcription',instruction:'Record several notes with short pauses. Confirm words do not repeat or move to the next photo.'},
+      {id:'jose-issue-voice',title:'Recheck issue-report voice input',instruction:'Use Speak Description in Report an Issue twice and confirm each description appears once.'},
+      {id:'jose-location',title:'Recheck address handling',instruction:'Test Retry Location and Address, then edit one address and confirm it stays corrected.'},
+      {id:'jose-repeat-report',title:'Submit two issue reports',instruction:'Submit two labeled test reports in succession and confirm the second Send button works.'},
+      {id:'jose-session',title:'Complete a 20-photo mixed session',instruction:'Capture 20 varied Photo Notes. Mix voice and typed notes and confirm no photo, note, or location crosses into another item.'}
+    ]},
+    {key:'basic-rolando-capture-2026-09',name:'Rolando',email:'espinoza@zukor.com',title:'Photo Notes Basic — Android Capture Reliability',summary:'Focus on repeated field capture, voice behavior, and saving when the connection changes.',extra:[
+      {id:'rolando-sequence',title:'Capture 15 consecutive Photo Notes',instruction:'Take 15 different photos with short voice notes. Confirm every note stays with the photo on which it was recorded.'},
+      {id:'rolando-pauses',title:'Test pauses and background noise',instruction:'Record one note after waiting three seconds and another with ordinary background noise. Confirm recording stays usable and does not spam repeated words.'},
+      {id:'rolando-network',title:'Test a weak connection',instruction:'With a weak or changing connection, save several Photo Notes and continue working. Confirm uploads finish without blocking the next capture.'},
+      {id:'rolando-reopen',title:'Leave and reopen Photo Notes',instruction:'After saving, switch to another app and return. Confirm saved and waiting-to-upload items are still present.'}
+    ]},
+    {key:'basic-hassan-organize-2026-09',name:'Hassan',email:null,title:'Photo Notes Basic — Organize and Edit',summary:'Focus on keeping a larger library understandable and correcting captured information.',extra:[
+      {id:'hassan-library',title:'Review at least 15 Photo Notes',instruction:'Inspect at least 15 library cards and confirm each photo is large enough to identify and matches its title and notes.'},
+      {id:'hassan-fields',title:'Edit titles, topics, notes, and addresses',instruction:'Change each type of information on different Photo Notes, refresh, and confirm every change remains.'},
+      {id:'hassan-selection',title:'Test selection controls',instruction:'Use Select All and Clear All, then select individual Photo Notes. Confirm the count and checkmarks are correct.'},
+      {id:'hassan-delete',title:'Test deletion safely',instruction:'Create a disposable test Photo Note, delete it from Organize, and confirm only that item is removed.'},
+      {id:'hassan-history',title:'Review Photo Details & History',instruction:'Open details for an edited Photo Note and confirm file format, original capture, and later changes are understandable.'}
+    ]},
+    {key:'basic-gabby-create-send-2026-09',name:'Gabby',email:null,title:'Photo Notes Basic — Create and Send',summary:'Focus on turning selected Photo Notes into a polished document and sharing it.',extra:[
+      {id:'gabby-document',title:'Build a document',instruction:'Create a document from several Photo Notes, change their order and captions, and review the paginated preview.'},
+      {id:'gabby-branding',title:'Add company branding',instruction:'Upload a test company logo and confirm it appears in the document preview.'},
+      {id:'gabby-template',title:'Try a Word template',instruction:'Import a simple Word template and confirm Photo Notes recognizes it without changing the original file.'},
+      {id:'gabby-edit',title:'Edit the document layout',instruction:'Change the cover, heading, spacing, and basic layout controls, then confirm the preview updates.'},
+      {id:'gabby-formats',title:'Download and share formats',instruction:'Create PDF, Word, and Markdown outputs. Test Download, Share, and Print where available and note any confusing wording.'}
+    ]}
+  ];
+  for (const round of rounds) {
+    const steps = sharedSteps.concat(round.extra);
+    await pool.query(`INSERT INTO testing_assignments (assignment_key,assignee_name,assignee_email,title,summary,steps)
+      VALUES($1,$2,$3,$4,$5,$6::jsonb) ON CONFLICT (assignment_key) DO UPDATE SET title=EXCLUDED.title,summary=EXCLUDED.summary,steps=EXCLUDED.steps,updated_at=now()`,
+      [round.key,round.name,round.email,round.title,round.summary,JSON.stringify(steps)]);
+  }
+  await pool.query(`UPDATE testing_assignments a SET user_id=u.id,updated_at=now() FROM users u
+    WHERE a.user_id IS NULL AND (lower(COALESCE(a.assignee_email,''))=lower(u.email) OR lower(COALESCE(u.name,'')) LIKE lower(a.assignee_name)||'%')`);
 
   // This common property-maintenance topic is available to every existing and
   // future account. Existing custom topics are preserved.

@@ -69,6 +69,10 @@
     .activity-table { width:100%; border-collapse:collapse; font-size:13px; }
     .activity-table th,.activity-table td { text-align:left; padding:8px; border-bottom:1px solid #e3e6ea; vertical-align:top; }
     .usage-row { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:8px; }
+    .assignment-admin-card { border-left:6px solid #2455d9; }
+    .assignment-admin-card.submitted { border-left-color:#1b7a3d; }
+    .assignment-admin-card .assignment-progress { height:9px; border:1px solid #2455d9; border-radius:999px; overflow:hidden; margin:8px 0; }
+    .assignment-admin-card .assignment-progress span { display:block; height:100%; background:#2455d9; }
     @media (max-width:520px) {
       .capture-stats { grid-template-columns:repeat(3, minmax(0, 1fr)); }
       .password-row { grid-template-columns:1fr 1fr; }
@@ -94,6 +98,7 @@
     function num(v){ return Number(v) || 0; }
     let allUsers = [];
     let allIssues = [];
+    let allAssignments = [];
     let usageByUser = {};
     let currentUser = null;
     function userInitials(user){
@@ -348,6 +353,11 @@
 
           <details style="margin-top:16px"><summary style="font-weight:bold;cursor:pointer">Administrative Activity Log</summary><div class="helper">Account, password, plan, feature-access, and issue-management changes. Passwords and user content are never recorded.</div><div id="activity"><p class="status">Loading...</p></div></details>
 
+          <label style="margin-top:22px">Testing Assignments</label>
+          <div class="helper">Live progress for the four Basic-version assignments. A submitted assignment needs no separate email or message from the tester.</div>
+          <button class="btn secondary" id="refreshAssignments" type="button" style="width:auto;margin:0 0 10px">Refresh Assignments</button>
+          <div id="assignments"><p class="status">Loading...</p></div>
+
           <label style="margin-top:22px">Issue Management Center</label>
           <div class="helper">Review tester reports, set priority, track repair and retesting, add private administrator notes, and confirm email delivery.</div>
           <div class="issue-toolbar">
@@ -387,12 +397,17 @@
       document.getElementById('issueTesterFilter').onchange = renderIssues;
       document.getElementById('issueDeviceFilter').onchange = renderIssues;
       document.getElementById('refreshIssues').onclick = loadIssues;
+      document.getElementById('refreshAssignments').onclick = loadAssignments;
       loadHealth();
       loadStripeBilling();
       loadActivity();
       loadIssues();
+      loadAssignments();
       loadUsers();
     }
+
+    function assignmentCard(a){const steps=Array.isArray(a.steps)?a.steps:[],done=new Set((Array.isArray(a.completed_step_ids)?a.completed_step_ids:[]).map(String)),percent=steps.length?Math.round(done.size/steps.length*100):0,name=a.user_name||a.assignee_name,email=a.user_email||a.assignee_email||'login not connected';return `<article class="card assignment-admin-card ${a.status==='submitted'?'submitted':''}"><div class="user-title-row"><div class="userhead">${esc(name)} — ${esc(a.title)}</div><span class="pill ${a.status==='submitted'?'pro':'basic'}">${a.status==='submitted'?'Submitted':a.status==='in_progress'?'In Progress':'Assigned'}</span></div><div class="muted">${esc(email)} · ${done.size} of ${steps.length} checks complete${a.submitted_at?' · Submitted '+fdatetime(a.submitted_at):''}</div><div class="assignment-progress"><span style="width:${percent}%"></span></div>${a.user_id?'':'<div class="helper"><b>Waiting for matching login.</b> The assignment will connect automatically when this tester signs in with a matching name.</div>'}${a.tester_notes?`<div class="admin-panel"><b>Tester notes</b><br>${esc(a.tester_notes)}</div>`:''}<details><summary>Checklist progress</summary>${steps.map((s,i)=>`<div class="muted" style="padding:5px 0">${done.has(String(s.id))?'✓':'○'} ${i+1}. ${esc(s.title)}</div>`).join('')}</details></article>`;}
+    async function loadAssignments(){const box=document.getElementById('assignments');if(!box)return;box.innerHTML='<p class="status">Loading...</p>';try{const r=await api('/api/admin/testing-assignments');if(!r.ok)throw new Error();allAssignments=await r.json();box.innerHTML=allAssignments.length?allAssignments.map(assignmentCard).join(''):'<p class="helper">No assignments are configured.</p>';}catch(e){box.innerHTML='<p class="status">Testing assignments could not be loaded.</p>';}}
 
     const issueStatusLabels={new:'New',reviewing:'Reviewing',fixing:'Fixing',ready_to_test:'Ready to Test',tester_confirmed:'Tester Confirmed',resolved:'Resolved',wont_fix:'Won’t Fix'};
     const issuePriorityLabels={low:'Low',normal:'Normal',high:'High',urgent:'Urgent'};

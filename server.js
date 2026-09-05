@@ -1407,6 +1407,47 @@ app.get('/api/issues/mine', requireAuth, async (req,res)=>{
   }catch(e){console.error('[issues.mine]',e);res.status(500).json({error:'failed'});}
 });
 
+app.get('/api/testing/assignments/mine', requireAuth, async (req,res)=>{
+  try{
+    await pool.query(`UPDATE testing_assignments SET user_id=$1,updated_at=now() WHERE user_id IS NULL AND (lower(COALESCE(assignee_email,''))=lower($2) OR lower($3) LIKE lower(assignee_name)||'%')`,[req.user.id,req.user.email||'',req.user.name||'']);
+    const rows=(await pool.query(`SELECT id,assignment_key,assignee_name,title,summary,steps,completed_step_ids,tester_notes,status,started_at,submitted_at,created_at,updated_at FROM testing_assignments WHERE user_id=$1 ORDER BY created_at DESC`,[req.user.id])).rows;
+    res.json(rows);
+  }catch(e){console.error('[testing.mine]',e);res.status(500).json({error:'assignments unavailable'});}
+});
+
+app.post('/api/testing/assignments/:id/progress', requireAuth, async (req,res)=>{
+  try{
+    const id=Number(req.params.id),completed=[...new Set((Array.isArray(req.body.completed_step_ids)?req.body.completed_step_ids:[]).map(String))],notes=String(req.body.tester_notes||'').slice(0,4000);
+    const current=(await pool.query(`SELECT steps,status FROM testing_assignments WHERE id=$1 AND user_id=$2`,[id,req.user.id])).rows[0];
+    if(!current)return res.status(404).json({error:'assignment not found'});
+    if(current.status==='submitted')return res.status(409).json({error:'assignment already submitted'});
+    const allowed=new Set((Array.isArray(current.steps)?current.steps:[]).map(s=>String(s.id)));
+    const safe=completed.filter(step=>allowed.has(step));
+    const row=(await pool.query(`UPDATE testing_assignments SET completed_step_ids=$1::jsonb,tester_notes=$2,status=CASE WHEN cardinality($3::text[])>0 THEN 'in_progress' ELSE 'assigned' END,started_at=CASE WHEN cardinality($3::text[])>0 THEN COALESCE(started_at,now()) ELSE started_at END,updated_at=now() WHERE id=$4 AND user_id=$5 RETURNING *`,[JSON.stringify(safe),notes,safe,id,req.user.id])).rows[0];
+    res.json(row);
+  }catch(e){console.error('[testing.progress]',e);res.status(500).json({error:'progress could not be saved'});}
+});
+
+app.post('/api/testing/assignments/:id/submit', requireAuth, async (req,res)=>{
+  try{
+    const id=Number(req.params.id),notes=String(req.body&&req.body.tester_notes||'').slice(0,4000);
+    const current=(await pool.query(`SELECT * FROM testing_assignments WHERE id=$1 AND user_id=$2`,[id,req.user.id])).rows[0];
+    if(!current)return res.status(404).json({error:'assignment not found'});
+    const stepIds=(Array.isArray(current.steps)?current.steps:[]).map(s=>String(s.id)),done=new Set((Array.isArray(current.completed_step_ids)?current.completed_step_ids:[]).map(String));
+    if(stepIds.some(step=>!done.has(step)))return res.status(400).json({error:'complete every checklist item before submitting'});
+    const row=(await pool.query(`UPDATE testing_assignments SET status='submitted',tester_notes=$1,submitted_at=now(),updated_at=now() WHERE id=$2 AND user_id=$3 RETURNING *`,[notes,id,req.user.id])).rows[0];
+    await logEvent(req.user.id,'testing_assignment_submitted',{assignment_id:id,assignment_key:current.assignment_key});
+    res.json(row);
+  }catch(e){console.error('[testing.submit]',e);res.status(500).json({error:'assignment could not be submitted'});}
+});
+
+app.get('/api/admin/testing-assignments', requireAdmin, async(req,res)=>{
+  try{
+    const rows=(await pool.query(`SELECT a.*,u.name AS user_name,u.email AS user_email FROM testing_assignments a LEFT JOIN users u ON u.id=a.user_id ORDER BY CASE a.status WHEN 'submitted' THEN 0 WHEN 'in_progress' THEN 1 ELSE 2 END,a.updated_at DESC`)).rows;
+    res.json(rows);
+  }catch(e){console.error('[admin.testing]',e);res.status(500).json({error:'assignments unavailable'});}
+});
+
 app.post('/api/issues/:id/retest',requireAuth,async(req,res)=>{
   try{
     const id=parseInt(req.params.id,10),result=req.body&&req.body.result;
