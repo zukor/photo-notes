@@ -17,11 +17,12 @@ test('general Pro retains the former Basic help, issue, and assignment workflows
 test('administrators can create, assign, and switch to general Pro',()=>{
   assert.match(admin,/<option value="general"[^>]*>Photo Notes Pro<\/option>/);
   assert.match(admin,/\{plan,pro_type:'general'\}/);
-  assert.match(server,/\['roads','general','paving','hoa','concrete','roofer'\]/);
+  assert.match(server,/\['roads','general','contractor','paving','hoa','concrete','roofer'\]/);
   assert.match(db,/SET plan='pro',pro_type='general' FROM testing_assignments/);
 });
-test('temporary Pro branding is explicit and replaceable by the supplied final SVG',()=>{
+test('supplied Pro branding replaces the temporary treatment',()=>{
   assert.match(styles,/general-pro-brand/);
-  assert.match(styles,/content:"PRO"/);
+  assert.match(styles,/photo-notes-ai-pro-animated\.svg\?v=127/);
+  assert.doesNotMatch(styles,/content:"PRO"/);
   assert.match(app,/>PRO<\/button>/);
 });

@@ -31,8 +31,8 @@ test('Tensor Man is hidden at phone and small-tablet widths and cannot cover con
 });
 
 test('new app and style versions are cache-busted', () => {
-  assert.match(index, /styles\.css\?v=126/);
-  assert.match(index, /app\.js\?v=141/);
+  assert.match(index, /styles\.css\?v=127/);
+  assert.match(index, /app\.js\?v=142/);
 });
 
 test('Android issue-description dictation replaces revised results and restarts', () => {

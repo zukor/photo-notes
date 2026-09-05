@@ -7,6 +7,7 @@ let state = { view: IS_HANDHELD ? 'capture' : 'organize', location: null, addres
 // not render at all for free users (no disabled teaser).
 function isProClient() { return state.plan === 'pro'; }
 function isGeneralProClient(){return isProClient()&&state.proType==='general';}
+function isGeneralContractorClient(){return isProClient()&&state.proType==='contractor';}
 function isIndustryProClient(){return isProClient()&&!isGeneralProClient();}
 function isBasicClient(){return !isProClient()&&!isRoadIssuesClient();}
 function isHoaClient(){return isProClient()&&state.proType==='hoa';}
@@ -14,7 +15,7 @@ function isConcreteClient(){return isProClient()&&state.proType==='concrete';}
 function isPavingClient(){return isProClient()&&(state.proType==='paving'||state.proType==='asphalt');}
 function isRooferClient(){return isProClient()&&state.proType==='roofer';}
 function isRoadIssuesClient(){return !isProClient()&&state.proType==='roads';}
-function productName(){return isRoadIssuesClient()?'Road Issue Reporter':isGeneralProClient()?'Photo Notes Pro':isHoaClient()?'HOA Maintenance Pro':isConcreteClient()?'Concrete Pro':isRooferClient()?'Roofer Pro':isPavingClient()?'Paving Pro':'Photo Notes AI Basic';}
+function productName(){return isRoadIssuesClient()?'Road Issue Reporter':isGeneralProClient()?'Photo Notes Pro':isGeneralContractorClient()?'General Contractor Pro':isHoaClient()?'HOA Maintenance Pro':isConcreteClient()?'Concrete Pro':isRooferClient()?'Roofer Pro':isPavingClient()?'Paving Pro':'Photo Notes AI Basic';}
 function issueFabLabel(){return isRoadIssuesClient()?'Report Issue':'Report an Issue';}
 function featureOn(name) { return isPavingClient() && (!state.me || !state.me.feature_access || state.me.feature_access[name] !== false); }
 function measurementOn(){return isConcreteClient()||featureOn('measurements');}
@@ -254,9 +255,9 @@ function renderApp() {
       <div class="app-header">
         <img class="zukor-corner-logo" src="/zukor-logo.svg" alt="Zukor AI" />
         <div class="brandrow">
-          <div class="brand ${isProClient() ? 'pro-edition-brand' : ''} ${isGeneralProClient()?'general-pro-brand':''} ${isRoadIssuesClient()?'road-issues-brand':''} ${isPavingClient()?'paving-pro-brand':''} ${isConcreteClient()?'concrete-pro-brand':''} ${isHoaClient()?'hoa-pro-brand':''} ${isRooferClient()?'roofer-pro-brand':''}" aria-label="${esc(isProClient()||isRoadIssuesClient()?productName():'Photo Notes AI Basic')}">${isProClient()||isRoadIssuesClient()?'':'<span class="product-suite-name">Photo Notes</span>'}</div>
+          <div class="brand ${isProClient() ? 'pro-edition-brand' : ''} ${isGeneralProClient()?'general-pro-brand':''} ${isGeneralContractorClient()?'contractor-pro-brand':''} ${isRoadIssuesClient()?'road-issues-brand':''} ${isPavingClient()?'paving-pro-brand':''} ${isConcreteClient()?'concrete-pro-brand':''} ${isHoaClient()?'hoa-pro-brand':''} ${isRooferClient()?'roofer-pro-brand':''}" aria-label="${esc(isProClient()||isRoadIssuesClient()?productName():'Photo Notes AI Basic')}">${isProClient()||isRoadIssuesClient()?'':'<span class="product-suite-name">Photo Notes</span>'}</div>
         </div>
-        ${state.me&&state.me.role==='admin'?`<div class="edition-switcher" aria-label="Switch Photo Notes edition"><button data-edition="basic" class="${isBasicClient()?'active':''}">BASIC</button><button data-edition="pro" class="${isGeneralProClient()?'active':''}">PRO</button><button data-edition="roads" class="${isRoadIssuesClient()?'active':''}">RIR</button><button data-edition="paving" class="${isPavingClient()?'active':''}">PP</button><button data-edition="hoa" class="${isHoaClient()?'active':''}">HMP</button><button data-edition="concrete" class="${isConcreteClient()?'active':''}">CP</button><button data-edition="roofer" class="${isRooferClient()?'active':''}">RP</button></div>`:''}
+        ${state.me&&state.me.role==='admin'?`<div class="edition-switcher" aria-label="Switch Photo Notes edition"><button data-edition="basic" class="${isBasicClient()?'active':''}">BASIC</button><button data-edition="pro" class="${isGeneralProClient()?'active':''}">PRO</button><button data-edition="contractor" class="${isGeneralContractorClient()?'active':''}">GCP</button><button data-edition="roads" class="${isRoadIssuesClient()?'active':''}">RIR</button><button data-edition="paving" class="${isPavingClient()?'active':''}">PP</button><button data-edition="hoa" class="${isHoaClient()?'active':''}">HMP</button><button data-edition="concrete" class="${isConcreteClient()?'active':''}">CP</button><button data-edition="roofer" class="${isRooferClient()?'active':''}">RP</button></div>`:''}
         <div class="header-controls">
           <div class="language-switch" aria-label="Language"><button type="button" data-language="en">EN</button><span> </span><button type="button" data-language="es">ES</button></div>
           <div class="account-menu-wrap">

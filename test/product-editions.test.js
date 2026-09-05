@@ -14,7 +14,7 @@ test('edition switching is restricted to administrators',()=>{
 
 test('only administrators see the compact edition switcher',()=>{
   assert.match(app,/state\.me&&state\.me\.role==='admin'/);
-  for(const label of ['BASIC','PRO','RIR','PP','HMP','CP','RP'])assert.match(app,new RegExp(`>${label}<`));
+  for(const label of ['BASIC','PRO','GCP','RIR','PP','HMP','CP','RP'])assert.match(app,new RegExp(`>${label}<`));
 });
 
 test('every edition uses Organize for the shared workflow tab',()=>{
@@ -62,6 +62,20 @@ test('Concrete Pro uses the supplied blue subtitle trial logo',()=>{
   assert.match(css,/concrete-pro-brand[\s\S]*photo-notes-ai-concrete-pro-animated\.svg\?v=78/);
   assert.match(logo,/aria-label="Photo Notes AI Concrete Pro logo, animated, blue subtitle trial"/);
   assert.match(logo,/fill="#1d4ed8"/);
+});
+
+test('Photo Notes Pro and General Contractor Pro use all supplied logo variants',()=>{
+  const css=fs.readFileSync(path.join(root,'public','styles.css'),'utf8');
+  const crypto=require('node:crypto');
+  const expected=[
+    ['pro-animated','Photo Notes AI Pro logo','dd74a1399243e7f400fff1ef37807559641a9f75d67dd3b92ddfd8da3c47321b'],
+    ['pro-static','Photo Notes AI Pro logo','ca562064a49cb4d67a07e3b369c83002721b7680b40afebd8660f0b682453c1c'],
+    ['general-contractor-pro-animated','Photo Notes AI General Contractor Pro logo','05b31fda853967ace97f96c8be525567bbcb1f754ec54210cb27965b3a15b8fa'],
+    ['general-contractor-pro-static','Photo Notes AI General Contractor Pro logo','48a61712f857209636f0440a0b9b5225386d60d24ee1100aead478d5210d3f74'],
+  ];
+  for(const [name,label,hash] of expected){const file=fs.readFileSync(path.join(root,'public',`photo-notes-ai-${name}.svg`));assert.match(file.toString(),new RegExp(`aria-label="${label}"`));assert.equal(crypto.createHash('sha256').update(file).digest('hex'),hash);assert.match(css,new RegExp(`photo-notes-ai-${name}\\.svg\\?v=127`));}
+  assert.match(server,/contractor:\{plan:'pro',pro_type:'contractor'\}/);
+  assert.match(app,/data-edition="contractor"[\s\S]*>GCP<\/button>/);
 });
 
 test('Paving classification covers broader visible pavement failures',()=>{
