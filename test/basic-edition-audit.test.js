@@ -9,17 +9,17 @@ const server = fs.readFileSync(path.join(root, 'server.js'), 'utf8');
 const admin = fs.readFileSync(path.join(root, 'public', 'admin.html'), 'utf8');
 const styles = fs.readFileSync(path.join(root, 'public', 'styles.css'), 'utf8');
 
-test('Basic keeps its own help and issue reporting while Pro-only camera tools stay gated', () => {
-  assert.match(app, /!isProClient\(\) \? `<button class="issue-fab \$\{isRoadIssuesClient\(\)\?'road-issue-fab':''\}"/);
-  assert.match(app, /if \(isProClient\(\) \|\| !TENSOR_HELP_TOPICS\[state\.view\]\) return/);
-  assert.match(app, /isProClient\(\) && \['ticket_scanner','camera_readers','before_after'\]\.some\(featureOn\)/);
-  assert.match(server, /if \(await currentPlan\(req\.user\.id\) === 'pro'\)[\s\S]*error:'basic only'/);
+test('core editions keep help and issue reporting while industry camera tools stay gated', () => {
+  assert.match(app, /!isIndustryProClient\(\) \? `<button class="issue-fab \$\{isRoadIssuesClient\(\)\?'road-issue-fab':''\}"/);
+  assert.match(app, /if \(isIndustryProClient\(\) \|\| isRoadIssuesClient\(\) \|\| !TENSOR_HELP_TOPICS\[state\.view\]\) return/);
+  assert.match(app, /isIndustryProClient\(\) && \['ticket_scanner','camera_readers','before_after'\]\.some\(featureOn\)/);
+  assert.match(server, /currentPlan\(req\.user\.id\) === 'pro' && await currentProduct\(req\.user\.id\) !== 'general'/);
 });
 
 test('Pro-only analytics and reports require a Pro plan on the server', () => {
   const guards = server.match(/if \(await currentPlan\(req\.user\.id\) !== 'pro'\) return res\.status\(403\)\.json\(\{ error: 'pro only' \}\);/g) || [];
   assert.ok(guards.length >= 1, 'expected server-side Pro plan guards');
-  assert.match(app, /isProClient\(\) && c\.defect_type/);
+  assert.match(app, /isIndustryProClient\(\) && c\.defect_type/);
   assert.match(server, /app\.get\('\/api\/export\/proposal', requireAuth,[\s\S]*?currentPlan\(req\.user\.id\) !== 'pro'/);
 });
 

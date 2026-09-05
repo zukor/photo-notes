@@ -24,7 +24,7 @@ test('road reporter is one camera-only form with the requested issue choices',()
   assert.match(form,/alt="Road issue photo preview" style="display:block"/);
   assert.match(form,/id="roadIssueSend">Send<\/button>/);
   assert.doesNotMatch(form,/photoLib|Choose from library|Record Note|id="note"|Select Topic/);
-  assert.match(app,/isRoadIssuesClient\(\)\?'':`<nav class="tabs workflow-tabs/);
+  assert.match(app,/isRoadIssuesClient\(\)\|\|isBasicClient\(\)\?'':`<nav class="tabs workflow-tabs/);
 });
 
 test('road reporter header shows the complete supplied Road Issue Reporter logo',()=>{

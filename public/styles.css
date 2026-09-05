@@ -118,6 +118,18 @@ textarea { min-height: 96px; resize: vertical; }
   flex-basis: 500px; width: 500px; max-width: calc(100vw - 110px); height:auto;
   background-image:none; font-size:0; line-height:1; text-align:center; margin:2px auto 3px;
 }
+.brandrow .brand.pro-edition-brand.general-pro-brand {
+  height:60px; background-image:url('/photo-notes-ai-basic-animated.svg?v=118');
+  background-position:center; background-size:contain; background-repeat:no-repeat;
+}
+/* Temporary general-Pro treatment until the supplied Pro SVG arrives. This
+   masks only the Basic subtitle in the current core wordmark. */
+.brandrow .brand.pro-edition-brand.general-pro-brand::before {
+  content:"PRO"; position:absolute; z-index:1; left:31%; right:31%; bottom:0;
+  height:34%; display:flex; align-items:center; justify-content:center;
+  background:#fff; color:#1254a3; font:800 18px/1 Arial,Helvetica,sans-serif;
+  letter-spacing:1.4px;
+}
 .brandrow .brand.pro-edition-brand.paving-pro-brand {
   height:60px; background-image:url('/photo-notes-ai-paving-pro-animated.svg?v=118');
   background-position:center; background-size:contain; background-repeat:no-repeat;
@@ -150,6 +162,7 @@ textarea { min-height: 96px; resize: vertical; }
 @media (max-width: 520px) { .brandrow .brand.pro-edition-brand.concrete-pro-brand { height:57px; } }
 @media (max-width: 520px) { .brandrow .brand.pro-edition-brand.hoa-pro-brand { height:57px; } }
 @media (max-width: 520px) { .brandrow .brand.pro-edition-brand.roofer-pro-brand { height:57px; } }
+@media (max-width: 520px) { .brandrow .brand.pro-edition-brand.general-pro-brand::before { font-size:14px; } }
 .app-header {
   display:grid; grid-template-columns:112px minmax(0,1fr) 30px; grid-template-rows:auto auto;
   width:100%; max-width:980px; align-items:center; column-gap:12px; row-gap:2px; margin:8px auto 5px;

@@ -7,8 +7,8 @@ const app = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf
 const css = fs.readFileSync(path.join(__dirname, '..', 'public', 'styles.css'), 'utf8');
 const index = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
 
-test('Tensor Man is Basic-only and limited to the five workflow pages', () => {
-  assert.match(app, /if \(isProClient\(\) \|\| !TENSOR_HELP_TOPICS\[state\.view\]\) return/);
+test('Tensor Man supports core editions and is limited to their workflow pages', () => {
+  assert.match(app, /if \(isIndustryProClient\(\) \|\| isRoadIssuesClient\(\) \|\| !TENSOR_HELP_TOPICS\[state\.view\]\) return/);
   for (const page of ['capture', 'organize', 'edit', 'create', 'send']) assert.match(app, new RegExp(`\\b${page}: \\[`));
   assert.doesNotMatch(app, /TENSOR_HELP_TOPICS\s*=\s*\{[\s\S]*?hoa-maintenance:/);
 });
@@ -31,8 +31,8 @@ test('Tensor Man is hidden at phone and small-tablet widths and cannot cover con
 });
 
 test('new app and style versions are cache-busted', () => {
-  assert.match(index, /styles\.css\?v=125/);
-  assert.match(index, /app\.js\?v=140/);
+  assert.match(index, /styles\.css\?v=126/);
+  assert.match(index, /app\.js\?v=141/);
 });
 
 test('Android issue-description dictation replaces revised results and restarts', () => {

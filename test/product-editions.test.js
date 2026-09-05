@@ -14,7 +14,7 @@ test('edition switching is restricted to administrators',()=>{
 
 test('only administrators see the compact edition switcher',()=>{
   assert.match(app,/state\.me&&state\.me\.role==='admin'/);
-  for(const label of ['PNAI','RIR','PP','HMP','CP','RP'])assert.match(app,new RegExp(`>${label}<`));
+  for(const label of ['BASIC','PRO','RIR','PP','HMP','CP','RP'])assert.match(app,new RegExp(`>${label}<`));
 });
 
 test('every edition uses Organize for the shared workflow tab',()=>{

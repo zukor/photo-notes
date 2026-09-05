@@ -24,6 +24,7 @@ if (process.env.NODE_ENV === 'production' && (!process.env.SESSION_SECRET || SES
 }
 
 function normalizeProType(value) {
+  if (value === 'general') return 'general';
   if (value === 'roads') return 'roads';
   if (value === 'hoa') return 'hoa';
   if (value === 'concrete') return 'concrete';
@@ -105,7 +106,7 @@ function isPro(user) { return !!(user && user.plan === 'pro'); }
 app.post('/api/admin/switch-edition', requireAdmin, async (req,res) => {
   try {
     const edition=String(req.body&&req.body.edition||'');
-    const choices={basic:{plan:'free',pro_type:'paving'},roads:{plan:'free',pro_type:'roads'},paving:{plan:'pro',pro_type:'paving'},hoa:{plan:'pro',pro_type:'hoa'},concrete:{plan:'pro',pro_type:'concrete'},roofer:{plan:'pro',pro_type:'roofer'}};
+    const choices={basic:{plan:'free',pro_type:'general'},pro:{plan:'pro',pro_type:'general'},roads:{plan:'free',pro_type:'roads'},paving:{plan:'pro',pro_type:'paving'},hoa:{plan:'pro',pro_type:'hoa'},concrete:{plan:'pro',pro_type:'concrete'},roofer:{plan:'pro',pro_type:'roofer'}};
     const choice=choices[edition];
     if(!choice)return res.status(400).json({error:'invalid edition'});
     const user=(await pool.query(`UPDATE users SET plan=$1,pro_type=$2 WHERE id=$3 AND role='admin' RETURNING *`,[choice.plan,choice.pro_type,req.user.id])).rows[0];
@@ -1366,9 +1367,9 @@ async function emailIssueReadyForRetest(report, user) {
 
 app.post('/api/issues', requireAuth, upload.single('screenshot'), async (req, res) => {
   try {
-    if (await currentPlan(req.user.id) === 'pro') {
+    if (await currentPlan(req.user.id) === 'pro' && await currentProduct(req.user.id) !== 'general') {
       if (req.file) { try { fs.unlinkSync(req.file.path); } catch (e) {} }
-      return res.status(403).json({ error:'basic only' });
+      return res.status(403).json({ error:'core Photo Notes editions only' });
     }
     const description = ticketText(req.body && req.body.description, 10000);
     if (!description) {
@@ -2627,7 +2628,7 @@ app.post('/api/admin/users', requireAdmin, async (req, res) => {
     const industry = b.industry ? String(b.industry).trim() : null;
     const password = String(b.password || '');
     const requestedProduct = b.product === 'asphalt' ? 'paving' : b.product;
-    const proType=['roads','paving','hoa','concrete','roofer'].includes(requestedProduct)?requestedProduct:'paving',plan=['paving','hoa','concrete','roofer'].includes(requestedProduct)?'pro':'free';
+    const proType=['roads','general','paving','hoa','concrete','roofer'].includes(requestedProduct)?requestedProduct:'general',plan=['general','paving','hoa','concrete','roofer'].includes(requestedProduct)?'pro':'free';
     if (name.split(/\s+/).filter(Boolean).length < 2) return res.status(400).json({ error: 'first and last name are required' });
     if (!email || !password) return res.status(400).json({ error: 'email and password are required' });
     const hash = bcrypt.hashSync(password, 10);
@@ -2664,7 +2665,7 @@ app.post('/api/admin/users/:id', requireAdmin, async (req, res) => {
     if (typeof b.active === 'boolean') { vals.push(b.active); sets.push(`active = $${vals.length}`); changed.push('active'); }
     if (b.role === 'admin' || b.role === 'user') { vals.push(b.role); sets.push(`role = $${vals.length}`); changed.push('role'); }
     if (b.plan === 'pro' || b.plan === 'free') { vals.push(b.plan); sets.push(`plan = $${vals.length}`); changed.push('plan'); }
-    if (['asphalt','roads','paving','hoa','concrete','roofer'].includes(b.pro_type)) { vals.push(normalizeProType(b.pro_type)); sets.push(`pro_type = $${vals.length}`); changed.push('pro_type'); }
+    if (['asphalt','roads','general','paving','hoa','concrete','roofer'].includes(b.pro_type)) { vals.push(normalizeProType(b.pro_type)); sets.push(`pro_type = $${vals.length}`); changed.push('pro_type'); }
     if (b.feature_access && typeof b.feature_access === 'object' && !Array.isArray(b.feature_access)) {
       const clean={}; MANAGED_FEATURES.forEach(k=>{if(typeof b.feature_access[k]==='boolean')clean[k]=b.feature_access[k];});
       vals.push(JSON.stringify(clean));sets.push(`feature_access=$${vals.length}`);changed.push('feature_access');

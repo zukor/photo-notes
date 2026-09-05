@@ -6,12 +6,15 @@ let state = { view: IS_HANDHELD ? 'capture' : 'organize', location: null, addres
 // Pro gating on the client. Mirrors isPro(user) on the server. Pro-only UI must
 // not render at all for free users (no disabled teaser).
 function isProClient() { return state.plan === 'pro'; }
+function isGeneralProClient(){return isProClient()&&state.proType==='general';}
+function isIndustryProClient(){return isProClient()&&!isGeneralProClient();}
+function isBasicClient(){return !isProClient()&&!isRoadIssuesClient();}
 function isHoaClient(){return isProClient()&&state.proType==='hoa';}
 function isConcreteClient(){return isProClient()&&state.proType==='concrete';}
 function isPavingClient(){return isProClient()&&(state.proType==='paving'||state.proType==='asphalt');}
 function isRooferClient(){return isProClient()&&state.proType==='roofer';}
 function isRoadIssuesClient(){return !isProClient()&&state.proType==='roads';}
-function productName(){return isRoadIssuesClient()?'Road Issue Reporter':isHoaClient()?'HOA Maintenance Pro':isConcreteClient()?'Concrete Pro':isRooferClient()?'Roofer Pro':isPavingClient()?'Paving Pro':'Photo Notes';}
+function productName(){return isRoadIssuesClient()?'Road Issue Reporter':isGeneralProClient()?'Photo Notes Pro':isHoaClient()?'HOA Maintenance Pro':isConcreteClient()?'Concrete Pro':isRooferClient()?'Roofer Pro':isPavingClient()?'Paving Pro':'Photo Notes AI Basic';}
 function issueFabLabel(){return isRoadIssuesClient()?'Report Issue':'Report an Issue';}
 function featureOn(name) { return isPavingClient() && (!state.me || !state.me.feature_access || state.me.feature_access[name] !== false); }
 function measurementOn(){return isConcreteClient()||featureOn('measurements');}
@@ -251,9 +254,9 @@ function renderApp() {
       <div class="app-header">
         <img class="zukor-corner-logo" src="/zukor-logo.svg" alt="Zukor AI" />
         <div class="brandrow">
-          <div class="brand ${isProClient() ? 'pro-edition-brand' : ''} ${isRoadIssuesClient()?'road-issues-brand':''} ${isPavingClient()?'paving-pro-brand':''} ${isConcreteClient()?'concrete-pro-brand':''} ${isHoaClient()?'hoa-pro-brand':''} ${isRooferClient()?'roofer-pro-brand':''}" aria-label="${esc(isProClient()||isRoadIssuesClient()?productName():'Photo Notes AI')}">${isProClient()||isRoadIssuesClient()?'':'<span class="product-suite-name">Photo Notes</span>'}</div>
+          <div class="brand ${isProClient() ? 'pro-edition-brand' : ''} ${isGeneralProClient()?'general-pro-brand':''} ${isRoadIssuesClient()?'road-issues-brand':''} ${isPavingClient()?'paving-pro-brand':''} ${isConcreteClient()?'concrete-pro-brand':''} ${isHoaClient()?'hoa-pro-brand':''} ${isRooferClient()?'roofer-pro-brand':''}" aria-label="${esc(isProClient()||isRoadIssuesClient()?productName():'Photo Notes AI Basic')}">${isProClient()||isRoadIssuesClient()?'':'<span class="product-suite-name">Photo Notes</span>'}</div>
         </div>
-        ${state.me&&state.me.role==='admin'?`<div class="edition-switcher" aria-label="Switch Photo Notes edition"><button data-edition="basic" class="${!isProClient()&&!isRoadIssuesClient()?'active':''}">PNAI</button><button data-edition="roads" class="${isRoadIssuesClient()?'active':''}">RIR</button><button data-edition="paving" class="${isPavingClient()?'active':''}">PP</button><button data-edition="hoa" class="${isHoaClient()?'active':''}">HMP</button><button data-edition="concrete" class="${isConcreteClient()?'active':''}">CP</button><button data-edition="roofer" class="${isRooferClient()?'active':''}">RP</button></div>`:''}
+        ${state.me&&state.me.role==='admin'?`<div class="edition-switcher" aria-label="Switch Photo Notes edition"><button data-edition="basic" class="${isBasicClient()?'active':''}">BASIC</button><button data-edition="pro" class="${isGeneralProClient()?'active':''}">PRO</button><button data-edition="roads" class="${isRoadIssuesClient()?'active':''}">RIR</button><button data-edition="paving" class="${isPavingClient()?'active':''}">PP</button><button data-edition="hoa" class="${isHoaClient()?'active':''}">HMP</button><button data-edition="concrete" class="${isConcreteClient()?'active':''}">CP</button><button data-edition="roofer" class="${isRooferClient()?'active':''}">RP</button></div>`:''}
         <div class="header-controls">
           <div class="language-switch" aria-label="Language"><button type="button" data-language="en">EN</button><span> </span><button type="button" data-language="es">ES</button></div>
           <div class="account-menu-wrap">
@@ -261,16 +264,16 @@ function renderApp() {
             <div class="profile-menu" id="profileMenu" hidden>
               <div class="profile-name">${esc((state.me && state.me.name) || 'Photo Notes User')}</div>
               <div class="profile-email">${esc((state.me && state.me.email) || '')}</div>
-              <div class="profile-plan">${isRoadIssuesClient()?'Road Issue Reporter':isProClient()?esc(productName()):'Basic Plan'}</div>
-              ${!isProClient()&&!isRoadIssuesClient()?'<button type="button" id="myAssignment">My Testing Assignment</button>':''}
-              ${!isProClient()?'<button type="button" id="myIssues">My Issue Reports</button>':''}
+              <div class="profile-plan">${isRoadIssuesClient()?'Road Issue Reporter':isGeneralProClient()?'Photo Notes Pro':isProClient()?esc(productName()):'Photo Notes Basic'}</div>
+              ${isGeneralProClient()?'<button type="button" id="myAssignment">My Testing Assignment</button>':''}
+              ${!isIndustryProClient()?'<button type="button" id="myIssues">My Issue Reports</button>':''}
               ${state.me && state.me.role === 'admin' ? '<a href="/admin">Admin Dashboard</a>' : ''}
               <button type="button" id="signout">Sign Out</button>
             </div>
           </div>
         </div>
       </div>
-      ${isRoadIssuesClient()?'':`<nav class="tabs workflow-tabs ${isHoaClient()?'hoa-tabs':isConcreteClient()?'concrete-tabs':''}" aria-label="Photo Notes workflow">
+      ${isRoadIssuesClient()||isBasicClient()?'':`<nav class="tabs workflow-tabs ${isHoaClient()?'hoa-tabs':isConcreteClient()?'concrete-tabs':''}" aria-label="Photo Notes workflow">
         <button type="button" class="tab ${['capture','camera-tools','ticket','camera-reader','alignment'].includes(state.view)?'on':''}" id="tabCapture" aria-current="${['capture','camera-tools','ticket','camera-reader','alignment'].includes(state.view)?'page':'false'}">Capture</button>
         <button type="button" class="tab ${['organize','hoa-visits','hoa-visit'].includes(state.view)?'on':''}" id="tabOrganize" aria-current="${['organize','hoa-visits','hoa-visit'].includes(state.view)?'page':'false'}">Organize</button>
         <button type="button" class="tab ${['edit','hoa-assets','hoa-asset'].includes(state.view)?'on':''}" id="tabEdit" aria-current="${['edit','hoa-assets','hoa-asset'].includes(state.view)?'page':'false'}">${isHoaClient()?'Assets':'Edit'}</button>
@@ -280,7 +283,7 @@ function renderApp() {
       <div id="body"></div>
       <div class="footer">&copy; ${new Date().getFullYear()} Zukor AI. All Rights Reserved.</div>
     </div>
-    ${!isProClient() ? `<button class="issue-fab ${isRoadIssuesClient()?'road-issue-fab':''}" id="issueFab" type="button" data-html2canvas-ignore="true" aria-label="${isRoadIssuesClient()?'Report issue':'Report an issue'}">${issueFabLabel()}</button>
+    ${!isIndustryProClient() ? `<button class="issue-fab ${isRoadIssuesClient()?'road-issue-fab':''}" id="issueFab" type="button" data-html2canvas-ignore="true" aria-label="${isRoadIssuesClient()?'Report issue':'Report an issue'}">${issueFabLabel()}</button>
     <div class="issue-modal" id="issueModal" hidden data-html2canvas-ignore="true">
       <div class="issue-dialog" role="dialog" aria-modal="true" aria-labelledby="issueTitle">
         <button class="issue-close" id="issueClose" type="button" aria-label="Close">×</button>
@@ -316,7 +319,7 @@ function renderApp() {
   document.getElementById('signout').onclick = async () => { await api('/api/logout', { method: 'POST' }); state.me = null; renderLogin(); };
   const myIssues=document.getElementById('myIssues');if(myIssues)myIssues.onclick=()=>{state.view='my-issues';renderApp();};
   const myAssignment=document.getElementById('myAssignment');if(myAssignment)myAssignment.onclick=()=>{state.view='my-assignment';renderApp();};
-  document.querySelectorAll('[data-edition]').forEach(button=>button.onclick=async()=>{if(button.classList.contains('active'))return;document.querySelectorAll('[data-edition]').forEach(b=>b.disabled=true);const r=await api('/api/admin/switch-edition',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({edition:button.dataset.edition})});if(!r.ok){toast('Edition could not be switched');return renderApp();}state.view=button.dataset.edition==='roads'?'road-report':(IS_HANDHELD?'capture':'organize');state.photoFile=null;state._note='';await boot();toast('Edition switched');});
+  document.querySelectorAll('[data-edition]').forEach(button=>button.onclick=async()=>{if(button.classList.contains('active'))return;document.querySelectorAll('[data-edition]').forEach(b=>b.disabled=true);const r=await api('/api/admin/switch-edition',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({edition:button.dataset.edition})});if(!r.ok){toast('Edition could not be switched');return renderApp();}state.view=button.dataset.edition==='roads'?'road-report':button.dataset.edition==='basic'?'capture':(IS_HANDHELD?'capture':'organize');state.photoFile=null;state._note='';await boot();toast('Edition switched');});
   const issueFab = document.getElementById('issueFab'); if (issueFab) issueFab.onclick = openIssueReporter;
   const tabCapture=document.getElementById('tabCapture');if(tabCapture)tabCapture.onclick = () => { state.view='capture'; renderApp(); };
   const tabOrganize=document.getElementById('tabOrganize');if(tabOrganize)tabOrganize.onclick = () => { state.view=isHoaClient()?'hoa-visits':'organize'; renderApp(); };
@@ -324,6 +327,7 @@ function renderApp() {
   const tabCreate=document.getElementById('tabCreate');if(tabCreate)tabCreate.onclick = () => { state.view=isHoaClient()?'hoa-inspections':'create'; state.groupId=null; renderApp(); };
   const tabSend=document.getElementById('tabSend');if(tabSend)tabSend.onclick = () => { state.view=isHoaClient()?'hoa-maintenance':'send'; renderApp(); };
   if (isRoadIssuesClient()) { state.view='road-report'; renderRoadIssueReport(); }
+  else if (isBasicClient()) { state.view='capture'; renderCapture(); }
   else if (state.view === 'capture') renderCapture();
   else if (state.view === 'camera-tools') renderCameraTools();
   else if (state.view === 'ticket') renderTicketScanner();
@@ -435,7 +439,7 @@ const TENSOR_HELP_TOPICS = {
 };
 
 function renderTensorHelp() {
-  if (isProClient() || !TENSOR_HELP_TOPICS[state.view]) return;
+  if (isIndustryProClient() || isRoadIssuesClient() || !TENSOR_HELP_TOPICS[state.view]) return;
   const page = state.view;
   try { if (localStorage.getItem(`pn_tensor_help_hidden_${page}`) === '1') return; } catch (e) {}
   const body = document.getElementById('body');
@@ -610,7 +614,7 @@ function renderCapture() {
     <label>Photo Note</label>
     <button type="button" class="btn" id="takephoto">Take Photo</button>
     <button type="button" class="btn secondary" id="choosephoto" style="margin-top:8px">Choose from library or files</button>
-    ${isProClient() && ['ticket_scanner','camera_readers','before_after'].some(featureOn) ? `<button type="button" class="btn secondary" id="openCameraTools" style="margin-top:8px">Other Camera Tools</button>` : ''}
+    ${isIndustryProClient() && ['ticket_scanner','camera_readers','before_after'].some(featureOn) ? `<button type="button" class="btn secondary" id="openCameraTools" style="margin-top:8px">Other Camera Tools</button>` : ''}
     <input type="file" accept="image/*" capture="environment" id="photoCam" style="display:none" />
     <input type="file" accept="image/*" id="photoLib" style="display:none" />
     <div class="photo-box capture-preview" id="previewBox" style="display:none;margin-top:12px"><img id="preview" alt="Selected photo preview" style="display:block" /><div class="capture-preview-actions"><button type="button" class="btn secondary" id="retakePhoto">Retake Photo</button><button type="button" class="btn secondary" id="cancelPhoto">Cancel Photo</button></div></div>
@@ -1126,7 +1130,7 @@ function startDictationSession(SR) {
     sessionText=cleanSpeechTranscript(parts.filter(Boolean).join(' '));
     if (noteEl) { noteEl.value=mergeSpeechTranscript(dictationBase,sessionText); state._note=noteEl.value; }
     const status=document.getElementById('dictationStatus');if(status&&sessionText)status.textContent='Speech received.';
-    if (isProClient()) applyExtraction(dictationBase+sessionText);
+    if (isIndustryProClient()) applyExtraction(dictationBase+sessionText);
   };
   session.onerror = (e) => {
     const err = e && e.error;
@@ -1449,7 +1453,7 @@ function extractDims(text) {
 // Apply extraction results to the dim fields. Never overwrites a manually-typed
 // field; marks filled fields as AI-suggested.
 function applyExtraction(text) {
-  if (!isProClient()) return;
+  if (!isIndustryProClient()) return;
   const found = extractDims(text);
   const d = getDims();
   let changed = false;
@@ -2132,7 +2136,7 @@ async function loadCards(area, query = '', filters = {}) {
   // Pro: pull only pairs the user deliberately created so we can render them
   // as combined before/after cards. Never suggest pairs automatically.
   let pairs = [];
-  if (isProClient() && state.view === 'organize') {
+  if (isIndustryProClient() && state.view === 'organize') {
     try { const pr = await api('/api/pairs'); if (pr.ok) pairs = await pr.json(); } catch (e) {}
   }
   const byId = {}; rows.forEach(c => { byId[c.id] = c; });
@@ -2264,7 +2268,7 @@ photoViewerObserver.observe(document.body,{childList:true,subtree:true});
 function pairCardHtml(before, after) {
   const side = (c, label) => {
     const dims = measurementOn() ? fmtDimsClient(c) : '';
-    const badge = isProClient() && c.defect_type ? defectBadgeHtml(c) : '';
+    const badge = isIndustryProClient() && c.defect_type ? defectBadgeHtml(c) : '';
     const titleAction=state.view==='edit'?(c.photo_title?'Change Photo Title':'Add Photo Title'):(state.view==='organize'&&!c.photo_title?'Add Photo Title':'');
     const tags=(c.area_tags||[]).map(t=>`<span class="badge">${esc(t)}</span>`).join('')||'<span class="badge">No Topic</span>';
     return `<div style="flex:1;min-width:0">
@@ -2372,7 +2376,7 @@ function renderStampEditor(c) {
   const addOpts = ['datetime', 'address', 'gps', 'copyright'];
   if ((c.area_tags || []).length) addOpts.push('topic');
   addOpts.push('custom', 'rect', 'arrow');
-  if (isProClient()) {
+  if (isIndustryProClient()) {
     if (fmtDimsClient(c)) addOpts.push('dims');
     if (c.defect_type) addOpts.push('defect');
   }
@@ -2864,7 +2868,7 @@ async function refreshPins() {
 }
 function mapPopupHtml(c) {
   const note = (c.note || '').slice(0, 120);
-  const badge = (isProClient() && c.defect_type) ? defectBadgeHtml(c) : '';
+  const badge = (isIndustryProClient() && c.defect_type) ? defectBadgeHtml(c) : '';
   return `<div style="max-width:210px">
     <div class="photo-title">${esc(c.photo_title||'Untitled photo')}</div>
     ${c.photo_path ? `<img src="${photoSrc(c.photo_path)}" style="width:100%;border-radius:4px" />` : ''}
@@ -3377,7 +3381,7 @@ function renderGroupCards(list, groups) {
     <article class="card document-card">
       <div style="font-weight:bold;font-size:17px">${esc(g.title || 'Untitled group')}</div>
       ${g.description ? `<div style="margin:4px 0">${esc(g.description)}</div>` : ''}
-      <div class="meta">${g.item_count} photo${g.item_count === 1 ? '' : 's'}${(isProClient() && g.score != null) ? ` <span class="scorechip" style="background:${scoreColor(g.score)}">Score ${g.score} · ${esc(g.band)}</span>` : ''}</div>
+      <div class="meta">${g.item_count} photo${g.item_count === 1 ? '' : 's'}${(isIndustryProClient() && g.score != null) ? ` <span class="scorechip" style="background:${scoreColor(g.score)}">Score ${g.score} · ${esc(g.band)}</span>` : ''}</div>
       <div class="row" style="margin-top:8px">
         <button class="btn slim gopen" data-id="${g.id}">Edit Document</button>
         <button class="btn secondary slim" data-id="${g.id}" data-del="1" style="color:#c1121f">Delete</button>
@@ -3417,7 +3421,7 @@ async function renderGroupDetail(id) {
   const score = data.score || null;
   const zsum = data.zones || null;
   let scoreHtml = '';
-  if (isProClient() && score) {
+  if (isIndustryProClient() && score) {
     if (score.score == null) {
       scoreHtml = `<div class="card" style="text-align:center"><div class="fieldval">Not yet scored</div><div class="meta">Classify captures in this site to generate a condition score.</div></div>`;
     } else {
@@ -3863,7 +3867,7 @@ function renderGroupItems() {
       ${c.photo_path ? `<img src="${photoSrc(c.photo_path)}" alt="capture" />` : ''}
       <div class="rotaterow">${rotateButtons(c.id)}</div>
       ${photoLocationHtml(c,'No location')}
-      ${isProClient() && fmtDimsClient(c) ? `<div class="meta"><strong>Dimensions:</strong> ${esc(fmtDimsClient(c))}</div>` : ''}
+      ${isIndustryProClient() && fmtDimsClient(c) ? `<div class="meta"><strong>Dimensions:</strong> ${esc(fmtDimsClient(c))}</div>` : ''}
       <label style="margin-top:8px">Photo Caption</label>
       <textarea class="gcaption" data-i="${i}" style="min-height:70px">${esc(c.note || '')}</textarea>
       <button class="btn secondary slim gsavecaption" data-i="${i}" style="margin-top:6px">Save Caption</button>
