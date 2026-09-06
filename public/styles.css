@@ -565,3 +565,7 @@ input.dimfield.suggested {
   .edition-switcher select { width:106px; min-width:0; padding-left:6px; font-size:10px; }
 }
 .evidence-comparison{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-bottom:18px}.evidence-comparison .card img{width:100%;max-height:340px;object-fit:contain;background:#f1f3f5;margin-top:8px}@media(max-width:700px){.evidence-comparison{grid-template-columns:1fr}}
+
+/* Keep the report inside the visible mobile viewport as browser chrome changes. */
+.issue-dialog { max-height:calc(100dvh - 36px); overscroll-behavior:contain; }
+@media (max-width:700px) { .issue-dialog { max-height:calc(100dvh - 20px); } }

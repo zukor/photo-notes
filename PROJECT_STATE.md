@@ -1,5 +1,15 @@
 # Photo Notes — Project State & Resume Guide
 
+## Issue reporter repair — 2026-09-05
+
+- Added report-session guards for microphone permission, recorder callbacks, Android recognition, and delayed submission completion. Closing/reopening cannot reuse old audio or text.
+- Send stops active voice input and asks the tester to review and send again after completion, preventing truncated or missing audio/text.
+- iPhone records an audio attachment; automatic audio transcription is not implemented. The popup explains keyboard dictation for text. Android continues browser speech recognition.
+- Mobile popup uses dynamic viewport height and does not immediately open the keyboard.
+- Validation: 116 Node tests pass, including five behavioral voice lifecycle regressions. Real spoken iPhone/Android acceptance remains required.
+- Existing historical deployment/tooling notes below may be stale; verify current Git and Railway state before relying on them.
+
+
 _Last updated: 2026-08-29 (production naming, Stripe sandbox, and health gate). This document is the single source of truth for
 resuming work on the Photo Notes app after any delay. It captures what the
 app is, where it lives, how it is built and deployed, the full feature set,
