@@ -1,5 +1,18 @@
 # Photo Notes — Project State & Resume Guide
 
+## Permanent user deletion — September 5, 2026
+
+User details now include Delete User beside Deactivate. The confirmation names
+that account, previews record counts, and requires its exact email. Deletion
+removes the account and owned records in one transaction; uploaded files are
+removed after commit using a durable retry queue. Shared files are preserved.
+Current-account deletion, last-active-admin deletion, and accounts with dependent
+shared HOA/document records are blocked. Retired testing assignment keys prevent
+seeded assignments from returning after restart. No existing account was deleted
+for this release. Tests include a disposable local PostgreSQL database with actual
+foreign keys and attachment files (USER_DELETION_TEST_DATABASE_URL; local database
+name must be pn_deletion_test).
+
 ## Admin redesign — September 5, 2026
 
 The admin page now starts with a searchable user list. Select a user to open

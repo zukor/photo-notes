@@ -121,6 +121,12 @@
       .feature-grid { grid-template-columns:1fr; }
       .account-actions .row { flex-direction:row; }
     }
+    .delete-user-button { border:1px solid #b42318; background:#fff; color:#b42318; }
+    .delete-user-button:hover { background:#fff1ef; border-color:#b42318; }
+    .delete-user-panel { border-color:#b42318; background:#fff8f7; overflow-wrap:anywhere; }
+    .delete-user-panel label { text-transform:none; }
+    .delete-user-panel h3 { margin-top:0; }
+    .delete-user-panel .btn { margin:10px 8px 0 0; }
   </style>
 </head>
 <body>
@@ -210,6 +216,7 @@
       box.querySelectorAll('[data-recommend-password]').forEach(b => b.onclick = () => recommendResetPassword(parseInt(b.getAttribute('data-recommend-password'),10)));
       box.querySelectorAll('[data-copy-password]').forEach(b => b.onclick = () => copyResetPassword(parseInt(b.getAttribute('data-copy-password'),10)));
       box.querySelectorAll('[data-save-password]').forEach(b => b.onclick = () => saveResetPassword(parseInt(b.getAttribute('data-save-password'),10), b));
+      box.querySelectorAll('[data-delete-user]').forEach(b=>b.onclick=()=>prepareDeleteUser(Number(b.dataset.deleteUser),b));
       box.querySelectorAll('[data-active]').forEach(b => b.onclick = () => setActive(parseInt(b.getAttribute('data-active'),10), b.getAttribute('data-to')==='1'));
       box.querySelectorAll('[data-edit-user]').forEach(b => b.onclick = () => toggleAdminPanel(`edit-user-${b.dataset.editUser}`));
       box.querySelectorAll('[data-save-user]').forEach(b => b.onclick = () => saveUserDetails(Number(b.dataset.saveUser), b));
@@ -235,13 +242,15 @@
 
           <div class="account-actions">
             <h4>Account settings</h4>
-            <div class="helper">Reset login credentials, change feature access, or prevent sign-in without deleting this user's data.</div>
+            <div class="helper">Edit login details and access, deactivate the login, or permanently delete the user.</div>
             <div class="row">
               <button class="btn secondary" data-edit-user="${u.id}">Edit</button>
               <button class="btn secondary" data-feature-user="${u.id}">Advanced Features</button>
               <button class="btn secondary" data-reset="${u.id}">Reset Password</button>
               <button class="btn secondary" data-active="${u.id}" data-to="${u.active ? '0' : '1'}">${u.active ? 'Deactivate Login' : 'Reactivate Login'}</button>
+              <button class="btn delete-user-button" type="button" data-delete-user="${u.id}">Delete User</button>
             </div>
+            <div class="admin-panel delete-user-panel" id="delete-user-${u.id}" hidden></div>
             <div class="admin-panel" id="edit-user-${u.id}" hidden><h4>Edit User</h4><div class="edit-user-grid"><label>First and Last Name<input id="edit-name-${u.id}" value="${esc(u.name||'')}"></label><label>Email<input id="edit-email-${u.id}" type="email" value="${esc(u.email||'')}"></label><label>Industry<input id="edit-industry-${u.id}" value="${esc(u.industry||'')}"></label></div><button class="btn" type="button" data-save-user="${u.id}" style="margin-top:8px">Save User</button></div>
             <div class="admin-panel" id="feature-user-${u.id}" hidden><h4>Advanced Features</h4>${allowedVersions(u).includes('paving')?`<div class="helper">Optional Paving Pro features. These settings apply whenever this user opens Paving Pro.</div><div class="feature-grid">${featureToggle(u.id,'ticket_scanner','Paving Ticket Scanner',features)}${featureToggle(u.id,'camera_readers','Camera Readers & Scanners',features)}${featureToggle(u.id,'before_after','Before & After Matching',features)}${featureToggle(u.id,'measurements','Measurements, Map & AI Classification',features)}${featureToggle(u.id,'extra_work','Extra Work Records',features)}</div><button class="btn" type="button" data-save-features="${u.id}">Save Feature Access</button>`:'<p class="helper">Use the Versions checkboxes below to manage access. No additional feature settings apply to these versions.</p>'}</div>
             <div class="reset-password-panel" id="reset-panel-${u.id}" hidden>
@@ -615,7 +624,7 @@
       const feature_access={};document.querySelectorAll(`[data-feature-owner="${id}"]`).forEach(c=>feature_access[c.dataset.featureKey]=c.checked);btn.disabled=true;btn.textContent='Saving...';
       try{const r=await api(`/api/admin/users/${id}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({feature_access})});if(!r.ok)throw new Error();toast('Feature access saved');await loadUsers();await loadActivity();}catch(e){toast('Feature access could not be saved');}finally{btn.disabled=false;btn.textContent='Save Feature Access';}
     }
-    const activityLabels={admin_user_create:'Created login',admin_user_update:'Changed user settings',admin_password_reset:'Reset password',admin_issue_update:'Updated issue',admin_issue_email_retry:'Retried issue email'};
+    const activityLabels={admin_user_delete:'Permanently deleted user',admin_user_create:'Created login',admin_user_update:'Changed user settings',admin_password_reset:'Reset password',admin_issue_update:'Updated issue',admin_issue_email_retry:'Retried issue email'};
     async function loadActivity(){
       const box=document.getElementById('activity');if(!box)return;
       try{const r=await api('/api/admin/activity');if(!r.ok)throw new Error();const rows=await r.json();box.innerHTML=rows.length?`<table class="activity-table"><thead><tr><th>When</th><th>Administrator</th><th>Action</th><th>Details</th></tr></thead><tbody>${rows.map(a=>`<tr><td>${fdatetime(a.created_at)}</td><td>${esc(a.admin_name||a.admin_email||'Administrator')}</td><td>${esc(activityLabels[a.action]||a.action)}</td><td>${esc(activityDetail(a))}</td></tr>`).join('')}</tbody></table>`:'<p class="helper">No administrative changes have been recorded yet.</p>';}
@@ -653,6 +662,33 @@
         document.getElementById(`reset-help-${id}`).textContent='Password saved. Give the copied password to the user securely.';
       }catch(e){toast('Password could not be saved');}
       finally{btn.disabled=false;btn.textContent='Save Password';}
+    }
+    async function prepareDeleteUser(id,button){
+      const panel=document.getElementById(`delete-user-${id}`);
+      panel.hidden=false;panel.innerHTML='<p role="status">Checking this account...</p>';button.disabled=true;
+      try{
+        const r=await api(`/api/admin/users/${id}/deletion`),d=await r.json();
+        if(!r.ok)throw new Error(d.error||'Deletion details could not be loaded');
+        panel.innerHTML=`<h3>Delete User Permanently</h3><p><strong>${esc(d.user.name||d.user.email)}</strong><br>${esc(d.user.email)}</p>${d.blocked?`<p role="alert">${esc(d.blocked)}</p>`:`<p>This removes the login, ${num(d.counts.photos)} Photo Notes, ${num(d.counts.documents)} documents, ${num(d.counts.issue_reports)} issue reports, ${num(d.counts.assignments)} testing assignments, and their other private app records and attachments. This cannot be undone.</p><label for="delete-email-${id}">Type ${esc(d.user.email)} to confirm</label><input id="delete-email-${id}" type="email" autocomplete="off" spellcheck="false"><button class="btn delete-user-button" type="button" id="confirmDeleteUser" disabled>Delete Permanently</button>`}<button class="btn secondary" type="button" id="cancelDeleteUser">Cancel</button><p id="deleteStatus" role="status"></p>`;
+        const cancel=document.getElementById('cancelDeleteUser');cancel.onclick=()=>{panel.hidden=true;panel.innerHTML='';button.focus();};
+        if(!d.blocked){
+          const input=document.getElementById(`delete-email-${id}`),confirm=document.getElementById('confirmDeleteUser');
+          input.oninput=()=>confirm.disabled=input.value!==d.user.email;
+          confirm.onclick=async()=>{
+            confirm.disabled=true;cancel.disabled=true;input.disabled=true;confirm.textContent='Deleting...';
+            try{
+              const result=await api(`/api/admin/users/${id}`,{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({confirm_email:input.value})});
+              const data=await result.json();if(!result.ok)throw new Error(data.error||'User could not be deleted');
+              selectedUserId=null;await loadUsers();
+              const assignments=document.querySelector('[data-admin-tool="testing"]');if(assignments){delete assignments.dataset.loaded;if(assignments.open)loadAssignments();}
+              const issues=document.querySelector('[data-admin-tool="issues"]');if(issues){delete issues.dataset.loaded;if(issues.open)loadIssues();}
+              loadActivity();toast(data.file_cleanup_pending?'User deleted. Attachment cleanup is pending.':'User permanently deleted');
+            }catch(e){document.getElementById('deleteStatus').textContent=e.message;confirm.disabled=false;cancel.disabled=false;input.disabled=false;confirm.textContent='Delete Permanently';}
+          };
+          input.focus();
+        }
+      }catch(e){panel.innerHTML=`<p role="alert">${esc(e.message)}</p>`;}
+      finally{button.disabled=false;}
     }
     async function setActive(id, active){
       if (!active && !confirm('Deactivate this login? They will not be able to sign in. Their data is kept.')) return;

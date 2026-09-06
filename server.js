@@ -16,6 +16,8 @@ const { registerStripeRoutes, registerStripeWebhook } = require('./stripe-integr
 
 const { EDITIONS, editionAccess, validateEditions, registerEditionRoutes } = require('./editions');
 
+const {registerUserDeletion}=require('./user-deletion');
+
 const PORT = process.env.PORT || 3000;
 const SESSION_SECRET = process.env.SESSION_SECRET || 'dev-secret-change-me';
 const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(__dirname, 'uploads');
@@ -120,6 +122,7 @@ registerStripeRoutes(app, { pool, requireAuth, requireAdmin });
 function isPro(user) { return !!(user && user.plan === 'pro'); }
 
 registerEditionRoutes(app,{pool,requireAuth,requireAdmin,setSession,logEvent});
+const cleanupDeletedUserFiles=registerUserDeletion(app,{pool,requireAdmin,uploadDir:UPLOAD_DIR});
 
 // ---- Pro dimension helpers ----
 // Compute area in square feet from canonical inch measurements and shape.
@@ -3382,6 +3385,8 @@ init()
   .then(() => {
     app.listen(PORT, () => console.log(`[efc] listening on ${PORT}`));
     backfillPhotoDims();
+    cleanupDeletedUserFiles().catch(()=>{});
+    setInterval(()=>cleanupDeletedUserFiles().catch(()=>{}),30000).unref();
   })
   .catch((err) => {
     console.error('[efc] failed to init db', err);

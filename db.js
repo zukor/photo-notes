@@ -640,6 +640,11 @@ async function init() {
   // NULL preserves existing account access until explicitly assigned.
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS edition_access TEXT[]`);
 
+  await pool.query(`CREATE TABLE IF NOT EXISTS pending_user_file_deletions (
+    file_path TEXT PRIMARY KEY,created_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS retired_testing_assignment_keys (
+    assignment_key TEXT PRIMARY KEY)`);
+
   // Retire the superseded full-workflow assignments without touching a tester's
   // submitted history. Basic is now the capture-only edition.
   await pool.query(`DELETE FROM testing_assignments WHERE assignment_key IN ('basic-rolando-capture-2026-09','basic-hassan-organize-2026-09','basic-gabby-create-send-2026-09') AND status<>'submitted'`);
@@ -677,6 +682,7 @@ async function init() {
     ]}
   ];
   for (const round of rounds) {
+    if((await pool.query('SELECT 1 FROM retired_testing_assignment_keys WHERE assignment_key=$1',[round.key])).rowCount)continue;
     const steps = sharedSteps.concat(round.extra);
     await pool.query(`INSERT INTO testing_assignments (assignment_key,assignee_name,assignee_email,title,summary,steps)
       VALUES($1,$2,$3,$4,$5,$6::jsonb) ON CONFLICT (assignment_key) DO UPDATE SET title=EXCLUDED.title,summary=EXCLUDED.summary,steps=EXCLUDED.steps,updated_at=now()`,
