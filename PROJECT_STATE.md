@@ -1,5 +1,24 @@
 # Photo Notes — Project State & Resume Guide
 
+## Admin redesign — September 5, 2026
+
+The admin page now starts with a searchable user list. Select a user to open
+Edit, password reset, activation, and Versions checkboxes. Usage statistics and
+the other admin tools are collapsed sections. Add User opens a separate form.
+
+Version grants are stored in users.edition_access (TEXT[]). NULL preserves legacy
+access: the current edition for ordinary users, all existing editions for admins.
+An explicit array controls both ordinary and admin accounts. At least one version
+must be enabled. Removing the current version selects a remaining granted version.
+The app dropdown shows only granted versions. editions.js contains validation and
+transactional grant/switch routes; existing plan/pro_type fields track the active
+version. Existing users and their data are not automatically moved to new versions.
+
+Authenticated requests read the current account record, so deactivated logins and
+removed admin roles cannot continue through old cookies. Version assignment
+changes use /api/admin/users/:id/versions; old single-plan edits are rejected.
+
+
 ## Issue reporter repair — 2026-09-05
 
 - Added report-session guards for microphone permission, recorder callbacks, Android recognition, and delayed submission completion. Closing/reopening cannot reuse old audio or text.

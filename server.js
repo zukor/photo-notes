@@ -14,6 +14,8 @@ const { Document, Packer, Paragraph, TextRun, ImageRun, HeadingLevel, Table, Tab
 const { pool, init, seedUserAreas } = require('./db');
 const { registerStripeRoutes, registerStripeWebhook } = require('./stripe-integration');
 
+const { EDITIONS, editionAccess, validateEditions, registerEditionRoutes } = require('./editions');
+
 const PORT = process.env.PORT || 3000;
 const SESSION_SECRET = process.env.SESSION_SECRET || 'dev-secret-change-me';
 const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(__dirname, 'uploads');
@@ -90,18 +92,21 @@ function readUser(req) {
   if (!token) return null;
   try { return jwt.verify(token, SESSION_SECRET); } catch { return null; }
 }
-function requireAuth(req, res, next) {
-  const u = readUser(req);
-  if (!u || !u.id) return res.status(401).json({ error: 'not authenticated' });
-  req.user = u;
+async function requireAuth(req, res, next) {
+  const session = readUser(req);
+  if (!session || !session.id) return res.status(401).json({ error: 'not authenticated' });
+  try {
+    const user=(await pool.query('SELECT id,email,name,role,plan,pro_type,active FROM users WHERE id=$1',[session.id])).rows[0];
+    if(!user||!user.active)return res.status(401).json({error:'not authenticated'});
+    req.user=user;
+  }catch(e){return res.status(503).json({error:'Account could not be checked. Please try again.'});}
   next();
 }
 function requireAdmin(req, res, next) {
-  const u = readUser(req);
-  if (!u || !u.id) return res.status(401).json({ error: 'not authenticated' });
-  if (u.role !== 'admin') return res.status(403).json({ error: 'admin only' });
-  req.user = u;
-  next();
+  return requireAuth(req,res,()=>{
+    if(req.user.role!=='admin')return res.status(403).json({error:'admin only'});
+    next();
+  });
 }
 function requireTestingQueueToken(req,res,next){
   const expected=process.env.TESTER_QUEUE_TOKEN;
@@ -114,19 +119,7 @@ registerStripeRoutes(app, { pool, requireAuth, requireAdmin });
 // for free users.
 function isPro(user) { return !!(user && user.plan === 'pro'); }
 
-app.post('/api/admin/switch-edition', requireAdmin, async (req,res) => {
-  try {
-    const edition=String(req.body&&req.body.edition||'');
-    const choices={basic:{plan:'free',pro_type:'general'},pro:{plan:'pro',pro_type:'general'},contractor:{plan:'pro',pro_type:'contractor'},roads:{plan:'free',pro_type:'roads'},paving:{plan:'pro',pro_type:'paving'},hoa:{plan:'pro',pro_type:'hoa'},concrete:{plan:'pro',pro_type:'concrete'},roofer:{plan:'pro',pro_type:'roofer'}};
-    const choice=choices[edition];
-    if(!choice)return res.status(400).json({error:'invalid edition'});
-    const user=(await pool.query(`UPDATE users SET plan=$1,pro_type=$2 WHERE id=$3 AND role='admin' RETURNING *`,[choice.plan,choice.pro_type,req.user.id])).rows[0];
-    if(!user)return res.status(404).json({error:'administrator not found'});
-    setSession(res,user);
-    await logEvent(req.user.id,'admin_edition_switch',{edition});
-    res.json({ok:true,plan:choice.plan,pro_type:choice.pro_type});
-  } catch(e){console.error('[admin.switch-edition]',e);res.status(500).json({error:'edition switch failed'});}
-});
+registerEditionRoutes(app,{pool,requireAuth,requireAdmin,setSession,logEvent});
 
 // ---- Pro dimension helpers ----
 // Compute area in square feet from canonical inch measurements and shape.
@@ -619,9 +612,9 @@ async function featureAllowed(userId, feature) {
 }
 
 app.get('/api/me', requireAuth, async (req, res) => {
-  const row = (await pool.query(`SELECT name,email,role,plan,pro_type,feature_access FROM users WHERE id=$1 AND active=true`, [req.user.id])).rows[0];
+  const row = (await pool.query(`SELECT name,email,role,plan,pro_type,feature_access,edition_access FROM users WHERE id=$1 AND active=true`, [req.user.id])).rows[0];
   if (!row) return res.status(401).json({ error:'not authenticated' });
-  res.json({ authed:true, name:row.name, role:row.role, email:row.email, plan:row.plan === 'pro' ? 'pro' : 'free', pro_type:normalizeProType(row.pro_type), feature_access:await currentFeatureAccess(req.user.id) });
+  res.json({ authed:true, edition_access:editionAccess(row), name:row.name, role:row.role, email:row.email, plan:row.plan === 'pro' ? 'pro' : 'free', pro_type:normalizeProType(row.pro_type), feature_access:await currentFeatureAccess(req.user.id) });
 });
 
 async function hoaCompanyForUser(userId,create=false){let row=(await pool.query(`SELECT c.*,m.company_role FROM hoa_management_companies c JOIN hoa_company_members m ON m.company_id=c.id WHERE m.user_id=$1 ORDER BY c.id LIMIT 1`,[userId])).rows[0];if(!row&&create){const u=(await pool.query(`SELECT name FROM users WHERE id=$1`,[userId])).rows[0];const client=await pool.connect();try{await client.query('BEGIN');row=(await client.query(`INSERT INTO hoa_management_companies(name) VALUES($1) RETURNING *`,[`${u&&u.name||'HOA'} Management`])).rows[0];await client.query(`INSERT INTO hoa_company_members(company_id,user_id,company_role) VALUES($1,$2,'administrator')`,[row.id,userId]);await client.query('COMMIT');}catch(e){await client.query('ROLLBACK');throw e;}finally{client.release();}}return row||null;}
@@ -2565,7 +2558,7 @@ app.get('/api/ewr/:id/export', requireAuth, async (req, res) => {
 app.get('/api/admin/users', requireAdmin, async (req, res) => {
   try {
     const { rows } = await pool.query(`
-      SELECT u.id, u.email, u.name, u.industry, u.role, u.plan, u.pro_type, u.feature_access, u.active, u.created_at, u.last_login_at,
+      SELECT u.id, u.email, u.name, u.industry, u.role, u.plan, u.pro_type, u.feature_access, u.edition_access, u.active, u.created_at, u.last_login_at,
         COALESCE(c.cnt, 0)::int      AS capture_count,
         c.first_capture, c.last_capture,
         COALESCE(c.d7, 0)::int       AS last_7d,
@@ -2648,15 +2641,18 @@ app.post('/api/admin/users', requireAdmin, async (req, res) => {
     const industry = b.industry ? String(b.industry).trim() : null;
     const password = String(b.password || '');
     const requestedProduct = b.product === 'asphalt' ? 'paving' : b.product;
-    const proType=['roads','general','contractor','paving','hoa','concrete','roofer'].includes(requestedProduct)?requestedProduct:'general',plan=['general','contractor','paving','hoa','concrete','roofer'].includes(requestedProduct)?'pro':'free';
+    let proType=['roads','general','contractor','paving','hoa','concrete','roofer'].includes(requestedProduct)?requestedProduct:'general',plan=['general','contractor','paving','hoa','concrete','roofer'].includes(requestedProduct)?'pro':'free';
+    const access=b.edition_access===undefined?null:validateEditions(b.edition_access);
+    if(b.edition_access!==undefined&&!access)return res.status(400).json({error:'Select at least one valid version'});
+    if(access){proType=EDITIONS[access[0]].pro_type;plan=EDITIONS[access[0]].plan;}
     if (name.split(/\s+/).filter(Boolean).length < 2) return res.status(400).json({ error: 'first and last name are required' });
     if (!email || !password) return res.status(400).json({ error: 'email and password are required' });
     const hash = bcrypt.hashSync(password, 10);
     const { rows } = await pool.query(
-      `INSERT INTO users (email, name, password_hash, role, industry, active, plan, pro_type)
-       VALUES ($1,$2,$3,'user',$4,true,$5,$6)
+      `INSERT INTO users (email, name, password_hash, role, industry, active, plan, pro_type, edition_access)
+       VALUES ($1,$2,$3,'user',$4,true,$5,$6,$7)
        RETURNING id, email, name, industry, role, plan, pro_type, active, created_at`,
-      [email, name, hash, industry,plan,proType]);
+      [email, name, hash, industry,plan,proType,access]);
     await seedUserAreas(rows[0].id);
     logEvent(req.user.id, 'admin_user_create', { target_user_id:rows[0].id });
     res.json(rows[0]);
@@ -2684,8 +2680,7 @@ app.post('/api/admin/users/:id', requireAdmin, async (req, res) => {
     if (typeof b.industry === 'string') { vals.push(b.industry.trim()); sets.push(`industry = $${vals.length}`); changed.push('industry'); }
     if (typeof b.active === 'boolean') { vals.push(b.active); sets.push(`active = $${vals.length}`); changed.push('active'); }
     if (b.role === 'admin' || b.role === 'user') { vals.push(b.role); sets.push(`role = $${vals.length}`); changed.push('role'); }
-    if (b.plan === 'pro' || b.plan === 'free') { vals.push(b.plan); sets.push(`plan = $${vals.length}`); changed.push('plan'); }
-    if (['asphalt','roads','general','contractor','paving','hoa','concrete','roofer'].includes(b.pro_type)) { vals.push(normalizeProType(b.pro_type)); sets.push(`pro_type = $${vals.length}`); changed.push('pro_type'); }
+    if(b.plan!==undefined||b.pro_type!==undefined)return res.status(400).json({error:'Use version access to change available products'});
     if (b.feature_access && typeof b.feature_access === 'object' && !Array.isArray(b.feature_access)) {
       const clean={}; MANAGED_FEATURES.forEach(k=>{if(typeof b.feature_access[k]==='boolean')clean[k]=b.feature_access[k];});
       vals.push(JSON.stringify(clean));sets.push(`feature_access=$${vals.length}`);changed.push('feature_access');

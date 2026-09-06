@@ -9,10 +9,10 @@ const db=fs.readFileSync(path.join(root,'db.js'),'utf8');
 const admin=fs.readFileSync(path.join(root,'public/admin.html'),'utf8');
 
 test('Road Issues Reporting is a separate non-Pro administrator-selectable edition',()=>{
-  assert.match(server,/roads:\{plan:'free',pro_type:'roads'\}/);
+  assert.equal(require('../editions').EDITIONS.roads.plan,'free');
   assert.match(app,/function isRoadIssuesClient\(\)/);
-  assert.match(app,/<option value="roads"[\s\S]*>Road Issue Reporter<\/option>/);
-  assert.match(admin,/<option value="roads">Road Issue Reporter<\/option>/);
+  assert.match(app,/roads:'Road Issue Reporter'/);
+  assert.match(admin,/roads:'Road Issue Reporter'/);
 });
 
 test('road reporter is one camera-only form with the requested issue choices',()=>{

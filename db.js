@@ -637,6 +637,9 @@ async function init() {
   await pool.query(`ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now()`);
   await pool.query(`ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMPTZ`);
 
+  // NULL preserves existing account access until explicitly assigned.
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS edition_access TEXT[]`);
+
   // Retire the superseded full-workflow assignments without touching a tester's
   // submitted history. Basic is now the capture-only edition.
   await pool.query(`DELETE FROM testing_assignments WHERE assignment_key IN ('basic-rolando-capture-2026-09','basic-hassan-organize-2026-09','basic-gabby-create-send-2026-09') AND status<>'submitted'`);

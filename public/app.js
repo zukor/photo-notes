@@ -16,6 +16,8 @@ function isPavingClient(){return isProClient()&&(state.proType==='paving'||state
 function isRooferClient(){return isProClient()&&state.proType==='roofer';}
 function isRoadIssuesClient(){return !isProClient()&&state.proType==='roads';}
 function productName(){return isRoadIssuesClient()?'Road Issue Reporter':isGeneralProClient()?'Photo Notes Pro':isGeneralContractorClient()?'General Contractor Pro':isHoaClient()?'HOA Maintenance Pro':isConcreteClient()?'Concrete Pro':isRooferClient()?'Roofer Pro':isPavingClient()?'Paving Pro':'Photo Notes AI Basic';}
+const editionNames={basic:'Photo Notes Basic',pro:'Photo Notes Pro',contractor:'General Contractor Pro',roads:'Road Issue Reporter',paving:'Paving Pro',hoa:'HOA Maintenance Pro',concrete:'Concrete Pro',roofer:'Roofer Pro'};
+function selectedEdition(){return isBasicClient()?'basic':isRoadIssuesClient()?'roads':isGeneralProClient()?'pro':state.proType;}
 function issueFabLabel(){return 'Report Issue';}
 function featureOn(name) { return isPavingClient() && (!state.me || !state.me.feature_access || state.me.feature_access[name] !== false); }
 function measurementOn(){return isConcreteClient()||featureOn('measurements');}
@@ -257,7 +259,7 @@ function renderApp() {
         <div class="brandrow">
           <div class="brand ${isProClient() ? 'pro-edition-brand' : ''} ${isGeneralProClient()?'general-pro-brand':''} ${isGeneralContractorClient()?'contractor-pro-brand':''} ${isRoadIssuesClient()?'road-issues-brand':''} ${isPavingClient()?'paving-pro-brand':''} ${isConcreteClient()?'concrete-pro-brand':''} ${isHoaClient()?'hoa-pro-brand':''} ${isRooferClient()?'roofer-pro-brand':''}" aria-label="${esc(isProClient()||isRoadIssuesClient()?productName():'Photo Notes AI Basic')}">${isProClient()||isRoadIssuesClient()?'':'<span class="product-suite-name">Photo Notes</span>'}</div>
         </div>
-        ${state.me&&state.me.role==='admin'?`<label class="edition-switcher" for="editionSwitcher"><select id="editionSwitcher" aria-label="Switch Photo Notes version"><option value="basic" ${isBasicClient()?'selected':''}>Photo Notes Basic</option><option value="pro" ${isGeneralProClient()?'selected':''}>Photo Notes Pro</option><option value="contractor" ${isGeneralContractorClient()?'selected':''}>General Contractor Pro</option><option value="roads" ${isRoadIssuesClient()?'selected':''}>Road Issue Reporter</option><option value="paving" ${isPavingClient()?'selected':''}>Paving Pro</option><option value="hoa" ${isHoaClient()?'selected':''}>HOA Maintenance Pro</option><option value="concrete" ${isConcreteClient()?'selected':''}>Concrete Pro</option><option value="roofer" ${isRooferClient()?'selected':''}>Roofer Pro</option></select></label>`:''}
+        ${state.me&&Array.isArray(state.me.edition_access)&&state.me.edition_access.length>1?`<label class="edition-switcher" for="editionSwitcher"><select id="editionSwitcher" aria-label="Switch Photo Notes version">${state.me.edition_access.map(key=>`<option value="${esc(key)}" ${key===selectedEdition()?'selected':''}>${esc(editionNames[key]||key)}</option>`).join('')}</select></label>`:''}
         <div class="header-controls">
           <div class="language-switch" aria-label="Language"><button type="button" data-language="en">EN</button><span> </span><button type="button" data-language="es">ES</button></div>
           <div class="account-menu-wrap">
@@ -320,7 +322,19 @@ function renderApp() {
   document.getElementById('signout').onclick = async () => { await api('/api/logout', { method: 'POST' }); state.me = null; renderLogin(); };
   const myIssues=document.getElementById('myIssues');if(myIssues)myIssues.onclick=()=>{state.view='my-issues';renderApp();};
   const myAssignment=document.getElementById('myAssignment');if(myAssignment)myAssignment.onclick=()=>{state.view='my-assignment';renderApp();};
-  const editionSwitcher=document.getElementById('editionSwitcher');if(editionSwitcher)editionSwitcher.onchange=async()=>{const edition=editionSwitcher.value;editionSwitcher.disabled=true;const r=await api('/api/admin/switch-edition',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({edition})});if(!r.ok){toast('Version could not be switched');return renderApp();}state.view=edition==='roads'?'road-report':edition==='basic'?'capture':(IS_HANDHELD?'capture':'organize');state.photoFile=null;state._note='';await boot();toast('Version switched');};
+  const editionSwitcher=document.getElementById('editionSwitcher');if(editionSwitcher)editionSwitcher.onchange=async()=>{
+    const edition=editionSwitcher.value;
+    if(state.photoFile&&!confirm(uiT('Switch versions and discard this unsaved photo?'))){editionSwitcher.value=selectedEdition();return;}
+    editionSwitcher.disabled=true;
+    try{
+      const r=await api('/api/switch-edition',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({edition})});
+      if(!r.ok)throw new Error();
+      stopCaptureDictation();
+      state.view=edition==='roads'?'road-report':edition==='basic'?'capture':(IS_HANDHELD?'capture':'organize');state.photoFile=null;state._note='';
+      await boot();toast('Version switched');
+    }catch(e){toast('Version could not be switched. Please try again.');}
+    finally{editionSwitcher.disabled=false;editionSwitcher.value=selectedEdition();}
+  };
   const issueFab = document.getElementById('issueFab'); if (issueFab) issueFab.onclick = openIssueReporter;
   const tabCapture=document.getElementById('tabCapture');if(tabCapture)tabCapture.onclick = () => { state.view='capture'; renderApp(); };
   const tabOrganize=document.getElementById('tabOrganize');if(tabOrganize)tabOrganize.onclick = () => { state.view=isHoaClient()?'hoa-visits':'organize'; renderApp(); };

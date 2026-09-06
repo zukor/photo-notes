@@ -23,9 +23,8 @@ test('Pro-only analytics and reports require a Pro plan on the server', () => {
   assert.match(server, /app\.get\('\/api\/export\/proposal', requireAuth,[\s\S]*?currentPlan\(req\.user\.id\) !== 'pro'/);
 });
 
-test('edition switching is never exposed to ordinary Basic testers', () => {
-  assert.match(app, /state\.me&&state\.me\.role==='admin'\?`<label class="edition-switcher"/);
-  assert.match(server, /app\.post\('\/api\/admin\/switch-edition', requireAdmin/);
+test('a single assigned version does not show an unnecessary switcher', () => {
+  assert.match(app, /state.me.edition_access.length>1/);
 });
 
 test('Basic paints only the SVG wordmark, without duplicate live title text', () => {

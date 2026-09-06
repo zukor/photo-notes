@@ -1,12 +1,12 @@
 const test=require('node:test');const assert=require('node:assert/strict');const fs=require('node:fs');const path=require('node:path');
 const root=path.join(__dirname,'..'),read=f=>fs.readFileSync(path.join(root,f),'utf8');
-const app=read('public/app.js'),server=read('server.js'),db=read('db.js'),admin=read('public/admin.html'),styles=read('public/styles.css');
+const app=read('public/app.js'),server=read('server.js')+read('editions.js'),db=read('db.js'),admin=read('public/admin.html'),styles=read('public/styles.css');
 test('Basic is capture-only while general Pro owns the complete workflow',()=>{
   assert.match(app,/function isGeneralProClient\(\)/);
   assert.match(app,/isRoadIssuesClient\(\)\|\|isBasicClient\(\)\?'':`<nav class="tabs workflow-tabs/);
   assert.match(app,/else if \(isBasicClient\(\)\) \{ state\.view='capture'; renderCapture\(\); \}/);
   assert.match(app,/edition==='basic'\?'capture'/);
-  assert.match(server,/pro:\{plan:'pro',pro_type:'general'\}/);
+  assert.match(server,/pro:\{plan:'pro',pro_type:'general',label:'Photo Notes Pro'\}/);
 });
 test('general Pro retains the former Basic help, issue, and assignment workflows',()=>{
   assert.match(app,/!isIndustryProClient\(\) \? `<button class="issue-fab/);
@@ -15,8 +15,8 @@ test('general Pro retains the former Basic help, issue, and assignment workflows
   assert.match(server,/currentProduct\(req\.user\.id\) !== 'general'/);
 });
 test('administrators can create, assign, and switch to general Pro',()=>{
-  assert.match(admin,/<option value="general"[^>]*>Photo Notes Pro<\/option>/);
-  assert.match(admin,/\{plan,pro_type:'general'\}/);
+  assert.match(admin,/pro:'Photo Notes Pro'/);
+  assert.match(admin,/versionChecks/);
   assert.match(server,/\['roads','general','contractor','paving','hoa','concrete','roofer'\]/);
   assert.doesNotMatch(db,/SET plan='pro',pro_type='general' FROM testing_assignments/);
 });
@@ -24,5 +24,5 @@ test('supplied Pro branding replaces the temporary treatment',()=>{
   assert.match(styles,/general-pro-brand/);
   assert.match(styles,/photo-notes-ai-pro-animated\.svg\?v=127/);
   assert.doesNotMatch(styles,/content:"PRO"/);
-  assert.match(app,/>Photo Notes Pro<\/option>/);
+  assert.match(app,/pro:'Photo Notes Pro'/);
 });
