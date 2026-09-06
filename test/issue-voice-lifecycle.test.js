@@ -2,7 +2,7 @@ const test=require('node:test');
 const assert=require('node:assert/strict');
 const vm=require('node:vm');
 const fs=require('node:fs');
-const source=fs.readFileSync('public/app.js','utf8');
+const source=fs.readFileSync('public/issue-reporter.js','utf8');
 function harness({ios=true,pending=false}={}){
   const elements={},recorders=[],sessions=[],requests=[],timers=[];
   let resolvePermission,stopped=0;
@@ -29,7 +29,7 @@ function harness({ios=true,pending=false}={}){
     setTimeout:fn=>{timers.push(fn);return timers.length;},clearTimeout(){},
     api:async(url,options)=>{requests.push(options.body);return {ok:true,json:async()=>({id:1})};}
   });
-  vm.runInContext(source.slice(source.indexOf('let issueScreenshotBlob'),source.indexOf('function areaChips()')),context);
+  vm.runInContext(source.slice(source.indexOf('let issueScreenshotBlob'),source.indexOf('function issueReporterMarkup()')),context);
   return {run:code=>vm.runInContext(code,context),elements,recorders,sessions,requests,timers,resolve:()=>resolvePermission(stream),stopped:()=>stopped};
 }
 test('sending during recording waits for the final audio blob, then includes it',async()=>{
@@ -63,4 +63,10 @@ test('repeated permission taps start only one recorder',async()=>{
   const h=harness({pending:true});await h.run('openIssueReporter()');
   const first=h.run('toggleIssueDictation()');await h.run('toggleIssueDictation()');
   h.resolve();await first;assert.equal(h.recorders.length,1);
+});
+
+test('admin reports retain the admin page and URL context',async()=>{
+  const h=harness();h.run("globalThis.adminIssuePageName=()=> 'Admin — User Details'; location.href='https://example.test/admin'");
+  await h.run('openIssueReporter()');h.elements.issueDescription.value='Cannot save versions';await h.run('submitIssueReport()');
+  assert.equal(h.requests[0].get('page_name'),'Admin — User Details');assert.equal(h.requests[0].get('page_url'),'https://example.test/admin');
 });

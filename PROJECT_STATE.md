@@ -1,5 +1,12 @@
 # Photo Notes — Project State & Resume Guide
 
+## Admin issue reporting — September 5, 2026
+
+The admin page has a fixed red-outline Report Issue button. The main app and
+admin share public/issue-reporter.js for the form, screenshot capture, dictation,
+iPhone voice attachments, and submission. Admin reports identify the current
+admin section and /admin URL. App and service-worker cache versions are 154.
+
 ## Permanent user deletion — September 5, 2026
 
 User details now include Delete User beside Deactivate. The confirmation names

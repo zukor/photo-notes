@@ -5,7 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Photo Notes — Admin</title>
   <meta name="theme-color" content="#1d4ed8" />
-  <link rel="stylesheet" href="/styles.css" />
+  <link rel="stylesheet" href="/styles.css?v=151" />
+  <script src="/vendor/html2canvas.min.js?v=59"></script>
+  <script src="/issue-reporter.js?v=154"></script>
   <style>
     .stat { display:inline-block; min-width:84px; margin:4px 14px 4px 0; vertical-align:top; }
     .stat .n { font-size:19px; font-weight:bold; color:#000; }
@@ -124,6 +126,7 @@
     .delete-user-button { border:1px solid #b42318; background:#fff; color:#b42318; }
     .delete-user-button:hover { background:#fff1ef; border-color:#b42318; }
     .delete-user-panel { border-color:#b42318; background:#fff8f7; overflow-wrap:anywhere; }
+    .wrap { padding-bottom:80px; }
     .delete-user-panel label { text-transform:none; }
     .delete-user-panel h3 { margin-top:0; }
     .delete-user-panel .btn { margin:10px 8px 0 0; }
@@ -371,6 +374,13 @@
         </div>`;
     }
 
+    function adminIssuePageName(){
+      const section=[...document.querySelectorAll('[data-admin-tool][open]')].map(d=>d.querySelector('summary').textContent.trim()).join(', ');
+      return selectedUserId?'Admin — User Details':section?'Admin — '+section:'Admin — Users';
+    }
+    function isIOS(){return /iP(hone|ad|od)/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);}
+    function uiSpeechLanguage(){return 'en-US';}
+    function issueFabLabel(){return 'Report Issue';}
     function renderAdmin(){
       el.innerHTML = `
         <div class="wrap">
@@ -450,7 +460,10 @@
 
           </div></details><details class="admin-section" data-admin-tool="activity"><summary style="font-weight:bold;cursor:pointer">Administrative Activity Log</summary><div class="helper">Account, password, plan, feature-access, and issue-management changes. Passwords and user content are never recorded.</div><div id="activity"><p class="status">Loading...</p></div></details>
 
-                  </div>`;
+                  </div>
+        <button class="issue-fab" id="issueFab" type="button" data-html2canvas-ignore="true">Report Issue</button>
+        ${issueReporterMarkup()}`;
+      document.getElementById('issueFab').onclick=openIssueReporter;
       const profileButton=document.getElementById('profileButton');
       const profileMenu=document.getElementById('profileMenu');
       profileButton.onclick=(e)=>{ e.stopPropagation(); profileMenu.hidden=!profileMenu.hidden; profileButton.setAttribute('aria-expanded',String(!profileMenu.hidden)); };

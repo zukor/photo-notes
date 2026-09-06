@@ -3,7 +3,7 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const path=require('node:path');
 
-const app=fs.readFileSync(path.join(__dirname,'..','public','app.js'),'utf8');
+const app=fs.readFileSync(path.join(__dirname,'..','public','app.js'),'utf8')+fs.readFileSync(path.join(__dirname,'..','public','issue-reporter.js'),'utf8');
 const admin=fs.readFileSync(path.join(__dirname,'..','public','admin.html'),'utf8');
 const server=fs.readFileSync(path.join(__dirname,'..','server.js'),'utf8');
 const db=fs.readFileSync(path.join(__dirname,'..','db.js'),'utf8');

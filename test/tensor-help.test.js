@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const app = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
+const app = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8') + fs.readFileSync(path.join(__dirname, '..', 'public', 'issue-reporter.js'), 'utf8');
 const css = fs.readFileSync(path.join(__dirname, '..', 'public', 'styles.css'), 'utf8');
 const index = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
 
@@ -32,7 +32,7 @@ test('Tensor Man is hidden at phone and small-tablet widths and cannot cover con
 
 test('new app and style versions are cache-busted', () => {
   assert.match(index, /styles\.css\?v=151/);
-  assert.match(index, /app\.js\?v=153/);
+  assert.match(index, /app\.js\?v=154/);
 });
 
 test('Android issue-description dictation replaces revised results and restarts', () => {
