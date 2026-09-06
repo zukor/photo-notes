@@ -1,24 +1,29 @@
-// Regenerates the PWA / favicon PNGs from the Photo Notes mark at build time.
-// Rendering from the SVG keeps the icons in sync with the brand artwork.
-// Failure is non-fatal so a build never breaks over icon generation.
+// Original artwork is immutable. Only resize for web usage; never crop,
+// recolor, round corners, or adjust the intentionally different proportions.
 const fs = require('fs');
 const path = require('path');
+const sharp = require('sharp');
 const pub = path.join(__dirname, '..', 'public');
-const src = path.join(pub, 'photo-notes-mark.svg');
-const sizes = { 'favicon-32.png': 32, 'icon-180.png': 180, 'icon-192.png': 192, 'icon-512.png': 512 };
+const source = path.join(__dirname, '..', 'assets', 'app-icons');
 
 (async () => {
-  try {
-    const sharp = require('sharp');
-    const svg = fs.readFileSync(src);
-    for (const [name, size] of Object.entries(sizes)) {
-      await sharp(svg, { density: 512 })
-        .resize(size, size, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 0 } })
-        .png()
-        .toFile(path.join(pub, name));
-    }
-    console.log('[icons] generated', Object.keys(sizes).join(', '));
-  } catch (e) {
-    console.error('[icons] skipped:', e && e.message);
+  for (const size of [16, 32, 48]) {
+    fs.copyFileSync(path.join(source, `photo-notes-favicon-${size}.png`), path.join(pub, `favicon-${size}.png`));
   }
-})();
+  for (const size of [180, 192, 512]) {
+    await sharp(path.join(source, 'photo-notes-icon-1024.png'))
+      .resize(size, size).png().toFile(path.join(pub, `icon-${size}.png`));
+  }
+  // Web manifests take a flattened image. Composite the adaptive layers at
+  // their original coordinates, then resize the complete square.
+  const adaptive = await sharp(path.join(source, 'photo-notes-icon-android-background.svg'))
+    .composite([{ input: path.join(source, 'photo-notes-icon-android-foreground.svg'), left: 0, top: 0 }])
+    .png().toBuffer();
+  for (const size of [192, 512]) {
+    await sharp(adaptive).resize(size, size).png().toFile(path.join(pub, `icon-maskable-${size}.png`));
+  }
+  console.log('[icons] generated web icons from the approved package');
+})().catch(error => {
+  console.error('[icons] generation failed:', error.message);
+  process.exitCode = 1;
+});
