@@ -228,7 +228,7 @@
           <div class="user-title-row"><div class="userhead">${esc(u.name || u.email || '(unnamed user)')}</div>${u.active ? '' : '<span class="pill basic">Inactive</span>'}</div>
           <div class="account-badges">
             ${u.role==='admin' ? '<span class="pill role">Administrator Access</span>' : '<span class="pill basic">Standard Access</span>'}
-            ${u.plan==='pro' ? `<span class="pill pro">${u.pro_type==='general'?'Photo Notes Pro':u.pro_type==='contractor'?'General Contractor Pro':u.pro_type==='hoa'?'HOA Maintenance Pro':u.pro_type==='concrete'?'Concrete Pro':u.pro_type==='roofer'?'Roofer Pro':'Paving Pro'}</span>` : `<span class="pill basic">${u.pro_type==='roads'?'Road Issue Reporter':'Basic Plan'}</span>`}
+            <span class="pill basic">Currently using: ${esc(editionLabels[u.plan==='pro'?(u.pro_type==='general'?'pro':u.pro_type):u.pro_type==='roads'?'roads':'basic'])}</span>
           </div>
           <div class="muted">${esc(u.email)}${u.industry ? ' · Industry: ' + esc(u.industry) : ''}</div>
           <div class="muted">Joined ${fdate(u.created_at)} · Last login ${fdatetime(u.last_login_at)} · Login count ${num(u.logins)} · Last active ${fdatetime(u.last_activity)}</div>
