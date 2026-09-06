@@ -662,7 +662,7 @@ async function init() {
       {id:'rolando-network',title:'Test a weak connection',instruction:'With a weak or changing connection, save several Photo Notes and continue working. Confirm uploads finish without blocking the next capture.'},
       {id:'rolando-reopen',title:'Leave and reopen Photo Notes',instruction:'After saving, switch to another app and return. Confirm saved and waiting-to-upload items are still present.'}
     ]},
-    {key:'basic-weekend-hassan-2026-09',name:'Hassan',email:null,title:'Photo Notes Basic — Weekend Capture Test',summary:'Test the capture-only Basic edition on your normal phone. Report each problem separately with Report an Issue.',extra:[
+    {key:'basic-weekend-hassan-2026-09',name:'Ahsan',email:null,title:'Photo Notes Basic — Weekend Capture Test',summary:'Test the capture-only Basic edition on your normal phone. Report each problem separately with Report an Issue.',extra:[
       {id:'hassan-sequence',title:'Capture 12 different Photo Notes',instruction:'Use different subjects and alternate between voice and typed notes. Confirm each saved capture resets cleanly for the next one.'},
       {id:'hassan-location',title:'Test location results',instruction:'Take photos in two different places. Confirm GPS appears and the displayed address or named location makes sense; use Retry once.'},
       {id:'hassan-permissions',title:'Test phone permissions',instruction:'Close and reopen Photo Notes, then confirm camera, microphone, and location permissions behave clearly without trapping the page.'}
@@ -679,6 +679,11 @@ async function init() {
       VALUES($1,$2,$3,$4,$5,$6::jsonb) ON CONFLICT (assignment_key) DO UPDATE SET title=EXCLUDED.title,summary=EXCLUDED.summary,steps=EXCLUDED.steps,updated_at=now()`,
       [round.key,round.name,round.email,round.title,round.summary,JSON.stringify(steps)]);
   }
+  // Correct the display name while retaining assignment and step IDs so
+  // existing checklist progress and submitted history remain attached.
+  await pool.query(`UPDATE testing_assignments SET assignee_name='Ahsan',updated_at=now()
+    WHERE assignment_key IN ('basic-weekend-hassan-2026-09','basic-hassan-organize-2026-09')
+      AND assignee_name='Hassan'`);
   await pool.query(`UPDATE testing_assignments a SET user_id=u.id,updated_at=now() FROM users u
     WHERE a.user_id IS NULL AND (lower(COALESCE(a.assignee_email,''))=lower(u.email) OR lower(COALESCE(u.name,'')) LIKE lower(a.assignee_name)||'%')`);
 

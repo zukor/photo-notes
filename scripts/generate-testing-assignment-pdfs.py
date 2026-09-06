@@ -33,7 +33,7 @@ ASSIGNMENTS = {
         ("Test a weak connection", "With a weak or changing connection, save several Photo Notes and continue working. Confirm uploads finish without blocking the next capture."),
         ("Leave and reopen Photo Notes", "After saving, switch to another app and return. Confirm saved and waiting-to-upload items are still present."),
     ]),
-    "Hassan": ("Organize and Edit", "Focus on keeping a larger library understandable and correcting captured information.", [
+    "Ahsan": ("Organize and Edit", "Focus on keeping a larger library understandable and correcting captured information.", [
         ("Review at least 15 Photo Notes", "Inspect at least 15 library cards. Confirm each photo is large enough to identify and matches its title and notes."),
         ("Edit titles, topics, notes, and addresses", "Change each type of information on different Photo Notes, refresh, and confirm every change remains."),
         ("Test selection controls", "Use Select All and Clear All, then select individual Photo Notes. Confirm the count and checkmarks are correct."),

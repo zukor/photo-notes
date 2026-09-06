@@ -9,7 +9,7 @@ const read = file => fs.readFileSync(path.join(root, file), 'utf8');
 test('testing assignments are persisted and seeded for four named testers', () => {
   const db = read('db.js');
   assert.match(db, /CREATE TABLE IF NOT EXISTS testing_assignments/);
-  for (const name of ['Jose', 'Rolando', 'Hassan', 'Gabby']) assert.match(db, new RegExp(`name:'${name}'`));
+  for (const name of ['Jose', 'Rolando', 'Ahsan', 'Gabby']) assert.match(db, new RegExp(`name:'${name}'`));
   assert.match(db, /completed_step_ids/);
   assert.match(read('server.js'), /testing_assignment_submitted/);
 });
