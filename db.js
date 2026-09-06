@@ -645,6 +645,18 @@ async function init() {
   await pool.query(`CREATE TABLE IF NOT EXISTS retired_testing_assignment_keys (
     assignment_key TEXT PRIMARY KEY)`);
 
+  await pool.query(`CREATE TABLE IF NOT EXISTS concrete_footprints (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    capture_id INTEGER NOT NULL REFERENCES captures(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,points JSONB NOT NULL DEFAULT '[]'::jsonb,
+    map_area_sqft DOUBLE PRECISION,
+    field_length_ft DOUBLE PRECISION,field_width_ft DOUBLE PRECISION,
+    field_method TEXT,field_area_sqft DOUBLE PRECISION,notes TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`);
+  await pool.query('CREATE INDEX IF NOT EXISTS concrete_footprints_owner_photo_idx ON concrete_footprints(user_id,capture_id)');
+
   // Retire the superseded full-workflow assignments without touching a tester's
   // submitted history. Basic is now the capture-only edition.
   await pool.query(`DELETE FROM testing_assignments WHERE assignment_key IN ('basic-rolando-capture-2026-09','basic-hassan-organize-2026-09','basic-gabby-create-send-2026-09') AND status<>'submitted'`);

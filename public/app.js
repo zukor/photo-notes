@@ -1732,6 +1732,7 @@ async function renderList() {
     </div>
     </section>
 
+    ${isConcreteClient()?'<div class="organize-footer-actions"><button class="btn secondary" id="concreteAreas">Patio &amp; Foundation Areas</button></div>':''}
     ${featureOn('measurements') ? `<div class="organize-footer-actions"><button class="btn secondary" id="openmap">Open Job Site Map</button></div>` : ''}
 
     <div class="organize-library-heading"><div><span class="organize-library-kicker">Your library</span><h2>Current Photo Notes</h2></div><p>Saved Photo Notes appear here. Select any photos you want to organize or compare.</p></div>
@@ -1758,6 +1759,7 @@ async function renderList() {
   if (cb) cb.onclick = classifySelected;
   const pb = document.getElementById('pairbtn');
   if (pb) pb.onclick = pairSelected;
+  const concreteAreas=document.getElementById('concreteAreas');if(concreteAreas)concreteAreas.onclick=()=>openConcreteFootprints();
   const om = document.getElementById('openmap'); if (om) om.onclick = () => { state.view = 'map'; renderApp(); };
   loadGroupOptions();
   loadCards('');
@@ -2122,6 +2124,8 @@ function captureCardHtml(c) {
     ${state.view === 'edit' ? `<button class="editlink editaddress" data-id="${c.id}" style="padding-left:0">Edit Address</button>` : ''}
     <div class="topicwrap" data-id="${c.id}"><div class="meta">${kind}${tags||'<span class="badge">No Topic</span>'}</div>${topicAction}</div>
     ${concreteRow}
+    ${isConcreteClient()&&c.photo_path?`<button class="btn secondary slim concrete-area-button" data-id="${c.id}">Measure Patio / Foundation Area</button>`:''}
+    ${(c.footprints||[]).map(f=>`<div class="concrete-evidence"><strong>${esc(f.name)}</strong><p>${esc(concreteAreaText(f))}</p>${f.notes?`<p>${esc(f.notes)}</p>`:''}</div>`).join('')}
     ${classifyRow}
     ${dims ? `<div class="meta"><strong>Dimensions:</strong> ${esc(dims)}</div>` : ''}
     ${measureRow}
@@ -2220,6 +2224,7 @@ function pairCardHtml(before, after) {
 }
 
 function wireCards(cards, rows) {
+  cards.querySelectorAll('.concrete-area-button').forEach(b=>b.onclick=()=>openConcreteFootprints(Number(b.dataset.id)));
   cards.querySelectorAll('.capchk').forEach(c => c.onchange = () => { if (c.checked) state.selectedIds.add(String(c.value)); else state.selectedIds.delete(String(c.value)); });
   wireRotate(cards);
   cards.querySelectorAll('.edittitle').forEach(b => b.onclick = () => startEditPhotoTitle(parseInt(b.getAttribute('data-id'), 10), rows));
@@ -2720,13 +2725,14 @@ function loadLeaflet() {
     if (window.L) return resolve();
     if (!document.getElementById('leafletcss')) {
       const css = document.createElement('link'); css.id = 'leafletcss'; css.rel = 'stylesheet';
-      css.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'; document.head.appendChild(css);
+      css.href = '/vendor/leaflet/leaflet.css?v=1.9.4'; document.head.appendChild(css);
     }
-    const s = document.createElement('script'); s.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+    const s = document.createElement('script'); s.src = '/vendor/leaflet/leaflet.js?v=1.9.4';
     s.onload = () => resolve(); s.onerror = () => resolve(); document.head.appendChild(s);
   });
 }
 async function renderMap() {
+  if(isConcreteClient())return renderConcreteFootprintMap();
   const body = document.getElementById('body');
   body.className = 'workflow-organize';
   body.innerHTML = `
@@ -2758,7 +2764,7 @@ async function renderMap() {
   if (cfg.mapbox_token) {
     L.tileLayer(`https://api.mapbox.com/styles/v1/mapbox/satellite-v9/tiles/512/{z}/{x}/{y}@2x?access_token=${cfg.mapbox_token}`, { tileSize: 512, zoomOffset: -1, maxZoom: 22, attribution: '&copy; Mapbox &copy; Maxar' }).addTo(mapObj);
   } else {
-    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 21, attribution: 'Tiles &copy; Esri, Maxar, Earthstar Geographics' }).addTo(mapObj);
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 22, maxNativeZoom: 19, attribution: 'Tiles &copy; Esri, Maxar, Earthstar Geographics' }).addTo(mapObj);
   }
   mapObj.on('popupopen', (e) => {
     const btn = e.popup.getElement().querySelector('.mapopen');

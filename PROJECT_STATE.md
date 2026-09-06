@@ -1,5 +1,28 @@
 # Photo Notes — Project State & Resume Guide
 
+## Concrete patio and foundation areas — September 5, 2026
+
+Concrete Pro now exposes Patio & Foundation Areas from Organize and Measure
+Patio / Foundation Area on saved photo cards. The screen centers overhead imagery
+on the photo GPS or offers My Location, supports polygon tracing with draggable
+corners, undo/clear/finish, and saves named areas against owned photos. Tape/laser
+length and width in decimal feet calculate a separate rectangle area; map and
+field-dimension values never overwrite one another. Map imagery represents an
+estimated overhead footprint, not exact boundaries or sloped surface area.
+
+concrete_footprints stores the photo link, outline, server-calculated map area,
+field dimensions/method/area, and notes. Endpoints require authenticated Concrete
+Pro and validate ownership. Photo/account deletion cascades to these records.
+Concrete report JSON, PDF, and Word include both values and their sources.
+Footprints can be reopened and edited; field-only measurements work without maps.
+
+Leaflet 1.9.4 is bundled locally for both Paving and Concrete maps. Esri imagery
+uses native zoom 19 with overzoom to avoid missing high-zoom tiles. App/SW 155.
+Validation: 135 standard tests passed; one opt-in deletion integration test skipped.
+An isolated PostgreSQL instance and real local app verified saving, reopening,
+map tracing, and PDF/Word export. Phone-width layout showed no horizontal overflow.
+No customer measurements were created during verification.
+
 ## Admin issue reporting — September 5, 2026
 
 The admin page has a fixed red-outline Report Issue button. The main app and
