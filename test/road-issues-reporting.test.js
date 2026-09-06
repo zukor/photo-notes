@@ -34,7 +34,7 @@ test('road reporter header shows the complete supplied Road Issue Reporter logo'
 });
 
 test('road reporter uses the shorter red-outlined issue button',()=>{
-  assert.match(app,/function issueFabLabel\(\)\{return isRoadIssuesClient\(\)\?'Report Issue':'Report an Issue';\}/);
+  assert.match(app,/function issueFabLabel\(\)\{return 'Report Issue';\}/);
   assert.match(app,/issue-fab \$\{isRoadIssuesClient\(\)\?'road-issue-fab':''\}/);
   const styles=fs.readFileSync(path.join(root,'public/styles.css'),'utf8');
   assert.match(styles,/\.issue-fab\.road-issue-fab \{ border-color:#e8231a; \}/);

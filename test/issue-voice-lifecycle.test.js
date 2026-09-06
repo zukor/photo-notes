@@ -24,7 +24,7 @@ function harness({ios=true,pending=false}={}){
     navigator:{userAgent:'test',mediaDevices:{getUserMedia:()=>pending?new Promise(r=>resolvePermission=r):Promise.resolve(stream)}},
     window:{MediaRecorder:Recorder,SpeechRecognition:Speech,innerWidth:390,innerHeight:844},
     document:{getElementById:id=>elements[id]||=( {value:'',hidden:false,disabled:false,textContent:'',focus(){},classList:{add(){},remove(){}}}),querySelector:()=>({})},
-    state:{view:'capture'},isIOS:()=>ios,uiSpeechLanguage:()=> 'en-US',issueFabLabel:()=> 'Report an Issue',
+    state:{view:'capture'},isIOS:()=>ios,uiSpeechLanguage:()=> 'en-US',issueFabLabel:()=> 'Report Issue',
     toast(){},location:{href:'https://example.test/'},
     setTimeout:fn=>{timers.push(fn);return timers.length;},clearTimeout(){},
     api:async(url,options)=>{requests.push(options.body);return {ok:true,json:async()=>({id:1})};}

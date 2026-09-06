@@ -16,7 +16,7 @@ function isPavingClient(){return isProClient()&&(state.proType==='paving'||state
 function isRooferClient(){return isProClient()&&state.proType==='roofer';}
 function isRoadIssuesClient(){return !isProClient()&&state.proType==='roads';}
 function productName(){return isRoadIssuesClient()?'Road Issue Reporter':isGeneralProClient()?'Photo Notes Pro':isGeneralContractorClient()?'General Contractor Pro':isHoaClient()?'HOA Maintenance Pro':isConcreteClient()?'Concrete Pro':isRooferClient()?'Roofer Pro':isPavingClient()?'Paving Pro':'Photo Notes AI Basic';}
-function issueFabLabel(){return isRoadIssuesClient()?'Report Issue':'Report an Issue';}
+function issueFabLabel(){return 'Report Issue';}
 function featureOn(name) { return isPavingClient() && (!state.me || !state.me.feature_access || state.me.feature_access[name] !== false); }
 function measurementOn(){return isConcreteClient()||featureOn('measurements');}
 function beforeAfterOn(){return isConcreteClient()||featureOn('before_after');}
@@ -284,11 +284,11 @@ function renderApp() {
       <div id="body"></div>
       <div class="footer">&copy; ${new Date().getFullYear()} Zukor AI. All Rights Reserved.</div>
     </div>
-    ${!isIndustryProClient() ? `<button class="issue-fab ${isRoadIssuesClient()?'road-issue-fab':''}" id="issueFab" type="button" data-html2canvas-ignore="true" aria-label="${isRoadIssuesClient()?'Report issue':'Report an issue'}">${issueFabLabel()}</button>
+    ${!isIndustryProClient() ? `<button class="issue-fab ${isRoadIssuesClient()?'road-issue-fab':''}" id="issueFab" type="button" data-html2canvas-ignore="true" aria-label="Report Issue">${issueFabLabel()}</button>
     <div class="issue-modal" id="issueModal" hidden data-html2canvas-ignore="true">
       <div class="issue-dialog" role="dialog" aria-modal="true" aria-labelledby="issueTitle">
         <button class="issue-close" id="issueClose" type="button" aria-label="Close">×</button>
-        <h2 id="issueTitle">Report an Issue</h2>
+        <h2 id="issueTitle">Report Issue</h2>
         <p class="status">Answer these short questions. Photo Notes attaches the page and device details automatically.</p>
         <div class="issue-shot-status" id="issueShotStatus">Capturing this page...</div>
         <label for="issueAction">What were you trying to do?</label>
@@ -371,7 +371,7 @@ async function renderMyTestingAssignment(){
 }
 function testingAssignmentCard(a){
   const steps=Array.isArray(a.steps)?a.steps:[],done=new Set((Array.isArray(a.completed_step_ids)?a.completed_step_ids:[]).map(String)),submitted=a.status==='submitted',complete=steps.length>0&&steps.every(s=>done.has(String(s.id))),percent=steps.length?Math.round(done.size/steps.length*100):0;
-  return `<article class="card testing-assignment-card" data-assignment="${a.id}"><div class="tester-issue-head"><strong>${esc(a.title)}</strong><span class="badge">${submitted?'Submitted':percent+'% complete'}</span></div><p>${esc(a.summary||'')}</p><div class="assignment-progress" aria-label="${percent}% complete"><span style="width:${percent}%"></span></div><div class="assignment-steps">${steps.map((s,index)=>`<label class="assignment-step ${done.has(String(s.id))?'done':''}"><input type="checkbox" data-assignment-check="${a.id}" value="${esc(s.id)}" ${done.has(String(s.id))?'checked':''} ${submitted?'disabled':''}><span><strong>${index+1}. ${esc(s.title)}</strong><small>${esc(s.instruction)}</small></span></label>`).join('')}</div><label for="assignmentNotes-${a.id}">Notes for the administrator (optional)</label><textarea id="assignmentNotes-${a.id}" data-assignment-notes="${a.id}" ${submitted?'disabled':''} placeholder="Use Report an Issue for a problem that needs a screenshot. Use this box only for overall comments.">${esc(a.tester_notes||'')}</textarea>${submitted?`<div class="issue-fix-summary"><strong>Assignment submitted</strong><span>${a.submitted_at?new Date(a.submitted_at).toLocaleString(uiLocale()):''}. No separate email or message is needed.</span></div>`:`<button class="btn slim" type="button" data-assignment-submit="${a.id}" ${complete?'':'disabled'}>Submit Assignment Complete</button><p class="meta">The Submit button becomes available after every checklist item is checked.</p>`}</article>`;
+  return `<article class="card testing-assignment-card" data-assignment="${a.id}"><div class="tester-issue-head"><strong>${esc(a.title)}</strong><span class="badge">${submitted?'Submitted':percent+'% complete'}</span></div><p>${esc(a.summary||'')}</p><div class="assignment-progress" aria-label="${percent}% complete"><span style="width:${percent}%"></span></div><div class="assignment-steps">${steps.map((s,index)=>`<label class="assignment-step ${done.has(String(s.id))?'done':''}"><input type="checkbox" data-assignment-check="${a.id}" value="${esc(s.id)}" ${done.has(String(s.id))?'checked':''} ${submitted?'disabled':''}><span><strong>${index+1}. ${esc(s.title)}</strong><small>${esc(s.instruction)}</small></span></label>`).join('')}</div><label for="assignmentNotes-${a.id}">Notes for the administrator (optional)</label><textarea id="assignmentNotes-${a.id}" data-assignment-notes="${a.id}" ${submitted?'disabled':''} placeholder="Use Report Issue for a problem that needs a screenshot. Use this box only for overall comments.">${esc(a.tester_notes||'')}</textarea>${submitted?`<div class="issue-fix-summary"><strong>Assignment submitted</strong><span>${a.submitted_at?new Date(a.submitted_at).toLocaleString(uiLocale()):''}. No separate email or message is needed.</span></div>`:`<button class="btn slim" type="button" data-assignment-submit="${a.id}" ${complete?'':'disabled'}>Submit Assignment Complete</button><p class="meta">The Submit button becomes available after every checklist item is checked.</p>`}</article>`;
 }
 async function saveTestingProgress(id){
   const card=document.querySelector(`[data-assignment="${id}"]`),completed=[...card.querySelectorAll('[data-assignment-check]:checked')].map(c=>c.value),notes=document.getElementById(`assignmentNotes-${id}`).value;
