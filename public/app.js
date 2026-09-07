@@ -17,6 +17,14 @@ function isRooferClient(){return isProClient()&&state.proType==='roofer';}
 function isRoadIssuesClient(){return !isProClient()&&state.proType==='roads';}
 function productName(){return isRoadIssuesClient()?'Road Issue Reporter':isGeneralProClient()?'Photo Notes Pro':isGeneralContractorClient()?'General Contractor Pro':isHoaClient()?'HOA Maintenance Pro':isConcreteClient()?'Concrete Pro':isRooferClient()?'Roofer Pro':isPavingClient()?'Paving Pro':'Photo Notes AI Basic';}
 const editionNames={basic:'Photo Notes Basic',pro:'Photo Notes Pro',contractor:'General Contractor Pro',roads:'Road Issue Reporter',paving:'Paving Pro',hoa:'HOA Maintenance Pro',concrete:'Concrete Pro',roofer:'Roofer Pro'};
+function editionSwitcherOptions() {
+  const allowed = state.me.edition_access;
+  const core = ['basic','pro'].filter(key=>allowed.includes(key));
+  const others = allowed.filter(key=>!['basic','pro'].includes(key))
+    .sort((a,b)=>(editionNames[a]||a).localeCompare(editionNames[b]||b, 'en'));
+  const option = key=>`<option value="${esc(key)}" ${key===selectedEdition()?'selected':''}>${esc(editionNames[key]||key)}</option>`;
+  return core.map(option).join('') + (core.length && others.length ? '<hr>' : '') + others.map(option).join('');
+}
 function selectedEdition(){return isBasicClient()?'basic':isRoadIssuesClient()?'roads':isGeneralProClient()?'pro':state.proType;}
 function issueFabLabel(){return 'Report Issue';}
 function featureOn(name) { return isPavingClient() && (!state.me || !state.me.feature_access || state.me.feature_access[name] !== false); }
@@ -259,7 +267,7 @@ function renderApp() {
   el.innerHTML = `
     <div class="wrap">
       <div class="app-header">
-        ${state.me&&Array.isArray(state.me.edition_access)&&state.me.edition_access.length>1?`<label class="edition-switcher" for="editionSwitcher"><select id="editionSwitcher" aria-label="Switch Photo Notes version">${state.me.edition_access.map(key=>`<option value="${esc(key)}" ${key===selectedEdition()?'selected':''}>${esc(editionNames[key]||key)}</option>`).join('')}</select></label>`:''}
+        ${state.me&&Array.isArray(state.me.edition_access)&&state.me.edition_access.length>1?`<label class="edition-switcher" for="editionSwitcher"><select id="editionSwitcher" aria-label="Switch Photo Notes version">${editionSwitcherOptions()}</select></label>`:''}
         <img class="zukor-corner-logo" src="/zukor-logo.svg" alt="Zukor AI" />
         <div class="brandrow">
           <div class="brand ${isProClient() ? 'pro-edition-brand' : ''} ${isGeneralProClient()?'general-pro-brand':''} ${isGeneralContractorClient()?'contractor-pro-brand':''} ${isRoadIssuesClient()?'road-issues-brand':''} ${isPavingClient()?'paving-pro-brand':''} ${isConcreteClient()?'concrete-pro-brand':''} ${isHoaClient()?'hoa-pro-brand':''} ${isRooferClient()?'roofer-pro-brand':''}" aria-label="${esc(isProClient()||isRoadIssuesClient()?productName():'Photo Notes AI Basic')}">${isProClient()||isRoadIssuesClient()?'':'<span class="product-suite-name">Photo Notes</span>'}</div>

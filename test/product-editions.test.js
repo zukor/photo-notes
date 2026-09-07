@@ -13,7 +13,7 @@ test('version management is admin-only while switching follows saved access',()=
 });
 test('accounts with multiple assigned versions see the compact switcher',()=>{
   assert.match(app,/state.me.edition_access.length>1/);
-  assert.match(app,/state.me.edition_access.map/);
+  assert.match(app,/editionSwitcherOptions\(\)/);
   assert.match(app,/<select id="editionSwitcher" aria-label="Switch Photo Notes version">/);
   assert.doesNotMatch(app,/<span>Version<\/span>/);
   assert.match(app,/editionSwitcher.onchange=async/);
