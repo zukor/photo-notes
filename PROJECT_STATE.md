@@ -1,5 +1,25 @@
 # Photo Notes — Project State & Resume Guide
 
+## Concrete Capture project phases - September 7, 2026
+
+Capture now opens with Concrete Project Photos and optional phase/purpose selectors:
+before proposal, work in progress, completion, and later follow-up. Each phase has
+specific photo purposes and guidance. Patio is a project type. Project/job, property
+location, and relevant condition/mix fields are in optional details below Notes.
+Draft context survives topic changes; camera and note capture remain available
+without choosing a phase. Photo-specific details clear after save.
+
+`public/concrete-capture.js` defines the shared phase/purpose catalog and validation.
+`captures.concrete_phase` and `concrete_purpose` are nullable additive fields; legacy
+stages remain valid. Background FormData now includes all Concrete fields (previously
+omitted), plus the selected owned job. Phase/purpose appear on cards and Concrete
+PDF/Word reports. Existing records are not assigned an inferred phase.
+
+Validation: 164 standard tests passed (two optional tests skipped), isolated local
+PostgreSQL/HTTP uploads for all four phases, JSON/PDF/Word report checks, real local
+Capture save with project context, English/Spanish UI, and 320/390/1440px layouts.
+
+
 ## Issue repair workflow — September 6, 2026
 
 All eight editions and Admin expose Report Issue and the report list. App/SW 156.

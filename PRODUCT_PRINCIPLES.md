@@ -30,8 +30,10 @@ supports a photo-centered workflow.
   job-linked evidence, including delivery-ticket and extra-work documentation.
 - **HOA Maintenance Pro:** Turn property photos into durable maintenance,
   inspection, condition, completion, and board-ready evidence.
-- **Concrete Pro:** Turn concrete photos into placement, condition, defect,
-  measurement, progress, repair, and verification evidence.
+- **Concrete Pro:** Support photos before a proposal, during work, at completion,
+  and on later visits. Include proposed patios, driveways, and sidewalks before
+  concrete exists, customer wishes, access, layout, measurements, and drainage,
+  as well as progress, completed work, reported problems, repairs, and follow-up.
 
 Shared functions such as projects, contacts, status, exports, and reports are
 supporting context. They must remain subordinate to capturing, finding,

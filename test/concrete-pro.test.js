@@ -22,7 +22,7 @@ test('Concrete Pro report is product protected and photo backed', () => {
 });
 
 test('Concrete Pro keeps photo context and report generation without replacing Create', () => {
-  assert.match(app, /Concrete Photo Evidence/);
+  assert.match(app, /Concrete Project Photos/);
   assert.match(app, /Concrete Photo Evidence Report/);
   assert.match(app, /id="tabCreate"[^>]*>\$\{isHoaClient\(\)\?'Inspections':'Create'\}<\/button>/);
   assert.match(app, /async function renderConcreteReport/);

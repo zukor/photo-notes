@@ -313,7 +313,7 @@ function renderApp() {
       profileButton.setAttribute('aria-expanded', 'false');
     }
   };
-  document.getElementById('signout').onclick = async () => { await api('/api/logout', { method: 'POST' }); state.me = null; renderLogin(); };
+  document.getElementById('signout').onclick = async () => { await api('/api/logout', { method: 'POST' }); state.me = null; state._concreteCapture=null; renderLogin(); };
   const myIssues=document.getElementById('myIssues');if(myIssues)myIssues.onclick=()=>{state.view='my-issues';renderApp();};
   const myAssignment=document.getElementById('myAssignment');if(myAssignment)myAssignment.onclick=()=>{state.view='my-assignment';renderApp();};
   const editionSwitcher=document.getElementById('editionSwitcher');if(editionSwitcher)editionSwitcher.onchange=async()=>{
@@ -324,7 +324,7 @@ function renderApp() {
       const r=await api('/api/switch-edition',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({edition})});
       if(!r.ok)throw new Error();
       stopCaptureDictation();
-      state.view=edition==='roads'?'road-report':edition==='basic'?'capture':(IS_HANDHELD?'capture':'organize');state.photoFile=null;state._note='';
+      state.view=edition==='roads'?'road-report':edition==='basic'?'capture':(IS_HANDHELD?'capture':'organize');state.photoFile=null;state._note='';state._concreteCapture=null;
       await boot();toast('Version switched');
     }catch(e){toast('Version could not be switched. Please try again.');}
     finally{editionSwitcher.disabled=false;editionSwitcher.value=selectedEdition();}
@@ -544,11 +544,63 @@ async function sendRoadIssueReport(){
   }catch(e){status.textContent='The road issue could not be sent. Check your connection and try again.';btn.disabled=false;btn.textContent='Send';}
 }
 
+function concreteCaptureDraft(){return state._concreteCapture||(state._concreteCapture={});}
+function concreteCaptureContextMarkup(){
+  const d=concreteCaptureDraft();
+  return `<section class="concrete-capture-context" aria-label="Concrete project photo context">
+    <div class="concrete-capture-intro"><strong>Concrete Project Photos</strong><p>Plan a proposal, document the work, show the finished result, or revisit a project.</p></div>
+    <div class="concrete-context-grid"><div><label for="concretePhase">Project phase</label><select id="concretePhase"><option value="">Choose a phase (optional)</option>${ConcreteCapture.phases.map(p=>`<option value="${p.id}" ${d.phase===p.id?'selected':''}>${esc(p.label)}</option>`).join('')}</select></div>
+    <div><label for="concretePurpose">Photo purpose</label><select id="concretePurpose" aria-describedby="concretePhotoGuide"></select></div></div>
+    <p id="concretePhotoGuide" class="concrete-photo-guide" aria-live="polite"></p>
+  </section>`;
+}
+function concreteCaptureDetailsMarkup(){
+  const d=concreteCaptureDraft();
+  return `<details class="concrete-capture-details" ${d.detailsOpen?'open':''}><summary>Project details (optional)</summary>
+    <div class="concrete-context-grid"><div><label for="concreteElement">Project type</label><select id="concreteElement"><option value="">Choose project type</option>${Object.entries(ConcreteCapture.elements).map(([key,label])=>`<option value="${key}" ${d.element===key?'selected':''}>${esc(label)}</option>`).join('')}</select></div>
+    <div><label for="concreteJob">Project / job</label><select id="concreteJob"><option value="">No project selected</option>${state.jobs.map(j=>`<option value="${j.id}" ${String(d.jobId||'')===String(j.id)?'selected':''}>${esc(j.job_number?j.job_number+' - '+j.name:j.name)}</option>`).join('')}</select></div></div>
+    <label for="concreteLocation">Where on the property?</label><input id="concreteLocation" value="${esc(d.location||'')}" placeholder="Backyard patio area, front driveway, or side walkway">
+    <div id="concreteConditionFields" hidden><div class="concrete-context-grid"><div><label for="concreteCondition">Observed condition (optional)</label><select id="concreteCondition">${Object.entries({not_assessed:'Not assessed',acceptable:'Acceptable',monitor:'Monitor',repair_needed:'Repair needed',unsafe:'Unsafe'}).map(([key,label])=>`<option value="${key}" ${d.condition===key?'selected':''}>${label}</option>`).join('')}</select></div><div><label for="concreteSeverity">Severity (optional)</label><select id="concreteSeverity">${Object.entries({none:'Not rated',minor:'Minor',moderate:'Moderate',severe:'Severe',critical:'Critical'}).map(([key,label])=>`<option value="${key}" ${d.severity===key?'selected':''}>${label}</option>`).join('')}</select></div></div></div>
+    <div id="concreteMixField" hidden><label for="concreteMix">Mix or specification (optional)</label><input id="concreteMix" value="${esc(d.mix||'')}" placeholder="Record only a confirmed mix or specification"></div>
+  </details>`;
+}
+function refreshConcreteCapturePurpose(){
+  const d=concreteCaptureDraft(),phase=ConcreteCapture.phase(d.phase),select=document.getElementById('concretePurpose');
+  if(!ConcreteCapture.purpose(d.phase,d.purpose))d.purpose='';
+  select.disabled=!phase;
+  select.innerHTML=`<option value="">${phase?'Choose a photo purpose (optional)':'Choose a phase first'}</option>`+(phase?phase.purposes.map(p=>`<option value="${p[0]}" ${d.purpose===p[0]?'selected':''}>${esc(p[1])}</option>`).join(''):'');
+  refreshConcreteCaptureGuide();
+}
+function refreshConcreteCaptureGuide(){
+  const d=concreteCaptureDraft(),phase=ConcreteCapture.phase(d.phase),purpose=ConcreteCapture.purpose(d.phase,d.purpose);
+  document.getElementById('concretePhotoGuide').textContent=purpose?.[2]||phase?.hint||'Choose a phase for photo ideas, or take a photo and add your notes.';
+  document.getElementById('concreteConditionFields').hidden=!['existing_condition','work_problem','routine_review','reported_problem','monitoring','repair','repair_check'].includes(d.purpose);
+  document.getElementById('concreteMixField').hidden=d.phase!=='work';
+}
+function bindConcreteCapture(){
+  const d=concreteCaptureDraft();
+  document.getElementById('concretePhase').onchange=e=>{d.phase=e.target.value;d.purpose='';d.condition='not_assessed';d.severity='none';document.getElementById('concreteCondition').value='not_assessed';document.getElementById('concreteSeverity').value='none';refreshConcreteCapturePurpose();};
+  document.getElementById('concretePurpose').onchange=e=>{d.purpose=e.target.value;refreshConcreteCaptureGuide();};
+  for(const [id,key] of Object.entries({concreteElement:'element',concreteJob:'jobId',concreteLocation:'location',concreteCondition:'condition',concreteSeverity:'severity',concreteMix:'mix'}))document.getElementById(id).addEventListener('input',e=>d[key]=e.target.value);
+  document.querySelector('.concrete-capture-details').ontoggle=e=>d.detailsOpen=e.target.open;
+  refreshConcreteCapturePurpose();
+}
+function concreteCapturePayload(){
+  const d=concreteCaptureDraft(),observed=!document.getElementById('concreteConditionFields').hidden;
+  return {...ConcreteCapture.normalize({concrete_phase:d.phase,concrete_purpose:d.purpose}),
+    concrete_element:document.getElementById('concreteElement').value,
+    concrete_condition:observed?document.getElementById('concreteCondition').value:'not_assessed',
+    concrete_severity:observed?document.getElementById('concreteSeverity').value:'none',
+    concrete_location:document.getElementById('concreteLocation').value.trim(),
+    concrete_mix:d.phase==='work'?document.getElementById('concreteMix').value.trim():'',
+    job_id:document.getElementById('concreteJob').value};
+}
+
 function renderCapture() {
   const body = document.getElementById('body');
   body.innerHTML = `
     ${isHoaClient()?`<label>HOA / Community</label><select id="hoaCommunity"><option value="">Select Community</option>${state.communities.map(c=>`<option value="${c.id}" ${String(state.communityId)===String(c.id)?'selected':''}>${esc(c.name)}</option>`).join('')}</select>${!state.communities.length?'<p class="status">Create your first community under Assets before saving a maintenance record.</p>':''}<label>Issue Title</label><input id="hoaTitle" placeholder="Briefly identify the maintenance issue"><div class="row compact"><div style="flex:1"><label>Record Type</label><select id="hoaType"><option value="maintenance">Maintenance Issue</option><option value="information">Information Request</option><option value="inspection">Inspection Finding</option></select></div><div style="flex:1"><label>Priority</label><select id="hoaPriority"><option value="routine">Routine</option><option value="high">High</option><option value="emergency">Emergency</option><option value="monitor">Monitor</option></select></div></div>`:''}
-    ${isConcreteClient()?`<div class="workflow-intro"><strong>Concrete Photo Evidence</strong><span>Identify what this photo proves. Add only the field context visible in or directly supported by the photo.</span></div><div class="organize-form-grid"><section class="organize-panel"><label>Concrete Element</label><select id="concreteElement"><option value="slab">Slab</option><option value="sidewalk">Sidewalk</option><option value="curb">Curb</option><option value="driveway">Driveway</option><option value="foundation">Foundation</option><option value="wall">Wall</option><option value="column">Column</option><option value="beam">Beam</option><option value="steps">Steps</option><option value="deck">Deck</option><option value="other">Other</option></select><label>Photo Stage</label><select id="concreteStage"><option value="existing_condition">Existing Condition</option><option value="pre_pour">Pre-Pour</option><option value="formwork">Formwork</option><option value="reinforcement">Reinforcement</option><option value="placement">Placement</option><option value="finishing">Finishing</option><option value="curing">Curing</option><option value="completed">Completed</option><option value="defect">Defect</option><option value="repair">Repair</option><option value="verification">Verification</option></select></section><section class="organize-panel"><label>Condition</label><select id="concreteCondition"><option value="not_assessed">Not Assessed</option><option value="acceptable">Acceptable</option><option value="monitor">Monitor</option><option value="repair_needed">Repair Needed</option><option value="unsafe">Unsafe</option></select><label>Observed Severity</label><select id="concreteSeverity"><option value="none">None</option><option value="minor">Minor</option><option value="moderate">Moderate</option><option value="severe">Severe</option><option value="critical">Critical</option></select></section></div><label>Exact Photo Location</label><input id="concreteLocation" placeholder="Grid line, elevation, room, station, or nearby landmark"><label>Mix / Specification Visible or Confirmed</label><input id="concreteMix" placeholder="Optional mix ID or specification tied to this photo">`:''}
+    ${isConcreteClient()?concreteCaptureContextMarkup():''}
     <label>Photo</label>
     <button type="button" class="btn" id="takephoto">Take Photo</button>
     <button type="button" class="btn secondary" id="choosephoto" style="margin-top:8px">Choose from library or files</button>
@@ -571,6 +623,7 @@ function renderCapture() {
     <button type="button" class="btn" id="dictate" style="margin-bottom:8px">Record Notes</button>
     <div class="status" id="dictationStatus" aria-live="polite"></div>
     <textarea id="note" placeholder="Your recorded notes will appear here as words"></textarea>
+    ${isConcreteClient()?concreteCaptureDetailsMarkup():''}
 
     ${isHoaClient()?`<label>Maintenance Category</label><select id="hoaArea">${HOA_AREAS.map(a=>`<option value="${esc(a)}">${esc(a)}</option>`).join('')}</select><div id="hoaDirectedWrap" style="display:none"><label>Directed To</label><input id="hoaDirected" placeholder="Person expected to answer"></div>`:`<label data-topic-heading="${isBasicClient()?'Optional':'Select Topic'}">${isBasicClient()?'Optional':'Select Topic'}</label>
     <div class="pill-group" id="areas">${areaChips()}</div>
@@ -581,6 +634,8 @@ function renderCapture() {
 
     <button class="btn" id="save">Save</button>
   `;
+
+  if(isConcreteClient())bindConcreteCapture();
 
   const cameraToolsButton = document.getElementById('openCameraTools');
   if (cameraToolsButton) cameraToolsButton.onclick = () => { state.view = 'camera-tools'; renderApp(); };
@@ -1510,7 +1565,7 @@ function queueDb(){return new Promise((resolve,reject)=>{if(!window.indexedDB)re
 async function queueStore(payload,hadCoords){const db=await queueDb();return new Promise((resolve,reject)=>{const tx=db.transaction('captures','readwrite');const r=tx.objectStore('captures').add({payload,hadCoords:!!hadCoords,createdAt:Date.now()});r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);tx.oncomplete=()=>db.close();});}
 async function queueDelete(id){if(id==null)return;try{const db=await queueDb();await new Promise((resolve,reject)=>{const tx=db.transaction('captures','readwrite');tx.objectStore('captures').delete(id);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);});db.close();}catch(e){}}
 async function restoreOfflineQueue(){if(offlineQueueRestored)return;offlineQueueRestored=true;try{const db=await queueDb();const rows=await new Promise((resolve,reject)=>{const tx=db.transaction('captures','readonly');const r=tx.objectStore('captures').getAll();r.onsuccess=()=>resolve(r.result||[]);r.onerror=()=>reject(r.error);});db.close();const known=new Set(bgQueue.map(x=>x.id));rows.forEach(row=>{if(!known.has(row.id))bgQueue.push({id:row.id,payload:row.payload,hadCoords:row.hadCoords,tries:0});});if(rows.length){toast(`${rows.length} offline capture${rows.length===1?'':'s'} ready to upload`);bgIndicator();drainQueue();}}catch(e){}}
-function payloadFormData(p){const fd=new FormData();if(p.photo)fd.append('photo',p.photo,p.photoName||'offline-photo.jpg');fd.append('note',p.note||'');fd.append('area_tags',p.area_tags||'[]');fd.append('kind',p.kind||'note');if(p.job_id)fd.append('job_id',p.job_id);for(const k of ['hoa_community_id','hoa_title','hoa_item_type','hoa_priority','hoa_area','hoa_directed_to','hoa_budget_source','hoa_photo_stage','hoa_target_date'])if(p[k])fd.append(k,p[k]);if(p.latitude!=null)fd.append('latitude',p.latitude);if(p.longitude!=null)fd.append('longitude',p.longitude);if(p.address)fd.append('address',p.address);return fd;}
+function payloadFormData(p){const fd=new FormData();if(p.photo)fd.append('photo',p.photo,p.photoName||'offline-photo.jpg');fd.append('note',p.note||'');fd.append('area_tags',p.area_tags||'[]');fd.append('kind',p.kind||'note');if(p.job_id)fd.append('job_id',p.job_id);for(const k of ['concrete_phase','concrete_purpose','concrete_element','concrete_stage','concrete_condition','concrete_severity','concrete_location','concrete_mix','hoa_community_id','hoa_title','hoa_item_type','hoa_priority','hoa_area','hoa_directed_to','hoa_budget_source','hoa_photo_stage','hoa_target_date'])if(p[k])fd.append(k,p[k]);if(p.latitude!=null)fd.append('latitude',p.latitude);if(p.longitude!=null)fd.append('longitude',p.longitude);if(p.address)fd.append('address',p.address);return fd;}
 
 function bgIndicator() {
   let el = document.getElementById('bgstatus');
@@ -1590,7 +1645,7 @@ async function saveCapture() {
   // Build the payload from the CURRENT state before we clear the form.
   const payload={photo:state.photoFile||null,photoName:state.photoFile&&state.photoFile.name||'offline-photo.jpg',note,area_tags:JSON.stringify(isHoaClient()?[document.getElementById('hoaArea').value]:(state.area?[state.area]:[])),kind:'note'};
   if(isHoaClient()){Object.assign(payload,{hoa_community_id:state.communityId,hoa_title:document.getElementById('hoaTitle').value.trim(),hoa_item_type:document.getElementById('hoaType').value,hoa_priority:document.getElementById('hoaPriority').value,hoa_area:document.getElementById('hoaArea').value,hoa_directed_to:(document.getElementById('hoaDirected')||{}).value||'',hoa_budget_source:'unassigned',hoa_photo_stage:'initial'});}
-  if(isConcreteClient()){Object.assign(payload,{concrete_element:document.getElementById('concreteElement').value,concrete_stage:document.getElementById('concreteStage').value,concrete_condition:document.getElementById('concreteCondition').value,concrete_severity:document.getElementById('concreteSeverity').value,concrete_location:document.getElementById('concreteLocation').value.trim(),concrete_mix:document.getElementById('concreteMix').value.trim()});}
+  if(isConcreteClient())Object.assign(payload,concreteCapturePayload());
   const hadCoords = !!state.location;
   if (state.location) { payload.latitude=state.location.lat;payload.longitude=state.location.lng; }
   if (state.address) payload.address=state.address;
@@ -1598,6 +1653,7 @@ async function saveCapture() {
   captureLocationGeneration++;
   state.photoFile = null; state._note = ''; state.location = null; state.address = null; state._locationPromise = null;
   state._dims = freshDims(); state._measure = null;
+  if(isConcreteClient()){const d=concreteCaptureDraft();state._concreteCapture={phase:d.phase,purpose:d.purpose,element:d.element,jobId:d.jobId};}
   renderCapture();
   toast('Saved');
   void enqueueUpload(payload, hadCoords);
@@ -2121,7 +2177,7 @@ function captureCardHtml(c) {
     : '';
   const measureRow = measurementOn() && state.view === 'edit' && c.photo_path
     ? `<button class="btn secondary slim editdims" data-id="${c.id}">Measurements</button>` : '';
-  const supporting=(c.supporting_photos||[]).map(p=>`<div class="meta"><strong>${p.reference_type==='specification'?'Specification':'Batch ticket'}:</strong> linked photo</div>`).join(''),concreteRow=isConcreteClient()&&c.concrete_element?`<div class="concrete-evidence"><strong>${esc(String(c.concrete_element).replaceAll('_',' '))}</strong> · ${esc(String(c.concrete_stage||'photo').replaceAll('_',' '))}${c.concrete_condition?` · ${esc(String(c.concrete_condition).replaceAll('_',' '))}`:''}${c.concrete_severity&&c.concrete_severity!=='none'?` · ${esc(c.concrete_severity)} severity`:''}${c.concrete_location?`<div>${esc(c.concrete_location)}</div>`:''}${c.concrete_mix?`<div>Mix/spec: ${esc(c.concrete_mix)}</div>`:''}${supporting}</div>${c.concrete_stage!=='batch_ticket'?`<label class="btn secondary slim concrete-ticket-label">Attach Batch Ticket / Spec Photo<input class="concrete-ticket-file" data-id="${c.id}" type="file" accept="image/*" capture="environment" hidden></label>`:''}`:'';
+  const supporting=(c.supporting_photos||[]).map(p=>`<div class="meta"><strong>${p.reference_type==='specification'?'Specification':'Batch ticket'}:</strong> linked photo</div>`).join(''),concreteRow=isConcreteClient()&&(c.concrete_element||c.concrete_phase)?`<div class="concrete-evidence"><strong>${esc(c.concrete_element?ConcreteCapture.elements[c.concrete_element]||c.concrete_element:'Concrete project')}</strong> · ${esc(ConcreteCapture.summary(c,uiT)||String(c.concrete_stage||'photo').replaceAll('_',' '))}${c.concrete_condition&&c.concrete_condition!=='not_assessed'?` · ${esc(String(c.concrete_condition).replaceAll('_',' '))}`:''}${c.concrete_severity&&c.concrete_severity!=='none'?` · ${esc(c.concrete_severity)} severity`:''}${c.concrete_location?`<div>${esc(c.concrete_location)}</div>`:''}${c.concrete_mix?`<div>Mix/spec: ${esc(c.concrete_mix)}</div>`:''}${supporting}</div>${c.concrete_stage!=='batch_ticket'&&(!c.concrete_phase||c.concrete_phase==='work')?`<label class="btn secondary slim concrete-ticket-label">Attach Batch Ticket / Spec Photo<input class="concrete-ticket-file" data-id="${c.id}" type="file" accept="image/*" capture="environment" hidden></label>`:''}`:'';
   const titleAction=state.view==='edit'?(c.photo_title?'Change Photo Title':'Add Photo Title'):(state.view==='organize'&&!c.photo_title?'Add Photo Title':'');
   const topicAction=['organize','edit'].includes(state.view)?`<button class="editlink edittopics" data-id="${c.id}" type="button">Change Topics</button>`:'';
   return `<div class="card">

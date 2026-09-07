@@ -583,3 +583,19 @@ input.dimfield.suggested {
 
 .issue-updates {position:fixed;right:max(14px,env(safe-area-inset-right));bottom:calc(60px + env(safe-area-inset-bottom));z-index:80;background:#fff;color:#1d4ed8;border:1px solid #1d4ed8;border-radius:12px;padding:9px 12px;font-weight:700;font-size:12px;max-width:calc(100vw - 28px);}
 .issue-updates[hidden] {display:none;}
+
+/* Concrete capture starts with the reason for the photo; technical details stay optional. */
+.concrete-capture-context, .concrete-capture-details { color:#000; font-family:Arial,Helvetica,sans-serif; }
+.concrete-capture-intro { margin:8px 0 12px; }
+.concrete-capture-intro strong { display:block; font-size:19px; }
+.concrete-capture-intro p, .concrete-photo-guide { margin:6px 0 0; font-size:14px; line-height:1.45; color:#000; }
+.concrete-context-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+.concrete-context-grid > div { min-width:0; }
+.concrete-context-grid label { margin-top:8px; }
+.concrete-context-grid select { padding:10px 8px; }
+.concrete-photo-guide { border-left:3px solid #1d4ed8; padding:8px 10px; margin-top:12px; background:#f0f5ff; }
+.concrete-capture-details { margin:16px 0; padding:12px; border:1px solid #9db0ca; border-radius:10px; }
+.concrete-capture-details summary { cursor:pointer; font-size:14px; font-weight:700; }
+.concrete-capture-details input::placeholder { color:#000; opacity:1; }
+#concreteConditionFields[hidden], #concreteMixField[hidden] { display:none; }
+@media(max-width:520px){.concrete-context-grid{grid-template-columns:minmax(0,1fr);gap:4px}.concrete-capture-intro strong{font-size:18px}}
