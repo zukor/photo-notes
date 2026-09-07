@@ -569,3 +569,6 @@ input.dimfield.suggested {
 /* Keep the report inside the visible mobile viewport as browser chrome changes. */
 .issue-dialog { max-height:calc(100dvh - 36px); overscroll-behavior:contain; }
 @media (max-width:700px) { .issue-dialog { max-height:calc(100dvh - 20px); } }
+
+.issue-updates {position:fixed;right:max(14px,env(safe-area-inset-right));bottom:calc(60px + env(safe-area-inset-bottom));z-index:80;background:#fff;color:#1d4ed8;border:1px solid #1d4ed8;border-radius:12px;padding:9px 12px;font-weight:700;font-size:12px;max-width:calc(100vw - 28px);}
+.issue-updates[hidden] {display:none;}

@@ -9,10 +9,10 @@ test('Basic is capture-only while general Pro owns the complete workflow',()=>{
   assert.match(server,/pro:\{plan:'pro',pro_type:'general',label:'Photo Notes Pro'\}/);
 });
 test('general Pro retains the former Basic help, issue, and assignment workflows',()=>{
-  assert.match(app,/!isIndustryProClient\(\) \? `<button class="issue-fab/);
+  assert.match(app,/<button class="issue-fab/);
   assert.match(app,/isBasicClient\(\)\|\|isGeneralProClient\(\)\?'<button type="button" id="myAssignment"/);
   assert.match(app,/if \(isIndustryProClient\(\) \|\| isRoadIssuesClient\(\)/);
-  assert.match(server,/currentProduct\(req\.user\.id\) !== 'general'/);
+  assert.doesNotMatch(server,/error:'core Photo Notes editions only'/);
 });
 test('administrators can create, assign, and switch to general Pro',()=>{
   assert.match(admin,/pro:'Photo Notes Pro'/);

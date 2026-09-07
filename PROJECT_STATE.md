@@ -1,5 +1,21 @@
 # Photo Notes — Project State & Resume Guide
 
+## Issue repair workflow — September 6, 2026
+
+All eight editions and Admin expose Report Issue and the report list. App/SW 156.
+Reports preserve the active edition and build. The scoped queue supports exclusive
+45-minute renewable claims, repair history, blocked questions, in-app updates,
+reporter details, and failed-retest requeue. Workers cannot confirm their own fixes.
+The issue-agent client verifies Railway SUCCESS, commit ancestry, health, and the
+live app bundle before requesting a retest. Follow docs/ISSUE-REPAIR-WORKFLOW.md.
+The local credential is private at ~/.config/photo-notes/issue-agent.json; never
+print it. Railway TESTER_QUEUE_TOKEN is configured. Email is not configured.
+A local Codex heartbeat is intended to check every 15 minutes; verify its actual
+schedule and Admin last-check timestamp. This is not a continuous server worker.
+Validation: 138 tests passed, one opt-in deletion test skipped; disposable local
+PostgreSQL/HTTP checks covered all editions, exclusive and renewed claims, stale
+worker rejection, ownership, blocked details, repair history, and failed retests.
+
 ## Concrete patio and foundation areas — September 5, 2026
 
 Concrete Pro now exposes Patio & Foundation Areas from Organize and Measure

@@ -657,6 +657,21 @@ async function init() {
   )`);
   await pool.query('CREATE INDEX IF NOT EXISTS concrete_footprints_owner_photo_idx ON concrete_footprints(user_id,capture_id)');
 
+  await pool.query(`ALTER TABLE issue_reports
+    ADD COLUMN IF NOT EXISTS reported_edition TEXT,
+    ADD COLUMN IF NOT EXISTS app_version TEXT,
+    ADD COLUMN IF NOT EXISTS repair_claim_hash TEXT,
+    ADD COLUMN IF NOT EXISTS repair_lease_until TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS verification TEXT,
+    ADD COLUMN IF NOT EXISTS fix_commit TEXT,
+    ADD COLUMN IF NOT EXISTS blocked_reason TEXT,
+    ADD COLUMN IF NOT EXISTS reporter_details TEXT`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS issue_repair_events (
+    id SERIAL PRIMARY KEY,issue_id INTEGER NOT NULL REFERENCES issue_reports(id) ON DELETE CASCADE,
+    event TEXT NOT NULL,detail TEXT NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
+  await pool.query('CREATE INDEX IF NOT EXISTS issue_repair_events_issue_idx ON issue_repair_events(issue_id,created_at)');
+  await pool.query('CREATE TABLE IF NOT EXISTS issue_worker_state(id INTEGER PRIMARY KEY,last_checked TIMESTAMPTZ NOT NULL)');
+
   // Retire the superseded full-workflow assignments without touching a tester's
   // submitted history. Basic is now the capture-only edition.
   await pool.query(`DELETE FROM testing_assignments WHERE assignment_key IN ('basic-rolando-capture-2026-09','basic-hassan-organize-2026-09','basic-gabby-create-send-2026-09') AND status<>'submitted'`);

@@ -14,8 +14,9 @@ const { Document, Packer, Paragraph, TextRun, ImageRun, HeadingLevel, Table, Tab
 const { pool, init, seedUserAreas } = require('./db');
 const { registerStripeRoutes, registerStripeWebhook } = require('./stripe-integration');
 
-const { EDITIONS, editionAccess, validateEditions, registerEditionRoutes } = require('./editions');
+const { EDITIONS, currentEdition, editionAccess, validateEditions, registerEditionRoutes } = require('./editions');
 
+const {registerIssueRepair}=require('./issue-repair');
 const {registerUserDeletion}=require('./user-deletion');
 const {registerConcreteFootprints,footprintSummary}=require('./concrete-footprints');
 
@@ -1370,10 +1371,6 @@ async function emailIssueReport(report, user) {
 app.post('/api/issues', requireAuth, upload.fields([{name:'screenshot',maxCount:1},{name:'voice',maxCount:1}]), async (req, res) => {
   try {
     const screenshotFile=req.files&&req.files.screenshot&&req.files.screenshot[0],voiceFile=req.files&&req.files.voice&&req.files.voice[0];
-    if (await currentPlan(req.user.id) === 'pro' && await currentProduct(req.user.id) !== 'general') {
-      for(const file of [screenshotFile,voiceFile])if(file){try{fs.unlinkSync(file.path);}catch(e){}}
-      return res.status(403).json({ error:'core Photo Notes editions only' });
-    }
     const description = ticketText(req.body && req.body.description, 10000);
     if (!description) {
       for(const file of [screenshotFile,voiceFile])if(file){try{fs.unlinkSync(file.path);}catch(e){}}
@@ -1387,12 +1384,12 @@ app.post('/api/issues', requireAuth, upload.fields([{name:'screenshot',maxCount:
     let voicePath=null;
     if(voiceFile){if(!String(voiceFile.mimetype||'').startsWith('audio/')){try{fs.unlinkSync(voiceFile.path);}catch(e){}}else voicePath=`/uploads/${path.basename(voiceFile.path)}`;}
     const row = (await pool.query(
-      `INSERT INTO issue_reports (user_id, description, page_name, page_url, screenshot_path, voice_path, viewport, user_agent)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
-      [req.user.id, description, ticketText(req.body.page_name,100), ticketText(req.body.page_url,500), screenshotPath, voicePath, ticketText(req.body.viewport,100), ticketText(req.body.user_agent,1000)])).rows[0];
+      `INSERT INTO issue_reports (user_id, description, page_name, page_url, screenshot_path, voice_path, viewport, user_agent,reported_edition,app_version)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+      [req.user.id, description, ticketText(req.body.page_name,100), ticketText(req.body.page_url,500), screenshotPath, voicePath, ticketText(req.body.viewport,100), ticketText(req.body.user_agent,1000),currentEdition(req.user),'156'])).rows[0];
     const user = (await pool.query(`SELECT name,email FROM users WHERE id=$1`, [req.user.id])).rows[0] || req.user;
-    const delivery = await emailIssueReport(row, user);
-    await pool.query(`UPDATE issue_reports SET email_status=$1,email_error=$2 WHERE id=$3`, [delivery.status, delivery.error, row.id]);
+    let delivery={status:'pending',error:'Notification pending'};
+    try{delivery=await emailIssueReport(row,user);await pool.query('UPDATE issue_reports SET email_status=$1,email_error=$2 WHERE id=$3',[delivery.status,delivery.error,row.id]);}catch(e){}
     logEvent(req.user.id, 'issue_report', { issue_id:row.id, screenshot:!!screenshotPath, voice:!!voicePath, email_status:delivery.status });
     res.json({ ok:true, id:row.id, email_status:delivery.status });
   } catch (err) { console.error('[issues.create]', err); res.status(500).json({ error:'issue report failed' }); }
@@ -1406,31 +1403,11 @@ app.get('/api/admin/issues', requireAdmin, async (req, res) => {
   } catch (err) { console.error('[issues.admin-list]', err); res.status(500).json({ error:'failed' }); }
 });
 
-// Scoped bridge for the Codex testing monitor. It can read the tester queue and
-// record repair progress, but it cannot access the rest of the admin API or
-// contact a tester.
-app.get('/api/automation/testing-queue',requireTestingQueueToken,async(req,res)=>{
-  try{
-    const issues=(await pool.query(`SELECT i.id,i.description,i.page_name,i.page_url,i.screenshot_path,i.viewport,i.user_agent,i.management_status,i.priority,i.fix_summary,i.release_reference,i.retest_instructions,i.tester_notification_status,i.tester_notified_at,i.tester_result,i.created_at,i.updated_at,u.name AS reporter_name,u.email AS reporter_email FROM issue_reports i JOIN users u ON u.id=i.user_id WHERE i.management_status NOT IN ('resolved','wont_fix','tester_confirmed') ORDER BY i.created_at`)).rows;
-    const assignments=(await pool.query(`SELECT id,assignment_key,assignee_name,title,status,tester_notes,submitted_at,updated_at FROM testing_assignments WHERE status='submitted' ORDER BY submitted_at`)).rows;
-    res.json({issues,submitted_assignments:assignments});
-  }catch(e){console.error('[automation.testing-queue]',e);res.status(500).json({error:'queue unavailable'});}
-});
-app.post('/api/automation/issues/:id',requireTestingQueueToken,async(req,res)=>{
-  try{
-    const id=Number(req.params.id),b=req.body||{};if(!Number.isInteger(id))return res.status(400).json({error:'bad id'});
-    const sets=[],vals=[];
-    if(typeof b.management_status==='string'){if(!ISSUE_MANAGEMENT_STATUSES.includes(b.management_status))return res.status(400).json({error:'bad status'});vals.push(b.management_status);sets.push(`management_status=$${vals.length}`);sets.push(b.management_status==='resolved'||b.management_status==='wont_fix'?'resolved_at=now()':'resolved_at=NULL');if(b.management_status==='ready_to_test'){sets.push(`tester_notification_status='awaiting_sam'`);sets.push('tester_notification_error=NULL');sets.push('tester_notified_at=NULL');}}
-    if(typeof b.priority==='string'){if(!ISSUE_PRIORITIES.includes(b.priority))return res.status(400).json({error:'bad priority'});vals.push(b.priority);sets.push(`priority=$${vals.length}`);}
-    for(const [field,max] of [['fix_summary',5000],['release_reference',300],['retest_instructions',5000],['admin_notes',10000]])if(typeof b[field]==='string'){vals.push(ticketText(b[field],max));sets.push(`${field}=$${vals.length}`);}
-    if(!sets.length)return res.status(400).json({error:'nothing to update'});sets.push('updated_at=now()');vals.push(id);
-    const row=(await pool.query(`UPDATE issue_reports SET ${sets.join(',')} WHERE id=$${vals.length} RETURNING id,management_status,priority,tester_notification_status,updated_at`,vals)).rows[0];if(!row)return res.status(404).json({error:'not found'});res.json(row);
-  }catch(e){console.error('[automation.issue-update]',e);res.status(500).json({error:'update failed'});}
-});
+registerIssueRepair(app,{pool,requireAuth,requireAdmin,requireTestingQueueToken,uploadDir:UPLOAD_DIR});
 
 app.get('/api/issues/mine', requireAuth, async (req,res)=>{
   try{
-    const rows=(await pool.query(`SELECT id,description,page_name,screenshot_path,management_status,fix_summary,release_reference,retest_instructions,tester_notification_status,tester_notified_at,tester_result,tester_notes,tester_retested_at,created_at,updated_at FROM issue_reports WHERE user_id=$1 ORDER BY created_at DESC LIMIT 100`,[req.user.id])).rows;
+    const rows=(await pool.query(`SELECT id,description,page_name,screenshot_path,reported_edition,app_version,blocked_reason,reporter_details,management_status,fix_summary,release_reference,retest_instructions,tester_notification_status,tester_notified_at,tester_result,tester_notes,tester_retested_at,created_at,updated_at FROM issue_reports WHERE user_id=$1 ORDER BY created_at DESC LIMIT 100`,[req.user.id])).rows;
     res.json(rows);
   }catch(e){console.error('[issues.mine]',e);res.status(500).json({error:'failed'});}
 });
@@ -1481,14 +1458,14 @@ app.post('/api/issues/:id/retest',requireAuth,async(req,res)=>{
     const id=parseInt(req.params.id,10),result=req.body&&req.body.result;
     if(!Number.isInteger(id)||!['fixed','still_happening'].includes(result))return res.status(400).json({error:'bad retest result'});
     const notes=ticketText(req.body&&req.body.notes,2000);
-    const nextStatus=result==='fixed'?'tester_confirmed':'fixing';
-    const row=(await pool.query(`UPDATE issue_reports SET tester_result=$1,tester_notes=$2,tester_retested_at=now(),management_status=$3,updated_at=now(),resolved_at=CASE WHEN $1='fixed' THEN now() ELSE NULL END WHERE id=$4 AND user_id=$5 AND management_status IN ('ready_to_test','tester_confirmed','fixing') RETURNING *`,[result,notes,nextStatus,id,req.user.id])).rows[0];
+    const nextStatus=result==='fixed'?'tester_confirmed':'new';
+    const row=(await pool.query(`UPDATE issue_reports SET tester_result=$1,tester_notes=$2,tester_retested_at=now(),management_status=$3,repair_claim_hash=NULL,repair_lease_until=NULL,updated_at=now(),resolved_at=CASE WHEN $1='fixed' THEN now() ELSE NULL END WHERE id=$4 AND user_id=$5 AND management_status IN ('ready_to_test','tester_confirmed','fixing') RETURNING *`,[result,notes,nextStatus,id,req.user.id])).rows[0];
     if(!row)return res.status(404).json({error:'issue is not ready for retesting'});
-    logEvent(req.user.id,'issue_retest',{issue_id:id,result});res.json({ok:true,status:nextStatus});
+    await pool.query("INSERT INTO issue_repair_events(issue_id,event,detail) VALUES($1,'retest',$2)",[id,JSON.stringify({result,notes})]);logEvent(req.user.id,'issue_retest',{issue_id:id,result});res.json({ok:true,status:nextStatus});
   }catch(e){console.error('[issues.retest]',e);res.status(500).json({error:'retest failed'});}
 });
 
-const ISSUE_MANAGEMENT_STATUSES = ['new', 'reviewing', 'fixing', 'ready_to_test', 'tester_confirmed', 'resolved', 'wont_fix'];
+const ISSUE_MANAGEMENT_STATUSES = ['new', 'reviewing', 'fixing', 'blocked', 'ready_to_test', 'tester_confirmed', 'resolved', 'wont_fix'];
 const ISSUE_PRIORITIES = ['low', 'normal', 'high', 'urgent'];
 
 app.post('/api/admin/issues/:id', requireAdmin, async (req, res) => {
@@ -1508,14 +1485,14 @@ app.post('/api/admin/issues/:id', requireAdmin, async (req, res) => {
       vals.push(b.priority); sets.push(`priority=$${vals.length}`);
     }
     if (typeof b.admin_notes === 'string') { vals.push(ticketText(b.admin_notes, 10000)); sets.push(`admin_notes=$${vals.length}`); }
-    for(const field of ['fix_summary','release_reference','retest_instructions'])if(typeof b[field]==='string'){vals.push(ticketText(b[field],field==='release_reference'?300:5000));sets.push(`${field}=$${vals.length}`);}
+    for(const field of ['fix_summary','release_reference','retest_instructions','blocked_reason'])if(typeof b[field]==='string'){vals.push(ticketText(b[field],field==='release_reference'?300:5000));sets.push(`${field}=$${vals.length}`);}
     if (!sets.length) return res.status(400).json({ error:'nothing to update' });
-    sets.push('updated_at=now()'); vals.push(id);
+    sets.push('updated_at=now()','repair_claim_hash=NULL','repair_lease_until=NULL'); vals.push(id);
     const row = (await pool.query(`UPDATE issue_reports SET ${sets.join(', ')} WHERE id=$${vals.length} RETURNING *`, vals)).rows[0];
     if (!row) return res.status(404).json({ error:'not found' });
     if(row.management_status==='ready_to_test'&&before.management_status!=='ready_to_test'){
-      await pool.query(`UPDATE issue_reports SET tester_notification_status='awaiting_sam',tester_notification_error=NULL,tester_notified_at=NULL WHERE id=$1`,[id]);
-      row.tester_notification_status='awaiting_sam';row.tester_notification_error=null;
+      await pool.query(`UPDATE issue_reports SET tester_notification_status='in_app',tester_notification_error=NULL,tester_notified_at=now() WHERE id=$1`,[id]);
+      row.tester_notification_status='in_app';row.tester_notification_error=null;
     }
     logEvent(req.user.id, 'admin_issue_update', { issue_id:id, status:row.management_status, priority:row.priority });
     res.json(row);

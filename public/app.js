@@ -162,6 +162,7 @@ async function boot() {
     // open Create, existing documents can be shown immediately instead of
     // appearing only after another action refreshes the list.
     prefetchGroups();
+    if(new URLSearchParams(location.search).has('issues'))state.view='my-issues';
     renderApp();
     setTimeout(maybeOfferInstall, 700);
   } else renderLogin();
@@ -269,7 +270,7 @@ function renderApp() {
               <div class="profile-email">${esc((state.me && state.me.email) || '')}</div>
               <div class="profile-plan">${isRoadIssuesClient()?'Road Issue Reporter':isGeneralProClient()?'Photo Notes Pro':isProClient()?esc(productName()):'Photo Notes Basic'}</div>
               ${isBasicClient()||isGeneralProClient()?'<button type="button" id="myAssignment">My Testing Assignment</button>':''}
-              ${!isIndustryProClient()?'<button type="button" id="myIssues">My Issue Reports</button>':''}
+              <button type="button" id="myIssues">My Issue Reports</button>
               ${state.me && state.me.role === 'admin' ? '<a href="/admin">Admin Dashboard</a>' : ''}
               <button type="button" id="signout">Sign Out</button>
             </div>
@@ -286,8 +287,8 @@ function renderApp() {
       <div id="body"></div>
       <div class="footer">&copy; ${new Date().getFullYear()} Zukor AI. All Rights Reserved.</div>
     </div>
-    ${!isIndustryProClient() ? `<button class="issue-fab ${isRoadIssuesClient()?'road-issue-fab':''}" id="issueFab" type="button" data-html2canvas-ignore="true" aria-label="Report Issue">${issueFabLabel()}</button>
-    ${issueReporterMarkup()}` : ''}`;
+    <button class="issue-fab ${isRoadIssuesClient()?'road-issue-fab':''}" id="issueFab" type="button" data-html2canvas-ignore="true" aria-label="Report Issue">${issueFabLabel()}</button>
+    ${issueReporterMarkup()}`;
   const profileButton = document.getElementById('profileButton');
   const profileMenu = document.getElementById('profileMenu');
   profileButton.onclick = (e) => {
@@ -317,15 +318,18 @@ function renderApp() {
     }catch(e){toast('Version could not be switched. Please try again.');}
     finally{editionSwitcher.disabled=false;editionSwitcher.value=selectedEdition();}
   };
+  refreshIssueAttention();
+  const updates=document.getElementById('issueUpdates');if(updates)updates.onclick=e=>{e.preventDefault();state.view='my-issues';renderApp();};
   const issueFab = document.getElementById('issueFab'); if (issueFab) issueFab.onclick = openIssueReporter;
   const tabCapture=document.getElementById('tabCapture');if(tabCapture)tabCapture.onclick = () => { state.view='capture'; renderApp(); };
   const tabOrganize=document.getElementById('tabOrganize');if(tabOrganize)tabOrganize.onclick = () => { state.view=isHoaClient()?'hoa-visits':'organize'; renderApp(); };
   const tabEdit=document.getElementById('tabEdit');if(tabEdit)tabEdit.onclick = () => { state.view=isHoaClient()?'hoa-assets':'edit'; renderApp(); };
   const tabCreate=document.getElementById('tabCreate');if(tabCreate)tabCreate.onclick = () => { state.view=isHoaClient()?'hoa-inspections':'create'; state.groupId=null; renderApp(); };
   const tabSend=document.getElementById('tabSend');if(tabSend)tabSend.onclick = () => { state.view=isHoaClient()?'hoa-maintenance':'send'; renderApp(); };
-  if (isRoadIssuesClient()) { state.view='road-report'; renderRoadIssueReport(); }
+  if (state.view === 'my-issues') renderMyIssueReports();
+  else if (isRoadIssuesClient()) { state.view='road-report'; renderRoadIssueReport(); }
   else if (state.view === 'my-assignment') renderMyTestingAssignment();
-  else if (state.view === 'my-issues') renderMyIssueReports();
+
   else if (isBasicClient()) { state.view='capture'; renderCapture(); }
   else if (state.view === 'capture') renderCapture();
   else if (state.view === 'camera-tools') renderCameraTools();
@@ -351,7 +355,7 @@ function renderApp() {
   renderTensorHelp();
 }
 
-const MY_ISSUE_STATUS={new:'Received',reviewing:'Under review',fixing:'Being fixed',ready_to_test:'Ready to retest',tester_confirmed:'Fixed — you confirmed',resolved:'Resolved',wont_fix:'Closed'};
+const MY_ISSUE_STATUS={blocked:'Needs more information',new:'Received',reviewing:'Under review',fixing:'Being fixed',ready_to_test:'Ready to retest',tester_confirmed:'Fixed — you confirmed',resolved:'Resolved',wont_fix:'Closed'};
 async function renderMyTestingAssignment(){
   const body=document.getElementById('body');
   body.innerHTML='<button class="backlink" id="assignmentBack">← Back</button><div class="workflow-intro"><strong>My Testing Assignment</strong><span>Complete each check here. Your progress saves in Photo Notes, and your administrator can see when you submit it.</span></div><div id="assignmentList"><p class="status">Loading your assignment...</p></div>';
@@ -387,7 +391,8 @@ async function renderMyIssueReports(){
   const r=await api('/api/issues/mine'),box=document.getElementById('myIssueList');
   if(!r.ok){box.innerHTML='<p class="status">Your issue reports could not be loaded.</p>';return;}
   const rows=await r.json();
-  box.innerHTML=rows.length?rows.map(i=>`<article class="card tester-issue-card"><div class="tester-issue-head"><strong>Issue #${i.id}: ${esc(i.page_name||'Photo Notes')}</strong><span class="badge issue-status-${esc(i.management_status||'new')}">${esc(MY_ISSUE_STATUS[i.management_status]||'Received')}</span></div><div class="meta">Reported ${new Date(i.created_at).toLocaleString(uiLocale())}</div><p>${esc(i.description)}</p>${i.fix_summary?`<div class="issue-fix-summary"><strong>What changed</strong><span>${esc(i.fix_summary)}</span></div>`:''}${i.release_reference?`<div class="meta">Release: ${esc(i.release_reference)}</div>`:''}${i.management_status==='ready_to_test'?`<div class="issue-retest"><strong>How to retest</strong><p>${esc(i.retest_instructions||'Refresh Photo Notes and repeat the steps that caused the problem.')}</p><label for="retestNotes-${i.id}">Optional retest note</label><textarea id="retestNotes-${i.id}" placeholder="Tell us only if something is still wrong."></textarea><div class="issue-retest-actions"><button class="btn" type="button" data-retest-fixed="${i.id}">Fixed on my device</button><button class="btn secondary" type="button" data-retest-broken="${i.id}">Still happening</button></div></div>`:i.tester_result?`<div class="meta">Your retest: ${i.tester_result==='fixed'?'Fixed':'Still happening'}${i.tester_notes?' — '+esc(i.tester_notes):''}</div>`:''}</article>`).join(''):'<p class="status">You have not submitted any issue reports yet.</p>';
+  box.innerHTML=rows.length?rows.map(i=>`<article class="card tester-issue-card"><div class="tester-issue-head"><strong>Issue #${i.id}: ${esc(i.page_name||'Photo Notes')}</strong><span class="badge issue-status-${esc(i.management_status||'new')}">${esc(MY_ISSUE_STATUS[i.management_status]||'Received')}</span></div><div class="meta">Reported ${new Date(i.created_at).toLocaleString(uiLocale())}</div><p>${esc(i.description)}</p>${i.management_status==='blocked'?`<div class="issue-fix-summary"><strong>Information needed</strong><p>${esc(i.blocked_reason||'Please add reproduction details.')}</p><label for="issueDetails-${i.id}">Additional details</label><textarea id="issueDetails-${i.id}" maxlength="5000"></textarea><button class="btn" data-issue-details="${i.id}">Send Details for Review</button></div>`:''}${i.fix_summary?`<div class="issue-fix-summary"><strong>What changed</strong><span>${esc(i.fix_summary)}</span></div>`:''}${i.release_reference?`<div class="meta">Release: ${esc(i.release_reference)}</div>`:''}${i.management_status==='ready_to_test'?`<div class="issue-retest"><strong>How to retest</strong><p>${esc(i.retest_instructions||'Refresh Photo Notes and repeat the steps that caused the problem.')}</p><label for="retestNotes-${i.id}">Optional retest note</label><textarea id="retestNotes-${i.id}" placeholder="Tell us only if something is still wrong."></textarea><div class="issue-retest-actions"><button class="btn" type="button" data-retest-fixed="${i.id}">Fixed on my device</button><button class="btn secondary" type="button" data-retest-broken="${i.id}">Still happening</button></div></div>`:i.tester_result?`<div class="meta">Your retest: ${i.tester_result==='fixed'?'Fixed':'Still happening'}${i.tester_notes?' — '+esc(i.tester_notes):''}</div>`:''}</article>`).join(''):'<p class="status">You have not submitted any issue reports yet.</p>';
+  box.querySelectorAll('[data-issue-details]').forEach(b=>b.onclick=async()=>{const id=b.dataset.issueDetails;b.disabled=true;try{const r=await api(`/api/issues/${id}/details`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({details:document.getElementById(`issueDetails-${id}`).value})});if(!r.ok)throw new Error();await renderMyIssueReports();}catch(e){toast('Details could not be saved. Enter details and try again.');b.disabled=false;}});
   box.querySelectorAll('[data-retest-fixed]').forEach(b=>b.onclick=()=>submitIssueRetest(Number(b.dataset.retestFixed),'fixed',b));
   box.querySelectorAll('[data-retest-broken]').forEach(b=>b.onclick=()=>submitIssueRetest(Number(b.dataset.retestBroken),'still_happening',b));
 }

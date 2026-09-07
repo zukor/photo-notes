@@ -112,7 +112,7 @@ async function submitIssueReport(){
   try{const fd=new FormData();fd.append('description',description||'Voice recording attached for review.');fd.append('page_name',issuePageName);fd.append('page_url',location.href);fd.append('viewport',`${window.innerWidth} × ${window.innerHeight}`);fd.append('user_agent',navigator.userAgent);if(issueScreenshotBlob)fd.append('screenshot',issueScreenshotBlob,'issue-screen.jpg');if(issueVoiceBlob)fd.append('voice',issueVoiceBlob,issueVoiceBlob.type.includes('webm')?'issue-voice.webm':'issue-voice.m4a');const r=await api('/api/issues',{method:'POST',body:fd});const d=await r.json().catch(()=>({}));if(generation!==issueGeneration)return;if(!r.ok)throw new Error();st.textContent=d.email_status==='sent'?`Issue #${d.id} sent. Thank you.`:`Issue #${d.id} saved. Thank you.`;btn.textContent='Sent';setTimeout(()=>{if(generation===issueGeneration)closeIssueReporter();},1800);}catch(e){if(generation!==issueGeneration)return;st.textContent='The report could not be sent. Check your connection and try again.';btn.disabled=false;btn.textContent='Send Issue Report';}
 }
 
-function issueReporterMarkup(){return `    <div class="issue-modal" id="issueModal" hidden data-html2canvas-ignore="true">
+function issueReporterMarkup(){return `<a id="issueUpdates" class="issue-updates" href="/?issues=1" hidden data-html2canvas-ignore="true"></a>    <div class="issue-modal" id="issueModal" hidden data-html2canvas-ignore="true">
       <div class="issue-dialog" role="dialog" aria-modal="true" aria-labelledby="issueTitle">
         <button class="issue-close" id="issueClose" type="button" aria-label="Close">×</button>
         <h2 id="issueTitle">Report Issue</h2>
@@ -131,3 +131,11 @@ function issueReporterMarkup(){return `    <div class="issue-modal" id="issueMod
         <div class="status" id="issueStatus" role="status" aria-live="polite"></div>
       </div>
     </div>`;}
+
+// In-app repair notifications do not depend on email configuration.
+async function refreshIssueAttention(){
+  if(!document.getElementById('issueUpdates')||document.hidden)return;
+  try{const r=await api('/api/issues/attention');if(!r.ok)return;const d=await r.json(),link=document.getElementById('issueUpdates');if(!link)return;link.hidden=!d.count;link.textContent=`Issue updates (${d.count})`;link.setAttribute('aria-label',`${d.count} issue reports need your attention`);}catch(e){}
+}
+setInterval(refreshIssueAttention,60000);
+document.addEventListener('visibilitychange',refreshIssueAttention);

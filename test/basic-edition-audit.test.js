@@ -10,10 +10,10 @@ const admin = fs.readFileSync(path.join(root, 'public', 'admin.html'), 'utf8');
 const styles = fs.readFileSync(path.join(root, 'public', 'styles.css'), 'utf8');
 
 test('core editions keep help and issue reporting while industry camera tools stay gated', () => {
-  assert.match(app, /!isIndustryProClient\(\) \? `<button class="issue-fab \$\{isRoadIssuesClient\(\)\?'road-issue-fab':''\}"/);
+  assert.match(app, /<button class="issue-fab \$\{isRoadIssuesClient\(\)\?'road-issue-fab':''\}"/);
   assert.match(app, /if \(isIndustryProClient\(\) \|\| isRoadIssuesClient\(\) \|\| !TENSOR_HELP_TOPICS\[state\.view\]\) return/);
   assert.match(app, /isIndustryProClient\(\) && \['ticket_scanner','camera_readers','before_after'\]\.some\(featureOn\)/);
-  assert.match(server, /currentPlan\(req\.user\.id\) === 'pro' && await currentProduct\(req\.user\.id\) !== 'general'/);
+  assert.doesNotMatch(server, /error:'core Photo Notes editions only'/);
 });
 
 test('Pro-only analytics and reports require a Pro plan on the server', () => {
