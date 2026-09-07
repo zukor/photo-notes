@@ -1,0 +1,6 @@
+import {execFileSync as exec} from 'node:child_process';
+const image='mcr.microsoft.com/playwright:v1.63.0-noble';
+exec('docker',['pull',image],{stdio:'inherit'});
+// No report data, production credentials, or network access in this browser check.
+const code=`const {chromium}=require('playwright');(async()=>{const browser=await chromium.launch({args:['--no-sandbox']});try{const page=await browser.newPage({viewport:{width:360,height:653}});await page.setContent('<button style="width:100%;box-sizing:border-box">Detalles e historial de la foto</button>');const fits=await page.locator('button').evaluate(el=>el.scrollWidth<=el.clientWidth&&el.getBoundingClientRect().right<=innerWidth);if(!fits)throw Error('Browser geometry check failed');console.log('Isolated Chromium geometry check passed');}finally{await browser.close();}})().catch(e=>{console.error(e.message);process.exit(1);});`;
+exec('docker',['run','--rm','--init','--user',`${process.getuid()}:${process.getgid()}`,'--network','none','--cap-drop','ALL','--security-opt','no-new-privileges','--pids-limit','256','--memory','2g','--cpus','2','--shm-size','256m','-v',`${process.cwd()}:/work:ro`,'-w','/work',image,'node','-e',code],{stdio:'inherit',timeout:90000});

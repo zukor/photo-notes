@@ -1,7 +1,7 @@
 import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {execFileSync as exec} from 'node:child_process';import {queue,unseal,parseProposal,applyProposal,approved,treeDigest,git,out} from './core.mjs';
 const claim=unseal(process.env.SEALED,process.env.TESTER_QUEUE_TOKEN),p=parseProposal(process.env.PROPOSAL);
 if(process.env.TEST_PASSED!=='true'||!approved(process.env.REVIEW))throw new Error('Review or test gate failed');
-await queue(`/api/automation/issues/${claim.id}`,{claim_token:claim.claim_token,management_status:'fixing',fix_summary:p.summary,verification:'Independent AI review approved. Regression failed on original source and passed after repair. Full tests passed in a network-disabled container.'});
+await queue(`/api/automation/issues/${claim.id}`,{claim_token:claim.claim_token,management_status:'testing',fix_summary:p.summary,verification:'Independent AI review approved. Regression failed on original source and passed after repair. Full tests passed in a network-disabled container.'});
 git(['fetch','origin','main']);if(git(['rev-parse','origin/main'])!==process.env.BASE)throw new Error('Main changed; repair needs a fresh run');
 applyProposal(p,claim.id);if(treeDigest(claim.id)!==process.env.TEST_DIGEST)throw new Error('Tested tree does not match publishing tree');
 // A repository-restricted SSH deploy key can publish only to Photo Notes.

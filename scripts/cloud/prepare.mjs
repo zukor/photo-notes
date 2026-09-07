@@ -5,7 +5,7 @@ await queue('/api/automation/cloud-heartbeat',{configured,run_url:`https://githu
 if(!configured){console.log('Cloud AI key missing; no issue claimed.');out('available','false');process.exit(0);}
 const q=await queue('/api/automation/testing-queue');const requested=process.env.ISSUE_ID?Number(process.env.ISSUE_ID):null;
 if(requested!==null&&(!Number.isInteger(requested)||requested<1))throw new Error('Invalid issue ID');
-const issue=q.issues.find(i=>(!requested||i.id===requested)&&['new','reviewing','fixing'].includes(i.management_status)&&(!i.repair_lease_until||new Date(i.repair_lease_until)<new Date()));
+const issue=q.issues.find(i=>(!requested||i.id===requested)&&['new','reviewing','fixing','testing'].includes(i.management_status)&&(!i.repair_lease_until||new Date(i.repair_lease_until)<new Date()));
 if(!issue){out('available','false');console.log('No actionable reports.');process.exit(0);}
 const c=await queue(`/api/automation/issues/${issue.id}/claim`,{});
 const sealed=seal({id:issue.id,claim_token:c.claim_token},process.env.TESTER_QUEUE_TOKEN);
