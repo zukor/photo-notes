@@ -1,6 +1,19 @@
 (function () {
   const STORAGE_KEY = 'photo-notes-language';
   const ES = {
+    "Screenshot markup tools": "Herramientas para marcar la captura",
+    "Select / Move": "Seleccionar / Mover",
+    "Delete selected": "Eliminar selección",
+    "Clear markup": "Borrar marcas",
+    "Retake screenshot": "Volver a capturar pantalla",
+    "Screenshot zoom": "Zoom de la captura",
+    "Fit whole screenshot": "Ajustar captura completa",
+    "Text to place on screenshot": "Texto para colocar en la captura",
+    "Type a label, then tap the screenshot": "Escriba una etiqueta y toque la captura",
+    "Choose a tool and drag on the screenshot. Select a mark to move or delete it.": "Elija una herramienta y arrastre sobre la captura. Seleccione una marca para moverla o eliminarla.",
+    "Type a label first, then tap the screenshot.": "Primero escriba una etiqueta y luego toque la captura.",
+    "Text added. Select it to move or delete it.": "Texto agregado. Selecciónelo para moverlo o eliminarlo.",
+
     "Ready status needs verification": "El estado requiere verificación", "Needs attention": "Requiere atención", "Working": "En curso", "Testing": "En pruebas", "Deployed - awaiting your confirmation": "Publicado - pendiente de su confirmación", "Closed - you confirmed": "Cerrado - confirmado por usted", "What stopped and what happens next": "Qué se detuvo y qué sigue", "Additional details, if requested": "Detalles adicionales, si se solicitan", "Issue history": "Historial del reporte", "Open to load history.": "Abra para cargar el historial.", "No repair activity yet.": "Todavía no hay actividad de reparación.", "History could not be loaded. Close and reopen to retry.": "No se pudo cargar el historial. Cierre y vuelva a abrir para reintentar.",
     "Topic (optional)": "Tema (opcional)", "Send/Share": "Enviar/Compartir", "Tensorman Help": "Ayuda de Tensorman", "Ask Tensorman something else": "Pregunte algo más a Tensorman", "Tensorman page help": "Ayuda de Tensorman para esta página",
     "Photo Note saved": "Nota fotográfica guardada", "Tap Share to choose where to send it.": "Toque Compartir para elegir dónde enviarla.", "Could not save this photo. Your draft is still here.": "No se pudo guardar esta foto. Su borrador sigue aquí.",

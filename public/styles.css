@@ -639,3 +639,33 @@ input.dimfield.suggested {
 #issueScreenshot{display:block;width:100%;height:auto;}
 #issueScreenshot[hidden]{display:none;}
 @media(max-width:700px){.issue-report-layout{grid-template-columns:minmax(0,1fr);gap:16px;}.issue-screenshot-scroll{max-height:35dvh;}}
+/* Issue evidence fills the available dialog without clipping the screenshot. */
+.issue-modal { padding:0; }
+.issue-dialog { box-sizing:border-box; width:80vw; height:80dvh; max-width:none; max-height:80dvh; padding:18px; display:flex; flex-direction:column; overflow:hidden; }
+.issue-dialog h2 { flex:none; }
+.issue-report-layout { flex:1; min-height:0; display:grid; grid-template-columns:minmax(0,1.8fr) minmax(260px,1fr); overflow:hidden; }
+.issue-evidence { display:flex; flex-direction:column; min-height:0; }
+.issue-report-fields { overflow:auto; padding:0 8px 12px 0; }
+#issueMarkup { display:flex; flex-direction:column; flex:1; min-height:0; }
+#issueMarkup[hidden], #issueMarkupTextRow[hidden] { display:none; }
+.issue-markup-toolbar { display:flex; flex-wrap:wrap; gap:5px; align-items:center; }
+.issue-markup-toolbar button { min-height:36px; padding:6px 9px; border:1px solid #000; border-radius:6px; background:#fff; color:#000; font:600 12px Arial,sans-serif; cursor:pointer; }
+.issue-markup-toolbar button[aria-pressed=true] { border:2px solid #2455d9; background:#eaf1ff; }
+.issue-markup-toolbar label { margin:0; text-transform:none; letter-spacing:0; color:#000; font-size:12px; display:flex; gap:5px; align-items:center; }
+.issue-markup-toolbar input[type=color] { width:40px; height:36px; padding:2px; }
+.issue-markup-toolbar select { width:auto; max-width:190px; padding:5px; font-size:12px; }
+#issueMarkupHint { color:#000; font-size:12px; margin:6px 0; }
+#issueMarkupTextRow label { margin-top:6px; }
+#issueMarkupStage { flex:1; min-height:100px; overflow:auto; border:1px solid #000; background:#fff; }
+#issueMarkupCanvas { display:block; touch-action:none; margin:auto; max-width:none; }
+#issueMarkupCanvas:focus-visible { outline:2px solid #2455d9; outline-offset:-2px; }
+.issue-evidence:has(#issueMarkup:not([hidden])) .issue-screenshot-scroll { display:none; }
+@media(max-width:700px) {
+ .issue-dialog { width:calc(100vw - 8px); height:calc(100dvh - 8px); max-height:calc(100dvh - 8px); padding:max(10px,env(safe-area-inset-top)) 10px max(10px,env(safe-area-inset-bottom)); border-radius:8px; overflow:auto; }
+ .issue-report-layout { display:flex; flex-direction:column; flex:none; overflow:visible; }
+ .issue-evidence { flex:none; }
+ #issueMarkup { flex:none; }
+ #issueMarkupStage { flex:none; height:46dvh; }
+ .issue-report-fields { overflow:visible; padding:0; }
+ .issue-markup-toolbar button { min-height:40px; }
+}
