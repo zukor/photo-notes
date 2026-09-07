@@ -1,6 +1,7 @@
 (function () {
   const STORAGE_KEY = 'photo-notes-language';
   const ES = {
+    'Photo': 'Foto',
     'Enable issue notifications':'Activar notificaciones de problemas',
     'Disable on this device':'Desactivar en este dispositivo',
     'On iPhone, add Photo Notes to your Home Screen and open it there first.':'En iPhone, agregue Photo Notes a la pantalla de inicio y ábralo desde allí primero.',
