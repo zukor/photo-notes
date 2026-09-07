@@ -63,24 +63,11 @@ function uiT(text) { return window.photoNotesI18n ? window.photoNotesI18n.t(text
 function uiLocale() { return window.photoNotesI18n && window.photoNotesI18n.getLanguage() === 'es' ? 'es-US' : undefined; }
 function uiSpeechLanguage() { return window.photoNotesI18n && window.photoNotesI18n.getLanguage() === 'es' ? 'es-US' : 'en-US'; }
 
-// Live title-case: capitalize the first letter of each word as the user types,
-// keeping the caret in place.
+// Preserve the title exactly as typed, including edits, accents, and casing.
+// The legacy helper name is retained for the existing title-field callers.
 function titleCaseInput(el) {
   if (!el) return;
-  const apply = (event) => {
-    if (event && event.isComposing) return;
-    const pos = el.selectionStart;
-    const spanish = typeof uiLocale === 'function' && String(uiLocale() || '').startsWith('es');
-    const smallWords = new Set(['a', 'al', 'ante', 'bajo', 'con', 'contra', 'de', 'del', 'desde', 'durante', 'en', 'entre', 'hacia', 'hasta', 'para', 'por', 'según', 'sin', 'sobre', 'tras', 'y', 'e', 'o', 'u', 'ni']);
-    const firstWord = el.value.search(/[\p{L}\p{M}\p{N}]/u);
-    const v = el.value.replace(/[\p{L}\p{M}\p{N}]+/gu, (word, offset) => {
-      if (spanish && offset > firstWord && smallWords.has(word.toLocaleLowerCase('es'))) return word.toLocaleLowerCase('es');
-      return word.replace(/^\p{L}/u, letter => letter.toUpperCase());
-    });
-    if (v !== el.value) { el.value = v; try { el.setSelectionRange(pos, pos); } catch (e) {} }
-  };
-  el.addEventListener('input', apply);
-  el.addEventListener('compositionend', apply);
+  el.setAttribute('autocapitalize', 'off');
 }
 
 async function loadAreas() {
