@@ -3281,6 +3281,50 @@ function safeSharedFileName(action, groupId, ext) {
   return `${base}.${ext}`;
 }
 
+// File preparation can outlast a browser's user activation. A fresh tap in
+// this dialog opens the native share menu with the already prepared file.
+function openPreparedExportShare(file, format, groupId) {
+  document.getElementById('exportShareDialog')?.remove();
+  const modal = document.createElement('div');
+  modal.id = 'exportShareDialog';
+  modal.className = 'photo-viewer-modal';
+  modal.innerHTML = `<section class="photo-viewer-dialog" role="dialog" aria-modal="true" aria-labelledby="exportShareTitle"><div class="photo-viewer-head"><strong id="exportShareTitle">Document ready to share</strong><button class="iconbtn" data-share-close aria-label="Close">×</button></div><p role="status" data-share-status>Tap Share to choose an app for this document.</p><div class="row"><button class="btn" data-share-open>Share</button><button class="btn secondary" data-share-download>Download</button></div></section>`;
+  const share = modal.querySelector('[data-share-open]');
+  const status = modal.querySelector('[data-share-status]');
+  const previousFocus = document.activeElement;
+  const close = () => { modal.remove(); previousFocus?.focus(); };
+  modal.querySelector('[data-share-close]').onclick = close;
+  modal.querySelector('[data-share-download]').onclick = () => {
+    window.location.assign(exportDownloadUrl(format, groupId));
+    close();
+  };
+  modal.onclick = event => { if (event.target === modal) close(); };
+  modal.onkeydown = event => {
+    if (event.key === 'Escape') close();
+    if (event.key === 'Tab') {
+      const buttons = [...modal.querySelectorAll('button')].filter(b => !b.disabled);
+      const first = buttons[0], last = buttons[buttons.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    }
+  };
+  share.onclick = async () => {
+    share.disabled = true;
+    try {
+      // No fetch or other asynchronous work before navigator.share.
+      await navigator.share({ files: [file] });
+      close();
+    } catch (error) {
+      status.textContent = uiT(error?.name === 'AbortError'
+        ? 'Sharing was canceled. Tap Share to try again.'
+        : 'This browser could not share the document. Use Download, then share it from your Downloads folder.');
+    } finally { share.disabled = false; }
+  };
+  document.body.appendChild(modal);
+  window.photoNotesI18n?.apply(modal);
+  share.focus();
+}
+
 async function deliverExport(format, groupId, action = 'download') {
   const ext = format === 'bundle' ? 'zip' : format;
   const name = safeSharedFileName(format, groupId, ext);
@@ -3301,7 +3345,7 @@ async function deliverExport(format, groupId, action = 'download') {
     if (action === 'share') {
       const file = new File([blob], name, { type: blob.type || (format === 'pdf' ? 'application/pdf' : 'application/octet-stream') });
       if (navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
-        await navigator.share({ files: [file] }); return;
+        openPreparedExportShare(file, format, groupId); return;
       }
       toast('This browser cannot share that file directly. Downloading it instead.');
     }
