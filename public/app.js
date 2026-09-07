@@ -70,7 +70,13 @@ function titleCaseInput(el) {
   const apply = (event) => {
     if (event && event.isComposing) return;
     const pos = el.selectionStart;
-    const v = el.value.replace(/(^|[^\p{L}\p{M}\p{N}])(\p{L})/gu, (_, boundary, letter) => boundary + letter.toUpperCase());
+    const spanish = typeof uiLocale === 'function' && String(uiLocale() || '').startsWith('es');
+    const smallWords = new Set(['a', 'al', 'ante', 'bajo', 'con', 'contra', 'de', 'del', 'desde', 'durante', 'en', 'entre', 'hacia', 'hasta', 'para', 'por', 'según', 'sin', 'sobre', 'tras', 'y', 'e', 'o', 'u', 'ni']);
+    const firstWord = el.value.search(/[\p{L}\p{M}\p{N}]/u);
+    const v = el.value.replace(/[\p{L}\p{M}\p{N}]+/gu, (word, offset) => {
+      if (spanish && offset > firstWord && smallWords.has(word.toLocaleLowerCase('es'))) return word.toLocaleLowerCase('es');
+      return word.replace(/^\p{L}/u, letter => letter.toUpperCase());
+    });
     if (v !== el.value) { el.value = v; try { el.setSelectionRange(pos, pos); } catch (e) {} }
   };
   el.addEventListener('input', apply);

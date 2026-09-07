@@ -31,8 +31,12 @@ test('Tensor Man is hidden at phone and small-tablet widths and cannot cover con
 });
 
 test('new app and style versions are cache-busted', () => {
-  assert.match(index, /styles\.css\?v=175/);
-  assert.match(index, /app\.js\?v=175/);
+  const shell = fs.readFileSync(path.join(__dirname, '..', 'public', 'sw.js'), 'utf8');
+  for (const asset of ['styles.css', 'app.js']) {
+    const url = index.match(new RegExp('/' + asset.replace('.', '\\.') + '\\?v=(\\d+)'));
+    assert.ok(url && Number(url[1]) >= 175, `${asset} must retain the cache refresh`);
+    assert.ok(shell.includes(url[0]), `${asset} must match the service worker cache`);
+  }
 });
 
 test('Android issue-description dictation replaces revised results and restarts', () => {
