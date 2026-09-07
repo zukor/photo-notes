@@ -3007,20 +3007,21 @@ app.get('/api/export/pdf', requireAuth, async (req, res) => {
     doc.pipe(res);
     const pdfFont=['Georgia','Times New Roman'].includes(layout.font)?'Times-Roman':'Helvetica';doc.font(pdfFont);
     const logo=await documentLogoAsset(logoPath,220,90);let pageNumber=0;
-    const drawChrome=()=>{pageNumber++;const oldY=doc.y,oldX=doc.x;if(layout.header&&branding.header_text){doc.font(pdfFont).fontSize(9).fillColor('#333').text(branding.header_text,48,24,{width:516,align:'center'});}if(layout.footer||layout.page_numbers){const bits=[];if(layout.footer&&branding.footer_text)bits.push(branding.footer_text);if(layout.page_numbers)bits.push(`Page ${pageNumber}`);doc.font(pdfFont).fontSize(8).fillColor('#444').text(bits.join('  |  '),48,742,{width:516,align:'center'});}doc.y=oldY;doc.x=oldX;};
+    const drawChrome=()=>{pageNumber++;const oldY=doc.y,oldX=doc.x;if(layout.header&&branding.header_text){doc.font(pdfFont).fontSize(9).fillColor('#333').text(branding.header_text,48,24,{width:516,align:'center'});}if(layout.footer||layout.page_numbers){const bits=[];if(layout.footer&&branding.footer_text)bits.push(branding.footer_text);if(layout.page_numbers)bits.push(`Page ${pageNumber}`);doc.font(pdfFont).fontSize(8).fillColor('#444').text(bits.join('  |  '),48,730,{width:516,height:12,align:'center',lineBreak:false});}doc.y=oldY;doc.x=oldX;};
     if(layout.cover_page){
       if(logo)doc.image(logo.buffer,306-logo.width/2,120,{width:logo.width,height:logo.height});
       doc.y=logo?235:170;if(branding.company_name)doc.fontSize(13).fillColor(layout.accent).text(branding.company_name,{align:'center'}).moveDown(.8);
       doc.fontSize(25).fillColor('#000').text(heading||'Document',{align:'center'});if(desc)doc.moveDown(.5).fontSize(13).text(desc,{align:'center'});
       if(layout.footer&&branding.footer_text)doc.fontSize(9).fillColor('#444').text(branding.footer_text,48,720,{width:516,align:'center'});
     }else if(heading){if(logo)doc.image(logo.buffer,48,48,{fit:[150,55]});doc.y=logo?115:48;doc.fontSize(20).fillColor('#000').text(heading,{align:'center'});if(desc)doc.moveDown(.3).fontSize(12).text(desc,{align:'center'});doc.moveDown(1);drawChrome();}
+    doc.on('pageAdded',drawChrome);
     const pairs = pro ? await userPairs(req.user.id) : [];
     const units = buildRenderUnits(rows, pairs);
     for (let i = 0; i < units.length; i++) {
       const u = units[i];
       const two=layout.photo_layout==='two_per_page'&&!u.pair;
-      const needsPage=layout.cover_page?i===0:(i>0&&(!two||i%2===0));
-      if(needsPage){doc.addPage();drawChrome();}
+      const needsPage=(layout.cover_page&&i===0)||(i>0&&(!two||i%2===0));
+      if(needsPage){doc.addPage();}
       else if(two&&i%2===1){doc.y=397;doc.x=48;}
       if (u.pair) {
         const { before, after } = u.pair;
@@ -3041,6 +3042,8 @@ app.get('/api/export/pdf', requireAuth, async (req, res) => {
         continue;
       }
       const c = u.single;
+      doc.font(pdfFont).fontSize(two?11:13).fillColor('#000').text((c.photo_title||conciseAddress(c.address)||'Untitled Photo') + (c.kind === 'task' ? '   [TASK]' : ''), { width: 516 });
+      doc.moveDown(0.3);
       const img = localPhoto(c.photo_path);
       if (img) {
         const r = await renderForEmbedStamped(img, imgRes, imgFmt, c);
@@ -3048,7 +3051,7 @@ app.get('/api/export/pdf', requireAuth, async (req, res) => {
           try {
             const meta = await sharp(r.buffer).metadata();
             const maxW = 516;
-            const maxH = two ? 225 : (scope === 'selection' ? 520 : 455);
+            const maxH = Math.min(two ? 225 : (scope === 'selection' ? 520 : 455), Math.max(80, 640-doc.y));
             const scale = Math.min(maxW / meta.width, maxH / meta.height);
             const drawW = Math.round(meta.width * scale);
             const drawH = Math.round(meta.height * scale);
@@ -3060,7 +3063,6 @@ app.get('/api/export/pdf', requireAuth, async (req, res) => {
           } catch (e) {}
         }
       }
-      doc.font(pdfFont).fontSize(two?11:13).fillColor('#000').text((c.photo_title||conciseAddress(c.address)||'Untitled Photo') + (c.kind === 'task' ? '   [TASK]' : ''), { width: 516 });
       if(c.address)doc.fontSize(9).text(conciseAddress(c.address),{width:516});
       if (scope !== 'selection' && c.area_tags && c.area_tags.length) doc.fontSize(10).fillColor('#000').text('Area: ' + c.area_tags.join(', '));
       if (pro) { const df = fmtDefect(c); if (df) doc.fontSize(10).fillColor('#000').text('Defect: ' + df); }
