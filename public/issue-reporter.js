@@ -131,7 +131,7 @@ async function submitIssueReport(){
 function issueReporterMarkup(){return `<a id="issueUpdates" class="issue-updates" href="/?issues=1" hidden data-html2canvas-ignore="true"></a>    <div class="issue-modal" id="issueModal" hidden data-html2canvas-ignore="true">
       <div class="issue-dialog" role="dialog" aria-modal="true" aria-labelledby="issueTitle">
         <button class="issue-close" id="issueClose" type="button" aria-label="Close">×</button>
-        <h2 id="issueTitle">Report Issue</h2>
+        <h2 id="issueTitle">Report Issue</h2>${issueNotificationControls()}
         <p class="status">Answer these short questions. Photo Notes attaches the page and device details automatically.</p>
         <div class="issue-shot-status" id="issueShotStatus">Capturing this page...</div>
         <label for="issueAction">What were you trying to do?</label>
@@ -153,5 +153,26 @@ async function refreshIssueAttention(){
   if(!document.getElementById('issueUpdates')||document.hidden)return;
   try{const r=await api('/api/issues/attention');if(!r.ok)return;const d=await r.json(),link=document.getElementById('issueUpdates');if(!link)return;link.hidden=!d.count;link.textContent=`Issue updates (${d.count})`;link.setAttribute('aria-label',`${d.count} issue reports need your attention`);}catch(e){}
 }
-setInterval(refreshIssueAttention,60000);
+setInterval(()=>{if(!document.hidden)refreshIssueAttention();},5000);
 document.addEventListener('visibilitychange',refreshIssueAttention);
+
+function issueNotificationControls(){return `<div class="issue-notification-controls" style="color:#000;text-align:left"><button type="button" class="btn secondary" data-issue-push="enable">Enable issue notifications</button><button type="button" class="btn secondary slim" data-issue-push="disable">Disable on this device</button><p data-push-status role="status" style="color:#000">On iPhone, add Photo Notes to your Home Screen and open it there first.</p></div>`;}
+document.addEventListener('click',async event=>{
+  const button=event.target.closest('[data-issue-push]');if(!button)return;
+  const status=button.parentElement.querySelector('[data-push-status]');button.disabled=true;
+  try{
+    if(!('serviceWorker' in navigator)||!('PushManager' in window))throw new Error('Notifications are unavailable here. On iPhone, open Photo Notes from your Home Screen.');
+    const registration=await navigator.serviceWorker.getRegistration();if(!registration)throw new Error('Reload Photo Notes before enabling notifications.');
+    let subscription=await registration.pushManager.getSubscription();
+    if(button.dataset.issuePush==='disable'){
+      if(subscription){const r=await api('/api/issues/push-subscription',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({endpoint:subscription.endpoint})});if(!r.ok)throw new Error('Could not disable notifications. Try again.');await subscription.unsubscribe();}
+      status.textContent=uiPushText('Notifications disabled on this device.');return;
+    }
+    const permission=await Notification.requestPermission();if(permission!=='granted')throw new Error('Notifications were not allowed. You can change this in your browser settings.');
+    const r=await api('/api/issues/push-key');if(!r.ok)throw new Error('Notifications are temporarily unavailable.');const {publicKey}=await r.json();if(!publicKey)throw new Error('Notifications are starting. Try again shortly.');
+    subscription=subscription||await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:publicKey});
+    const saved=await api('/api/issues/push-subscription',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(subscription.toJSON())});if(!saved.ok)throw new Error('Could not save notification settings. Try again.');
+    status.textContent=uiPushText('Issue notifications enabled on this device.');
+  }catch(e){status.textContent=uiPushText(e.message);}finally{button.disabled=false;}
+});
+function uiPushText(text){return window.photoNotesI18n?.t(text)||text;}
