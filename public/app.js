@@ -259,11 +259,11 @@ function renderApp() {
   el.innerHTML = `
     <div class="wrap">
       <div class="app-header">
+        ${state.me&&Array.isArray(state.me.edition_access)&&state.me.edition_access.length>1?`<label class="edition-switcher" for="editionSwitcher"><select id="editionSwitcher" aria-label="Switch Photo Notes version">${state.me.edition_access.map(key=>`<option value="${esc(key)}" ${key===selectedEdition()?'selected':''}>${esc(editionNames[key]||key)}</option>`).join('')}</select></label>`:''}
         <img class="zukor-corner-logo" src="/zukor-logo.svg" alt="Zukor AI" />
         <div class="brandrow">
           <div class="brand ${isProClient() ? 'pro-edition-brand' : ''} ${isGeneralProClient()?'general-pro-brand':''} ${isGeneralContractorClient()?'contractor-pro-brand':''} ${isRoadIssuesClient()?'road-issues-brand':''} ${isPavingClient()?'paving-pro-brand':''} ${isConcreteClient()?'concrete-pro-brand':''} ${isHoaClient()?'hoa-pro-brand':''} ${isRooferClient()?'roofer-pro-brand':''}" aria-label="${esc(isProClient()||isRoadIssuesClient()?productName():'Photo Notes AI Basic')}">${isProClient()||isRoadIssuesClient()?'':'<span class="product-suite-name">Photo Notes</span>'}</div>
         </div>
-        ${state.me&&Array.isArray(state.me.edition_access)&&state.me.edition_access.length>1?`<label class="edition-switcher" for="editionSwitcher"><select id="editionSwitcher" aria-label="Switch Photo Notes version">${state.me.edition_access.map(key=>`<option value="${esc(key)}" ${key===selectedEdition()?'selected':''}>${esc(editionNames[key]||key)}</option>`).join('')}</select></label>`:''}
         <div class="header-controls">
           <div class="language-switch" aria-label="Language"><button type="button" data-language="en">EN</button><span> </span><button type="button" data-language="es">ES</button></div>
           <div class="account-menu-wrap">

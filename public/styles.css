@@ -176,8 +176,13 @@ textarea { min-height: 96px; resize: vertical; }
 .app-header .header-controls { grid-column:2 / 4; grid-row:1; justify-self:end; display:flex; align-items:center; gap:10px; }
 .workflow-road-report { width:min(620px,100%); margin:0 auto; }
 .workflow-road-report .road-send { margin-top:22px; }
-.edition-switcher { position:absolute; z-index:2; top:16px; left:50%; transform:translateX(-50%); display:block; line-height:1; }
-.edition-switcher select { width:min(190px,32vw); min-width:112px; padding:5px 24px 5px 8px; border:1px solid #9db0ca; border-radius:8px; background:#fff; color:#111827; font:700 11px/1.2 Arial,Helvetica,sans-serif; cursor:pointer; }
+.wrap:has(.edition-switcher) { padding-top:4px; }
+.app-header:has(.edition-switcher) { grid-template-rows:auto auto auto; margin-top:0; }
+.app-header:has(.edition-switcher) .zukor-corner-logo,
+.app-header:has(.edition-switcher) .header-controls { grid-row:2; }
+.app-header:has(.edition-switcher) .brandrow { grid-row:3; }
+.edition-switcher { grid-column:1 / -1; grid-row:1; justify-self:center; display:block; max-width:100%; margin:0 0 4px; line-height:1; }
+.edition-switcher select { width:auto; max-width:100%; min-width:0; padding:5px 24px 5px 8px; border:1px solid #9db0ca; border-radius:8px; background:#fff; color:#000; font:700 11px/1.2 Arial,Helvetica,sans-serif; cursor:pointer; }
 .edition-switcher select:focus-visible { outline:2px solid #1d4ed8; outline-offset:2px; }
 /* Wide browser header: the company mark is approximately one workflow-tab wide.
    Every product edition uses the HOA Maintenance Pro 750x90 reference box so
@@ -568,7 +573,6 @@ input.dimfield.suggested {
    after the 700px phone rule so the cascade cannot enlarge it again. */
 @media (max-width: 380px) {
   .app-header .zukor-corner-logo { width:82px; min-width:0; }
-  .edition-switcher select { width:106px; min-width:0; padding-left:6px; font-size:10px; }
 }
 .evidence-comparison{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-bottom:18px}.evidence-comparison .card img{width:100%;max-height:340px;object-fit:contain;background:#f1f3f5;margin-top:8px}@media(max-width:700px){.evidence-comparison{grid-template-columns:1fr}}
 
