@@ -559,10 +559,10 @@ function renderCapture() {
       <button type="button" class="btn secondary slim" id="correctAddress">Correct address</button>
     </div>
 
-    <label>Note</label>
-    <button type="button" class="btn" id="dictate" style="margin-bottom:8px">Record Note</button>
+    <label>Notes</label>
+    <button type="button" class="btn" id="dictate" style="margin-bottom:8px">Record Notes</button>
     <div class="status" id="dictationStatus" aria-live="polite"></div>
-    <textarea id="note" placeholder="Type what you're looking at, or tap Record Note"></textarea>
+    <textarea id="note" placeholder="Your recorded notes will appear here as words"></textarea>
 
     ${isHoaClient()?`<label>Maintenance Category</label><select id="hoaArea">${HOA_AREAS.map(a=>`<option value="${esc(a)}">${esc(a)}</option>`).join('')}</select><div id="hoaDirectedWrap" style="display:none"><label>Directed To</label><input id="hoaDirected" placeholder="Person expected to answer"></div>`:`<label>Select Topic</label>
     <div class="pill-group" id="areas">${areaChips()}</div>
@@ -985,7 +985,7 @@ function cleanupDictation() {
   dictationActive = false;
   recognizer = null;
   const btn = document.getElementById('dictate');
-  if (btn) { btn.textContent = 'Record Note'; btn.classList.remove('on'); }
+  if (btn) { btn.textContent = 'Record Notes'; btn.classList.remove('on'); }
 }
 
 function stopCaptureDictation(){
@@ -994,7 +994,7 @@ function stopCaptureDictation(){
   if(dictationWatchdog)clearTimeout(dictationWatchdog);
   dictationRestartTimer=null;dictationWatchdog=null;dictationActive=false;
   const current=recognizer;recognizer=null;if(current)try{current.stop();}catch(e){}
-  const btn=document.getElementById('dictate');if(btn){btn.textContent='Record Note';btn.classList.remove('on');}
+  const btn=document.getElementById('dictate');if(btn){btn.textContent='Record Notes';btn.classList.remove('on');}
 }
 
 function isIOS() {
@@ -1028,7 +1028,7 @@ async function toggleDictation() {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     stream.getTracks().forEach(track => track.stop());
   } catch (e) {
-    toast('Microphone access is off for Photo Notes. Allow it for this website, then tap Record Note again');
+    toast('Microphone access is off for Photo Notes. Allow it for this website, then tap Record Notes again');
     return;
   }
   dictationActive = true;
@@ -1048,7 +1048,7 @@ function startDictationSession(SR) {
   session.continuous = !ios;
   session.interimResults = true;
   let sessionText = '';
-  if(dictationWatchdog)clearTimeout(dictationWatchdog);dictationWatchdog=setTimeout(()=>{if(generation!==dictationGeneration||sessionText)return;dictationActive=false;try{session.stop();}catch(e){}const status=document.getElementById('dictationStatus');if(status)status.textContent='No speech was received. On iPhone, tap the note box and use the keyboard microphone, or try Record Note again.';},10000);
+  if(dictationWatchdog)clearTimeout(dictationWatchdog);dictationWatchdog=setTimeout(()=>{if(generation!==dictationGeneration||sessionText)return;dictationActive=false;try{session.stop();}catch(e){}const status=document.getElementById('dictationStatus');if(status)status.textContent='No speech was received. On iPhone, tap the note box and use the keyboard microphone, or try Record Notes again.';},10000);
   session.onresult = (ev) => {
     if(generation!==dictationGeneration||state.photoFile!==photoForSession||document.getElementById('note')!==noteEl)return;
     if(dictationWatchdog)clearTimeout(dictationWatchdog);dictationWatchdog=null;
@@ -1065,7 +1065,7 @@ function startDictationSession(SR) {
   session.onerror = (e) => {
     const err = e && e.error;
     if (err === 'not-allowed' || err === 'service-not-allowed') {
-      toast('Allow microphone access for this site, then tap Record Note again');
+      toast('Allow microphone access for this site, then tap Record Notes again');
       dictationActive=false;
     } else if (err === 'no-speech') {
       // Android often ends a session before the user starts talking. onend
@@ -1080,7 +1080,7 @@ function startDictationSession(SR) {
       // Stopping after speech can report "aborted" on Safari even though the
       // final result has already been delivered. No error message is needed.
     } else {
-      toast('Recording stopped unexpectedly. Tap Record Note to try again');
+      toast('Recording stopped unexpectedly. Tap Record Notes to try again');
       dictationActive=false;
     }
   };
@@ -1099,7 +1099,7 @@ function startDictationSession(SR) {
     } else cleanupDictation();
   };
   try { session.start(); }
-  catch (e) { cleanupDictation(); toast('Recording could not start. Tap Record Note to try again'); }
+  catch (e) { cleanupDictation(); toast('Recording could not start. Tap Record Notes to try again'); }
 }
 
 // ================= Pro dimension fields =================
