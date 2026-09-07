@@ -48,3 +48,11 @@ test('document branding and layout controls translate without changing template 
  for(const label of ['2. Company Branding & Word Template','3. Page Layout & Preview','Header Text','Footer Text','Word Template','Download Starter Template','Import Word Template','Typeface','Photo Arrangement','Cover page','Page numbers','Save Layout','Photo Notes Test Checkout'])assert.notEqual(api.t(label),label,label);
  for(const token of ['{{PHOTO_NOTES_CONTENT}}','{{TITLE}}','{{DESCRIPTION}}','{{COMPANY_NAME}}'])assert.equal(api.t(token),token);
 });
+
+test('current document content section heading translates in the rendered text flow',()=>{
+ const app=fs.readFileSync('public/app.js','utf8');
+ const label=app.match(/<div class="formhead"[^>]*>([0-9]+\. Document Contents)<\/div>/)[1];
+ const {api,nodes,Element}=translator();const node={nodeType:3,parentElement:new Element(),nodeValue:label};nodes.push(node);api.apply();
+ assert.equal(node.nodeValue,'4. Contenido del documento');
+ api.setLanguage('en');assert.equal(node.nodeValue,label);
+});
