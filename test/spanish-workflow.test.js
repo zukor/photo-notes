@@ -43,3 +43,8 @@ test('Send counts translate after selection changes and switch back to English',
   api.setLanguage('es');assert.equal(api.t('Provided by Example'),'Proveedor: Example');
   assert.equal(api.t('Custom topic XYZ'),'Custom topic XYZ');
 });
+test('document branding and layout controls translate without changing template tokens',()=>{
+ const {api}=translator();
+ for(const label of ['2. Company Branding & Word Template','3. Page Layout & Preview','Header Text','Footer Text','Word Template','Download Starter Template','Import Word Template','Typeface','Photo Arrangement','Cover page','Page numbers','Save Layout','Photo Notes Test Checkout'])assert.notEqual(api.t(label),label,label);
+ for(const token of ['{{PHOTO_NOTES_CONTENT}}','{{TITLE}}','{{DESCRIPTION}}','{{COMPANY_NAME}}'])assert.equal(api.t(token),token);
+});
