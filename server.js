@@ -1414,7 +1414,7 @@ registerCloud(app,{pool,requireAuth,requireAdmin,requireTestingQueueToken});
 
 app.get('/api/issues/mine', requireAuth, async (req,res)=>{
   try{
-    const rows=(await pool.query(`SELECT id,description,page_name,screenshot_path,reported_edition,app_version,blocked_reason,reporter_details,management_status,fix_summary,release_reference,retest_instructions,tester_notification_status,tester_notified_at,tester_result,tester_notes,tester_retested_at,created_at,updated_at,(SELECT max(created_at) FROM issue_repair_events WHERE issue_id=issue_reports.id AND event='ready_to_test') AS deployed_at FROM issue_reports WHERE user_id=$1 ORDER BY created_at DESC LIMIT 100`,[req.user.id])).rows;
+    const rows=(await pool.query(`SELECT id,description,page_name,screenshot_path,reported_edition,app_version,blocked_reason,reporter_details,management_status,fix_summary,release_reference,retest_instructions,tester_notification_status,tester_notified_at,tester_result,tester_notes,tester_retested_at,created_at,updated_at,verification,(SELECT max(created_at) FROM issue_repair_events WHERE issue_id=issue_reports.id AND event='ready_to_test') AS deployed_at FROM issue_reports WHERE user_id=$1 ORDER BY created_at DESC LIMIT 100`,[req.user.id])).rows;
     res.json(rows);
   }catch(e){console.error('[issues.mine]',e);res.status(500).json({error:'failed'});}
 });
