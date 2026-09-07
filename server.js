@@ -1386,7 +1386,7 @@ app.post('/api/issues', requireAuth, upload.fields([{name:'screenshot',maxCount:
     const row = (await pool.query(
       `INSERT INTO issue_reports (user_id, description, page_name, page_url, screenshot_path, voice_path, viewport, user_agent,reported_edition,app_version)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
-      [req.user.id, description, ticketText(req.body.page_name,100), ticketText(req.body.page_url,500), screenshotPath, voicePath, ticketText(req.body.viewport,100), ticketText(req.body.user_agent,1000),currentEdition(req.user),'161'])).rows[0];
+      [req.user.id, description, ticketText(req.body.page_name,100), ticketText(req.body.page_url,500), screenshotPath, voicePath, ticketText(req.body.viewport,100), ticketText(req.body.user_agent,1000),currentEdition(req.user),'162'])).rows[0];
     const user = (await pool.query(`SELECT name,email FROM users WHERE id=$1`, [req.user.id])).rows[0] || req.user;
     let delivery={status:'pending',error:'Notification pending'};
     try{delivery=await emailIssueReport(row,user);await pool.query('UPDATE issue_reports SET email_status=$1,email_error=$2 WHERE id=$3',[delivery.status,delivery.error,row.id]);}catch(e){}
