@@ -34,7 +34,10 @@ test('durable notification worker respects ownership, retries, and idempotence',
     await pool.query("INSERT INTO issue_reports(id,user_id,management_status) VALUES(11,2,'new')");
     await pool.query("UPDATE issue_reports SET management_status='ready_to_test' WHERE id IN (10,11)");
     await pool.query("UPDATE issue_cloud_events SET created_at=now()-interval '61 seconds' WHERE status='ready_to_test'");
-    const grouped=[];await tickCloud(pool,keys,{send:async(s,p)=>grouped.push(JSON.parse(p)),env:{}});
+    await pool.query("UPDATE issue_cloud_events SET created_at=now() WHERE issue_id=11 AND status='ready_to_test'");
+    const grouped=[];await tickCloud(pool,keys,{send:async(s,p)=>grouped.push(JSON.parse(p)),env:{}});assert.equal(grouped.length,0,'Wait for the related completion group to settle');
+    await pool.query("UPDATE issue_cloud_events SET created_at=now()-interval '61 seconds' WHERE status='ready_to_test'");
+    await tickCloud(pool,keys,{send:async(s,p)=>grouped.push(JSON.parse(p)),env:{}});
     assert.equal(grouped.length,2);assert.ok(grouped.every(p=>p.body.startsWith('2 issue repairs')));
 
   }finally{await pool.end();}
