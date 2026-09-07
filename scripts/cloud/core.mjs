@@ -9,7 +9,7 @@ export function parseProposal(raw){
  if(!Array.isArray(p.changes)||!p.changes.length||p.changes.length>8||typeof p.test!=='string'||p.test.length<80||p.test.length>15000)throw new Error('Missing bounded changes and regression test');
  for(const c of p.changes){if(!allowed.includes(c.path)||typeof c.before!=='string'||!c.before||typeof c.after!=='string'||c.before===c.after||c.before.length+c.after.length>16000)throw new Error('Invalid change');
  // Sensitive or external-communication changes are routed to a person.
- if(/https?:|\b(?:fetch|XMLHttpRequest|WebSocket|sendBeacon|password|authorization|cookie|localStorage|sessionStorage|eval|Function|requireAuth|requireAdmin|stripe|deleteUser)\b/i.test(c.before+'\n'+c.after))throw new Error('Repair requires sensitive-code review');}
+ if(/https?:|\b(?:fetch|XMLHttpRequest|WebSocket|sendBeacon|password|authorization|cookie|localStorage|sessionStorage|eval|requireAuth|requireAdmin|stripe|deleteUser)\b/i.test(c.before+'\n'+c.after)||/\bFunction\s*\(/.test(c.before+'\n'+c.after))throw new Error('Repair requires sensitive-code review');}
  return p;
 }
 export function applyProposal(p,id,{bump=true}={}){
