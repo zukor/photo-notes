@@ -56,7 +56,16 @@ function combineSpeechResults(parts){
     if(segments.length&&incoming.length>previous.length&&prefix(previous,incoming)){
       while(segments.length&&prefix(words(segments.at(-1)),incoming))segments.pop();
     }
-    segments.push(text);
+    // Android can repeat the last phrase as a new result after a pause.
+    // Only reconcile multiword overlaps at result boundaries. Repetition
+    // inside a result and short emphasis such as "very very" stay intact.
+    const accumulated=words(segments.join(' '));
+    let overlap=0;
+    for(let size=3;size<=Math.min(16,accumulated.length,incoming.length);size++){
+      if(prefix(accumulated.slice(-size),incoming.slice(0,size)))overlap=size;
+    }
+    const remainder=text.split(/\s+/).slice(overlap).join(' ');
+    if(remainder)segments.push(remainder);
   }
   return cleanSpeechTranscript(segments.join(' '));
 }
