@@ -1823,7 +1823,7 @@ async function renderList() {
     <div class="organize-form-grid organize-batch-grid">
       <section class="organize-panel">
         <label>File Selected Under a Topic</label>
-        <div class="row compact">
+        <div class="row compact organize-topic-actions">
           <select id="bulktopic"><option value="">Choose Topic</option>${state.areas.map(a => `<option value="${esc(a)}">${esc(a)}</option>`).join('')}</select>
           <button class="btn secondary" id="applytopic">Add Topic</button>
           <button class="btn secondary" id="replacetopic">Replace Topics</button>
