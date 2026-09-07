@@ -44,6 +44,22 @@ function cleanSpeechTranscript(value){
   }
   return words.join(' ');
 }
+function combineSpeechResults(parts){
+  const segments=[];
+  const words=value=>value.toLocaleLowerCase().split(/\s+/);
+  const prefix=(short,long)=>short.length<=long.length&&short.every((word,i)=>word===long[i]);
+  for(const part of parts){
+    const text=String(part||'').trim();if(!text)continue;
+    const incoming=words(text),previous=words(segments.at(-1)||'');
+    // Some Android engines append progressively longer snapshots as new slots.
+    // Replace that prefix chain before joining; joining first loses boundaries.
+    if(segments.length&&incoming.length>previous.length&&prefix(previous,incoming)){
+      while(segments.length&&prefix(words(segments.at(-1)),incoming))segments.pop();
+    }
+    segments.push(text);
+  }
+  return cleanSpeechTranscript(segments.join(' '));
+}
 function mergeSpeechTranscript(base,incoming){
   const left=String(base||'').trim().split(/\s+/).filter(Boolean),right=cleanSpeechTranscript(incoming).split(/\s+/).filter(Boolean);
   let overlap=0,max=Math.min(16,left.length,right.length);
@@ -90,7 +106,7 @@ function startIssueDictationSession(SR){
   const generation=issueGeneration;
   const ta=document.getElementById('issueDescription'),session=new SR(),ios=isIOS();issueRecognizer=session;session.lang=uiSpeechLanguage();session.continuous=!ios;session.interimResults=!ios;let sessionText='';
   if(issueDictationWatchdog)clearTimeout(issueDictationWatchdog);issueDictationWatchdog=setTimeout(()=>{if(issueRecognizer!==session||sessionText)return;issueDictationActive=false;try{session.stop();}catch(e){}const b=document.getElementById('issueRecord'),s=document.getElementById('issueStatus');if(b){b.textContent='Speak Description';b.classList.remove('on');}if(s)s.textContent='No speech was received. On iPhone, tap the text box and use the microphone on the keyboard, or try again.';},10000);
-  session.onresult=e=>{if(generation!==issueGeneration||issueRecognizer!==session)return;if(issueDictationWatchdog)clearTimeout(issueDictationWatchdog);issueDictationWatchdog=null;const parts=[];for(let i=0;i<e.results.length;i++)parts.push(e.results[i][0].transcript.trim());sessionText=cleanSpeechTranscript(parts.filter(Boolean).join(' '));if(ta)ta.value=mergeSpeechTranscript(issueDictationBase,sessionText);};
+  session.onresult=e=>{if(generation!==issueGeneration||issueRecognizer!==session)return;if(issueDictationWatchdog)clearTimeout(issueDictationWatchdog);issueDictationWatchdog=null;const parts=[];for(let i=0;i<e.results.length;i++)parts.push(e.results[i][0].transcript.trim());sessionText=combineSpeechResults(parts);if(ta)ta.value=mergeSpeechTranscript(issueDictationBase,sessionText);};
   session.onerror=e=>{if(generation!==issueGeneration||issueRecognizer!==session)return;const err=e&&e.error;if(err==='not-allowed'||err==='service-not-allowed'){toast('Allow microphone access for this website, then try again');issueDictationActive=false;}else if(err==='audio-capture'||err==='network'){toast('Recording stopped. You can continue by typing or try again');issueDictationActive=false;}else if(err!=='aborted'&&err!=='no-speech'){toast('Recording stopped. You can continue by typing or try again');issueDictationActive=false;}};
   session.onend=()=>{if(generation!==issueGeneration||issueRecognizer!==session)return;if(issueDictationWatchdog)clearTimeout(issueDictationWatchdog);issueDictationWatchdog=null;if(issueRecognizer===session)issueRecognizer=null;if(sessionText){issueDictationBase=mergeSpeechTranscript(issueDictationBase,sessionText);if(issueDictationBase)issueDictationBase+=' ';}if(issueDictationActive&&!ios){const b=document.getElementById('issueRecord');if(b)b.textContent='Listening... tap to stop';issueDictationRestartTimer=setTimeout(()=>startIssueDictationSession(SR),300);}else{issueDictationActive=false;const b=document.getElementById('issueRecord');if(b){b.textContent='Speak Description';b.classList.remove('on');}if(ios&&sessionText){const s=document.getElementById('issueStatus');if(s)s.textContent='Description added. Tap Speak Description to continue.';}}};
   try{session.start();}catch(e){issueDictationActive=false;issueRecognizer=null;const b=document.getElementById('issueRecord');if(b){b.textContent='Speak Description';b.classList.remove('on');}}

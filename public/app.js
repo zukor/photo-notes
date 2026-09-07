@@ -1054,7 +1054,7 @@ function startDictationSession(SR) {
     // appending each event produces duplicated/spammed words.
     const parts=[];
     for (let i=0;i<ev.results.length;i++) parts.push(ev.results[i][0].transcript.trim());
-    sessionText=cleanSpeechTranscript(parts.filter(Boolean).join(' '));
+    sessionText=combineSpeechResults(parts);
     if (noteEl) { noteEl.value=mergeSpeechTranscript(dictationBase,sessionText); state._note=noteEl.value; }
     const status=document.getElementById('dictationStatus');if(status&&sessionText)status.textContent='Speech received.';
     if (isIndustryProClient()) applyExtraction(dictationBase+sessionText);
