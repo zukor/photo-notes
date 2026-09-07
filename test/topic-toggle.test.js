@@ -21,8 +21,8 @@ test('topic label updates after language or selection changes',()=>{
 });
 
 test('Basic Optional heading stays stable and expands the topic entry row',()=>{
- const f=fixture('Optional');f.setLanguage('en');f.setSelected('');
- assert.equal(f.settle(),true);assert.equal(f.label.textContent,'Optional ▾');
- assert.equal(f.label.style.textTransform,'uppercase');
+ const f=fixture('Topic (optional)');f.setLanguage('en');f.setSelected('');
+ assert.equal(f.settle(),true);assert.equal(f.label.textContent,'Topic (optional) ▾');
+ assert.equal(f.label.style.textTransform,'none');
  f.label.onclick();assert.equal(f.settle(),true);assert.equal(f.row.style.display,'');
 });

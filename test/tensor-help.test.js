@@ -16,7 +16,7 @@ test('Tensor Man supports core editions and is limited to their workflow pages',
 test('Tensor Man has accessible controls, secondary chat fallback, and per-page persistence', () => {
   assert.match(app, /aria-label="Help with this page"/);
   assert.match(app, /Need help with this page\?/);
-  assert.match(app, /Ask Tensor Man something else/);
+  assert.match(app, /Ask Tensorman something else/);
   assert.match(app, /Chat help is coming soon\./);
   assert.match(app, /badge\.onmouseenter = \(\) => setTensorArt\('hover'\)/);
   assert.match(app, /setTensorArt\(opening \? 'open' : 'badge'\)/);

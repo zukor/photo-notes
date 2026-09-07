@@ -627,3 +627,14 @@ input.dimfield.suggested {
   .organize-topic-actions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); }
   .organize-topic-actions select { grid-column:1 / -1; }
 }
+
+/* Keep the report and its captured page readable together. */
+.issue-dialog{width:min(1200px,100%);}
+.issue-dialog h2{text-align:center;margin:0 34px 16px;}
+.issue-report-layout{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:24px;}
+.issue-report-layout section{min-width:0;color:#000;}
+.issue-evidence h3{margin:0 0 10px;}
+.issue-screenshot-scroll{max-height:calc(100dvh - 190px);overflow:auto;border:1px solid #000;background:#fff;}
+#issueScreenshot{display:block;width:100%;height:auto;}
+#issueScreenshot[hidden]{display:none;}
+@media(max-width:700px){.issue-report-layout{grid-template-columns:minmax(0,1fr);gap:16px;}.issue-screenshot-scroll{max-height:35dvh;}}

@@ -407,7 +407,7 @@ async function submitIssueRetest(id,result,button){
   else{toast('Your retest result could not be saved');button.disabled=false;}
 }
 
-// ================= Tensor Man page help (Basic, desktop only) =================
+// ================= Tensorman page help (Basic, desktop only) =================
 const TENSOR_HELP_TOPICS = {
   capture: [
     ['Take or import a photo', 'Use Capture to take a new business photo or import one you already have. The photo is the main record; notes and details add useful context to it.'],
@@ -453,12 +453,12 @@ function renderTensorHelp() {
   const topics = TENSOR_HELP_TOPICS[page];
   body.insertAdjacentHTML('afterbegin', `<div class="tensor-help-slot" data-html2canvas-ignore="true">
     <div class="tensor-help-widget">
-      <button class="tensor-help-badge" type="button" aria-label="Help with this page" aria-expanded="false"><img src="/tensor-man-badge.png" srcset="/tensor-man-badge.png 1x, /tensor-man-badge@2x.png 2x" alt="" aria-hidden="true"><span>Tensor Man</span></button>
-      <section class="tensor-help-panel" hidden aria-label="Tensor Man page help">
+      <button class="tensor-help-badge" type="button" aria-label="Help with this page" aria-expanded="false"><img src="/tensor-man-badge.png" srcset="/tensor-man-badge.png 1x, /tensor-man-badge@2x.png 2x" alt="" aria-hidden="true"><span>Tensorman Help</span></button>
+      <section class="tensor-help-panel" hidden aria-label="Tensorman page help">
         <h2>Need help with this page?</h2>
         <div class="tensor-topic-list">${topics.map((topic, index)=>`<button type="button" data-tensor-topic="${index}">${esc(topic[0])}</button>`).join('')}</div>
         <div class="tensor-topic-answer" aria-live="polite" hidden></div>
-        <button class="tensor-ask-toggle" type="button" aria-expanded="false">Ask Tensor Man something else <span aria-hidden="true">⌄</span></button>
+        <button class="tensor-ask-toggle" type="button" aria-expanded="false">Ask Tensorman something else <span aria-hidden="true">⌄</span></button>
         <form class="tensor-ask-form" hidden><label for="tensorAskInput">Question about Photo Notes</label><div><input id="tensorAskInput" type="text" autocomplete="off"><button type="submit">Send</button></div><p class="tensor-chat-status" aria-live="polite"></p></form>
         <div class="tensor-help-actions"><button type="button" data-tensor-close>Not now</button><button type="button" data-tensor-hide>Hide help on this page</button></div>
       </section>
@@ -662,10 +662,10 @@ function renderCapture() {
     <label>Notes</label>
     <button type="button" class="btn" id="dictate" style="margin-bottom:8px">Record Notes</button>
     <div class="status" id="dictationStatus" aria-live="polite"></div>
-    <textarea id="note" placeholder="Your recorded notes will appear here as words"></textarea>
+    <textarea id="note" placeholder="Your recorded notes will appear here as words."></textarea>
     ${isConcreteClient()?concreteCaptureDetailsMarkup():''}
 
-    ${isHoaClient()?`<label>Maintenance Category</label><select id="hoaArea">${HOA_AREAS.map(a=>`<option value="${esc(a)}">${esc(a)}</option>`).join('')}</select><div id="hoaDirectedWrap" style="display:none"><label>Directed To</label><input id="hoaDirected" placeholder="Person expected to answer"></div>`:`<label data-topic-heading="${isBasicClient()?'Optional':'Select Topic'}">${isBasicClient()?'Optional':'Select Topic'}</label>
+    ${isHoaClient()?`<label>Maintenance Category</label><select id="hoaArea">${HOA_AREAS.map(a=>`<option value="${esc(a)}">${esc(a)}</option>`).join('')}</select><div id="hoaDirectedWrap" style="display:none"><label>Directed To</label><input id="hoaDirected" placeholder="Person expected to answer"></div>`:`<label data-topic-heading="Topic (optional)">Topic (optional)</label>
     <div class="pill-group" id="areas">${areaChips()}</div>
     <div class="row compact" style="margin-top:10px">
       <input type="text" id="newarea" placeholder="${isBasicClient()?'Type topic name here':'Add a topic...'}" />
@@ -1609,7 +1609,7 @@ let bgOnlineHooked = false;
 let offlineQueueRestored = false;
 
 function queueDb(){return new Promise((resolve,reject)=>{if(!window.indexedDB)return reject(new Error('unavailable'));const r=indexedDB.open('photo-notes-offline',1);r.onupgradeneeded=()=>{if(!r.result.objectStoreNames.contains('captures'))r.result.createObjectStore('captures',{keyPath:'id',autoIncrement:true});};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});}
-async function queueStore(payload,hadCoords){const db=await queueDb();return new Promise((resolve,reject)=>{const tx=db.transaction('captures','readwrite');const r=tx.objectStore('captures').add({payload,hadCoords:!!hadCoords,createdAt:Date.now()});r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);tx.oncomplete=()=>db.close();});}
+async function queueStore(payload,hadCoords){const db=await queueDb();return new Promise((resolve,reject)=>{const tx=db.transaction('captures','readwrite');const r=tx.objectStore('captures').add({payload,hadCoords:!!hadCoords,createdAt:Date.now()});r.onerror=()=>reject(r.error);tx.oncomplete=()=>{db.close();resolve(r.result);};tx.onabort=()=>{db.close();reject(tx.error||new Error("Save transaction aborted"));};tx.onerror=()=>reject(tx.error);});}
 async function queueDelete(id){if(id==null)return;try{const db=await queueDb();await new Promise((resolve,reject)=>{const tx=db.transaction('captures','readwrite');tx.objectStore('captures').delete(id);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);});db.close();}catch(e){}}
 async function restoreOfflineQueue(){if(offlineQueueRestored)return;offlineQueueRestored=true;try{const db=await queueDb();const rows=await new Promise((resolve,reject)=>{const tx=db.transaction('captures','readonly');const r=tx.objectStore('captures').getAll();r.onsuccess=()=>resolve(r.result||[]);r.onerror=()=>reject(r.error);});db.close();const known=new Set(bgQueue.map(x=>x.id));rows.forEach(row=>{if(!known.has(row.id))bgQueue.push({id:row.id,payload:row.payload,hadCoords:row.hadCoords,tries:0});});if(rows.length){toast(`${rows.length} offline capture${rows.length===1?'':'s'} ready to upload`);bgIndicator();drainQueue();}}catch(e){}}
 function payloadFormData(p){const fd=new FormData();if(p.photo)fd.append('photo',p.photo,p.photoName||'offline-photo.jpg');fd.append('note',p.note||'');fd.append('area_tags',p.area_tags||'[]');fd.append('kind',p.kind||'note');if(p.job_id)fd.append('job_id',p.job_id);for(const k of ['paving_photo_reason','concrete_phase','concrete_purpose','concrete_element','concrete_stage','concrete_condition','concrete_severity','concrete_location','concrete_mix','hoa_community_id','hoa_title','hoa_item_type','hoa_priority','hoa_area','hoa_directed_to','hoa_budget_source','hoa_photo_stage','hoa_target_date'])if(p[k])fd.append(k,p[k]);if(p.latitude!=null)fd.append('latitude',p.latitude);if(p.longitude!=null)fd.append('longitude',p.longitude);if(p.address)fd.append('address',p.address);return fd;}
@@ -1636,8 +1636,8 @@ function bgIndicator() {
   }
 }
 
-async function enqueueUpload(payload, hadCoords) {
-  let id=null;try{id=await queueStore(payload,hadCoords);}catch(e){}
+async function enqueueUpload(payload, hadCoords, options = {}) {
+  let id=null;try{id=await queueStore(payload,hadCoords);}catch(e){if(options.requireDurable)throw e;}
   bgQueue.push({ id, payload, hadCoords: !!hadCoords, tries: 0 });
   if (!bgOnlineHooked) { window.addEventListener('online', drainQueue); bgOnlineHooked = true; }
   bgIndicator();
@@ -1682,7 +1682,7 @@ async function drainQueue() {
   } finally { bgDraining = false; }
 }
 
-async function saveCapture() {
+async function saveCapture(options = {}) {
   stopCaptureDictation();
   const note = document.getElementById('note').value.trim();
   if (!state.photoFile && !note) { toast('Take a photo or add a note first'); return; }
@@ -1697,14 +1697,20 @@ async function saveCapture() {
   const hadCoords = !!state.location;
   if (state.location) { payload.latitude=state.location.lat;payload.longitude=state.location.lng; }
   if (state.address) payload.address=state.address;
-  // Commit instantly: clear the form and hand the upload to the background.
+  // Sharing must wait for durable local storage before clearing the draft.
+  if(options.requireDurable){
+    try{await enqueueUpload(payload,hadCoords,{requireDurable:true});}
+    catch(e){toast('Could not save this photo. Your draft is still here.');return false;}
+  }
+  // Clear the saved draft and hand upload to the background.
   captureLocationGeneration++;
   state.photoFile = null; state._note = ''; state.location = null; state.address = null; state._locationPromise = null;
   state._dims = freshDims(); state._measure = null;
   if(isConcreteClient()){const d=concreteCaptureDraft();state._concreteCapture={phase:d.phase,purpose:d.purpose,element:d.element,jobId:d.jobId};}
   renderCapture();
   toast('Saved');
-  void enqueueUpload(payload, hadCoords);
+  if(!options.requireDurable)void enqueueUpload(payload, hadCoords);
+  return true;
 }
 
 // ================= HOA Maintenance Pro =================

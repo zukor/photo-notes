@@ -1,6 +1,9 @@
 (function () {
   const STORAGE_KEY = 'photo-notes-language';
   const ES = {
+    "Topic (optional)": "Tema (opcional)", "Send/Share": "Enviar/Compartir", "Tensorman Help": "Ayuda de Tensorman", "Ask Tensorman something else": "Pregunte algo más a Tensorman", "Tensorman page help": "Ayuda de Tensorman para esta página",
+    "Photo Note saved": "Nota fotográfica guardada", "Tap Share to choose where to send it.": "Toque Compartir para elegir dónde enviarla.", "Could not save this photo. Your draft is still here.": "No se pudo guardar esta foto. Su borrador sigue aquí.",
+    "Page screenshot": "Captura de pantalla", "Screenshot of the page being reported": "Captura de la página que se está reportando", "Your recorded notes will appear here as words.": "Sus notas grabadas aparecerán aquí como palabras.",
     "2. Company Branding & Word Template": "2. Marca de la empresa y plantilla de Word",
     "3. Page Layout & Preview": "3. Diseño de página y vista previa",
     "Company Name": "Nombre de la empresa",
