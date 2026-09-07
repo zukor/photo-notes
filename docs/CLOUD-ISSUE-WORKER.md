@@ -4,7 +4,7 @@ Notifications run inside the Railway app service every two seconds while healthy
 
 ## Private repair runner
 
-Customer report processing runs in the PRIVATE `zukor/photo-notes-repair-worker` repository. The public application's workflow does not read reports. Scheduled runs check every five minutes, subject to GitHub scheduling delays. No desktop runtime is required. A manual repair run can target a report. An optional private-repository Actions credential on Railway can enable immediate dispatch, but scheduled operation does not require it.
+Customer report processing runs in the PRIVATE `zukor/photo-notes-repair-worker` repository. The public application's workflow does not read reports. The canonical workflow is https://github.com/zukor/photo-notes-repair-worker/blob/main/.github/workflows/issue-cloud-repair.yml. Scheduled runs check every five minutes, subject to GitHub scheduling delays. No desktop runtime is required. A manual repair run can target a report. An optional private-repository Actions credential on Railway can enable immediate dispatch, but scheduled operation does not require it.
 
 GitHub secrets in the private runner:
 - OPENAI_API_KEY: required working AI credential. API usage is billed to its account.
