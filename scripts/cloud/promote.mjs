@@ -7,7 +7,7 @@ applyProposal(p,claim.id);if(treeDigest(claim.id)!==process.env.TEST_DIGEST)thro
 // A repository-restricted SSH deploy key can publish only to Photo Notes.
 // Generated regression source stays in the private run, never in the public repository.
 const keyFile=path.join(fs.mkdtempSync(path.join(os.tmpdir(),'pn-publish-')),'key');
-fs.writeFileSync(keyFile,process.env.PHOTO_NOTES_DEPLOY_KEY,{mode:0o600});
+fs.writeFileSync(keyFile,process.env.PHOTO_NOTES_DEPLOY_KEY.trimEnd()+'\n',{mode:0o600});
 try{
  git(['add','--','public/app.js','public/styles.css','public/i18n.js','public/send.js','public/index.html','public/admin.html','public/sw.js','server.js','test/tensor-help.test.js']);
  git(['-c','user.name=Photo Notes Repair','-c','user.email=repair@users.noreply.github.com','commit','-m',`Repair Photo Notes report ${claim.id}`]);const fix=git(['rev-parse','HEAD']);
