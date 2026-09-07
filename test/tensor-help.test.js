@@ -31,13 +31,13 @@ test('Tensor Man is hidden at phone and small-tablet widths and cannot cover con
 });
 
 test('new app and style versions are cache-busted', () => {
-  assert.match(index, /styles\.css\?v=156/);
-  assert.match(index, /app\.js\?v=156/);
+  assert.match(index, /styles\.css\?v=157/);
+  assert.match(index, /app\.js\?v=157/);
 });
 
 test('Android issue-description dictation replaces revised results and restarts', () => {
   assert.match(app, /function startIssueDictationSession\(SR\)/);
-  assert.match(app, /sessionText=cleanSpeechTranscript\(parts\.filter\(Boolean\)\.join\(' '\)\)/);
+  assert.match(app, /sessionText=combineSpeechResults\(parts\)/);
   assert.match(app, /mergeSpeechTranscript\(issueDictationBase,sessionText\)/);
   assert.match(app, /issueDictationRestartTimer=setTimeout\(\(\)=>startIssueDictationSession\(SR\),300\)/);
 });
