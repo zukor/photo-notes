@@ -402,7 +402,7 @@
     ,'(at least one required)': '(se requiere al menos uno)', '+ Extra Work Record': '+ Registro de trabajo adicional',
     'The photograph is the source of truth.': 'La fotografía es la fuente original.', 'The photographed ticket is the source of truth.': 'La fotografía del boleto es la fuente original.',
     '1. Choose the Before Photo': '1. Elegir la foto de antes', '1. Document Details': '1. Datos del documento', '1. Photograph the Ticket': '1. Fotografiar el boleto',
-    '2. Document Contents': '2. Contenido del documento', '2. Match the Framing': '2. Igualar el encuadre', '2. Review and Save': '2. Revisar y guardar',
+    '4. Document Contents': '4. Contenido del documento', '2. Document Contents': '2. Contenido del documento', '2. Match the Framing': '2. Igualar el encuadre', '2. Review and Save': '2. Revisar y guardar',
     '3. Check the Alignment': '3. Revisar la alineación', '3. Download Finished Document': '3. Descargar el documento terminado',
     '12-inch Ruler': 'Regla de 12 pulgadas', '25-foot Tape': 'Cinta de 25 pies', 'AI ZIP': 'ZIP para IA', 'For AI (.zip)': 'Para IA (.zip)',
     'Attach to document': 'Adjuntar al documento', 'Before / After': 'Antes / Después', 'Capture wide shots for context and close-ups for detail.': 'Tome fotos amplias para mostrar el contexto y primeros planos para mostrar los detalles.',
