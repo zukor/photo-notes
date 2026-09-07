@@ -3130,12 +3130,17 @@ function downloadBlob(blob, name) {
 }
 
 async function exportBlob(format, groupId) {
-  const ids = Array.from(state.selectedIds);
-  if (!groupId && !ids.length) throw new Error('Select at least one capture');
-  const q = groupId ? `group=${groupId}` : `ids=${ids.join(',')}`;
-  const r = await api(`/api/export/${format}?${q}&res=standard&fmt=jpeg`);
+  const r = await api(exportDownloadUrl(format, groupId));
   if (!r.ok) throw new Error('Could not build document');
   return r.blob();
+}
+
+function exportDownloadUrl(format, groupId) {
+  if (!['pdf','docx','bundle'].includes(format)) throw new Error('Choose a supported document format');
+  const ids = Array.from(state.selectedIds);
+  if (!groupId && !ids.length) throw new Error('Select at least one capture');
+  const q = groupId ? `group=${encodeURIComponent(groupId)}` : `ids=${encodeURIComponent(ids.join(','))}`;
+  return `/api/export/${format}?${q}&res=standard&fmt=jpeg`;
 }
 
 function safeSharedFileName(action, groupId, ext) {
@@ -3157,6 +3162,12 @@ async function deliverExport(format, groupId, action = 'download') {
   const ext = format === 'bundle' ? 'zip' : format;
   const name = safeSharedFileName(format, groupId, ext);
   try {
+    if (action === 'download') {
+      // Let the browser handle the server's attachment response directly.
+      // A delayed synthetic blob click can be ignored by mobile browsers.
+      window.location.assign(exportDownloadUrl(format, groupId));
+      return;
+    }
     const blob = await exportBlob(format, groupId);
     if (action === 'print') {
       const url = URL.createObjectURL(blob); const w = window.open(url, '_blank');
