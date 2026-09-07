@@ -61,8 +61,8 @@ function combineSpeechResults(parts){
     // inside a result and short emphasis such as "very very" stay intact.
     const accumulated=words(segments.join(' '));
     let overlap=0;
-    for(let size=3;size<=Math.min(16,accumulated.length,incoming.length);size++){
-      if(prefix(accumulated.slice(-size),incoming.slice(0,size)))overlap=size;
+    for(let size=Math.min(accumulated.length,incoming.length);size>=3;size--){
+      if(prefix(accumulated.slice(-size),incoming.slice(0,size))){overlap=size;break;}
     }
     const remainder=text.split(/\s+/).slice(overlap).join(' ');
     if(remainder)segments.push(remainder);
@@ -71,8 +71,8 @@ function combineSpeechResults(parts){
 }
 function mergeSpeechTranscript(base,incoming){
   const left=String(base||'').trim().split(/\s+/).filter(Boolean),right=cleanSpeechTranscript(incoming).split(/\s+/).filter(Boolean);
-  let overlap=0,max=Math.min(16,left.length,right.length);
-  for(let size=1;size<=max;size++)if(left.slice(-size).map(w=>w.toLowerCase()).join('\u0000')===right.slice(0,size).map(w=>w.toLowerCase()).join('\u0000'))overlap=size;
+  let overlap=0,max=Math.min(left.length,right.length);
+  for(let size=max;size>=1;size--)if(left.slice(-size).map(w=>w.toLowerCase()).join('\u0000')===right.slice(0,size).map(w=>w.toLowerCase()).join('\u0000')){overlap=size;break;}
   return cleanSpeechTranscript([...left,...right.slice(overlap)].join(' '));
 }
 async function toggleIssueDictation(){
