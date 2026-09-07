@@ -389,7 +389,7 @@ async function submitTestingAssignment(id,button){
 }
 async function renderMyIssueReports(){
   const body=document.getElementById('body');
-  body.innerHTML='<button class="backlink" id="issuesBack">← Back</button><div class="workflow-intro"><strong>My Issue Reports</strong><span>See what you reported, whether it has been fixed, and what needs another test.</span></div><div id="myIssueList"><p class="status">Loading your reports...</p></div>';
+  body.innerHTML='<button class="backlink" id="issuesBack">← Back</button><div class="workflow-intro"><strong>My Issue Reports</strong><span>See what you reported, whether it has been fixed, and what needs another test.</span></div>'+issueNotificationControls()+'<div id="myIssueList"><p class="status">Loading your reports...</p></div>';
   document.getElementById('issuesBack').onclick=()=>{state.view=IS_HANDHELD?'capture':'organize';renderApp();};
   const r=await api('/api/issues/mine'),box=document.getElementById('myIssueList');
   if(!r.ok){box.innerHTML='<p class="status">Your issue reports could not be loaded.</p>';return;}

@@ -1,6 +1,12 @@
 (function () {
   const STORAGE_KEY = 'photo-notes-language';
   const ES = {
+    'Enable issue notifications':'Activar notificaciones de problemas',
+    'Disable on this device':'Desactivar en este dispositivo',
+    'On iPhone, add Photo Notes to your Home Screen and open it there first.':'En iPhone, agregue Photo Notes a la pantalla de inicio y ábralo desde allí primero.',
+    'Notifications disabled on this device.':'Notificaciones desactivadas en este dispositivo.',
+    'Issue notifications enabled on this device.':'Notificaciones de problemas activadas en este dispositivo.',
+
     "Job Evidence Word": "Evidencia del trabajo en Word",
     "Job Evidence PDF": "Evidencia del trabajo en PDF",
     "Choose a job to check its photo evidence.": "Elija un trabajo para revisar su evidencia fotográfica.",
