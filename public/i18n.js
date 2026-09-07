@@ -1,6 +1,14 @@
 (function () {
   const STORAGE_KEY = 'photo-notes-language';
   const ES = {
+    "Photo Reason": "Motivo de la foto",
+    "Proposal Photo": "Foto para propuesta",
+    "Photograph the proposed paving area, existing conditions, access, and measurements for a proposal. Add your notes, then save.": "Fotografíe el área de pavimentación propuesta, las condiciones existentes, el acceso y las medidas para una propuesta. Agregue sus notas y guarde.",
+    "Take a clear photo. Reading starts automatically; review the results before saving.": "Tome una foto clara. La lectura comienza automáticamente; revise los resultados antes de guardar.",
+    "All photo reason descriptions": "Descripciones de todos los motivos de foto",
+    "Open Camera Tools guide": "Abrir guía de herramientas de cámara",
+    "Changing the photo reason will discard this unsaved photo and notes. Continue?": "Cambiar el motivo de la foto descartará esta foto y las notas sin guardar. ¿Continuar?",
+
     "Fences & Walls": "Cercas y muros",
     "Fences & walls": "Cercas y muros",
     "No Topic": "Sin tema",

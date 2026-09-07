@@ -821,7 +821,9 @@ app.post('/api/captures', requireAuth, upload.single('photo'), async (req, res) 
       }
     }
 
-    const concreteProduct = await currentProduct(req.user.id) === 'concrete';
+    const captureProduct=await currentProduct(req.user.id);
+    const pavingPhotoReason=['paving','asphalt'].includes(captureProduct)&&b.paving_photo_reason==='proposal'?'proposal':null;
+    const concreteProduct = captureProduct === 'concrete';
     const concreteElements=['patio','slab','sidewalk','curb','driveway','foundation','wall','column','beam','steps','deck','other'];
     const concreteStages=['existing_condition','pre_pour','formwork','reinforcement','placement','finishing','curing','completed','defect','repair','verification'];
     const concreteConditions=['not_assessed','acceptable','monitor','repair_needed','unsafe'];
@@ -835,12 +837,12 @@ app.post('/api/captures', requireAuth, upload.single('photo'), async (req, res) 
     const concreteLocation=concreteProduct?ticketText(b.concrete_location,300):null;
     const q = `INSERT INTO captures (user_id, captured_by, photo_path, photo_width, photo_height, note, latitude, longitude, address, area_tags, kind, status, job_id, perceptual_hash,
                  dim_length_in, dim_length_unit, dim_width_in, dim_width_unit, dim_depth_in, dim_shape, dim_area_sqft,
-                 dim_source, dim_confidence, dim_ai, dim_confirmed, concrete_element, concrete_stage, concrete_condition, concrete_severity, concrete_mix, concrete_location, concrete_phase, concrete_purpose)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33) RETURNING *`;
+                 dim_source, dim_confidence, dim_ai, dim_confirmed, concrete_element, concrete_stage, concrete_condition, concrete_severity, concrete_mix, concrete_location, concrete_phase, concrete_purpose, paving_photo_reason)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34) RETURNING *`;
     const status = kind === 'task' ? 'open' : null;
     const vals = [req.user.id, req.user.name, photoPath, pw, ph, b.note || null, lat, lng, address, areas, kind, status, jobId, perceptualHash,
       dLenIn, dLenUnit, dWidIn, dWidUnit, dDepthIn, dShape, dArea,
-      dSource, dConf, dAi ? JSON.stringify(dAi) : null, dConfirmed, concreteElement, concreteStage, concreteCondition, concreteSeverity, concreteMix, concreteLocation, concreteContext.concrete_phase, concreteContext.concrete_purpose];
+      dSource, dConf, dAi ? JSON.stringify(dAi) : null, dConfirmed, concreteElement, concreteStage, concreteCondition, concreteSeverity, concreteMix, concreteLocation, concreteContext.concrete_phase, concreteContext.concrete_purpose, pavingPhotoReason];
     const { rows } = await pool.query(q, vals);
     const saved = rows[0];
     if (req.file) {

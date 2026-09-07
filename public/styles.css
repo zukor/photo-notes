@@ -599,3 +599,17 @@ input.dimfield.suggested {
 .concrete-capture-details input::placeholder { color:#000; opacity:1; }
 #concreteConditionFields[hidden], #concreteMixField[hidden] { display:none; }
 @media(max-width:520px){.concrete-context-grid{grid-template-columns:minmax(0,1fr);gap:4px}.concrete-capture-intro strong{font-size:18px}}
+
+/* Paving Capture keeps each photo purpose and its tools together. */
+.paving-photo-context { color:#000; text-align:left; margin-bottom:18px; }
+.paving-photo-context > label { margin-top:0; }
+.paving-photo-context select { width:100%; min-width:0; }
+.paving-photo-context p { color:#000; font-size:14px; line-height:1.5; margin:8px 0; }
+.paving-reason-guide { margin-top:12px; border:1px solid #2455d9; border-radius:10px; padding:10px 12px; }
+.paving-reason-guide summary { cursor:pointer; color:#000; font-size:14px; font-weight:bold; }
+.paving-reason-guide article { margin-top:14px; color:#000; }
+.paving-reason-guide article p { margin:4px 0; }
+.paving-photo-reason-label { color:#000; font-weight:bold; margin:8px 0; }
+#pavingInlineTool [hidden] { display:none !important; }
+#pavingInlineTool > .workflow-intro { margin-top:0; }
+#readerPreview, #ticketPreview { display:block; width:100%; max-height:360px; object-fit:contain; }
