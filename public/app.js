@@ -3392,6 +3392,15 @@ async function renderGroupDetail(id) {
     <div id="gitems" style="margin-top:12px"></div>
     <button class="btn secondary slim" id="greverse" style="margin-top:10px">Reverse Photo Order</button>
 
+    <section aria-label="Download Document" style="margin-top:24px">
+      <div class="formhead">5. Download Document</div>
+      <p class="status">Save your title, captions, branding, and layout changes before downloading.</p>
+      <div class="row compact">
+        <a class="btn secondary" href="/api/export/pdf?group=${encodeURIComponent(currentGroup.id)}&amp;res=standard&amp;fmt=jpeg" download>Download PDF</a>
+        <a class="btn secondary" href="/api/export/docx?group=${encodeURIComponent(currentGroup.id)}&amp;res=standard&amp;fmt=jpeg" download>Download Word</a>
+      </div>
+    </section>
+
     ${featureOn('extra_work') ? `<label style="margin-top:16px">Extra Work Records</label>
     <div class="status">Document added scope, unexpected conditions, or customer-requested work.</div>
     <button class="btn slim" id="ewrNew" style="margin-top:6px">+ Extra Work Record</button>

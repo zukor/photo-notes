@@ -19,6 +19,7 @@
     'Photo Note': 'Nota fotográfica', 'Take Photo': 'Tomar foto', 'Choose from library or files': 'Elegir de la fototeca o archivos',
     'Other Camera Tools': 'Otras herramientas de cámara', 'Note': 'Nota', 'Record Note': 'Grabar nota',
     "Type what you're looking at, or tap Record Note": 'Escriba lo que está viendo o toque Grabar nota',
+    '5. Download Document': '5. Descargar documento', 'Download Document': 'Descargar documento', 'Download PDF': 'Descargar PDF', 'Download Word': 'Descargar Word', 'Save your title, captions, branding, and layout changes before downloading.': 'Guarda los cambios del título, los pies de foto, la marca y el diseño antes de descargar.',
     'Select Topic': 'Seleccionar tema', 'Add a topic...': 'Agregar un tema...', 'Add': 'Agregar', 'Save': 'Guardar', 'Send & Save': 'Enviar y guardar',
     'Topic added': 'Tema agregado', 'Could not add topic': 'No se pudo agregar el tema', 'Could not remove topic': 'No se pudo eliminar el tema',
     'No topics yet. Add one below.': 'Todavía no hay temas. Agregue uno abajo.', 'No topics yet': 'Todavía no hay temas',
