@@ -1,5 +1,6 @@
 import {queue,seal,git,out} from './core.mjs';
-const configured=!!process.env.OPENAI_API_KEY,run=process.env.GITHUB_RUN_ID;
+const run=process.env.GITHUB_RUN_ID;let configured=false;
+if(process.env.OPENAI_API_KEY){try{const r=await fetch('https://api.openai.com/v1/models',{headers:{authorization:'Bearer '+process.env.OPENAI_API_KEY},signal:AbortSignal.timeout(15000),redirect:'error'});configured=r.ok;}catch{}}
 await queue('/api/automation/cloud-heartbeat',{configured,run_url:`https://github.com/zukor/photo-notes-repair-worker/actions/runs/${run}`});
 if(!configured){console.log('Cloud AI key missing; no issue claimed.');out('available','false');process.exit(0);}
 const q=await queue('/api/automation/testing-queue');const requested=process.env.ISSUE_ID?Number(process.env.ISSUE_ID):null;
