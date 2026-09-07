@@ -2,7 +2,7 @@ const crypto=require('crypto'),path=require('path');
 const digest=value=>crypto.createHash('sha256').update(String(value||'')).digest('hex');
 const sha=value=>typeof value==='string'&&/^[a-f0-9]{40}$/.test(value);
 function validateRepairUpdate(body){
-  if(!['reviewing','fixing','blocked','ready_to_test'].includes(body.management_status))throw new Error('Worker may review, fix, block, or request retesting; only a person confirms resolution');
+  if(!['reviewing','fixing','testing','blocked','ready_to_test'].includes(body.management_status))throw new Error('Worker may review, fix, block, or request retesting; only a person confirms resolution');
   const fields={};for(const [k,max] of Object.entries({fix_summary:5000,retest_instructions:5000,verification:10000,blocked_reason:3000,admin_notes:10000}))if(body[k]!==undefined){if(typeof body[k]!=='string'||body[k].length>max)throw new Error('Invalid '+k);fields[k]=body[k].trim();}
   if(body.management_status==='blocked'&&!fields.blocked_reason)throw new Error('A blocked issue needs a concrete explanation or question');
   if(body.management_status==='ready_to_test'){
@@ -28,7 +28,7 @@ function registerIssueRepair(app,{pool,requireAuth,requireAdmin,requireTestingQu
     const id=Number(req.params.id);if(!Number.isInteger(id)||id<1)return res.status(400).json({error:'Invalid issue'});
     const token=crypto.randomBytes(32).toString('hex');let client;
     try{client=await pool.connect();await client.query('BEGIN');
-      const {rows}=await client.query(`UPDATE issue_reports SET repair_claim_hash=$1,repair_lease_until=now()+interval '45 minutes',management_status=CASE WHEN management_status='new' THEN 'reviewing' ELSE management_status END,updated_at=now() WHERE id=$2 AND management_status IN ('new','reviewing','fixing') AND (repair_lease_until IS NULL OR repair_lease_until<now() OR repair_claim_hash=$3) RETURNING id,repair_lease_until`,[digest(token),id,req.body?.claim_token?digest(req.body.claim_token):'']);
+      const {rows}=await client.query(`UPDATE issue_reports SET repair_claim_hash=$1,repair_lease_until=now()+interval '45 minutes',management_status=CASE WHEN management_status='new' THEN 'reviewing' ELSE management_status END,updated_at=now() WHERE id=$2 AND management_status IN ('new','reviewing','fixing','testing') AND (repair_lease_until IS NULL OR repair_lease_until<now() OR repair_claim_hash=$3) RETURNING id,repair_lease_until`,[digest(token),id,req.body?.claim_token?digest(req.body.claim_token):'']);
       if(!rows.length){await client.query('ROLLBACK');return res.status(409).json({error:'Issue is already claimed or is not actionable'});}
       await client.query("INSERT INTO issue_repair_events(issue_id,event,detail) VALUES($1,'claimed','Worker claimed or renewed the repair lease')",[id]);await client.query('COMMIT');res.json({...rows[0],claim_token:token});
     }catch(e){if(client)await client.query('ROLLBACK');res.status(500).json({error:'Claim failed'});}finally{client?.release();}
@@ -42,7 +42,7 @@ function registerIssueRepair(app,{pool,requireAuth,requireAdmin,requireTestingQu
       if(req.body.management_status==='ready_to_test')sets.push("tester_notification_status='in_app'",'tester_notified_at=now()','tester_notification_error=NULL','blocked_reason=NULL');
       if(['blocked','ready_to_test'].includes(req.body.management_status))sets.push('repair_claim_hash=NULL','repair_lease_until=NULL');
       vals.push(id,digest(req.body.claim_token));
-      const {rows}=await client.query(`UPDATE issue_reports SET ${sets.join(',')} WHERE id=$${vals.length-1} AND repair_claim_hash=$${vals.length} AND repair_lease_until>now() AND management_status IN ('reviewing','fixing') RETURNING id,management_status,release_reference`,vals);
+      const {rows}=await client.query(`UPDATE issue_reports SET ${sets.join(',')} WHERE id=$${vals.length-1} AND repair_claim_hash=$${vals.length} AND repair_lease_until>now() AND management_status IN ('reviewing','fixing','testing') RETURNING id,management_status,release_reference`,vals);
       if(!rows.length){await client.query('ROLLBACK');return res.status(409).json({error:'Claim expired or issue changed; reload the queue'});}
       const detail=JSON.stringify({status:req.body.management_status,...fields});
       await client.query("INSERT INTO issue_repair_events(issue_id,event,detail) VALUES($1,$2,$3)",[id,req.body.management_status,detail]);await client.query('COMMIT');res.json({ok:true,...rows[0]});

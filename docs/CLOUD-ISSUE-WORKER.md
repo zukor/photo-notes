@@ -22,3 +22,11 @@ Railway deploys the resulting commit. Verification requires the running deployme
 The check workflow runs unit tests and a synthetic failing/passing repair inside a disposable checkout without changing real reports or production. Passing that check proves deterministic gates, not AI quality or an actual repair release. Keep the desktop repair automation as a fallback until cloud AI execution and the first real repair have been verified.
 
 Admin displays the latest server notification cycle, cloud queue check, and AI-credential readiness. A missing or invalid AI key prevents cloud repairs; do not call the AI pipeline operational until a real authenticated run succeeds. Deployment errors are not success notifications.
+
+## Dispatch reliability and notification delivery
+
+Railway's running app hosts the durable worker; there is no desktop dependency for that cycle. Set `ISSUE_CLOUD_RUNNER_ENABLED=true` and save a fine-grained `ISSUE_GITHUB_TOKEN` scoped only to the private worker repository with Actions read/write. The worker checks active workflow runs every 30 seconds before dispatching, waits while a run is active, and retries missed starts after 15 minutes. Admin displays missing credentials, dispatch errors, stale runs and failed notification deliveries. This is queued processing, not a guaranteed repair deadline.
+
+Owner worker-failure incidents persist in PostgreSQL and notify subscribed admin devices once per incident, with retries. Completion notifications wait 60 seconds and group updates by device/outcome; routine progress does not generate push. My Issue Reports includes deployment time, history and explicit testing/confirmation states. Browser/OS permission is still required. Email is not activated by this release.
+
+The private test workflow installs Playwright 1.63.0 and uses its matching Chromium image. Tests run without network, AI keys, queue tokens or publishing credentials. Visual fixes must test rendered bounds with synthetic content and the actual source; a CSS-string assertion alone is insufficient. `check_ref` validates a branch without claiming that branch is deployed.
