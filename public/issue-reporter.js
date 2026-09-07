@@ -1,5 +1,6 @@
 // ================= Shared issue reporter =================
 let issueScreenshotBlob = null, issueVoiceBlob = null, issuePageName = '', issueRecognizer = null, issueMediaRecorder = null, issueMediaStream = null;
+let issueScreenshotURL = null;
 let issueGeneration = 0, issueMicPending = false;
 let issueDictationActive = false, issueDictationBase = '', issueDictationRestartTimer = null, issueDictationWatchdog = null;
 const issuePageLabels = { capture:'Capture', organize:'Organize', edit:'Edit', create:'Create', send:'Send', map:'Job Site Map' };
@@ -15,6 +16,8 @@ async function openIssueReporter() {
   try {
     if(window.html2canvas){const canvas=await window.html2canvas(document.querySelector('.wrap'),{useCORS:true,allowTaint:false,backgroundColor:'#ffffff',scale:Math.min(window.devicePixelRatio||1,1.5),logging:false});const shot=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',0.78));if(generation===issueGeneration)issueScreenshotBlob=shot;}
   } catch(e){if(generation===issueGeneration)issueScreenshotBlob=null;}
+  const preview=document.getElementById('issueScreenshot');
+  if(preview&&generation===issueGeneration){preview.hidden=!issueScreenshotBlob;if(issueScreenshotBlob){issueScreenshotURL=URL.createObjectURL(issueScreenshotBlob);preview.src=issueScreenshotURL;}}
   const modal=document.getElementById('issueModal'); if(!modal||generation!==issueGeneration)return; modal.hidden=false;
   const record=document.getElementById('issueRecord');record.disabled=false;record.classList.remove('on');record.textContent=isIOS()?'Record Voice Description':'Speak Description';
   if(isIOS())status.textContent='Attach a voice recording, or use your keyboard microphone to enter text. Audio is not automatically transcribed.';
@@ -26,7 +29,7 @@ async function openIssueReporter() {
   if(fab){fab.disabled=false;fab.textContent=issueFabLabel();}
 }
 function stopIssueMediaStream(){if(issueMediaStream){issueMediaStream.getTracks().forEach(track=>track.stop());issueMediaStream=null;}issueMediaRecorder=null;}
-function closeIssueReporter(){issueGeneration++;issueMicPending=false;issueDictationActive=false;if(issueDictationRestartTimer)clearTimeout(issueDictationRestartTimer);if(issueDictationWatchdog)clearTimeout(issueDictationWatchdog);issueDictationRestartTimer=null;issueDictationWatchdog=null;if(issueRecognizer){try{issueRecognizer.stop();}catch(e){}}if(issueMediaRecorder&&issueMediaRecorder.state==='recording'){try{issueMediaRecorder.stop();}catch(e){}}stopIssueMediaStream();const m=document.getElementById('issueModal');if(m)m.hidden=true;issueScreenshotBlob=null;issueVoiceBlob=null;issueRecognizer=null;}
+function closeIssueReporter(){if(issueScreenshotURL){URL.revokeObjectURL(issueScreenshotURL);issueScreenshotURL=null;}const preview=document.getElementById("issueScreenshot");if(preview){preview.removeAttribute("src");preview.hidden=true;}issueGeneration++;issueMicPending=false;issueDictationActive=false;if(issueDictationRestartTimer)clearTimeout(issueDictationRestartTimer);if(issueDictationWatchdog)clearTimeout(issueDictationWatchdog);issueDictationRestartTimer=null;issueDictationWatchdog=null;if(issueRecognizer){try{issueRecognizer.stop();}catch(e){}}if(issueMediaRecorder&&issueMediaRecorder.state==='recording'){try{issueMediaRecorder.stop();}catch(e){}}stopIssueMediaStream();const m=document.getElementById('issueModal');if(m)m.hidden=true;issueScreenshotBlob=null;issueVoiceBlob=null;issueRecognizer=null;}
 function cleanSpeechTranscript(value){
   let words=String(value||'').trim().split(/\s+/).filter(Boolean);
   // Android speech services occasionally return the same short fragment three
@@ -140,9 +143,8 @@ async function submitIssueReport(){
 function issueReporterMarkup(){return `<a id="issueUpdates" class="issue-updates" href="/?issues=1" hidden data-html2canvas-ignore="true"></a>    <div class="issue-modal" id="issueModal" hidden data-html2canvas-ignore="true">
       <div class="issue-dialog" role="dialog" aria-modal="true" aria-labelledby="issueTitle">
         <button class="issue-close" id="issueClose" type="button" aria-label="Close">×</button>
-        <h2 id="issueTitle">Report Issue</h2>${issueNotificationControls()}
+        <h2 id="issueTitle">Report Issue</h2><div class="issue-report-layout"><section class="issue-evidence"><h3>Page screenshot</h3><div class="issue-screenshot-scroll"><img id="issueScreenshot" alt="Screenshot of the page being reported" hidden></div><div class="issue-shot-status" id="issueShotStatus">Capturing this page...</div></section><section class="issue-report-fields">${issueNotificationControls()}
         <p class="status">Answer these short questions. Photo Notes attaches the page and device details automatically.</p>
-        <div class="issue-shot-status" id="issueShotStatus">Capturing this page...</div>
         <label for="issueAction">What were you trying to do?</label>
         <input id="issueAction" type="text" placeholder="For example: record a note after taking a photo">
         <label for="issueDescription">What went wrong?</label>
@@ -153,7 +155,7 @@ function issueReporterMarkup(){return `<a id="issueUpdates" class="issue-updates
         <label for="issueFrequency">How often does it happen?</label>
         <select id="issueFrequency"><option value="">Choose one</option><option>Every time</option><option>Sometimes</option><option>Only happened once</option><option>Not sure</option></select>
         <button class="btn" id="issueSend" type="button">Send Issue Report</button>
-        <div class="status" id="issueStatus" role="status" aria-live="polite"></div>
+        <div class="status" id="issueStatus" role="status" aria-live="polite"></div></section></div>
       </div>
     </div>`;}
 

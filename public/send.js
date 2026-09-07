@@ -1,9 +1,6 @@
 // Photo Notes add-on (loaded after app.js):
-//  1. Adds "Send" and "Send & Save" buttons under the Save button on the Capture
-//     screen. Send opens the device's native share sheet (Messages, Mail,
-//     WhatsApp, AirDrop, etc.) with the photo + caption; Send & Save also commits
-//     the record to the Library. Falls back to email + photo download where the
-//     Web Share API is unavailable (some desktop browsers).
+//  1. Send/Share durably saves the capture, then offers a fresh Share tap.
+//     Desktop browsers without Web Share use email and a photo download.
 //  2. Moves the Zukor AI corner logo to the far left and shrinks it.
 // Shipped as a separate file so it can deploy without rebuilding app.js.
 (function () {
@@ -72,30 +69,33 @@
     toast(file ? 'Opened email; photo downloaded to attach' : 'Opened email');
   }
 
-  function onSend() {
-    if (!lastFile && !noteVal()) { toast('Take a photo or add a note first'); return; }
-    share(lastFile, caption());
+  var sending = false;
+  function showSavedShare(file, text) {
+    var modal = document.createElement('div');modal.className='export-share-modal';
+    modal.innerHTML='<section class="export-share-dialog" role="dialog" aria-modal="true" aria-labelledby="captureShareTitle"><h2 id="captureShareTitle">'+tr('Photo Note saved')+'</h2><p>'+tr('Tap Share to choose where to send it.')+'</p><button class="btn" data-share>'+tr('Share')+'</button><button class="btn secondary" data-close>'+tr('Close')+'</button></section>';
+    var close=function(){modal.remove();q('send')?.focus();};
+    modal.querySelector('[data-close]').onclick=close;
+    modal.querySelector('[data-share]').onclick=async function(){this.disabled=true;try{await share(file,text);}finally{this.disabled=false;}};
+    modal.onkeydown=function(e){if(e.key==='Escape')close();if(e.key==='Tab'){var buttons=modal.querySelectorAll('button');if(e.shiftKey&&document.activeElement===buttons[0]){e.preventDefault();buttons[1].focus();}else if(!e.shiftKey&&document.activeElement===buttons[1]){e.preventDefault();buttons[0].focus();}}};
+    document.body.appendChild(modal);modal.querySelector('[data-share]').focus();
   }
-  function onSendSave() {
-    if (!lastFile && !noteVal()) { toast('Take a photo or add a note first'); return; }
-    var f = lastFile, t = caption();
-    var s = q('save'); if (s) s.click(); // app's Save: commit + background upload
-    share(f, t);
+  async function onSend() {
+    if(sending)return;
+    var f=typeof state!=='undefined'?state.photoFile:lastFile,t=caption();
+    if (!f && !noteVal()) { toast('Take a photo or add a note first'); return; }
+    sending=true;var button=q('send'),save=q('save');if(button)button.disabled=true;if(save)save.disabled=true;
+    try {
+      var saved=await saveCapture({requireDurable:true});
+      if(!saved)return;
+      lastFile=null;showSavedShare(f,t);
+    } catch(e){toast('Could not save this photo. Your draft is still here.');}
+    finally{sending=false;if(q('send'))q('send').disabled=false;if(q('save'))q('save').disabled=false;}
   }
-
   function injectButtons() {
     var save = q('save');
-    if (!save || q('send')) return; // capture screen only, once
-    var b1 = document.createElement('button');
-    b1.id = 'send'; b1.className = 'btn secondary slim'; b1.type = 'button'; b1.textContent = 'Send';
-    b1.addEventListener('click', onSend);
-    var b2 = document.createElement('button');
-    b2.id = 'sendsave'; b2.className = 'btn secondary slim'; b2.type = 'button'; b2.textContent = 'Send & Save';
-    b2.addEventListener('click', onSendSave);
-    var row = document.createElement('div');
-    row.className = 'send-row';
-    row.appendChild(b1); row.appendChild(b2);
-    save.insertAdjacentElement('afterend', row);
+    if (!save || q('send')) return;
+    var button=document.createElement('button');button.id='send';button.className='btn secondary';button.type='button';button.textContent=tr('Send/Share');
+    button.addEventListener('click',onSend);save.insertAdjacentElement('afterend',button);
   }
 
   function fixLogo() {
@@ -151,7 +151,7 @@
     var sel = onPill ? (onPill.getAttribute('data-area') || '') : '';
     label.style.cursor = 'pointer';
     var topicHeading = label.getAttribute('data-topic-heading') || 'Select Topic';
-    label.style.textTransform = topicHeading === 'Optional' ? 'uppercase' : 'none';
+    label.style.textTransform = 'none';
     label.style.margin = '12px 0 0';
     label.style.userSelect = 'none';
     // Render in the current language so the translation observer cannot fight

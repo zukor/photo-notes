@@ -23,7 +23,7 @@ function harness({ios=true,pending=false}={}){
     Blob,FormData,MediaRecorder:Recorder,
     navigator:{userAgent:'test',mediaDevices:{getUserMedia:()=>pending?new Promise(r=>resolvePermission=r):Promise.resolve(stream)}},
     window:{MediaRecorder:Recorder,SpeechRecognition:Speech,innerWidth:390,innerHeight:844},
-    document:{getElementById:id=>elements[id]||=( {value:'',hidden:false,disabled:false,textContent:'',focus(){},classList:{add(){},remove(){}}}),querySelector:()=>({})},
+    document:{getElementById:id=>elements[id]||=( {value:'',hidden:false,disabled:false,textContent:'',removeAttribute(k){delete this[k];},focus(){},classList:{add(){},remove(){}}}),querySelector:()=>({})},
     state:{view:'capture'},isIOS:()=>ios,uiSpeechLanguage:()=> 'en-US',issueFabLabel:()=> 'Report Issue',
     toast(){},location:{href:'https://example.test/'},
     setTimeout:fn=>{timers.push(fn);return timers.length;},clearTimeout(){},
