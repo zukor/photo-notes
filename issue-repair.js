@@ -38,6 +38,7 @@ function registerIssueRepair(app,{pool,requireAuth,requireAdmin,requireTestingQu
     const id=Number(req.params.id);if(!Number.isInteger(id)||id<1||!req.body.claim_token)return res.status(400).json({error:'Issue and claim token required'});
     let client;try{client=await pool.connect();await client.query('BEGIN');
       const vals=[req.body.management_status],sets=['management_status=$1','updated_at=now()'];
+      if(['reviewing','fixing','testing'].includes(req.body.management_status))sets.push("repair_lease_until=now()+interval '45 minutes'");
       for(const [key,value] of Object.entries(fields)){vals.push(value);sets.push(`${key}=$${vals.length}`);}
       if(req.body.management_status==='ready_to_test')sets.push("tester_notification_status='in_app'",'tester_notified_at=now()','tester_notification_error=NULL','blocked_reason=NULL');
       if(['blocked','ready_to_test'].includes(req.body.management_status))sets.push('repair_claim_hash=NULL','repair_lease_until=NULL');

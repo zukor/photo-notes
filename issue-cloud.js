@@ -53,7 +53,12 @@ async function tickCloud(pool,keys,{send=webpush.sendNotification,fetcher=fetch,
       FROM issue_push_delivery d JOIN issue_cloud_events e ON e.id=d.event_id JOIN issue_reports i ON i.id=e.issue_id
       JOIN issue_push_subscriptions s ON s.id=d.subscription_id JOIN users u ON u.id=s.user_id
       WHERE d.sent_at IS NULL AND d.attempts<5 AND d.next_try<=now() AND e.status=i.management_status
-      AND e.status IN ('ready_to_test','blocked') AND (e.status='blocked' OR e.created_at<now()-interval '60 seconds')
+      AND e.status IN ('ready_to_test','blocked') AND (e.status='blocked' OR NOT EXISTS (
+        SELECT 1 FROM issue_push_delivery pending JOIN issue_cloud_events recent ON recent.id=pending.event_id
+        JOIN issue_reports current_issue ON current_issue.id=recent.issue_id
+        WHERE pending.subscription_id=d.subscription_id AND pending.sent_at IS NULL
+        AND recent.status='ready_to_test' AND current_issue.management_status=recent.status
+        AND recent.created_at>=now()-interval '60 seconds'))
       ORDER BY d.event_id LIMIT 100`)).rows;
     // One notification per device and outcome per cycle, with a short completion
     // buffer so related repairs arrive as one message rather than five alerts.
