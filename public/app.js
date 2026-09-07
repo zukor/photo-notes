@@ -590,20 +590,20 @@ function concreteCapturePayload(){
 }
 
 const PAVING_PHOTO_REASONS=[
-  {id:'proposal',label:'Proposal Photo',description:'Photograph the proposed paving area, existing conditions, access, and measurements for a proposal. Add your notes, then save.'},
+  {id:'proposal',label:'Proposal Photo',description:'Document the proposed paving area, existing conditions, access, and measurements for a proposal.'},
   {id:'ticket',label:'Paving Delivery Ticket Scanner',feature:'ticket_scanner',description:'Read asphalt and paving delivery-ticket details and calculate saved daily tonnage.'},
   {id:'plan_sketch',label:'Plan or Sketch Scanner',feature:'camera_readers',description:'Read visible project, sheet, revision, scale, dimension, and field-note information without estimating missing details.'},
   {id:'business_card',label:'Business Card Scanner',feature:'camera_readers',description:'Read contact and company details from a photographed business card.'},
   {id:'equipment_plate',label:'Equipment Plate Scanner',feature:'camera_readers',description:'Read manufacturer, model, serial number, year, and equipment specifications.'},
   {id:'material_label',label:'Material Label Scanner',feature:'camera_readers',description:'Read product, manufacturer, lot, quantity, dates, instructions, and visible warnings.'},
   {id:'gauge',label:'Gauge & Instrument Reader',feature:'camera_readers',description:'Read gauges, scales, hour meters, thermometers, fuel displays, and other instruments.'},
-  {id:'alignment',label:'Before & After Alignment',feature:'before_after',description:'Use an earlier photo as a framing reference, compare the alignment, and save the pair.'}
+  {id:'alignment',label:'Before & After Alignment',feature:'before_after',description:'Compare before and after photos using the same framing.'}
 ];
 function pavingPhotoReasons(){return PAVING_PHOTO_REASONS.filter(r=>!r.feature||featureOn(r.feature));}
 function pavingPhotoReason(){return pavingPhotoReasons().find(r=>r.id===state._pavingReason)||PAVING_PHOTO_REASONS[0];}
 function pavingPhotoReasonMarkup(){
   const selected=pavingPhotoReason(),choices=pavingPhotoReasons();
-  return `<section class="paving-photo-context" aria-label="Paving photo reason"><label for="pavingPhotoReason">Photo Reason</label><select id="pavingPhotoReason" aria-describedby="pavingReasonDescription">${choices.map(r=>`<option value="${r.id}" ${r.id===selected.id?'selected':''}>${esc(r.label)}</option>`).join('')}</select><p id="pavingReasonDescription">${esc(selected.description)}</p>${!['proposal','alignment'].includes(selected.id)?'<p class="paving-auto-read">Take a clear photo. Reading starts automatically; review the results before saving.</p>':''}<details class="paving-reason-guide"><summary>All photo reason descriptions</summary>${choices.map(r=>`<article><strong>${esc(r.label)}</strong><p>${esc(r.description)}</p></article>`).join('')}<button type="button" class="backlink" id="pavingToolsGuide">Open Camera Tools guide</button></details></section>`;
+  return `<section class="paving-photo-context" aria-label="Paving photo reason"><label for="pavingPhotoReason">Photo Reason</label><select id="pavingPhotoReason" aria-describedby="pavingReasonDescription">${choices.map(r=>`<option value="${r.id}" ${r.id===selected.id?'selected':''}>${esc(r.label)}</option>`).join('')}</select><p id="pavingReasonDescription">${esc(selected.description)}</p><details class="paving-reason-guide"><summary>All photo reason descriptions</summary>${choices.map(r=>`<article><strong>${esc(r.label)}</strong><p>${esc(r.description)}</p></article>`).join('')}<button type="button" class="backlink" id="pavingToolsGuide">Open Camera Tools guide</button></details></section>`;
 }
 function pavingHasUnsavedPhoto(){
   const id=pavingPhotoReason().id;
