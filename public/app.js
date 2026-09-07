@@ -59,11 +59,14 @@ function uiSpeechLanguage() { return window.photoNotesI18n && window.photoNotesI
 // keeping the caret in place.
 function titleCaseInput(el) {
   if (!el) return;
-  el.addEventListener('input', () => {
+  const apply = (event) => {
+    if (event && event.isComposing) return;
     const pos = el.selectionStart;
-    const v = el.value.replace(/\b\w/g, ch => ch.toUpperCase());
+    const v = el.value.replace(/(^|[^\p{L}\p{M}\p{N}])(\p{L})/gu, (_, boundary, letter) => boundary + letter.toUpperCase());
     if (v !== el.value) { el.value = v; try { el.setSelectionRange(pos, pos); } catch (e) {} }
-  });
+  };
+  el.addEventListener('input', apply);
+  el.addEventListener('compositionend', apply);
 }
 
 async function loadAreas() {
