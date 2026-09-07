@@ -1,6 +1,11 @@
 (function () {
   const STORAGE_KEY = 'photo-notes-language';
   const ES = {
+    'Document ready to share': 'Documento listo para compartir',
+    'Tap Share to choose an app for this document.': 'Pulse Compartir para elegir una aplicación para este documento.',
+    'Sharing was canceled. Tap Share to try again.': 'Se canceló el envío. Pulse Compartir para volver a intentarlo.',
+    'This browser could not share the document. Use Download, then share it from your Downloads folder.': 'Este navegador no pudo compartir el documento. Use Descargar y luego compártalo desde su carpeta Descargas.',
+
     "Photo Reason": "Motivo de la foto",
     "Proposal Photo": "Foto para propuesta",
     "Photograph the proposed paving area, existing conditions, access, and measurements for a proposal. Add your notes, then save.": "Fotografíe el área de pavimentación propuesta, las condiciones existentes, el acceso y las medidas para una propuesta. Agregue sus notas y guarde.",
