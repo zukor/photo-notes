@@ -1028,6 +1028,7 @@ app.get('/review/:token',async(req,res)=>{try{const p=(await pool.query(`SELECT 
 app.post('/review/:token',express.urlencoded({extended:false}),async(req,res)=>{try{const decision=req.body.decision==='approved'?'approved':'changes_requested';const row=(await pool.query(`UPDATE approval_packages SET status=$1,customer_name=$2,customer_comment=$3,responded_at=now() WHERE token=$4 AND status='pending' AND expires_at>now() RETURNING token`,[decision,ticketText(req.body.customer_name,200),ticketText(req.body.comment,1000),req.params.token])).rows[0];if(!row)return res.status(400).send('This review can no longer be changed.');res.redirect(`/review/${row.token}`);}catch(e){res.status(500).send('Response could not be saved.');}});
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
+app.get('/api/release',async(req,res)=>{try{await pool.query('SELECT 1');res.set('Cache-Control','no-store').json({ok:true,commit:process.env.RAILWAY_GIT_COMMIT_SHA||null,deployment:process.env.RAILWAY_DEPLOYMENT_ID||null});}catch{res.status(503).json({ok:false});}});
 
 // ---- client config: which map imagery to use ----
 // Mapbox public tokens (pk....) are safe to expose to the browser, so we pass
@@ -1387,7 +1388,7 @@ app.post('/api/issues', requireAuth, upload.fields([{name:'screenshot',maxCount:
     const row = (await pool.query(
       `INSERT INTO issue_reports (user_id, description, page_name, page_url, screenshot_path, voice_path, viewport, user_agent,reported_edition,app_version)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
-      [req.user.id, description, ticketText(req.body.page_name,100), ticketText(req.body.page_url,500), screenshotPath, voicePath, ticketText(req.body.viewport,100), ticketText(req.body.user_agent,1000),currentEdition(req.user),'164'])).rows[0];
+      [req.user.id, description, ticketText(req.body.page_name,100), ticketText(req.body.page_url,500), screenshotPath, voicePath, ticketText(req.body.viewport,100), ticketText(req.body.user_agent,1000),currentEdition(req.user),'165'])).rows[0];
     const user = (await pool.query(`SELECT name,email FROM users WHERE id=$1`, [req.user.id])).rows[0] || req.user;
     let delivery={status:'pending',error:'Notification pending'};
     try{delivery=await emailIssueReport(row,user);await pool.query('UPDATE issue_reports SET email_status=$1,email_error=$2 WHERE id=$3',[delivery.status,delivery.error,row.id]);}catch(e){}
