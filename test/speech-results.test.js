@@ -24,3 +24,11 @@ test('single-result repetition and short distinct emphasis are preserved',()=>{
  assert.equal(combine(['yes','yes']),'yes yes');
  assert.equal(combine(['The door is blue','The window is blue']),'The door is blue The window is blue');
 });
+
+test('complete long sentences repeated in separate result slots appear once',()=>{
+ const sentence='This is a synthetic recording to verify that a long spoken sentence is not appended again when the recognition service repeats its complete result';
+ assert.ok(sentence.split(' ').length>16);
+ assert.equal(combine([sentence,sentence]),sentence);
+ assert.equal(context.mergeSpeechTranscript(sentence,sentence),sentence);
+ assert.equal(combine([sentence,sentence+' with a new ending']),sentence+' with a new ending');
+});
