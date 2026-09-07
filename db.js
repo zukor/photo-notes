@@ -526,6 +526,12 @@ async function seedUserAreas(userId) {
 async function init() {
   await pool.query(SCHEMA);
 
+  // Seeded topics remain available to industry editions. Basic only offers
+  // topics explicitly added by a user. Preserve historical custom names.
+  await pool.query(`ALTER TABLE user_areas ADD COLUMN IF NOT EXISTS user_added BOOLEAN NOT NULL DEFAULT false`);
+  await pool.query(`UPDATE user_areas SET user_added=true WHERE NOT user_added AND name <> ALL($1::text[])`,
+    [['Roads','Maintenance','Walls','Fences & Walls','Security','Landscaping','Other']]);
+
   // 1. Ensure an admin user exists. On a fresh/existing DB with no users, seed
   //    the admin from env (email + the current ADMIN_PASSWORD), so the original
   //    login keeps working as email + that password.

@@ -490,7 +490,7 @@ function renderTensorHelp() {
 
 function areaChips() {
   const none=`<div class="pill ${state.area?'':'on'}" data-area="">No Topic</div>`;
-  if (!state.areas.length) return none+'<p class="status">No topics yet. Add one below.</p>';
+  if (!state.areas.length) return (isBasicClient()?'':none)+'<p class="status">No topics yet. Add one below.</p>';
   return none+state.areas.map(a =>
     `<div class="pill ${state.area===a?'on':''}" data-area="${esc(a)}">${esc(a)} <span class="areax" data-del="${esc(a)}">&times;</span></div>`
   ).join('');
@@ -564,11 +564,11 @@ function renderCapture() {
     <div class="status" id="dictationStatus" aria-live="polite"></div>
     <textarea id="note" placeholder="Your recorded notes will appear here as words"></textarea>
 
-    ${isHoaClient()?`<label>Maintenance Category</label><select id="hoaArea">${HOA_AREAS.map(a=>`<option value="${esc(a)}">${esc(a)}</option>`).join('')}</select><div id="hoaDirectedWrap" style="display:none"><label>Directed To</label><input id="hoaDirected" placeholder="Person expected to answer"></div>`:`<label>Select Topic</label>
+    ${isHoaClient()?`<label>Maintenance Category</label><select id="hoaArea">${HOA_AREAS.map(a=>`<option value="${esc(a)}">${esc(a)}</option>`).join('')}</select><div id="hoaDirectedWrap" style="display:none"><label>Directed To</label><input id="hoaDirected" placeholder="Person expected to answer"></div>`:`<label data-topic-heading="${isBasicClient()?'Optional':'Select Topic'}">${isBasicClient()?'Optional':'Select Topic'}</label>
     <div class="pill-group" id="areas">${areaChips()}</div>
     <div class="row compact" style="margin-top:10px">
-      <input type="text" id="newarea" placeholder="Add a topic..." />
-      <button class="btn secondary" id="addarea">Add</button>
+      <input type="text" id="newarea" placeholder="${isBasicClient()?'Type topic name here':'Add a topic...'}" />
+      <button class="btn ${isBasicClient()?'':'secondary'}" id="addarea">Add</button>
     </div>`}
 
     <button class="btn" id="save">Save</button>

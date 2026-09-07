@@ -1640,9 +1640,15 @@ app.get('/api/geocode', requireAuth, async (req, res) => {
 });
 
 // ---- areas (per-user) ----
+async function topicRows(userId) {
+  return pool.query(`SELECT a.name FROM user_areas a JOIN users u ON u.id=a.user_id
+    WHERE a.user_id=$1 AND (u.plan='pro' OR a.user_added)
+    ORDER BY a.created_at ASC, a.name ASC`, [userId]);
+}
+
 app.get('/api/areas', requireAuth, async (req, res) => {
   try {
-    const { rows } = await pool.query('SELECT name FROM user_areas WHERE user_id = $1 ORDER BY created_at ASC, name ASC', [req.user.id]);
+    const { rows } = await topicRows(req.user.id);
     res.json(rows.map((r) => r.name));
   } catch (err) { console.error('[areas.list]', err); res.status(500).json({ error: 'failed to list areas' }); }
 });
@@ -1650,8 +1656,8 @@ app.post('/api/areas', requireAuth, async (req, res) => {
   try {
     const name = req.body && req.body.name ? String(req.body.name).trim() : '';
     if (!name) return res.status(400).json({ error: 'name required' });
-    await pool.query('INSERT INTO user_areas (user_id, name) VALUES ($1, $2) ON CONFLICT DO NOTHING', [req.user.id, name]);
-    const { rows } = await pool.query('SELECT name FROM user_areas WHERE user_id = $1 ORDER BY created_at ASC, name ASC', [req.user.id]);
+    await pool.query('INSERT INTO user_areas (user_id, name, user_added) VALUES ($1, $2, true) ON CONFLICT (user_id, name) DO UPDATE SET user_added=true', [req.user.id, name]);
+    const { rows } = await topicRows(req.user.id);
     res.json(rows.map((r) => r.name));
   } catch (err) { console.error('[areas.add]', err); res.status(500).json({ error: 'failed to add area' }); }
 });
@@ -1660,7 +1666,7 @@ app.post('/api/areas/delete', requireAuth, async (req, res) => {
     const name = req.body && req.body.name ? String(req.body.name) : '';
     if (!name) return res.status(400).json({ error: 'name required' });
     await pool.query('DELETE FROM user_areas WHERE user_id = $1 AND name = $2', [req.user.id, name]);
-    const { rows } = await pool.query('SELECT name FROM user_areas WHERE user_id = $1 ORDER BY created_at ASC, name ASC', [req.user.id]);
+    const { rows } = await topicRows(req.user.id);
     res.json(rows.map((r) => r.name));
   } catch (err) { console.error('[areas.delete]', err); res.status(500).json({ error: 'failed to delete area' }); }
 });

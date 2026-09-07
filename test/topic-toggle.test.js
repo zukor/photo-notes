@@ -1,8 +1,8 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const source=fs.readFileSync('public/send.js','utf8');
-function fixture(){
+function fixture(heading=null){
  let language='es',text='',writes=0,selected='Roads';
- const label={tagName:'LABEL',style:{},setAttribute(){},get textContent(){return text;},set textContent(v){text=v;writes++;}};
+ const label={tagName:'LABEL',getAttribute:()=>heading,style:{},setAttribute(){},get textContent(){return text;},set textContent(v){text=v;writes++;}};
  const areas={previousElementSibling:label,style:{},children:[],querySelector:s=>s==='.pill.on'?{getAttribute:()=>selected}:null};
  const row={style:{}},input={parentElement:row};
  const tr=s=>language==='es'?({'Select Topic':'Seleccionar tema',Roads:'Carreteras'}[s]||s.replace(/^Select Topic: (.+)( [▴▾])$/,(_,a,c)=>`Seleccionar tema: ${a}${c}`)):s;
@@ -18,4 +18,11 @@ test('Spanish selected topic converges instead of alternating observer writes',(
 test('topic label updates after language or selection changes',()=>{
  const f=fixture();f.settle();f.setLanguage('en');assert.equal(f.settle(),true);assert.match(f.label.textContent,/Select Topic: Roads/);
  f.setSelected('');assert.equal(f.settle(),true);assert.doesNotMatch(f.label.textContent,/Roads/);
+});
+
+test('Basic Optional heading stays stable and expands the topic entry row',()=>{
+ const f=fixture('Optional');f.setLanguage('en');f.setSelected('');
+ assert.equal(f.settle(),true);assert.equal(f.label.textContent,'Optional ▾');
+ assert.equal(f.label.style.textTransform,'uppercase');
+ f.label.onclick();assert.equal(f.settle(),true);assert.equal(f.row.style.display,'');
 });

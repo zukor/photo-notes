@@ -1,6 +1,7 @@
 (function () {
   const STORAGE_KEY = 'photo-notes-language';
   const ES = {
+    'Optional': 'Opcional', 'Type topic name here': 'Escriba el nombre del tema aquí',
     'Photo': 'Foto',
     'Enable issue notifications':'Activar notificaciones de problemas',
     'Disable on this device':'Desactivar en este dispositivo',
