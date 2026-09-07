@@ -153,7 +153,9 @@
     label.style.textTransform = 'none';
     label.style.margin = '12px 0 0';
     label.style.userSelect = 'none';
-    var want = 'Select Topic' + (sel ? ': ' + sel : '') + '  ' + (topicExpanded ? '▴' : '▾');
+    // Render in the current language so the translation observer cannot fight
+    // this observer by repeatedly replacing the same label.
+    var want = tr('Select Topic') + (sel ? ': ' + tr(sel) : '') + ' ' + (topicExpanded ? '▴' : '▾');
     if (label.textContent !== want) label.textContent = want; // guard: avoid observer loop
     label.onclick = function () { topicExpanded = !topicExpanded; fixTopics(); };
 
@@ -178,5 +180,6 @@
   var mo = new MutationObserver(apply);
   mo.observe(document.documentElement, { childList: true, subtree: true });
   document.addEventListener('DOMContentLoaded', apply);
+  document.addEventListener('photo-notes-languagechange', apply);
   apply();
 })();
