@@ -51,7 +51,7 @@ textarea { min-height: 96px; resize: vertical; }
 .photo-location-label { margin-top:6px; font-size:12px; font-weight:800; letter-spacing:.04em; text-transform:uppercase; }
 .photo-gps, .photo-location .addr { margin-top:2px; overflow-wrap:anywhere; }
 .photo-viewer-button,
-.evidencebtn {
+.evidencebtn:not(:where(.workflow-edit .evidencebtn)) {
   display:inline-flex;
   align-items:center;
   justify-content:center;
