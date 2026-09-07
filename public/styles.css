@@ -614,8 +614,16 @@ input.dimfield.suggested {
 #pavingInlineTool > .workflow-intro { margin-top:0; }
 #readerPreview, #ticketPreview { display:block; width:100%; max-height:360px; object-fit:contain; }
 
+/* Keep photo controls reachable independently of panning and page scrolling. */
+#photoViewerModal { overscroll-behavior:contain; }
+#photoViewerModal .photo-viewer-dialog { display:flex; flex-direction:column; overflow:hidden; max-height:calc(100dvh - 28px); }
+#photoViewerModal .photo-viewer-head { flex:0 0 auto; min-width:0; padding-bottom:10px; }
+#photoViewerTitle { min-width:0; overflow-wrap:anywhere; max-height:3em; overflow:auto; }
+#photoViewerClose { flex:0 0 auto; }
+#photoViewerModal .photo-viewer-body { min-height:0; overflow:auto; overscroll-behavior:contain; }
 .organize-topic-actions .btn { min-width:0; white-space:normal; overflow-wrap:anywhere; }
 @media(max-width:600px) {
+  #photoViewerModal .photo-viewer-dialog { max-height:calc(100dvh - 14px); }
   .organize-topic-actions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); }
   .organize-topic-actions select { grid-column:1 / -1; }
 }

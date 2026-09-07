@@ -2285,9 +2285,10 @@ function fEvidenceDate(value){try{return new Date(value).toLocaleString(uiLocale
 function formatEvidenceBytes(n){n=Number(n)||0;if(n<1024)return n+' B';if(n<1048576)return (n/1024).toFixed(1)+' KB';return (n/1048576).toFixed(1)+' MB';}
 
 function openPhotoViewer(src,title='Photo'){
-  const old=document.getElementById('photoViewerModal');if(old)old.remove();
+  const old=document.getElementById('photoViewerModal');if(old){if(old._close)old._close();else old.remove();}
+  const priorOverflow=document.body.style.overflow,priorFocus=document.activeElement;document.body.style.overflow='hidden';
   const modal=document.createElement('div');modal.id='photoViewerModal';modal.className='photo-viewer-modal';modal.setAttribute('data-html2canvas-ignore','true');
-  modal.innerHTML=`<section class="photo-viewer-dialog" role="dialog" aria-modal="true" aria-labelledby="photoViewerTitle"><div class="photo-viewer-head"><strong id="photoViewerTitle">${esc(title||'Photo')}</strong><button class="iconbtn" id="photoViewerClose" aria-label="Close photo viewer">×</button></div><p class="status">Viewing only. Drag the photo with a finger or mouse, or use the controls below.</p><div class="photo-viewer-viewport"><img src="${esc(src)}" alt="${esc(title||'Photo')}" draggable="false"></div><div class="photo-viewer-controls"><button class="btn secondary slim" data-view-action="zoom-in">Zoom In</button><button class="btn secondary slim" data-view-action="zoom-out">Zoom Out</button><button class="btn secondary slim" data-view-action="left">Move Left</button><button class="btn secondary slim" data-view-action="right">Move Right</button><button class="btn secondary slim" data-view-action="up">Move Up</button><button class="btn secondary slim" data-view-action="down">Move Down</button></div><button class="btn secondary" id="photoViewerReset">Reset Photo</button></section>`;
+  modal.innerHTML=`<section class="photo-viewer-dialog" role="dialog" aria-modal="true" aria-labelledby="photoViewerTitle"><div class="photo-viewer-head"><strong id="photoViewerTitle">${esc(title||'Photo')}</strong><button class="iconbtn" id="photoViewerClose" aria-label="Close photo viewer">×</button></div><div class="photo-viewer-body"><p class="status">Viewing only. Drag the photo with a finger or mouse, or use the controls below.</p><div class="photo-viewer-viewport"><img src="${esc(src)}" alt="${esc(title||'Photo')}" draggable="false"></div><div class="photo-viewer-controls"><button class="btn secondary slim" data-view-action="zoom-in">Zoom In</button><button class="btn secondary slim" data-view-action="zoom-out">Zoom Out</button><button class="btn secondary slim" data-view-action="left">Move Left</button><button class="btn secondary slim" data-view-action="right">Move Right</button><button class="btn secondary slim" data-view-action="up">Move Up</button><button class="btn secondary slim" data-view-action="down">Move Down</button></div><button class="btn secondary" id="photoViewerReset">Reset Photo</button></div></section>`;
   document.body.appendChild(modal);
   const viewport=modal.querySelector('.photo-viewer-viewport'),img=viewport.querySelector('img');let scale=1,x=0,y=0,drag=null,pinch=null;
   const paint=()=>{img.style.transform=`translate(${x}px, ${y}px) scale(${scale})`;};
@@ -2301,8 +2302,8 @@ function openPhotoViewer(src,title='Photo'){
   viewport.addEventListener('touchstart',e=>{if(e.touches.length===2){const [a,b]=e.touches;pinch={distance:Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY),scale};}},{passive:true});
   viewport.addEventListener('touchmove',e=>{if(e.touches.length!==2||!pinch)return;e.preventDefault();const [a,b]=e.touches,distance=Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);scale=Math.max(1,Math.min(5,pinch.scale*(distance/pinch.distance)));paint();},{passive:false});
   viewport.addEventListener('touchend',()=>{pinch=null;},{passive:true});
-  const close=()=>{document.removeEventListener('keydown',onKey);modal.remove();},onKey=e=>{if(e.key==='Escape')close();};
-  modal.querySelector('#photoViewerClose').onclick=close;modal.querySelector('#photoViewerReset').onclick=reset;modal.onclick=e=>{if(e.target===modal)close();};document.addEventListener('keydown',onKey);paint();
+  const close=()=>{document.removeEventListener('keydown',onKey);modal.remove();document.body.style.overflow=priorOverflow;priorFocus?.focus();},onKey=e=>{if(e.key==='Escape')close();};
+  modal.querySelector('#photoViewerClose').onclick=close;modal.querySelector('#photoViewerReset').onclick=reset;modal.onclick=e=>{if(e.target===modal)close();};document.addEventListener('keydown',onKey);modal._close=close;modal.querySelector('#photoViewerClose').focus();paint();
 }
 
 function installPhotoViewerButtons(root=document){
