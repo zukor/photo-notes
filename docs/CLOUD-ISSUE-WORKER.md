@@ -1,17 +1,24 @@
-# Cloud issue worker
+# Cloud issue repair and notifications
 
-The Railway web service runs the durable notification worker every two seconds while healthy. It does not depend on Codex desktop. Database events survive restarts, delivery is tracked per subscribed device, retries back off, and expired subscriptions are removed. PostgreSQL advisory locking prevents simultaneous workers delivering the same queue. A crash after push delivery and before acknowledgement can cause a duplicate; the notification tag collapses duplicates on the device.
+Notifications run inside the Railway app service every two seconds while healthy. Durable database events survive restarts; opt-in Web Push delivery retries with backoff. PostgreSQL advisory locking prevents simultaneous processing. A crash between delivery and acknowledgement can cause a duplicate; notification tags collapse duplicates on the device. Payloads contain no customer report details. Users enable notifications through My Issue Reports or Report Issue. On iPhone, open the installed Home Screen app first. OS permission, network access, and delivery policies apply.
 
-Users enable notifications in My Issue Reports or Report Issue. Admins enable them through Report Issue and receive issue activity across users. Reporter notifications concern their own reports. Payloads contain no report text, names, or photos. On iPhone, install the web app on the Home Screen first. Browser permission, network availability, and OS delivery policies still apply. In-app attention checks run every five seconds while visible.
+## Private repair runner
 
-## AI repair activation still required
+Customer report processing runs in the PRIVATE `zukor/photo-notes-repair-worker` repository. The public application's workflow does not read reports. The canonical workflow is https://github.com/zukor/photo-notes-repair-worker/blob/main/.github/workflows/issue-cloud-repair.yml. Scheduled runs check every five minutes, subject to GitHub scheduling delays. No desktop runtime is required. A manual repair run can target a report. An optional private-repository Actions credential on Railway can enable immediate dispatch, but scheduled operation does not require it.
 
-Cloud dispatch is OFF until ISSUE_CLOUD_RUNNER_ENABLED=true and ISSUE_GITHUB_TOKEN exist on Photo Notes Production. Use a fine-grained GitHub credential restricted to zukor/photo-notes with Actions write access. Do not reuse an unrestricted personal login token.
+GitHub secrets in the private runner:
+- OPENAI_API_KEY: required working AI credential. API usage is billed to its account.
+- TESTER_QUEUE_TOKEN: existing scoped queue credential, configured.
+- PHOTO_NOTES_DEPLOY_KEY: write-enabled SSH deploy key restricted to the Photo Notes repository, configured. No personal GitHub token is stored.
 
-The repository must have OPENAI_API_KEY and TESTER_QUEUE_TOKEN GitHub Actions secrets. The latter is the existing scoped issue queue credential. AI calls consume API usage. No AI credential was found or transferred from another project.
+Each run checks configuration before claiming a report. It obtains an exclusive 45-minute claim; the claim is encrypted between jobs. The proposing and independently reviewing models have read-only source access and no queue/publishing credentials. Repairs are restricted to ordinary frontend code in app.js, styles.css, i18n.js and send.js. Sensitive operations, network destinations, uncertain evidence, and unsupported defects need human review.
 
-The cloud workflow produces draft repair proposals for a restricted set of frontend files. It has read-only model execution without production or publishing credentials. A fresh job checks patch paths and opens a draft PR. It does not execute proposed code in a credentialed job or mark a report fixed. It does not yet implement automatic testing, review, merge, deployment verification, or exclusive repair claims. Those stages remain necessary before replacing the desktop repair worker. Do not describe proposal generation as automatic repair completion.
+A regression must fail on the original source and pass on the repaired source. The full suite runs in a network-disabled container without cloud secrets. The publishing job independently rebuilds and fingerprints the tested tree; it never executes proposed code. A repository-restricted key fast-forwards main only if its base has not changed. Generated regression source and review details remain in the private run. A generic public commit identifies the issue number without its private report text. This cloud path uses independent model review plus isolated tests instead of a public PR containing customer details.
 
-Dispatch status and notification worker timestamps are shown in Admin. A successful GitHub dispatch only acknowledges workflow scheduling, not AI completion. Failed or unavailable dispatch credentials are stored as dispatch errors. Keep the existing desktop repair automation active until the full cloud pipeline has been validated.
+Railway deploys the resulting commit. Verification requires the running deployment to report the exact commit and healthy database, and five live frontend assets to match the committed files. It repeats the checks before marking ready_to_test. Failed review, test, publishing or verification records a blocker; the worker never confirms its own repair. A stale claim prevents status updates, and an expired unfinished claim can be retried by the next worker. Device retest remains necessary.
 
-No real reports were submitted and no devices were subscribed on behalf of users during deployment tests.
+## Verification and activation
+
+The check workflow runs unit tests and a synthetic failing/passing repair inside a disposable checkout without changing real reports or production. Passing that check proves deterministic gates, not AI quality or an actual repair release. Keep the desktop repair automation as a fallback until cloud AI execution and the first real repair have been verified.
+
+Admin displays the latest server notification cycle, cloud queue check, and AI-credential readiness. A missing or invalid AI key prevents cloud repairs; do not call the AI pipeline operational until a real authenticated run succeeds. Deployment errors are not success notifications.
