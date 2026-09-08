@@ -8,8 +8,9 @@
     "postinstall": "node scripts/gen-icons.js",
     "dev": "node --env-file=.env server.js",
     "start": "node server.js",
-    "test": "node --test",
-    "test:mobile": "node --test test/mobile-regression.test.js"
+    "test": "node --test test/*.test.js",
+    "test:mobile": "node --test test/mobile-regression.test.js",
+    "test:web-browser": "node scripts/test-web-browser.cjs"
   },
   "engines": {
     "node": ">=20"
@@ -30,5 +31,9 @@
     "sharp": "^0.35.3",
     "stripe": "^22.4.0",
     "web-push": "^3.6.7"
+  },
+  "devDependencies": {
+    "fake-indexeddb": "^6.2.5",
+    "playwright": "^1.62.1"
   }
 }

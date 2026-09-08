@@ -53,10 +53,10 @@ window.addEventListener('beforeinstallprompt', event => {
 });
 window.addEventListener('appinstalled', () => {
   deferredInstallPrompt = null;
-  localStorage.setItem(INSTALL_PROMPT_KEY, 'installed');
+  try{localStorage.setItem(INSTALL_PROMPT_KEY, 'installed');}catch(error){}
   const modal = document.getElementById('installPrompt');
   if (modal) modal.remove();
-  toast('Photo Notes added to your phone');
+  toast('Photo Notes installed on this device');
 });
 
 function uiT(text) { return window.photoNotesI18n ? window.photoNotesI18n.t(text) : text; }
@@ -157,11 +157,12 @@ async function api(path, opts = {}) {
 }
 
 async function boot() {
+  try {
   const r = await api('/api/me');
   if (r.ok) {
     try { const me = await r.json(); state.me = me; state.plan = me.plan || 'free'; state.proType=me.pro_type||'paving'; } catch (e) {}
     await Promise.all([loadAreas(),loadJobs(),loadHoaContext()]);
-    restoreOfflineQueue();
+    await restoreOfflineQueue();
     // Start loading documents as soon as the user signs in. By the time they
     // open Create, existing documents can be shown immediately instead of
     // appearing only after another action refreshes the list.
@@ -170,6 +171,7 @@ async function boot() {
     renderApp();
     setTimeout(maybeOfferInstall, 700);
   } else renderLogin();
+  } catch(error) {renderLogin();document.getElementById('loginErr').textContent='Connection unavailable. Reconnect and sign in to resume pending uploads. Saved captures remain in this browser.';}
 }
 
 function isInstalledApp() {
@@ -181,14 +183,20 @@ function isPhoneInstallCandidate() {
 }
 
 function dismissInstallOffer(value='dismissed') {
-  localStorage.setItem(INSTALL_PROMPT_KEY, value);
+  try{localStorage.setItem(INSTALL_PROMPT_KEY, value);}catch(error){}
   const modal = document.getElementById('installPrompt');
   if (modal) modal.remove();
 }
 
+function showInstallHelp(){
+  document.getElementById('installHelpDialog')?.remove();
+  const dialog=document.createElement('dialog');dialog.id='installHelpDialog';dialog.className='web-help-dialog';
+  dialog.innerHTML='<h2>Install Photo Notes</h2><p>Add an icon for quick access. Use your existing Photo Notes account.</p><div id="installDeviceGuide"></div><p>Keep this app open and connected until pending photos upload. Browser data is separate from your cloud account.</p><p><a href="/install.html" target="_blank" rel="noopener">Full installation and recovery guide</a></p><button class="btn secondary" id="closeInstallHelp">Close</button>';
+  document.body.append(dialog);PhotoNotesInstall.mount(dialog.querySelector('#installDeviceGuide'));dialog.querySelector('#closeInstallHelp').onclick=()=>dialog.close();dialog.addEventListener('close',()=>dialog.remove());dialog.showModal();
+}
 function maybeOfferInstall() {
   if (!state.me || installOfferShown || isInstalledApp() || !isPhoneInstallCandidate()) return;
-  if (localStorage.getItem(INSTALL_PROMPT_KEY)) return;
+  try{if(localStorage.getItem(INSTALL_PROMPT_KEY))return;}catch(error){}
   const ios = isIOS();
   if (!ios && !deferredInstallPrompt) return;
   installOfferShown = true;
@@ -197,7 +205,7 @@ function maybeOfferInstall() {
   modal.className = 'install-prompt';
   modal.innerHTML = `<div class="install-prompt-card" role="dialog" aria-modal="true" aria-labelledby="installPromptTitle">
     <h2 id="installPromptTitle">Add Photo Notes to your phone?</h2>
-    <p>${ios ? 'For one-tap access, open your browser’s Share menu, choose <strong>Add to Home Screen</strong>, then tap <strong>Add</strong>.' : 'Install an app icon so you can open Photo Notes directly from your phone’s Home screen.'}</p>
+    <p>${ios ? 'In Safari, open the Share menu, choose <strong>Add to Home Screen</strong>, keep <strong>Open as Web App</strong> on if shown, then tap <strong>Add</strong>.' : 'Install an app icon so you can open Photo Notes directly from your phone’s Home screen.'}</p>
     <div class="install-prompt-actions">
       ${ios ? '<button class="btn" id="installGuideDone" type="button">Got It</button>' : '<button class="btn" id="installAppButton" type="button">Install App Icon</button>'}
       <button class="btn secondary" id="installNotNow" type="button">Not Now</button>
@@ -238,7 +246,7 @@ function renderLogin() {
       <input id="pw" type="password" autocomplete="current-password" />
       <button class="btn" id="loginBtn">Sign In</button>
       <p class="status" id="loginErr"></p>
-      <div class="footer">&copy; ${new Date().getFullYear()} Zukor AI. All Rights Reserved.</div>
+      <div class="footer"><a href="/install.html" target="_blank" rel="noopener">Install Photo Notes on your device</a><br>&copy; ${new Date().getFullYear()} Zukor AI. All Rights Reserved.</div>
     </div>`;
   document.getElementById('loginBtn').onclick = doLogin;
   document.getElementById('pw').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
@@ -246,14 +254,11 @@ function renderLogin() {
 }
 
 async function doLogin() {
-  const email = document.getElementById('email').value.trim();
-  const pw = document.getElementById('pw').value;
-  const r = await api('/api/login', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password: pw }),
-  });
-  if (r.ok) await boot();
-  else document.getElementById('loginErr').textContent = 'Wrong email or password. Try again.';
+  const email=document.getElementById('email').value.trim(),password=document.getElementById('pw').value,button=document.getElementById('loginBtn'),error=document.getElementById('loginErr');
+  button.disabled=true;error.textContent='';
+  try{const r=await api('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password})});if(r.ok)location.reload();else error.textContent=r.status===401?'Wrong email or password. Try again.':'Sign-in is unavailable. Please try again.';}
+  catch(cause){error.textContent='Could not sign in. Check your connection and try again. Pending captures remain in this browser.';}
+  finally{button.disabled=false;}
 }
 
 function renderApp() {
@@ -274,6 +279,8 @@ function renderApp() {
               <div class="profile-email">${esc((state.me && state.me.email) || '')}</div>
               <div class="profile-plan">${isRoadIssuesClient()?'Road Issue Reporter':isGeneralProClient()?'Photo Notes Pro':isProClient()?esc(productName()):'Photo Notes Basic'}</div>
               ${isBasicClient()||isGeneralProClient()?'<button type="button" id="myAssignment">My Testing Assignment</button>':''}
+              <button type="button" id="installHelp">Install Photo Notes</button>
+              <button type="button" id="pendingPhotos">Pending Photos</button>
               <button type="button" id="myIssues">My Issue Reports</button>
               ${state.me && state.me.role === 'admin' ? '<a href="/admin">Admin Dashboard</a>' : ''}
               <button type="button" id="signout">Sign Out</button>
@@ -289,7 +296,7 @@ function renderApp() {
         <button type="button" class="tab ${['send','hoa-maintenance'].includes(state.view)?'on':''}" id="tabSend" aria-current="${['send','hoa-maintenance'].includes(state.view)?'page':'false'}">${isHoaClient()?'Records':'Send'}</button>
       </nav>`}
       <div id="body"></div>
-      <div class="footer">&copy; ${new Date().getFullYear()} Zukor AI. All Rights Reserved.</div>
+      <div class="footer"><a href="/install.html" target="_blank" rel="noopener">Install Photo Notes on your device</a><br>&copy; ${new Date().getFullYear()} Zukor AI. All Rights Reserved.</div>
     </div>
     <button class="issue-fab ${isRoadIssuesClient()?'road-issue-fab':''}" id="issueFab" type="button" data-html2canvas-ignore="true" aria-label="Report Issue">${issueFabLabel()}</button>
     ${issueReporterMarkup()}`;
@@ -306,10 +313,13 @@ function renderApp() {
       profileButton.setAttribute('aria-expanded', 'false');
     }
   };
-  document.getElementById('signout').onclick = async () => { await api('/api/logout', { method: 'POST' }); state.me = null; state._concreteCapture=null;state._pavingReason=null; renderLogin(); };
+  document.getElementById('signout').onclick = async () => { if(captureSavePending){toast('Please wait for this photo to finish saving locally.');return;}if(state.photoFile&&!confirm('Sign out and discard the photo that has not been saved?'))return;try{const r=await api('/api/logout',{method:'POST'});if(!r.ok)throw Error();queueAccount=null;bgQueue=[];clearTimeout(queueRetryTimer);stopCaptureDictation();location.reload();}catch(error){toast('Could not sign out. Check your connection and try again.');} };
+  document.getElementById('installHelp').onclick=showInstallHelp;
+  document.getElementById('pendingPhotos').onclick=showPendingPhotos;
   const myIssues=document.getElementById('myIssues');if(myIssues)myIssues.onclick=()=>{state.view='my-issues';renderApp();};
   const myAssignment=document.getElementById('myAssignment');if(myAssignment)myAssignment.onclick=()=>{state.view='my-assignment';renderApp();};
   const editionSwitcher=document.getElementById('editionSwitcher');if(editionSwitcher)editionSwitcher.onchange=async()=>{
+    if(captureSavePending){editionSwitcher.value=selectedEdition();toast('Please wait for this photo to finish saving locally.');return;}
     const edition=editionSwitcher.value;
     if(state.photoFile&&!confirm(uiT('Switch versions and discard this unsaved photo?'))){editionSwitcher.value=selectedEdition();return;}
     editionSwitcher.disabled=true;
@@ -962,6 +972,7 @@ async function loadTodayTickets() {
 }
 
 function onPhotoChosen(file) {
+  if(captureSavePending){toast('Please wait for the current photo to save.');return;}
   const replacing=!!state.photoFile;stopCaptureDictation();
   captureLocationGeneration++;
   if(replacing){state._note='';const note=document.getElementById('note');if(note)note.value='';}
@@ -992,6 +1003,7 @@ function retakeCapturePhoto(){
   if(!input)return;input.value='';input.click();
 }
 function cancelCapturePhoto(){
+  if(captureSavePending){toast('Please wait for the current photo to save.');return;}
   stopCaptureDictation();
   captureLocationGeneration++;
   if(state._previewUrl)URL.revokeObjectURL(state._previewUrl);
@@ -1612,81 +1624,112 @@ let bgDraining = false;
 let bgOnlineHooked = false;
 let offlineQueueRestored = false;
 
-function queueDb(){return new Promise((resolve,reject)=>{if(!window.indexedDB)return reject(new Error('unavailable'));const r=indexedDB.open('photo-notes-offline',1);r.onupgradeneeded=()=>{if(!r.result.objectStoreNames.contains('captures'))r.result.createObjectStore('captures',{keyPath:'id',autoIncrement:true});};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});}
-async function queueStore(payload,hadCoords){const db=await queueDb();return new Promise((resolve,reject)=>{const tx=db.transaction('captures','readwrite');const r=tx.objectStore('captures').add({payload,hadCoords:!!hadCoords,createdAt:Date.now()});r.onerror=()=>reject(r.error);tx.oncomplete=()=>{db.close();resolve(r.result);};tx.onabort=()=>{db.close();reject(tx.error||new Error("Save transaction aborted"));};tx.onerror=()=>reject(tx.error);});}
-async function queueDelete(id){if(id==null)return;try{const db=await queueDb();await new Promise((resolve,reject)=>{const tx=db.transaction('captures','readwrite');tx.objectStore('captures').delete(id);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);});db.close();}catch(e){}}
-async function restoreOfflineQueue(){if(offlineQueueRestored)return;offlineQueueRestored=true;try{const db=await queueDb();const rows=await new Promise((resolve,reject)=>{const tx=db.transaction('captures','readonly');const r=tx.objectStore('captures').getAll();r.onsuccess=()=>resolve(r.result||[]);r.onerror=()=>reject(r.error);});db.close();const known=new Set(bgQueue.map(x=>x.id));rows.forEach(row=>{if(!known.has(row.id))bgQueue.push({id:row.id,payload:row.payload,hadCoords:row.hadCoords,tries:0});});if(rows.length){toast(`${rows.length} offline capture${rows.length===1?'':'s'} ready to upload`);bgIndicator();drainQueue();}}catch(e){}}
+let queueAccount = null;
+let legacyPendingCount = 0;
+let queueRetryTimer = null;
+async function queueStore(payload,hadCoords){
+  if(!state.me)throw Error('Sign in first');
+  const email=state.me.email,edition=selectedEdition();
+  const account=await PhotoNotesQueue.accountKey(email);
+  const row=await PhotoNotesQueue.create(payload,hadCoords,account,edition);
+  return row;
+}
+async function queueDelete(id){if(id!=null)await PhotoNotesQueue.remove(id);}
+async function restoreOfflineQueue(){
+  if(!state.me)return;
+  const account=await PhotoNotesQueue.accountKey(state.me.email);
+  queueAccount=account;
+  try{
+    const rows=await PhotoNotesQueue.all();
+    if(queueAccount!==account)return;
+    legacyPendingCount=rows.filter(row=>!row.account).length;
+    bgQueue=rows.filter(row=>PhotoNotesQueue.eligible(row,account,selectedEdition())).map(row=>({...row,tries:0}));
+    offlineQueueRestored=true;
+    bgIndicator();void drainQueue();
+  }catch(error){toast('Local pending photos could not be read. Keep this browser data and try again.');}
+}
+async function showPendingPhotos(){
+  if(!state.me)return;
+  const account=await PhotoNotesQueue.accountKey(state.me.email);
+  let rows;try{rows=await PhotoNotesQueue.all();}catch(error){toast('Local storage is unavailable. Do not clear browser data.');return;}
+  if(!state.me||account!==queueAccount)return;
+  document.getElementById('pendingPhotosDialog')?.remove();
+  const dialog=document.createElement('dialog');dialog.id='pendingPhotosDialog';dialog.className='web-help-dialog';
+  dialog.innerHTML='<h2>Pending Photos</h2><p>These captures are saved in this browser, but are not yet confirmed uploaded. Keep Photo Notes open and connected. Do not clear browser data or uninstall this web app while photos are pending.</p>';
+  const owned=rows.filter(row=>row.account===account);
+  for(const row of owned){
+    const item=document.createElement('p');item.textContent=`${editionNames[row.edition]||row.edition}: ${new Date(row.createdAt).toLocaleString()}${row.edition!==selectedEdition()?' - switch to this version to upload':''}`;dialog.append(item);
+    if(row.payload?.photo){const button=document.createElement('button');button.className='btn secondary';button.textContent='Download Original Photo';button.onclick=()=>{const url=URL.createObjectURL(row.payload.photo),a=document.createElement('a');a.href=url;a.download=row.payload.photoName||'pending-photo.jpg';a.click();setTimeout(()=>URL.revokeObjectURL(url),60000);};dialog.append(button);}
+    const notes=document.createElement('button');notes.className='btn secondary';notes.textContent='Download Notes and Details';notes.onclick=()=>{const {photo,...details}=row.payload||{};downloadBlob(new Blob([JSON.stringify({edition:row.edition,...details},null,2)],{type:'application/json'}),'pending-photo-details.json');};dialog.append(notes);
+  }
+  if(!owned.length){const p=document.createElement('p');p.textContent='No pending captures for this account in this browser.';dialog.append(p);}
+  if(rows.some(row=>!row.account)){const p=document.createElement('p');p.textContent='Older pending captures without an account label were retained and will not upload automatically. Report this issue from the account that created them. Do not clear browser data.';dialog.append(p);}
+  const retry=document.createElement('button');retry.className='btn';retry.textContent='Retry Current Version';retry.onclick=async()=>{dialog.close();await restoreOfflineQueue();};
+  const close=document.createElement('button');close.className='btn secondary';close.textContent='Close';close.onclick=()=>dialog.close();dialog.append(retry,close);dialog.addEventListener('close',()=>dialog.remove());document.body.append(dialog);dialog.showModal();
+}
 function payloadFormData(p){const fd=new FormData();if(p.photo)fd.append('photo',p.photo,p.photoName||'offline-photo.jpg');fd.append('note',p.note||'');fd.append('area_tags',p.area_tags||'[]');fd.append('kind',p.kind||'note');if(p.job_id)fd.append('job_id',p.job_id);for(const k of ['paving_photo_reason','concrete_phase','concrete_purpose','concrete_element','concrete_stage','concrete_condition','concrete_severity','concrete_location','concrete_mix','hoa_community_id','hoa_title','hoa_item_type','hoa_priority','hoa_area','hoa_directed_to','hoa_budget_source','hoa_photo_stage','hoa_target_date'])if(p[k])fd.append(k,p[k]);if(p.latitude!=null)fd.append('latitude',p.latitude);if(p.longitude!=null)fd.append('longitude',p.longitude);if(p.address)fd.append('address',p.address);return fd;}
 
 function bgIndicator() {
-  let el = document.getElementById('bgstatus');
-  const total = bgActive + bgQueue.length;
-  if (!el) {
-    if (total === 0) return;
-    el = document.createElement('div');
-    el.id = 'bgstatus';
-    el.style.cssText = 'position:fixed;left:50%;bottom:64px;transform:translateX(-50%);background:#111;color:#fff;padding:9px 16px;border-radius:20px;font-weight:bold;font-size:14px;z-index:20;box-shadow:0 2px 8px rgba(0,0,0,.3)';
-    document.body.appendChild(el);
-  }
-  if (total > 0) {
-    const offline=typeof navigator!=='undefined'&&navigator.onLine===false;
-    el.textContent = offline ? (total === 1 ? '1 photo saved offline' : `${total} photos saved offline`) : (total === 1 ? 'Uploading photo…' : `Uploading ${total} photos…`);
-    el.style.background = '#111';
-    el.style.display = 'block';
-  } else {
-    el.textContent = 'All photos uploaded';
-    el.style.background = '#1b7a3d';
-    setTimeout(() => { if (el && bgActive + bgQueue.length === 0) el.style.display = 'none'; }, 1600);
-  }
+  let box=document.getElementById('bgstatus');
+  if(!state.me){if(box)box.remove();return;}
+  const total=bgQueue.length+bgActive;
+  if(!box){if(!total&&!legacyPendingCount)return;box=document.createElement('button');box.id='bgstatus';box.type='button';box.className='web-queue-status';box.setAttribute('aria-live','polite');box.onclick=showPendingPhotos;document.body.append(box);}
+  box.textContent=total?`${total} capture${total===1?'':'s'} saved on this device, ${navigator.onLine===false?'waiting for connection':bgQueue.some(x=>x.blocked)?'needs attention':'waiting for upload'}`:legacyPendingCount?'Older pending captures need recovery':'All queued captures uploaded';
+  box.hidden=!total&&!legacyPendingCount;
 }
-
 async function enqueueUpload(payload, hadCoords, options = {}) {
-  let id=null;try{id=await queueStore(payload,hadCoords);}catch(e){if(options.requireDurable)throw e;}
-  bgQueue.push({ id, payload, hadCoords: !!hadCoords, tries: 0 });
-  if (!bgOnlineHooked) { window.addEventListener('online', drainQueue); bgOnlineHooked = true; }
-  bgIndicator();
-  drainQueue();
+  const row=await queueStore(payload,hadCoords);
+  if(row.account!==queueAccount||row.edition!==selectedEdition())return;
+  bgQueue.push({...row,tries:0});
+  if(!bgOnlineHooked){window.addEventListener('online',()=>void restoreOfflineQueue());bgOnlineHooked=true;}
+  bgIndicator();void drainQueue();
 }
-
 async function drainQueue() {
-  if (bgDraining) return;
-  bgDraining = true;
-  try {
-    while (bgQueue.length) {
-      if (typeof navigator !== 'undefined' && navigator.onLine === false) break; // wait for 'online'
-      const item = bgQueue.shift();
-      bgActive = 1; bgIndicator();
-      try {
-        const r = await fetch('/api/captures', { method: 'POST', credentials: 'same-origin', body: payloadFormData(item.payload) });
-        if (!r.ok) throw new Error('http ' + r.status);
-        const saved=await r.json().catch(()=>({}));
-        if(saved.duplicate_matches&&saved.duplicate_matches.length)toast(`Possible duplicate found (${saved.duplicate_matches.length})`);
-        else if(saved.maintenance_item)toast('Maintenance item saved');
+  if(bgDraining||!state.me||!queueAccount)return;
+  bgDraining=true;
+  const account=queueAccount, edition=selectedEdition();
+  try{
+    while(bgQueue.length&&queueAccount===account&&selectedEdition()===edition){
+      if(navigator.onLine===false)break;
+      const item=bgQueue[0];
+      if(item.blocked)break;
+      if(!PhotoNotesQueue.eligible(item,account,edition))break;
+      try{
+        const me=await api('/api/me');
+        if(!me.ok)throw Object.assign(Error('Sign in to upload pending photos'),{blocked:true});
+        if(me.headers.get('X-Photo-Notes-Upload-Receipts')!=='1')throw Error('Waiting for upload service update');
+        const identity=await me.json();
+        if(await PhotoNotesQueue.accountKey(identity.email)!==account)throw Object.assign(Error('Sign in to the original account to upload these photos'),{blocked:true});
+        if(queueAccount!==account||selectedEdition()!==edition)break;
+        const r=await fetch('/api/captures',{method:'POST',credentials:'same-origin',headers:PhotoNotesQueue.headers(item),body:payloadFormData(item.payload)});
+        if(!r.ok){const body=await r.json().catch(()=>({}));throw Object.assign(Error(body.error||'Upload needs attention'),{blocked:PhotoNotesQueue.permanent(r.status)});}
+        const saved=await r.json();if(!saved.id)throw Error('Upload confirmation missing');
         await queueDelete(item.id);
-        bgActive = 0;
-        // Refresh the Library if it is open so the new card appears...
-        if (state.view === 'organize' || state.view === 'edit') {
-          const flt = document.getElementById('filter');
-          loadCards(flt ? (flt.value || '') : '');
-          // ...and again shortly after, to pick up the background-filled address.
-          if (item.hadCoords) setTimeout(() => { if (state.view === 'organize' || state.view === 'edit') { const f = document.getElementById('filter'); loadCards(f ? (f.value || '') : ''); } }, 3000);
-        }
-      } catch (e) {
-        bgActive = 0;
-        item.tries++;
-        const delay = Math.min(120000, 2000 * Math.pow(2, Math.min(item.tries - 1, 6)));
-        bgQueue.push(item);
-        setTimeout(drainQueue, delay);
-        if(item.tries===3)toast('Photo saved offline. Upload will continue automatically.');
-        bgIndicator();
+        if(queueAccount!==account||selectedEdition()!==edition)break;
+        bgQueue=bgQueue.filter(row=>row.id!==item.id);
+        toast('Photo uploaded');
+        if(state.view==='organize'||state.view==='edit'){const f=document.getElementById('filter');void loadCards(f?f.value||'':'');}
+      }catch(error){
+        if(queueAccount!==account||selectedEdition()!==edition)break;
+        item.tries++;item.blocked=!!error.blocked;
+        if(error.blocked)toast(error.message+'. Local photo retained.');
+        else {clearTimeout(queueRetryTimer);queueRetryTimer=setTimeout(()=>void drainQueue(),Math.min(120000,2000*2**Math.min(item.tries,6)));}
         break;
       }
       bgIndicator();
     }
-  } finally { bgDraining = false; }
+  }finally{bgDraining=false;bgIndicator();if(queueAccount!==account||selectedEdition()!==edition)void drainQueue();}
 }
 
+let captureSavePending=false;
 async function saveCapture(options = {}) {
+  if(captureSavePending)return false;
+  captureSavePending=true;
+  const controls=Array.from(document.querySelectorAll?.('#body button,#body input,#body textarea,#body select')||[]).map(el=>[el,el.disabled]);
+  controls.forEach(([el])=>el.disabled=true);
+  try{return await saveCaptureDurably(options);}finally{captureSavePending=false;controls.forEach(([el,disabled])=>el.disabled=disabled);}
+}
+async function saveCaptureDurably(options = {}) {
   stopCaptureDictation();
   const note = document.getElementById('note').value.trim();
   if (!state.photoFile && !note) { toast('Take a photo or add a note first'); return; }
@@ -1697,12 +1740,12 @@ async function saveCapture(options = {}) {
   const payload={photo:state.photoFile||null,photoName:state.photoFile&&state.photoFile.name||'offline-photo.jpg',note,area_tags:JSON.stringify(isHoaClient()?[document.getElementById('hoaArea').value]:(state.area?[state.area]:[])),kind:'note'};
   if(isHoaClient()){Object.assign(payload,{hoa_community_id:state.communityId,hoa_title:document.getElementById('hoaTitle').value.trim(),hoa_item_type:document.getElementById('hoaType').value,hoa_priority:document.getElementById('hoaPriority').value,hoa_area:document.getElementById('hoaArea').value,hoa_directed_to:(document.getElementById('hoaDirected')||{}).value||'',hoa_budget_source:'unassigned',hoa_photo_stage:'initial'});}
   if(isConcreteClient())Object.assign(payload,concreteCapturePayload());
-  if(isPavingClient())payload.paving_photo_reason='proposal';
+  if(isPavingClient()){payload.paving_photo_reason='proposal';if(state.jobId)payload.job_id=state.jobId;}
   const hadCoords = !!state.location;
   if (state.location) { payload.latitude=state.location.lat;payload.longitude=state.location.lng; }
   if (state.address) payload.address=state.address;
-  // Sharing must wait for durable local storage before clearing the draft.
-  if(options.requireDurable){
+  // Every Save waits for the local storage transaction to commit.
+  {
     try{await enqueueUpload(payload,hadCoords,{requireDurable:true});}
     catch(e){toast('Could not save this photo. Your draft is still here.');return false;}
   }
@@ -1712,8 +1755,7 @@ async function saveCapture(options = {}) {
   state._dims = freshDims(); state._measure = null;
   if(isConcreteClient()){const d=concreteCaptureDraft();state._concreteCapture={phase:d.phase,purpose:d.purpose,element:d.element,jobId:d.jobId};}
   renderCapture();
-  toast('Saved');
-  if(!options.requireDurable)void enqueueUpload(payload, hadCoords);
+  toast('Saved on this device. Upload will be confirmed separately.');
   return true;
 }
 

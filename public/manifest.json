@@ -30,5 +30,8 @@
       "type": "image/png",
       "purpose": "maskable"
     }
-  ]
+  ],
+  "id": "/",
+  "scope": "/",
+  "description": "Capture photos, add notes, and organize your authorized Photo Notes versions."
 }

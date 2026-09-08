@@ -1,3 +1,4 @@
+const {beginCaptureReceipt,validateCaptureAccount}=require('./capture-receipts');
 const ConcreteCapture = require('./public/concrete-capture');
 const path = require('path');
 const fs = require('fs');
@@ -540,8 +541,8 @@ async function logEvent(userId, action, detail) {
       [userId, action, JSON.stringify(detail || {})]);
   } catch (e) { /* analytics is best-effort; never block the real request */ }
 }
-async function recordCaptureHistory(userId, captureId, action, detail) {
-  try { await pool.query(`INSERT INTO capture_history (capture_id,user_id,action,detail) VALUES ($1,$2,$3,$4)`, [captureId,userId,action,JSON.stringify(detail||{})]); }
+async function recordCaptureHistory(userId, captureId, action, detail, db=pool) {
+  try { await db.query(`INSERT INTO capture_history (capture_id,user_id,action,detail) VALUES ($1,$2,$3,$4)`, [captureId,userId,action,JSON.stringify(detail||{})]); }
   catch (e) { /* evidence history must not prevent the user's primary action */ }
 }
 const HOA_TYPES=['maintenance','information','inspection'];
@@ -549,8 +550,8 @@ const HOA_PRIORITIES=['emergency','high','routine','monitor'];
 const HOA_STATUSES=['new','investigating','getting_pricing','board_decision','on_hold','approved','scheduled','work_in_progress','waiting_vendor','waiting_management','waiting_board','work_done','needs_review','completed','deferred','cancelled'];
 const HOA_BUDGETS=['operating','reserve','unassigned','board_determination'];
 const HOA_STAGES=['initial','inspection','estimate','work_in_progress','completed_work','final_verification','follow_up'];
-async function hoaHistory(itemId,userId,action,detail={}){await pool.query(`INSERT INTO hoa_item_history(item_id,user_id,action,detail) VALUES($1,$2,$3,$4)`,[itemId,userId,action,JSON.stringify(detail)]);}
-async function hoaNotifyCompany(companyId,itemId,message,excludeUser){await pool.query(`INSERT INTO hoa_notifications(user_id,item_id,message) SELECT user_id,$2,$3 FROM hoa_company_members WHERE company_id=$1 AND user_id<>$4`,[companyId,itemId,message,excludeUser||0]);}
+async function hoaHistory(itemId,userId,action,detail={},db=pool){await db.query(`INSERT INTO hoa_item_history(item_id,user_id,action,detail) VALUES($1,$2,$3,$4)`,[itemId,userId,action,JSON.stringify(detail)]);}
+async function hoaNotifyCompany(companyId,itemId,message,excludeUser,db=pool){await db.query(`INSERT INTO hoa_notifications(user_id,item_id,message) SELECT user_id,$2,$3 FROM hoa_company_members WHERE company_id=$1 AND user_id<>$4`,[companyId,itemId,message,excludeUser||0]);}
 
 // Oriented photo dimensions (accounts for EXIF orientation) so we can classify
 // landscape vs portrait the way the user actually sees the photo. Content is
@@ -597,13 +598,13 @@ app.post('/api/logout', (req, res) => {
 
 // Current plan straight from the DB, so an admin plan change takes effect on the
 // user's next page load without needing them to sign out and back in.
-async function currentPlan(userId) {
+async function currentPlan(userId,db=pool) {
   try {
-    const { rows } = await pool.query(`SELECT plan FROM users WHERE id = $1`, [userId]);
+    const { rows } = await db.query(`SELECT plan FROM users WHERE id = $1`, [userId]);
     return rows.length && rows[0].plan === 'pro' ? 'pro' : 'free';
   } catch { return 'free'; }
 }
-async function currentProduct(userId){try{const r=(await pool.query(`SELECT plan,pro_type FROM users WHERE id=$1`,[userId])).rows[0];return r&&r.plan==='pro'?normalizeProType(r.pro_type):'basic';}catch(e){return 'basic';}}
+async function currentProduct(userId,db=pool){try{const r=(await db.query(`SELECT plan,pro_type FROM users WHERE id=$1`,[userId])).rows[0];return r&&r.plan==='pro'?normalizeProType(r.pro_type):'basic';}catch(e){return 'basic';}}
 
 const MANAGED_FEATURES = ['ticket_scanner', 'camera_readers', 'before_after', 'measurements', 'extra_work'];
 async function currentFeatureAccess(userId) {
@@ -620,15 +621,16 @@ async function featureAllowed(userId, feature) {
 }
 
 app.get('/api/me', requireAuth, async (req, res) => {
+  res.setHeader('X-Photo-Notes-Upload-Receipts','1');
   const row = (await pool.query(`SELECT name,email,role,plan,pro_type,feature_access,edition_access FROM users WHERE id=$1 AND active=true`, [req.user.id])).rows[0];
   if (!row) return res.status(401).json({ error:'not authenticated' });
   res.json({ authed:true, edition_access:editionAccess(row), name:row.name, role:row.role, email:row.email, plan:row.plan === 'pro' ? 'pro' : 'free', pro_type:normalizeProType(row.pro_type), feature_access:await currentFeatureAccess(req.user.id) });
 });
 
-async function hoaCompanyForUser(userId,create=false){let row=(await pool.query(`SELECT c.*,m.company_role FROM hoa_management_companies c JOIN hoa_company_members m ON m.company_id=c.id WHERE m.user_id=$1 ORDER BY c.id LIMIT 1`,[userId])).rows[0];if(!row&&create){const u=(await pool.query(`SELECT name FROM users WHERE id=$1`,[userId])).rows[0];const client=await pool.connect();try{await client.query('BEGIN');row=(await client.query(`INSERT INTO hoa_management_companies(name) VALUES($1) RETURNING *`,[`${u&&u.name||'HOA'} Management`])).rows[0];await client.query(`INSERT INTO hoa_company_members(company_id,user_id,company_role) VALUES($1,$2,'administrator')`,[row.id,userId]);await client.query('COMMIT');}catch(e){await client.query('ROLLBACK');throw e;}finally{client.release();}}return row||null;}
+async function hoaCompanyForUser(userId,create=false,db=pool){let row=(await db.query(`SELECT c.*,m.company_role FROM hoa_management_companies c JOIN hoa_company_members m ON m.company_id=c.id WHERE m.user_id=$1 ORDER BY c.id LIMIT 1`,[userId])).rows[0];if(!row&&create){const u=(await pool.query(`SELECT name FROM users WHERE id=$1`,[userId])).rows[0];const client=await pool.connect();try{await client.query('BEGIN');row=(await client.query(`INSERT INTO hoa_management_companies(name) VALUES($1) RETURNING *`,[`${u&&u.name||'HOA'} Management`])).rows[0];await client.query(`INSERT INTO hoa_company_members(company_id,user_id,company_role) VALUES($1,$2,'administrator')`,[row.id,userId]);await client.query('COMMIT');}catch(e){await client.query('ROLLBACK');throw e;}finally{client.release();}}return row||null;}
 async function requireHoa(req,res,next){if(await currentProduct(req.user.id)!=='hoa')return res.status(403).json({error:'HOA Maintenance Pro required'});req.hoaCompany=await hoaCompanyForUser(req.user.id,true);next();}
 async function requireConcrete(req,res,next){if(await currentProduct(req.user.id)!=='concrete')return res.status(403).json({error:'Concrete Pro required'});next();}
-async function hoaOwnsCommunity(companyId,communityId){return !!(await pool.query(`SELECT 1 FROM hoa_communities WHERE id=$1 AND company_id=$2 AND active=true`,[communityId,companyId])).rowCount;}
+async function hoaOwnsCommunity(companyId,communityId,db=pool){return !!(await db.query(`SELECT 1 FROM hoa_communities WHERE id=$1 AND company_id=$2 AND active=true`,[communityId,companyId])).rowCount;}
 
 // ---- photo upload ----
 const storage = multer.diskStorage({
@@ -757,9 +759,14 @@ async function reverseGeocode(lat, lng) {
 }
 
 // ---- captures (all scoped to the logged-in user) ----
-app.post('/api/captures', requireAuth, upload.single('photo'), async (req, res) => {
+app.post('/api/captures', requireAuth, validateCaptureAccount, upload.single('photo'), async (req, res) => {
+  let receipt;
   try {
+    receipt=await beginCaptureReceipt(req,pool);
+    if(receipt.replay){if(req.file)await fs.promises.unlink(req.file.path).catch(()=>{});return res.json(receipt.replay);}
+    const db=receipt.db;
     const b = req.body || {};
+    if(!req.file&&!String(b.note||'').trim())throw Object.assign(new Error('Take a photo or add a note first'),{status:400});
     const lat = b.latitude ? parseFloat(b.latitude) : null;
     const lng = b.longitude ? parseFloat(b.longitude) : null;
     // Address geocoding is kept OFF the save path so the record commits
@@ -775,18 +782,18 @@ app.post('/api/captures', requireAuth, upload.single('photo'), async (req, res) 
     const kind = b.kind === 'task' ? 'task' : 'note';
     const photoPath = req.file ? `/uploads/${req.file.filename}` : null;
     let jobId=Number.isInteger(Number(b.job_id))?Number(b.job_id):null;
-    if(jobId){const ok=(await pool.query(`SELECT 1 FROM jobs WHERE id=$1 AND user_id=$2`,[jobId,req.user.id])).rowCount;if(!ok)jobId=null;}
+    if(jobId){const ok=(await db.query(`SELECT 1 FROM jobs WHERE id=$1 AND user_id=$2`,[jobId,req.user.id])).rowCount;if(!ok)jobId=null;}
 
     let pw = null, ph = null;
     if (req.file) { const d = await imageDims(req.file.path); if (d) { pw = d.w; ph = d.h; } }
     const perceptualHash=req.file?await photoDhash(req.file.path):null;
     let duplicateMatches=[];
-    if(perceptualHash){const prior=(await pool.query(`SELECT id,photo_path,created_at,perceptual_hash FROM captures WHERE user_id=$1 AND perceptual_hash IS NOT NULL ORDER BY created_at DESC LIMIT 500`,[req.user.id])).rows;duplicateMatches=prior.map(x=>({...x,distance:hashDistance(perceptualHash,x.perceptual_hash)})).filter(x=>x.distance<=6).slice(0,5);}
+    if(perceptualHash){const prior=(await db.query(`SELECT id,photo_path,created_at,perceptual_hash FROM captures WHERE user_id=$1 AND perceptual_hash IS NOT NULL ORDER BY created_at DESC LIMIT 500`,[req.user.id])).rows;duplicateMatches=prior.map(x=>({...x,distance:hashDistance(perceptualHash,x.perceptual_hash)})).filter(x=>x.distance<=6).slice(0,5);}
 
     // Pro-tier dimension fields. Only stored for Pro users; ignored otherwise.
     let dLenIn = null, dLenUnit = null, dWidIn = null, dWidUnit = null, dDepthIn = null, dShape = null, dArea = null;
     let dSource = null, dConf = null, dAi = null, dConfirmed = true;
-    const isProUser = await currentPlan(req.user.id) === 'pro';
+    const isProUser = await currentPlan(req.user.id,db) === 'pro';
     if (isProUser) {
       const lenUnit = b.dim_length_unit === 'in' ? 'in' : 'ft';
       const widUnit = b.dim_width_unit === 'in' ? 'in' : 'ft';
@@ -821,7 +828,7 @@ app.post('/api/captures', requireAuth, upload.single('photo'), async (req, res) 
       }
     }
 
-    const captureProduct=await currentProduct(req.user.id);
+    const captureProduct=await currentProduct(req.user.id,db);
     const pavingPhotoReason=['paving','asphalt'].includes(captureProduct)&&b.paving_photo_reason==='proposal'?'proposal':null;
     const concreteProduct = captureProduct === 'concrete';
     const concreteElements=['patio','slab','sidewalk','curb','driveway','foundation','wall','column','beam','steps','deck','other'];
@@ -843,31 +850,33 @@ app.post('/api/captures', requireAuth, upload.single('photo'), async (req, res) 
     const vals = [req.user.id, req.user.name, photoPath, pw, ph, b.note || null, lat, lng, address, areas, kind, status, jobId, perceptualHash,
       dLenIn, dLenUnit, dWidIn, dWidUnit, dDepthIn, dShape, dArea,
       dSource, dConf, dAi ? JSON.stringify(dAi) : null, dConfirmed, concreteElement, concreteStage, concreteCondition, concreteSeverity, concreteMix, concreteLocation, concreteContext.concrete_phase, concreteContext.concrete_purpose, pavingPhotoReason];
-    const { rows } = await pool.query(q, vals);
+    const { rows } = await db.query(q, vals);
     const saved = rows[0];
     if (req.file) {
       try {
         const buffer=fs.readFileSync(req.file.path);
         const hash=crypto.createHash('sha256').update(buffer).digest('hex');
-        await pool.query(`INSERT INTO capture_evidence (capture_id,user_id,original_sha256,original_bytes,original_name) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (capture_id) DO NOTHING`, [saved.id,req.user.id,hash,buffer.length,ticketText(req.file.originalname,255)]);
+        await db.query(`INSERT INTO capture_evidence (capture_id,user_id,original_sha256,original_bytes,original_name) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (capture_id) DO NOTHING`, [saved.id,req.user.id,hash,buffer.length,ticketText(req.file.originalname,255)]);
       } catch (e) { console.error('[evidence.fingerprint]',e&&e.message); }
     }
-    await recordCaptureHistory(req.user.id,saved.id,'captured',{photo:!!req.file,gps:lat!=null&&lng!=null,address:!!address});
+    await recordCaptureHistory(req.user.id,saved.id,'captured',{photo:!!req.file,gps:lat!=null&&lng!=null,address:!!address},db);
     let maintenance_item=null;
-    if(await currentProduct(req.user.id)==='hoa'&&b.hoa_community_id){
-      const company=await hoaCompanyForUser(req.user.id,true),communityId=Number(b.hoa_community_id);
-      if(company&&await hoaOwnsCommunity(company.id,communityId)){
+    if(await currentProduct(req.user.id,db)==='hoa'&&b.hoa_community_id){
+      const company=await hoaCompanyForUser(req.user.id,false,db),communityId=Number(b.hoa_community_id);
+      if(company&&await hoaOwnsCommunity(company.id,communityId,db)){
         const itemType=HOA_TYPES.includes(b.hoa_item_type)?b.hoa_item_type:'maintenance',priority=HOA_PRIORITIES.includes(b.hoa_priority)?b.hoa_priority:'routine',stage=HOA_STAGES.includes(b.hoa_photo_stage)?b.hoa_photo_stage:'initial';
         const title=ticketText(b.hoa_title,200)||ticketText(b.note,120)||'Maintenance Photo Note';
-        const community=(await pool.query(`SELECT manager_name,assignment_rules FROM hoa_communities WHERE id=$1 AND company_id=$2`,[communityId,company.id])).rows[0];
+        const community=(await db.query(`SELECT manager_name,assignment_rules FROM hoa_communities WHERE id=$1 AND company_id=$2`,[communityId,company.id])).rows[0];
         const autoAssignee=ticketText(b.hoa_assignee,200)||(community.assignment_rules&&community.assignment_rules[ticketText(b.hoa_area,100)])||community.manager_name||null;
-        maintenance_item=(await pool.query(`INSERT INTO hoa_maintenance_items(company_id,community_id,capture_id,created_by,title,item_type,description,area,priority,target_date,primary_assignee,directed_to,budget_source,photo_stage) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,[company.id,communityId,saved.id,req.user.id,title,itemType,ticketText(b.note,4000),ticketText(b.hoa_area,100)||'Maintenance',priority,b.hoa_target_date||null,autoAssignee,ticketText(b.hoa_directed_to,200),HOA_BUDGETS.includes(b.hoa_budget_source)?b.hoa_budget_source:'unassigned',stage])).rows[0];
-        await pool.query(`INSERT INTO hoa_item_photos(item_id,capture_id,photo_stage) VALUES($1,$2,$3)`,[maintenance_item.id,saved.id,stage]);
-        await hoaHistory(maintenance_item.id,req.user.id,'created',{priority,item_type:itemType,photo_stage:stage});
-        await hoaNotifyCompany(company.id,maintenance_item.id,`${itemType==='information'?'New Information Request':'New Maintenance Item'}: ${title}`,req.user.id);
+        maintenance_item=(await db.query(`INSERT INTO hoa_maintenance_items(company_id,community_id,capture_id,created_by,title,item_type,description,area,priority,target_date,primary_assignee,directed_to,budget_source,photo_stage) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,[company.id,communityId,saved.id,req.user.id,title,itemType,ticketText(b.note,4000),ticketText(b.hoa_area,100)||'Maintenance',priority,b.hoa_target_date||null,autoAssignee,ticketText(b.hoa_directed_to,200),HOA_BUDGETS.includes(b.hoa_budget_source)?b.hoa_budget_source:'unassigned',stage])).rows[0];
+        await db.query(`INSERT INTO hoa_item_photos(item_id,capture_id,photo_stage) VALUES($1,$2,$3)`,[maintenance_item.id,saved.id,stage]);
+        await hoaHistory(maintenance_item.id,req.user.id,'created',{priority,item_type:itemType,photo_stage:stage},db);
+        await hoaNotifyCompany(company.id,maintenance_item.id,`${itemType==='information'?'New Information Request':'New Maintenance Item'}: ${title}`,req.user.id,db);
       }
     }
-    res.json({...saved,duplicate_matches:duplicateMatches,maintenance_item});
+    const response={...saved,duplicate_matches:duplicateMatches,maintenance_item};
+    await receipt.commit(response);
+    res.json(response);
 
     // Background address fill: if we have coordinates but no address yet, geocode
     // AFTER responding and patch the row. The save is already committed and the
@@ -883,9 +892,11 @@ app.post('/api/captures', requireAuth, upload.single('photo'), async (req, res) 
         .catch(e => console.error('[captures.bg-geocode]', e && e.message));
     }
   } catch (err) {
+    if(receipt)await receipt.rollback().catch(()=>{});
+    if(err.status)return res.status(err.status).json({error:err.message});
     console.error('[captures.create]', err);
     res.status(500).json({ error: 'failed to save capture' });
-  }
+  } finally { if(receipt)receipt.release(); }
 });
 
 app.get('/api/captures', requireAuth, async (req, res) => {
@@ -1392,7 +1403,7 @@ app.post('/api/issues', requireAuth, upload.fields([{name:'screenshot',maxCount:
     const row = (await pool.query(
       `INSERT INTO issue_reports (user_id, description, page_name, page_url, screenshot_path, voice_path, viewport, user_agent,reported_edition,app_version)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
-      [req.user.id, description, ticketText(req.body.page_name,100), ticketText(req.body.page_url,500), screenshotPath, voicePath, ticketText(req.body.viewport,100), ticketText(req.body.user_agent,1000),currentEdition(req.user),'165'])).rows[0];
+      [req.user.id, description, ticketText(req.body.page_name,100), ticketText(req.body.page_url,500), screenshotPath, voicePath, ticketText(req.body.viewport,100), ticketText(req.body.user_agent,1000),currentEdition(req.user),/^\d{1,12}$/.test(req.body.app_version||'')?req.body.app_version:'unknown'])).rows[0];
     const user = (await pool.query(`SELECT name,email FROM users WHERE id=$1`, [req.user.id])).rows[0] || req.user;
     let delivery={status:'pending',error:'Notification pending'};
     try{delivery=await emailIssueReport(row,user);await pool.query('UPDATE issue_reports SET email_status=$1,email_error=$2 WHERE id=$3',[delivery.status,delivery.error,row.id]);}catch(e){}
@@ -3379,7 +3390,7 @@ async function backfillPhotoDims() {
   } catch (e) { console.error('[backfill dims]', e); }
 }
 
-init()
+if(require.main===module)init()
   .then(() => {
     app.listen(PORT, () => console.log(`[efc] listening on ${PORT}`));
     const bootCloud=()=>startCloud(pool).catch(()=>{console.error('[issue-cloud] initialization failed; retrying');setTimeout(bootCloud,30000).unref();});
@@ -3392,3 +3403,5 @@ init()
     console.error('[efc] failed to init db', err);
     app.listen(PORT, () => console.log(`[efc] listening on ${PORT} (db init failed)`));
   });
+
+module.exports={app};

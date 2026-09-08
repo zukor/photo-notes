@@ -76,7 +76,7 @@ test('late speech results cannot move from one pending photo to the next', () =>
   assert.match(app, /words may appear after you pause/);
   assert.match(app, /const replacing=!!state\.photoFile;stopCaptureDictation\(\)/);
   assert.match(app, /if\(replacing\)\{state\._note=''/);
-  assert.match(app, /async function saveCapture\(options = \{\}\) \{\s*stopCaptureDictation\(\)/);
+  assert.match(app, /async function saveCaptureDurably\(options = \{\}\) \{\s*stopCaptureDictation\(\)/);
 });
 
 test('location failures expose a retry path without blocking photo save', () => {
@@ -87,12 +87,12 @@ test('location failures expose a retry path without blocking photo save', () => 
 });
 
 test('Save never waits for location and stale location cannot move to the next capture', () => {
-  const saveCapture=app.slice(app.indexOf('async function saveCapture()'),app.indexOf('// ================= HOA Maintenance Pro'));
+  const saveCapture=app.slice(app.indexOf('async function saveCaptureDurably(options'),app.indexOf('// ================= HOA Maintenance Pro'));
   assert.doesNotMatch(app, /Getting Full Address/);
   assert.doesNotMatch(saveCapture, /await state\._locationPromise/);
   assert.match(app, /let captureLocationGeneration = 0/);
   assert.match(app, /generation === captureLocationGeneration && state\.photoFile === photoForLocation/);
-  assert.match(app, /void enqueueUpload\(payload, hadCoords\)/);
+  assert.match(app, /await enqueueUpload\(payload,hadCoords,\{requireDurable:true\}\)/);
 });
 
 test('signed-in phone users receive a one-time install app icon offer', () => {

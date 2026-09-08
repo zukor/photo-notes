@@ -72,7 +72,7 @@
   var sending = false;
   function showSavedShare(file, text) {
     var modal = document.createElement('div');modal.className='export-share-modal';
-    modal.innerHTML='<section class="export-share-dialog" role="dialog" aria-modal="true" aria-labelledby="captureShareTitle"><h2 id="captureShareTitle">'+tr('Photo Note saved')+'</h2><p>'+tr('Tap Share to choose where to send it.')+'</p><button class="btn" data-share>'+tr('Share')+'</button><button class="btn secondary" data-close>'+tr('Close')+'</button></section>';
+    modal.innerHTML='<section class="export-share-dialog" role="dialog" aria-modal="true" aria-labelledby="captureShareTitle"><h2 id="captureShareTitle">'+tr('Photo saved on this device')+'</h2><p>'+tr('Tap Share to choose where to send it.')+'</p><button class="btn" data-share>'+tr('Share')+'</button><button class="btn secondary" data-close>'+tr('Close')+'</button></section>';
     var close=function(){modal.remove();q('send')?.focus();};
     modal.querySelector('[data-close]').onclick=close;
     modal.querySelector('[data-share]').onclick=async function(){this.disabled=true;try{await share(file,text);}finally{this.disabled=false;}};
