@@ -1,4 +1,5 @@
 const webpush = require('web-push');
+const {sendIssueNotification,registerIOSPush}=require('./ios-push');
 function validSubscription(s) {
   try {
     const u = new URL(s.endpoint);
@@ -29,6 +30,7 @@ async function initCloud(pool) {
   return (await pool.query('SELECT public_key,private_key FROM issue_push_config WHERE id=1')).rows[0];
 }
 function registerCloud(app,{pool,requireAuth,requireAdmin,requireTestingQueueToken}) {
+  registerIOSPush(app,{pool,requireAuth});
   app.get('/api/issues/push-key',requireAuth,async(req,res)=>{try {const r=await pool.query('SELECT public_key FROM issue_push_config WHERE id=1');res.json({publicKey:r.rows[0]?.public_key||null});}catch{res.status(503).json({error:'Notifications starting'});}});
   app.post('/api/issues/push-subscription',requireAuth,async(req,res)=>{
     if(!validSubscription(req.body))return res.status(400).json({error:'Unsupported notification subscription'});
@@ -39,7 +41,7 @@ function registerCloud(app,{pool,requireAuth,requireAdmin,requireTestingQueueTok
   app.get('/api/automation/cloud-worker',requireTestingQueueToken,async(req,res)=>{try{const state=(await pool.query('SELECT last_tick,last_error,last_runner_tick,runner_configured,runner_url,last_dispatch_check,dispatch_error FROM issue_cloud_state WHERE id=1')).rows[0];res.json({...state,dispatch_configured:!!process.env.ISSUE_GITHUB_TOKEN,runner_enabled:process.env.ISSUE_CLOUD_RUNNER_ENABLED==='true'});}catch{res.status(503).json({error:'Worker starting'});}});
   app.get('/api/admin/cloud-worker',requireAdmin,async(req,res)=>{try{const s=(await pool.query('SELECT * FROM issue_cloud_state WHERE id=1')).rows[0];const counts=(await pool.query('SELECT count(*)::int AS subscribed_devices FROM issue_push_subscriptions')).rows[0];const delivery=(await pool.query('SELECT count(*) FILTER (WHERE sent_at IS NULL AND attempts>=5)::int AS failed_deliveries FROM issue_push_delivery')).rows[0];res.json({...s,...counts,...delivery,dispatch_configured:!!process.env.ISSUE_GITHUB_TOKEN,runner_enabled:process.env.ISSUE_CLOUD_RUNNER_ENABLED==='true'});}catch{res.status(503).json({error:'Worker starting'});}});
 }
-async function tickCloud(pool,keys,{send=webpush.sendNotification,fetcher=fetch,env=process.env}={}) {
+async function tickCloud(pool,keys,{send=sendIssueNotification,fetcher=fetch,env=process.env}={}) {
   const client=await pool.connect();
   try {
     const locked=(await client.query('SELECT pg_try_advisory_lock(740193) AS locked')).rows[0].locked;if(!locked)return;
@@ -53,6 +55,7 @@ async function tickCloud(pool,keys,{send=webpush.sendNotification,fetcher=fetch,
       FROM issue_push_delivery d JOIN issue_cloud_events e ON e.id=d.event_id JOIN issue_reports i ON i.id=e.issue_id
       JOIN issue_push_subscriptions s ON s.id=d.subscription_id JOIN users u ON u.id=s.user_id
       WHERE d.sent_at IS NULL AND d.attempts<5 AND d.next_try<=now() AND e.status=i.management_status
+      AND u.active=true AND (u.role='admin' OR i.user_id=s.user_id)
       AND e.status IN ('ready_to_test','blocked') AND (e.status='blocked' OR NOT EXISTS (
         SELECT 1 FROM issue_push_delivery pending JOIN issue_cloud_events recent ON recent.id=pending.event_id
         JOIN issue_reports current_issue ON current_issue.id=recent.issue_id
@@ -109,8 +112,8 @@ async function notifyWorkerIncidents(client,keys,send){
     SELECT i.id,s.id FROM issue_cloud_incidents i JOIN issue_push_subscriptions s ON s.created_at<=i.created_at JOIN users u ON u.id=s.user_id
     WHERE i.resolved_at IS NULL AND u.role='admin' ON CONFLICT DO NOTHING`);
   const rows=(await client.query(`SELECT d.incident_id,d.subscription_id,s.subscription FROM issue_cloud_incident_delivery d
-    JOIN issue_cloud_incidents i ON i.id=d.incident_id JOIN issue_push_subscriptions s ON s.id=d.subscription_id
-    WHERE i.resolved_at IS NULL AND d.sent_at IS NULL AND d.attempts<5 AND d.next_try<=now() LIMIT 20`)).rows;
+    JOIN issue_cloud_incidents i ON i.id=d.incident_id JOIN issue_push_subscriptions s ON s.id=d.subscription_id JOIN users u ON u.id=s.user_id
+    WHERE u.active=true AND u.role='admin' AND i.resolved_at IS NULL AND d.sent_at IS NULL AND d.attempts<5 AND d.next_try<=now() LIMIT 20`)).rows;
   for(const d of rows){try{await send(d.subscription,JSON.stringify({title:'Photo Notes worker needs attention',body:'Automatic repairs need attention. Open Admin for the reason and next step.',url:'/admin',tag:'photo-notes-worker-attention'}),{vapidDetails:{subject:'https://photonotesapp.com',publicKey:keys.public_key,privateKey:keys.private_key},TTL:86400,timeout:10000});await client.query('UPDATE issue_cloud_incident_delivery SET sent_at=now() WHERE incident_id=$1 AND subscription_id=$2',[d.incident_id,d.subscription_id]);}
     catch(e){if([404,410].includes(e.statusCode))await client.query('DELETE FROM issue_push_subscriptions WHERE id=$1',[d.subscription_id]);else await client.query("UPDATE issue_cloud_incident_delivery SET attempts=attempts+1,next_try=now()+interval '1 minute'*power(2,attempts) WHERE incident_id=$1 AND subscription_id=$2",[d.incident_id,d.subscription_id]);}}
 }

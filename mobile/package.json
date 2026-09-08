@@ -5,12 +5,13 @@
   "type": "module",
   "scripts": {
     "dev": "npm run build && vite preview --host 127.0.0.1",
-    "build": "tsc --noEmit && vite build",
-    "sync": "npm run build && cap sync",
+    "build": "tsc --noEmit && vite build && node scripts/package-web.mjs",
+    "sync": "npm run sync:ios",
     "test": "tsx --test test/*.test.ts",
     "ios": "cap open ios",
     "android": "cap open android",
-    "format": "prettier --write src test package.json capacitor.config.json tsconfig.json index.html"
+    "format": "prettier --write src test package.json capacitor.config.json tsconfig.json vite.config.ts scripts/*.mjs",
+    "sync:ios": "npm run build && cap sync ios"
   },
   "dependencies": {
     "@capacitor/android": "8.5.1",

@@ -111,7 +111,7 @@ function userInitials(user) {
   return (words.length > 1 ? words[0][0] + words[words.length - 1][0] : source.slice(0, 2)).toUpperCase();
 }
 
-function photoSrc(p) { return p ? `${p}?v=${state.imgv}` : ''; }
+function photoSrc(p) { return p ? `${window.PhotoNotesNative?window.PhotoNotesNative.photoURL(p):p}?v=${state.imgv}` : ''; }
 
 const US_STATE_ABBR = {
   Alabama:'AL', Alaska:'AK', Arizona:'AZ', Arkansas:'AR', California:'CA', Colorado:'CO', Connecticut:'CT', Delaware:'DE', Florida:'FL', Georgia:'GA', Hawaii:'HI', Idaho:'ID', Illinois:'IL', Indiana:'IN', Iowa:'IA', Kansas:'KS', Kentucky:'KY', Louisiana:'LA', Maine:'ME', Maryland:'MD', Massachusetts:'MA', Michigan:'MI', Minnesota:'MN', Mississippi:'MS', Missouri:'MO', Montana:'MT', Nebraska:'NE', Nevada:'NV', 'New Hampshire':'NH', 'New Jersey':'NJ', 'New Mexico':'NM', 'New York':'NY', 'North Carolina':'NC', 'North Dakota':'ND', Ohio:'OH', Oklahoma:'OK', Oregon:'OR', Pennsylvania:'PA', 'Rhode Island':'RI', 'South Carolina':'SC', 'South Dakota':'SD', Tennessee:'TN', Texas:'TX', Utah:'UT', Vermont:'VT', Virginia:'VA', Washington:'WA', 'West Virginia':'WV', Wisconsin:'WI', Wyoming:'WY', 'District of Columbia':'DC'
@@ -157,10 +157,16 @@ async function api(path, opts = {}) {
 }
 
 async function boot() {
-  const r = await api('/api/me');
+  let r, offline=false;
+  try { r=await api('/api/me'); } catch(e) {
+    const me=window.PhotoNotesNative&&await window.PhotoNotesNative.offlineMe();
+    if(me){r=new Response(JSON.stringify(me));offline=true;}
+    else {renderLogin();const error=document.getElementById('loginErr');if(error)error.textContent='Connect to the internet to sign in.';return;}
+  }
   if (r.ok) {
     try { const me = await r.json(); state.me = me; state.plan = me.plan || 'free'; state.proType=me.pro_type||'paving'; } catch (e) {}
-    await Promise.all([loadAreas(),loadJobs(),loadHoaContext()]);
+    if(window.PhotoNotesNative)await window.PhotoNotesNative.account(state.me,selectedEdition(),offline);
+    if(!offline)await Promise.all([loadAreas(),loadJobs(),loadHoaContext()]);
     restoreOfflineQueue();
     // Start loading documents as soon as the user signs in. By the time they
     // open Create, existing documents can be shown immediately instead of
@@ -168,7 +174,11 @@ async function boot() {
     prefetchGroups();
     if(new URLSearchParams(location.search).has('issues'))state.view='my-issues';
     renderApp();
-    setTimeout(maybeOfferInstall, 700);
+    if(window.PhotoNotesNative){
+      const draft=await window.PhotoNotesNative.restoreDraft();
+      if(draft){state._note=draft.note||'';if(draft.context){state._concreteCapture=draft.context.concrete;state._pavingReason=draft.context.pavingReason;state.jobId=draft.context.jobId||'';state.area=draft.context.area||'';state.communityId=draft.context.communityId||'';}state.view='capture';renderApp();if(draft.photo)await onPhotoChosen(draft.photo);const note=document.getElementById('note');if(note)note.value=state._note||'';}
+    } else setTimeout(maybeOfferInstall, 700);
+    if(window.PhotoNotesNative?.issueOpenPending)openNativeIssues();
   } else renderLogin();
 }
 
@@ -248,12 +258,20 @@ function renderLogin() {
 async function doLogin() {
   const email = document.getElementById('email').value.trim();
   const pw = document.getElementById('pw').value;
-  const r = await api('/api/login', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password: pw }),
-  });
-  if (r.ok) await boot();
-  else document.getElementById('loginErr').textContent = 'Wrong email or password. Try again.';
+  const button = document.getElementById('loginBtn');
+  const error = document.getElementById('loginErr');
+  button.disabled = true;
+  error.textContent = '';
+  try {
+    const r = await api('/api/login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password: pw }),
+    });
+    if(r.ok){if(window.PhotoNotesNative){location.reload();return;}await boot();}
+    else error.textContent = r.status === 401 ? 'Wrong email or password. Try again.' : 'Sign-in is unavailable. Please try again.';
+  } catch (cause) {
+    error.textContent = 'Could not sign in. Check your connection and try again.';
+  } finally { button.disabled = false; }
 }
 
 function renderApp() {
@@ -306,7 +324,7 @@ function renderApp() {
       profileButton.setAttribute('aria-expanded', 'false');
     }
   };
-  document.getElementById('signout').onclick = async () => { await api('/api/logout', { method: 'POST' }); state.me = null; state._concreteCapture=null;state._pavingReason=null; renderLogin(); };
+  document.getElementById('signout').onclick = async () => { try { await api('/api/logout', { method: 'POST' }); if(window.PhotoNotesNative){location.reload();return;} state.me = null; state._concreteCapture=null;state._pavingReason=null; renderLogin(); } catch(error) { toast('Could not sign out securely. Please try again.'); } };
   const myIssues=document.getElementById('myIssues');if(myIssues)myIssues.onclick=()=>{state.view='my-issues';renderApp();};
   const myAssignment=document.getElementById('myAssignment');if(myAssignment)myAssignment.onclick=()=>{state.view='my-assignment';renderApp();};
   const editionSwitcher=document.getElementById('editionSwitcher');if(editionSwitcher)editionSwitcher.onchange=async()=>{
@@ -961,8 +979,9 @@ async function loadTodayTickets() {
   } catch (e) { box.innerHTML = '<p class="status">Today’s tickets could not be loaded.</p>'; }
 }
 
-function onPhotoChosen(file) {
+async function onPhotoChosen(file) {
   const replacing=!!state.photoFile;stopCaptureDictation();
+  if(window.PhotoNotesNative){try{await window.PhotoNotesNative.stopRecording();await window.PhotoNotesNative.draft({photo:file,note:replacing?'':state._note||'',context:{concrete:state._concreteCapture,pavingReason:state._pavingReason,jobId:state.jobId,area:state.area,communityId:state.communityId}});}catch(e){toast('Could not keep this photo on your iPhone. Check available storage.');return;}}
   captureLocationGeneration++;
   if(replacing){state._note='';const note=document.getElementById('note');if(note)note.value='';}
   state.photoFile = file;
@@ -992,6 +1011,7 @@ function retakeCapturePhoto(){
   if(!input)return;input.value='';input.click();
 }
 function cancelCapturePhoto(){
+  if(window.PhotoNotesNative)void window.PhotoNotesNative.clearDraft();
   stopCaptureDictation();
   captureLocationGeneration++;
   if(state._previewUrl)URL.revokeObjectURL(state._previewUrl);
@@ -1117,6 +1137,7 @@ function isIOS() {
 }
 
 async function toggleDictation() {
+  if(window.PhotoNotesNative){try{await window.PhotoNotesNative.record();}catch(e){toast(e.message||'Recording could not start');}return;}
   const noteEl = document.getElementById('note');
   const btn = document.getElementById('dictate');
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -1615,7 +1636,7 @@ let offlineQueueRestored = false;
 function queueDb(){return new Promise((resolve,reject)=>{if(!window.indexedDB)return reject(new Error('unavailable'));const r=indexedDB.open('photo-notes-offline',1);r.onupgradeneeded=()=>{if(!r.result.objectStoreNames.contains('captures'))r.result.createObjectStore('captures',{keyPath:'id',autoIncrement:true});};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});}
 async function queueStore(payload,hadCoords){const db=await queueDb();return new Promise((resolve,reject)=>{const tx=db.transaction('captures','readwrite');const r=tx.objectStore('captures').add({payload,hadCoords:!!hadCoords,createdAt:Date.now()});r.onerror=()=>reject(r.error);tx.oncomplete=()=>{db.close();resolve(r.result);};tx.onabort=()=>{db.close();reject(tx.error||new Error("Save transaction aborted"));};tx.onerror=()=>reject(tx.error);});}
 async function queueDelete(id){if(id==null)return;try{const db=await queueDb();await new Promise((resolve,reject)=>{const tx=db.transaction('captures','readwrite');tx.objectStore('captures').delete(id);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);});db.close();}catch(e){}}
-async function restoreOfflineQueue(){if(offlineQueueRestored)return;offlineQueueRestored=true;try{const db=await queueDb();const rows=await new Promise((resolve,reject)=>{const tx=db.transaction('captures','readonly');const r=tx.objectStore('captures').getAll();r.onsuccess=()=>resolve(r.result||[]);r.onerror=()=>reject(r.error);});db.close();const known=new Set(bgQueue.map(x=>x.id));rows.forEach(row=>{if(!known.has(row.id))bgQueue.push({id:row.id,payload:row.payload,hadCoords:row.hadCoords,tries:0});});if(rows.length){toast(`${rows.length} offline capture${rows.length===1?'':'s'} ready to upload`);bgIndicator();drainQueue();}}catch(e){}}
+async function restoreOfflineQueue(){if(window.PhotoNotesNative)return window.PhotoNotesNative.restore();if(offlineQueueRestored)return;offlineQueueRestored=true;try{const db=await queueDb();const rows=await new Promise((resolve,reject)=>{const tx=db.transaction('captures','readonly');const r=tx.objectStore('captures').getAll();r.onsuccess=()=>resolve(r.result||[]);r.onerror=()=>reject(r.error);});db.close();const known=new Set(bgQueue.map(x=>x.id));rows.forEach(row=>{if(!known.has(row.id))bgQueue.push({id:row.id,payload:row.payload,hadCoords:row.hadCoords,tries:0});});if(rows.length){toast(`${rows.length} offline capture${rows.length===1?'':'s'} ready to upload`);bgIndicator();drainQueue();}}catch(e){}}
 function payloadFormData(p){const fd=new FormData();if(p.photo)fd.append('photo',p.photo,p.photoName||'offline-photo.jpg');fd.append('note',p.note||'');fd.append('area_tags',p.area_tags||'[]');fd.append('kind',p.kind||'note');if(p.job_id)fd.append('job_id',p.job_id);for(const k of ['paving_photo_reason','concrete_phase','concrete_purpose','concrete_element','concrete_stage','concrete_condition','concrete_severity','concrete_location','concrete_mix','hoa_community_id','hoa_title','hoa_item_type','hoa_priority','hoa_area','hoa_directed_to','hoa_budget_source','hoa_photo_stage','hoa_target_date'])if(p[k])fd.append(k,p[k]);if(p.latitude!=null)fd.append('latitude',p.latitude);if(p.longitude!=null)fd.append('longitude',p.longitude);if(p.address)fd.append('address',p.address);return fd;}
 
 function bgIndicator() {
@@ -1641,6 +1662,7 @@ function bgIndicator() {
 }
 
 async function enqueueUpload(payload, hadCoords, options = {}) {
+  if(window.PhotoNotesNative)return window.PhotoNotesNative.enqueue(payload);
   let id=null;try{id=await queueStore(payload,hadCoords);}catch(e){if(options.requireDurable)throw e;}
   bgQueue.push({ id, payload, hadCoords: !!hadCoords, tries: 0 });
   if (!bgOnlineHooked) { window.addEventListener('online', drainQueue); bgOnlineHooked = true; }
@@ -1688,6 +1710,7 @@ async function drainQueue() {
 
 async function saveCapture(options = {}) {
   stopCaptureDictation();
+  if(window.PhotoNotesNative){await window.PhotoNotesNative.stopRecording();options={...options,requireDurable:true};}
   const note = document.getElementById('note').value.trim();
   if (!state.photoFile && !note) { toast('Take a photo or add a note first'); return; }
   if(isHoaClient()&&!state.communityId){toast('Select an HOA or community');return;}
@@ -3251,6 +3274,7 @@ function clearSendSelection() {
 }
 
 function downloadBlob(blob, name) {
+  if(window.PhotoNotesNative)return window.PhotoNotesNative.share(blob,name);
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 3000);
@@ -4110,7 +4134,7 @@ async function exportProposal(doc) {
   finally { if (btn) { btn.disabled = false; btn.textContent = doc === 'pdf' ? 'Proposal PDF' : 'Proposal Word'; } }
 }
 
-if ('serviceWorker' in navigator) {
+if (!window.PhotoNotesNative && 'serviceWorker' in navigator) {
   window.addEventListener('load', async () => {
     try {
       const registration = await navigator.serviceWorker.register('/sw.js', { updateViaCache:'none' });
@@ -4119,3 +4143,15 @@ if ('serviceWorker' in navigator) {
   });
 }
 boot();
+
+// Persist native note edits before the user taps Save.
+if(window.PhotoNotesNative){
+  const keepNativeDraft=()=>{if(!state.photoFile)return;void window.PhotoNotesNative.draft({photo:state.photoFile,note:state._note||"",context:{concrete:state._concreteCapture,pavingReason:state._pavingReason,jobId:state.jobId,area:state.area,communityId:state.communityId}}).catch(()=>toast("Changes could not be saved locally. Keep this screen open."));};
+  document.addEventListener("input",event=>{if(event.target.id!=="note")return;state._note=event.target.value;keepNativeDraft();});
+  document.addEventListener("change",event=>{if(state.view==='capture'&&event.target.matches('input,select,textarea'))keepNativeDraft();});
+}
+
+
+async function openNativeRecoveredPhoto(file){if(!window.PhotoNotesNative)return;state.photoFile=null;state._note="";state.view="capture";renderApp();await onPhotoChosen(file);}
+
+function openNativeIssues(){if(!window.PhotoNotesNative||!state.me)return;window.PhotoNotesNative.issueOpenPending=false;state.view="my-issues";renderApp();}

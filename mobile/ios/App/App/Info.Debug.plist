@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-	<string>Photo Notes AI</string>
+	<string>Photo Notes Dev</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -24,8 +24,15 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
 	<key>NSCameraUsageDescription</key>
 	<string>Take photos to keep with your Photo Notes.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Connect to the local iOS test server during development.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Add your location to photos when you choose to capture it.</string>
 	<key>NSMicrophoneUsageDescription</key>

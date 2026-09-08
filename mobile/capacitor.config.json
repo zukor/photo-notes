@@ -1,7 +1,11 @@
 {
-  "appId": "com.zukor.photonotes.dev",
-  "appName": "Photo Notes Dev",
+  "appId": "com.zukor.photonotes.ai",
+  "appName": "Photo Notes AI",
   "webDir": "dist",
-  "ios": { "contentInset": "automatic" },
-  "android": { "allowMixedContent": false }
+  "ios": {
+    "contentInset": "automatic"
+  },
+  "android": {
+    "allowMixedContent": false
+  }
 }

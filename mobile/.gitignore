@@ -7,3 +7,7 @@ dist/
 *.keystore
 *.p12
 *.mobileprovision
+
+artifacts/
+*.xcarchive
+*.ipa

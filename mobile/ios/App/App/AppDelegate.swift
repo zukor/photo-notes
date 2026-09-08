@@ -1,14 +1,36 @@
 import UIKit
 import Capacitor
+import UserNotifications
+
+enum PhotoNotesPushRouting { static var pending = false }
 
 @UIApplicationMain
-class AppDelegate: UIResponder, UIApplicationDelegate {
+class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterDelegate {
 
     var window: UIWindow?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        // Override point for customization after application launch.
+        UNUserNotificationCenter.current().delegate = self
         return true
+    }
+
+    func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        let token = deviceToken.map { String(format: "%02x", $0) }.joined()
+        #if DEBUG
+        let environment = "development"
+        #else
+        let environment = "production"
+        #endif
+        NotificationCenter.default.post(name: Notification.Name("PhotoNotesPushToken"), object: nil, userInfo: ["token": token, "environment": environment])
+    }
+    func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
+        NotificationCenter.default.post(name: Notification.Name("PhotoNotesPushToken"), object: nil, userInfo: ["error": "Apple notification registration failed. Check signing and notification settings."])
+    }
+    func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) { completionHandler([.banner, .sound]) }
+    func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse, withCompletionHandler completionHandler: @escaping () -> Void) {
+        PhotoNotesPushRouting.pending = true
+        NotificationCenter.default.post(name: Notification.Name("PhotoNotesPushOpened"), object: nil)
+        completionHandler()
     }
 
     func applicationWillResignActive(_ application: UIApplication) {

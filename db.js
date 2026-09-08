@@ -340,6 +340,15 @@ CREATE TABLE IF NOT EXISTS capture_evidence (
   original_name   TEXT,
   captured_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+CREATE TABLE IF NOT EXISTS mobile_capture_receipts (
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  request_id UUID NOT NULL,
+  request_hash TEXT NOT NULL,
+  response JSONB NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY(user_id,request_id)
+);
+
 CREATE TABLE IF NOT EXISTS capture_history (
   id         SERIAL PRIMARY KEY,
   capture_id INTEGER NOT NULL REFERENCES captures(id) ON DELETE CASCADE,
