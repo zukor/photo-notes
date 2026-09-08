@@ -1,0 +1,9 @@
+node_modules/
+dist/
+*.local
+
+# Signing material stays outside source control.
+*.jks
+*.keystore
+*.p12
+*.mobileprovision

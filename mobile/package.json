@@ -1,0 +1,31 @@
+{
+  "name": "photo-notes-mobile",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "npm run build && vite preview --host 127.0.0.1",
+    "build": "tsc --noEmit && vite build",
+    "sync": "npm run build && cap sync",
+    "test": "tsx --test test/*.test.ts",
+    "ios": "cap open ios",
+    "android": "cap open android",
+    "format": "prettier --write src test package.json capacitor.config.json tsconfig.json index.html"
+  },
+  "dependencies": {
+    "@capacitor/android": "8.5.1",
+    "@capacitor/app": "^8.0.0",
+    "@capacitor/camera": "8.2.4",
+    "@capacitor/core": "8.5.1",
+    "@capacitor/filesystem": "8.1.3",
+    "@capacitor/ios": "8.5.1"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.5.1",
+    "@types/node": "^24.0.0",
+    "prettier": "3.9.6",
+    "tsx": "^4.21.0",
+    "typescript": "~5.9.3",
+    "vite": "^7.3.0"
+  }
+}
