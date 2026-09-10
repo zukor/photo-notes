@@ -696,3 +696,15 @@ input.dimfield.suggested {
 #issueMarkupStage { flex:none; height:46dvh; }
 .issue-markup-toolbar { margin-top:8px; }
 #issueShotStatus:empty { display:none; }
+
+/* Full-width screenshot with natural height, followed by two tool rows. */
+#issueMarkupStage { height:auto; min-height:0; overflow:visible; }
+.issue-screenshot-scroll { max-height:none; overflow:visible; }
+.issue-markup-toolbar { display:block; }
+.issue-markup-tools { display:grid; grid-template-columns:minmax(0,1.35fr) minmax(0,.85fr) minmax(0,1.3fr) minmax(0,1fr) minmax(0,.75fr) minmax(0,.75fr); gap:4px; }
+.issue-markup-actions { display:grid; grid-template-columns:1fr 1.5fr 1fr 1fr 1fr; gap:4px; margin-top:4px; }
+.issue-markup-toolbar button { min-width:0; min-height:44px; padding:5px 3px; font-size:12px; overflow-wrap:anywhere; }
+.issue-markup-actions label { min-width:0; justify-content:center; flex-wrap:wrap; gap:2px; font-size:11px; }
+.issue-markup-actions input[type=color] { width:30px; height:28px; }
+#issueMarkupHint:empty { display:none; }
+@media(max-width:360px) { .issue-markup-toolbar button { font-size:11px; } }
