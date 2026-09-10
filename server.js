@@ -1415,7 +1415,7 @@ app.post('/api/issues', requireAuth, upload.fields([{name:'screenshot',maxCount:
 app.get('/api/admin/issues', requireAdmin, async (req, res) => {
   try {
     const rows = (await pool.query(
-      `SELECT i.*,u.name AS user_name,u.email AS user_email FROM issue_reports i JOIN users u ON u.id=i.user_id ORDER BY i.created_at DESC LIMIT 200`)).rows;
+      `SELECT i.*,u.name AS user_name,u.email AS user_email FROM issue_reports i JOIN users u ON u.id=i.user_id ORDER BY i.created_at DESC`)).rows;
     res.json(rows);
   } catch (err) { console.error('[issues.admin-list]', err); res.status(500).json({ error:'failed' }); }
 });

@@ -426,7 +426,7 @@
 <details class="admin-section" data-admin-tool="issues"><summary>Issue Management Center</summary><div class="admin-section-body">
           <div class="helper">Review reports from every version, repair progress, deployment evidence, and tester feedback. Ready-to-test fixes and requests for details appear automatically in the reporter’s app.</div>
           <p id="repairWorkerStatus" class="helper" role="status"></p><div class="issue-toolbar">
-            <label>Status Filter<select id="issueStatusFilter"><option value="open">All Open Issues</option><option value="all">All Issues</option><option value="new">New</option><option value="reviewing">Reviewing</option><option value="fixing">Working</option><option value="testing">Testing</option><option value="blocked">Needs Information / Blocked</option><option value="ready_to_test">Ready to Test</option><option value="tester_confirmed">Tester Confirmed</option><option value="resolved">Resolved</option><option value="wont_fix">Won’t Fix</option></select></label>
+            <label>Status Filter<select id="issueStatusFilter"><option value="open">All Unresolved Issues</option><option value="all">All Issues</option><option value="new">New</option><option value="reviewing">Reviewing</option><option value="fixing">Working</option><option value="testing">Testing</option><option value="blocked">Needs Information / Blocked</option><option value="ready_to_test">Ready to Test</option><option value="tester_confirmed">Tester Confirmed</option><option value="resolved">Resolved</option><option value="wont_fix">Won’t Fix</option></select></label>
             <label>Priority Filter<select id="issuePriorityFilter"><option value="all">All Priorities</option><option value="urgent">Urgent</option><option value="high">High</option><option value="normal">Normal</option><option value="low">Low</option></select></label>
             <label>Tester Filter<select id="issueTesterFilter"><option value="all">All Testers</option></select></label>
             <label>Device Filter<select id="issueDeviceFilter"><option value="all">All Devices</option><option value="android">Android</option><option value="ios">iPhone / iPad</option><option value="desktop">Desktop</option><option value="unknown">Unknown</option></select></label>
@@ -496,7 +496,23 @@
     const issuePriorityLabels={low:'Low',normal:'Normal',high:'High',urgent:'Urgent'};
     function issueDevice(i){const ua=String(i.user_agent||'').toLowerCase(),vp=String(i.viewport||'');if(/android/.test(ua))return {key:'android',label:'Android'};if(/iphone|ipad|ipod/.test(ua))return {key:'ios',label:/ipad/.test(ua)?'iPad':'iPhone'};if(/windows|macintosh|cros|linux/.test(ua))return {key:'desktop',label:'Desktop'};if(/^\d+\s*[×x]\s*\d+$/.test(vp)&&Number(vp.split(/[×x]/)[0].trim())<=900)return {key:'unknown',label:'Mobile / unknown'};return {key:'unknown',label:'Unknown device'};}
     function populateIssueFilters(){const tester=document.getElementById('issueTesterFilter');if(!tester)return;const selected=tester.value||'all',people=[...new Map(allIssues.map(i=>[String(i.user_id),i.user_name||i.user_email||`User ${i.user_id}`])).entries()].sort((a,b)=>a[1].localeCompare(b[1]));tester.innerHTML='<option value="all">All Testers</option>'+people.map(([id,name])=>`<option value="${esc(id)}">${esc(name)}</option>`).join('');tester.value=people.some(([id])=>id===selected)?selected:'all';}
-    function renderIssueComparison(rows){const box=document.getElementById('issueComparison');if(!box)return;const groups=new Map();for(const i of rows){const name=i.user_name||i.user_email||`User ${i.user_id}`,device=issueDevice(i).label,key=`${name}|${device}`,current=groups.get(key)||{name,device,total:0,open:0};current.total++;if(!['resolved','wont_fix','tester_confirmed'].includes(i.management_status||'new'))current.open++;groups.set(key,current);}const list=[...groups.values()].sort((a,b)=>b.total-a.total||a.name.localeCompare(b.name));box.innerHTML=list.length?'<b>Tester and device comparison</b><br>'+list.map(g=>`${esc(g.name)} · ${esc(g.device)}: ${g.total} report${g.total===1?'':'s'}, ${g.open} open`).join('<br>'):'<span class="muted">No reports match these filters.</span>';}
+    function issueCounts(rows){
+      const counts={work:0,awaiting:0,resolved:0,closed:0,urgent:0};
+      for(const i of rows){const status=i.management_status||'new';
+        if(['resolved','tester_confirmed'].includes(status))counts.resolved++;
+        else if(status==='wont_fix')counts.closed++;
+        else if(status==='ready_to_test'&&i.verification&&i.release_reference)counts.awaiting++;
+        else counts.work++;
+        if(!['resolved','tester_confirmed','wont_fix'].includes(status)&&i.priority==='urgent')counts.urgent++;
+      }return counts;
+    }
+    function renderIssueComparison(rows){
+      const box=document.getElementById('issueComparison');if(!box)return;
+      const groups=new Map();
+      for(const i of rows){const name=i.user_name||i.user_email||`User ${i.user_id}`,device=issueDevice(i).label,key=`${i.user_id}|${device}`,group=groups.get(key)||{name,device,rows:[]};group.rows.push(i);groups.set(key,group);}
+      const list=[...groups.values()].sort((a,b)=>b.rows.length-a.rows.length||a.name.localeCompare(b.name));
+      box.innerHTML=list.length?'<b>Tester and device comparison</b><br>'+list.map(g=>{const c=issueCounts(g.rows);return `${esc(g.name)} · ${esc(g.device)}: ${g.rows.length} reports, ${c.work} need work, ${c.awaiting} awaiting retest, ${c.resolved} resolved${c.closed?`, ${c.closed} closed without a fix`:''}`;}).join('<br>'):'<span class="muted">No reports match these filters.</span>';
+    }
     function issueOptions(values,labels,current){return values.map(v=>`<option value="${v}"${v===current?' selected':''}>${labels[v]}</option>`).join('');}
     function renderIssues(){
       const box=document.getElementById('issues'); if(!box)return;
@@ -505,10 +521,11 @@
       const tf=(document.getElementById('issueTesterFilter')||{}).value||'all';
       const df=(document.getElementById('issueDeviceFilter')||{}).value||'all';
       const closed=new Set(['resolved','wont_fix','tester_confirmed']);
-      const rows=allIssues.filter(i=>(sf==='all'||(sf==='open'&&!closed.has(i.management_status||'new'))||i.management_status===sf)&&(pf==='all'||(i.priority||'normal')===pf)&&(tf==='all'||String(i.user_id)===tf)&&(df==='all'||issueDevice(i).key===df));
-      const counts={open:allIssues.filter(i=>!closed.has(i.management_status||'new')).length,new:allIssues.filter(i=>(i.management_status||'new')==='new').length,urgent:allIssues.filter(i=>(i.priority||'normal')==='urgent'&&!closed.has(i.management_status||'new')).length,resolved:allIssues.filter(i=>i.management_status==='resolved').length};
-      document.getElementById('issueSummary').innerHTML=`<span class="pill basic">${counts.open} open</span><span class="pill basic">${counts.new} new</span><span class="pill ${counts.urgent?'role':'basic'}">${counts.urgent} urgent</span><span class="pill pro">${counts.resolved} resolved</span>`;
-      renderIssueComparison(rows);
+      const scope=allIssues.filter(i=>(pf==='all'||(i.priority||'normal')===pf)&&(tf==='all'||String(i.user_id)===tf)&&(df==='all'||issueDevice(i).key===df));
+      const rows=scope.filter(i=>sf==='all'||(sf==='open'&&!closed.has(i.management_status||'new'))||i.management_status===sf);
+      const counts=issueCounts(scope);
+      document.getElementById('issueSummary').innerHTML=`<span class="pill basic">${counts.work} need work</span><span class="pill basic">${counts.awaiting} awaiting retest</span><span class="pill pro">${counts.resolved} resolved</span>${counts.closed?`<span class="pill basic">${counts.closed} closed without a fix</span>`:''}<span class="pill ${counts.urgent?'role':'basic'}">${counts.urgent} urgent</span><p class="helper">Totals and comparison include all statuses for the selected tester, device, and priority. The status filter applies to the report list below. Awaiting retest means a fix is deployed but the reporter has not yet confirmed it.</p>`;
+      renderIssueComparison(scope);
       box.innerHTML=rows.length?rows.map(issueCard).join(''):'<p class="helper">No issue reports match these filters.</p>';
       for(const issue of rows.filter(i=>i.voice_path)){
         const save=box.querySelector(`[data-issue-save="${issue.id}"]`);if(!save)continue;
