@@ -169,9 +169,21 @@ function issueReporterMarkup(){return `<a id="issueUpdates" class="issue-updates
 
 // In-app repair notifications do not depend on email configuration.
 async function refreshIssueAttention(){
-  if(!document.getElementById('issueUpdates')||document.hidden)return;
-  try{const r=await api('/api/issues/attention');if(!r.ok)return;const d=await r.json(),link=document.getElementById('issueUpdates');if(!link)return;link.hidden=!d.count;link.textContent=`Issue updates (${d.count})`;link.setAttribute('aria-label',`${d.count} issue reports need your attention`);}catch(e){}
+  const profile=document.getElementById('profileButton'),link=document.getElementById('issueUpdates');
+  if((!profile&&!link)||document.hidden)return;
+  try{
+    const r=await api('/api/issues/attention');if(!r.ok)return;const d=await r.json();
+    if(profile&&profile===document.getElementById('profileButton')){
+      const badge=document.getElementById('testerAlert'),menu=document.getElementById('myIssues');
+      if(badge)badge.hidden=!d.ready_count;
+      profile.setAttribute('aria-label',typeof uiT==='function'?uiT(d.ready_count?'Account menu: fix ready to retest':'Account menu'):'Account menu');
+      if(typeof state!=='undefined'&&state.me)state.me.is_tester=!!d.is_tester;
+      if(menu)menu.textContent=typeof uiT==='function'?uiT(d.is_tester?'Testing Hub':'My Issue Reports'):(d.is_tester?'Testing Hub':'My Issue Reports');
+    }
+    if(link){link.hidden=!d.count;link.textContent=`Issue updates (${d.count})`;link.setAttribute('aria-label',`${d.count} issue reports need your attention`);}
+  }catch(e){}
 }
+window.addEventListener('focus',refreshIssueAttention);
 setInterval(()=>{if(!document.hidden)refreshIssueAttention();},5000);
 document.addEventListener('visibilitychange',refreshIssueAttention);
 

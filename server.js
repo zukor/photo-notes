@@ -622,9 +622,9 @@ async function featureAllowed(userId, feature) {
 
 app.get('/api/me', requireAuth, async (req, res) => {
   res.setHeader('X-Photo-Notes-Upload-Receipts','1');
-  const row = (await pool.query(`SELECT name,email,role,plan,pro_type,feature_access,edition_access FROM users WHERE id=$1 AND active=true`, [req.user.id])).rows[0];
+  const row = (await pool.query(`SELECT name,email,role,plan,pro_type,feature_access,edition_access,is_tester FROM users WHERE id=$1 AND active=true`, [req.user.id])).rows[0];
   if (!row) return res.status(401).json({ error:'not authenticated' });
-  res.json({ authed:true, edition_access:editionAccess(row), name:row.name, role:row.role, email:row.email, plan:row.plan === 'pro' ? 'pro' : 'free', pro_type:normalizeProType(row.pro_type), feature_access:await currentFeatureAccess(req.user.id) });
+  res.json({ authed:true, is_tester:row.is_tester, edition_access:editionAccess(row), name:row.name, role:row.role, email:row.email, plan:row.plan === 'pro' ? 'pro' : 'free', pro_type:normalizeProType(row.pro_type), feature_access:await currentFeatureAccess(req.user.id) });
 });
 
 async function hoaCompanyForUser(userId,create=false,db=pool){let row=(await db.query(`SELECT c.*,m.company_role FROM hoa_management_companies c JOIN hoa_company_members m ON m.company_id=c.id WHERE m.user_id=$1 ORDER BY c.id LIMIT 1`,[userId])).rows[0];if(!row&&create){const u=(await pool.query(`SELECT name FROM users WHERE id=$1`,[userId])).rows[0];const client=await pool.connect();try{await client.query('BEGIN');row=(await client.query(`INSERT INTO hoa_management_companies(name) VALUES($1) RETURNING *`,[`${u&&u.name||'HOA'} Management`])).rows[0];await client.query(`INSERT INTO hoa_company_members(company_id,user_id,company_role) VALUES($1,$2,'administrator')`,[row.id,userId]);await client.query('COMMIT');}catch(e){await client.query('ROLLBACK');throw e;}finally{client.release();}}return row||null;}
@@ -1425,7 +1425,7 @@ registerCloud(app,{pool,requireAuth,requireAdmin,requireTestingQueueToken});
 
 app.get('/api/issues/mine', requireAuth, async (req,res)=>{
   try{
-    const rows=(await pool.query(`SELECT id,description,page_name,screenshot_path,reported_edition,app_version,blocked_reason,reporter_details,management_status,fix_summary,release_reference,retest_instructions,tester_notification_status,tester_notified_at,tester_result,tester_notes,tester_retested_at,created_at,updated_at,verification,(SELECT max(created_at) FROM issue_repair_events WHERE issue_id=issue_reports.id AND event='ready_to_test') AS deployed_at FROM issue_reports WHERE user_id=$1 ORDER BY created_at DESC LIMIT 100`,[req.user.id])).rows;
+    const rows=(await pool.query(`SELECT id,description,page_name,screenshot_path,reported_edition,app_version,blocked_reason,reporter_details,management_status,fix_summary,release_reference,retest_instructions,tester_notification_status,tester_notified_at,tester_result,tester_notes,tester_retested_at,created_at,updated_at,verification,(SELECT max(created_at) FROM issue_repair_events WHERE issue_id=issue_reports.id AND event='ready_to_test') AS deployed_at FROM issue_reports WHERE user_id=$1 ORDER BY created_at DESC`,[req.user.id])).rows;
     res.json(rows);
   }catch(e){console.error('[issues.mine]',e);res.status(500).json({error:'failed'});}
 });
@@ -1477,7 +1477,7 @@ app.post('/api/issues/:id/retest',requireAuth,async(req,res)=>{
     if(!Number.isInteger(id)||!['fixed','still_happening'].includes(result))return res.status(400).json({error:'bad retest result'});
     const notes=ticketText(req.body&&req.body.notes,2000);
     const nextStatus=result==='fixed'?'tester_confirmed':'new';
-    const row=(await pool.query(`UPDATE issue_reports SET tester_result=$1,tester_notes=$2,tester_retested_at=now(),management_status=$3,repair_claim_hash=NULL,repair_lease_until=NULL,updated_at=now(),resolved_at=CASE WHEN $1='fixed' THEN now() ELSE NULL END WHERE id=$4 AND user_id=$5 AND management_status IN ('ready_to_test','tester_confirmed','fixing') RETURNING *`,[result,notes,nextStatus,id,req.user.id])).rows[0];
+    const row=(await pool.query(`UPDATE issue_reports SET tester_result=$1,tester_notes=$2,tester_retested_at=now(),management_status=$3,repair_claim_hash=NULL,repair_lease_until=NULL,updated_at=now(),resolved_at=CASE WHEN $1='fixed' THEN now() ELSE NULL END WHERE id=$4 AND user_id=$5 AND management_status='ready_to_test' AND verification IS NOT NULL AND COALESCE(release_reference,'')<>'' RETURNING *`,[result,notes,nextStatus,id,req.user.id])).rows[0];
     if(!row)return res.status(404).json({error:'issue is not ready for retesting'});
     await pool.query("INSERT INTO issue_repair_events(issue_id,event,detail) VALUES($1,'retest',$2)",[id,JSON.stringify({result,notes})]);logEvent(req.user.id,'issue_retest',{issue_id:id,result});res.json({ok:true,status:nextStatus});
   }catch(e){console.error('[issues.retest]',e);res.status(500).json({error:'retest failed'});}
@@ -2568,7 +2568,7 @@ app.get('/api/ewr/:id/export', requireAuth, async (req, res) => {
 app.get('/api/admin/users', requireAdmin, async (req, res) => {
   try {
     const { rows } = await pool.query(`
-      SELECT u.id, u.email, u.name, u.industry, u.role, u.plan, u.pro_type, u.feature_access, u.edition_access, u.active, u.created_at, u.last_login_at,
+      SELECT u.id, u.email, u.name, u.industry, u.role, u.plan, u.pro_type, u.feature_access, u.edition_access, u.is_tester, u.active, u.created_at, u.last_login_at,
         COALESCE(c.cnt, 0)::int      AS capture_count,
         c.first_capture, c.last_capture,
         COALESCE(c.d7, 0)::int       AS last_7d,
@@ -2688,6 +2688,8 @@ app.post('/api/admin/users/:id', requireAdmin, async (req, res) => {
     }
     if (typeof b.email === 'string') { const email=b.email.toLowerCase().trim(); if(!email)return res.status(400).json({error:'email required'}); vals.push(email);sets.push(`email=$${vals.length}`);changed.push('email'); }
     if (typeof b.industry === 'string') { vals.push(b.industry.trim()); sets.push(`industry = $${vals.length}`); changed.push('industry'); }
+    if (b.is_tester !== undefined && typeof b.is_tester !== 'boolean') return res.status(400).json({error:'Tester must be true or false'});
+    if (typeof b.is_tester === 'boolean') { vals.push(b.is_tester); sets.push(`is_tester = $${vals.length}`); changed.push('is_tester'); }
     if (typeof b.active === 'boolean') { vals.push(b.active); sets.push(`active = $${vals.length}`); changed.push('active'); }
     if (b.role === 'admin' || b.role === 'user') { vals.push(b.role); sets.push(`role = $${vals.length}`); changed.push('role'); }
     if(b.plan!==undefined||b.pro_type!==undefined)return res.status(400).json({error:'Use version access to change available products'});

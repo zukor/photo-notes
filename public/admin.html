@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Photo Notes — Admin</title>
   <meta name="theme-color" content="#1d4ed8" />
-  <link rel="stylesheet" href="/styles.css?v=193" />
+  <link rel="stylesheet" href="/styles.css?v=194" />
   <script src="/vendor/html2canvas.min.js?v=59"></script>
-  <script src="/issue-markup.js?v=193"></script>
-  <script src="/issue-reporter.js?v=193"></script>
+  <script src="/issue-markup.js?v=194"></script>
+  <script src="/issue-reporter.js?v=194"></script>
   <style>
     .stat { display:inline-block; min-width:84px; margin:4px 14px 4px 0; vertical-align:top; }
     .stat .n { font-size:19px; font-weight:bold; color:#000; }
@@ -224,7 +224,7 @@
       box.querySelectorAll('[data-active]').forEach(b => b.onclick = () => setActive(parseInt(b.getAttribute('data-active'),10), b.getAttribute('data-to')==='1'));
       box.querySelectorAll('[data-edit-user]').forEach(b => b.onclick = () => toggleAdminPanel(`edit-user-${b.dataset.editUser}`));
       box.querySelectorAll('[data-save-user]').forEach(b => b.onclick = () => saveUserDetails(Number(b.dataset.saveUser), b));
-      box.querySelectorAll('[data-feature-user]').forEach(b => b.onclick = () => toggleAdminPanel(`feature-user-${b.dataset.featureUser}`));
+      box.querySelectorAll('[data-save-tester]').forEach(b=>b.onclick=async()=>{b.disabled=true;try{const r=await api(`/api/admin/users/${b.dataset.saveTester}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({is_tester:box.querySelector('[data-tester]').checked})});if(!r.ok)throw Error();await loadUsers();toast('Tester access saved');}catch{toast('Tester access could not be saved');}finally{b.disabled=false;}});
       box.querySelectorAll('[data-save-features]').forEach(b => b.onclick = () => saveFeatureAccess(Number(b.dataset.saveFeatures), b));
     }
 
@@ -249,14 +249,13 @@
             <div class="helper">Edit login details and access, deactivate the login, or permanently delete the user.</div>
             <div class="row">
               <button class="btn secondary" data-edit-user="${u.id}">Edit</button>
-              <button class="btn secondary" data-feature-user="${u.id}">Advanced Features</button>
               <button class="btn secondary" data-reset="${u.id}">Reset Password</button>
               <button class="btn secondary" data-active="${u.id}" data-to="${u.active ? '0' : '1'}">${u.active ? 'Deactivate Login' : 'Reactivate Login'}</button>
               <button class="btn delete-user-button" type="button" data-delete-user="${u.id}">Delete User</button>
             </div>
             <div class="admin-panel delete-user-panel" id="delete-user-${u.id}" hidden></div>
             <div class="admin-panel" id="edit-user-${u.id}" hidden><h4>Edit User</h4><div class="edit-user-grid"><label>First and Last Name<input id="edit-name-${u.id}" value="${esc(u.name||'')}"></label><label>Email<input id="edit-email-${u.id}" type="email" value="${esc(u.email||'')}"></label><label>Industry<input id="edit-industry-${u.id}" value="${esc(u.industry||'')}"></label></div><button class="btn" type="button" data-save-user="${u.id}" style="margin-top:8px">Save User</button></div>
-            <div class="admin-panel" id="feature-user-${u.id}" hidden><h4>Advanced Features</h4>${allowedVersions(u).includes('paving')?`<div class="helper">Optional Paving Pro features. These settings apply whenever this user opens Paving Pro.</div><div class="feature-grid">${featureToggle(u.id,'ticket_scanner','Paving Ticket Scanner',features)}${featureToggle(u.id,'camera_readers','Camera Readers & Scanners',features)}${featureToggle(u.id,'before_after','Before & After Matching',features)}${featureToggle(u.id,'measurements','Measurements, Map & AI Classification',features)}${featureToggle(u.id,'extra_work','Extra Work Records',features)}</div><button class="btn" type="button" data-save-features="${u.id}">Save Feature Access</button>`:'<p class="helper">Use the Versions checkboxes below to manage access. No additional feature settings apply to these versions.</p>'}</div>
+            ${allowedVersions(u).includes('paving')?`<div class="admin-panel"><h4>Paving Pro Options</h4><div class="helper">Optional Paving Pro features. These settings apply whenever this user opens Paving Pro.</div><div class="feature-grid">${featureToggle(u.id,'ticket_scanner','Paving Ticket Scanner',features)}${featureToggle(u.id,'camera_readers','Camera Readers & Scanners',features)}${featureToggle(u.id,'before_after','Before & After Matching',features)}${featureToggle(u.id,'measurements','Measurements, Map & AI Classification',features)}${featureToggle(u.id,'extra_work','Extra Work Records',features)}</div><button class="btn" type="button" data-save-features="${u.id}">Save Feature Access</button></div>`:''}
             <div class="reset-password-panel" id="reset-panel-${u.id}" hidden>
               <label for="reset-password-${u.id}">New Password</label>
               <input id="reset-password-${u.id}" type="password" autocomplete="new-password" placeholder="Enter or recommend a password" />
@@ -268,6 +267,7 @@
               <div class="helper" id="reset-help-${u.id}">Recommended passwords are 10 characters and include uppercase, lowercase, numbers, and symbols.</div>
             </div>
           </div>
+          <fieldset class="version-access"><legend>Testing</legend><label class="feature-item"><input type="checkbox" data-tester="${u.id}" ${u.is_tester?'checked':''}>Tester</label><p class="helper">Gives this user a Testing Hub for their own reports and an alert when a fix is ready to retest.</p><button class="btn" type="button" data-save-tester="${u.id}">Save Tester Access</button></fieldset>
           <fieldset class="version-access"><legend>Versions</legend><p class="helper">Check every version this user can open. They can switch between their selected versions in the app.</p><div class="feature-grid">${versionChecks(u.id,allowedVersions(u))}</div><button class="btn" type="button" data-save-versions="${u.id}">Save Versions</button></fieldset>
 <details class="admin-section"><summary>Usage &amp; Activity</summary>          <div class="section">
             <h4>Captures</h4>

@@ -680,3 +680,7 @@ input.dimfield.suggested {
 .web-help-dialog p,.web-help-dialog li,.web-help-dialog label,.web-help-dialog a{color:#000}.web-help-dialog label{display:block;font-weight:bold}.web-help-dialog select{width:100%;font:inherit;color:#000;background:#fff}.web-help-dialog li{margin:12px 0}.web-help-dialog .btn{margin:8px 8px 8px 0}.web-help-dialog .btn:not(.secondary){color:#fff}
 .web-queue-status{position:fixed;left:12px;right:12px;bottom:max(66px,env(safe-area-inset-bottom));width:max-content;max-width:calc(100vw - 24px);margin:auto;background:#fff;color:#000;border:2px solid #2455d9;border-radius:12px;padding:10px 14px;z-index:20;font:bold 14px/1.35 Arial,Helvetica,sans-serif;cursor:pointer}.web-queue-status[hidden]{display:none}
 .footer a{color:#000}
+
+.profile-button{position:relative;overflow:visible}
+.tester-alert{position:absolute;right:-5px;top:-6px;background:#ffdf40;color:#000;border:2px solid #000;border-radius:50%;width:22px;height:22px;display:grid;place-items:center;font:bold 17px Arial,sans-serif}
+.tester-alert[hidden]{display:none}

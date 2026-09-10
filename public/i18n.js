@@ -1,6 +1,8 @@
 (function () {
   const STORAGE_KEY = 'photo-notes-language';
   const ES = {
+    "Testing Hub": "Centro de pruebas",
+    "Account menu: fix ready to retest": "Menú de cuenta: corrección lista para probar",
     "Screenshot markup tools": "Herramientas para marcar la captura",
     "Select / Move": "Seleccionar / Mover",
     "Delete selected": "Eliminar selección",

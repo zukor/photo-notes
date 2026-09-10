@@ -660,6 +660,7 @@ async function init() {
 
   // NULL preserves existing account access until explicitly assigned.
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS edition_access TEXT[]`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_tester BOOLEAN NOT NULL DEFAULT false`);
 
   await pool.query(`CREATE TABLE IF NOT EXISTS pending_user_file_deletions (
     file_path TEXT PRIMARY KEY,created_at TIMESTAMPTZ NOT NULL DEFAULT now())`);

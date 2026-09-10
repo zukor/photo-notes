@@ -273,7 +273,7 @@ function renderApp() {
         <div class="header-controls">
           <div class="language-switch" aria-label="Language"><button type="button" data-language="en">EN</button><span> </span><button type="button" data-language="es">ES</button></div>
           <div class="account-menu-wrap">
-            <button class="profile-button" id="profileButton" type="button" aria-label="Account menu" aria-expanded="false">${esc(userInitials(state.me))}</button>
+            <button class="profile-button" id="profileButton" type="button" aria-label="Account menu" aria-expanded="false">${esc(userInitials(state.me))}<span id="testerAlert" class="tester-alert" hidden aria-hidden="true">!</span></button>
             <div class="profile-menu" id="profileMenu" hidden>
               <div class="profile-name">${esc((state.me && state.me.name) || 'Photo Notes User')}</div>
               <div class="profile-email">${esc((state.me && state.me.email) || '')}</div>
@@ -281,7 +281,7 @@ function renderApp() {
               ${isBasicClient()||isGeneralProClient()?'<button type="button" id="myAssignment">My Testing Assignment</button>':''}
               <button type="button" id="installHelp">Install Photo Notes</button>
               <button type="button" id="pendingPhotos">Pending Photos</button>
-              <button type="button" id="myIssues">My Issue Reports</button>
+              <button type="button" id="myIssues">${state.me?.is_tester?'Testing Hub':'My Issue Reports'}</button>
               ${state.me && state.me.role === 'admin' ? '<a href="/admin">Admin Dashboard</a>' : ''}
               <button type="button" id="signout">Sign Out</button>
             </div>
@@ -400,12 +400,12 @@ async function submitTestingAssignment(id,button){
 }
 async function renderMyIssueReports(){
   const body=document.getElementById('body');
-  body.innerHTML='<button class="backlink" id="issuesBack">← Back</button><div class="workflow-intro"><strong>My Issue Reports</strong><span>See what you reported, whether it has been fixed, and what needs another test.</span></div>'+issueNotificationControls()+'<div id="myIssueList"><p class="status">Loading your reports...</p></div>';
+  body.innerHTML='<button class="backlink" id="issuesBack">← Back</button><div class="workflow-intro"><strong>'+ (state.me?.is_tester?'Testing Hub':'My Issue Reports') +'</strong><span>See what you reported, whether it has been fixed, and what needs another test.</span></div>'+issueNotificationControls()+'<div id="myIssueList"><p class="status">Loading your reports...</p></div>';
   document.getElementById('issuesBack').onclick=()=>{state.view=IS_HANDHELD?'capture':'organize';renderApp();};
   const r=await api('/api/issues/mine'),box=document.getElementById('myIssueList');
   if(!r.ok){box.innerHTML='<p class="status">Your issue reports could not be loaded.</p>';return;}
   const rows=await r.json();
-  box.innerHTML=rows.length?rows.map(i=>`<article class="card tester-issue-card"><div class="tester-issue-head"><strong>Issue #${i.id}: ${esc(i.page_name||'Photo Notes')}</strong><span class="badge issue-status-${esc(i.management_status||'new')}">${esc(i.management_status==='ready_to_test'&&(!i.verification||!i.release_reference)?'Ready status needs verification':MY_ISSUE_STATUS[i.management_status]||'Received')}</span></div><div class="meta">Reported ${new Date(i.created_at).toLocaleString(uiLocale())}</div><p>${esc(i.description)}</p>${i.management_status==='blocked'?`<div class="issue-fix-summary"><strong>What stopped and what happens next</strong><p>${esc(i.blocked_reason||'Please add reproduction details.')}</p><label for="issueDetails-${i.id}">Additional details, if requested</label><textarea id="issueDetails-${i.id}" maxlength="5000"></textarea><button class="btn" data-issue-details="${i.id}">Send Details for Review</button></div>`:''}${i.fix_summary?`<div class="issue-fix-summary"><strong>What changed</strong><span>${esc(i.fix_summary)}</span></div>`:''}${i.deployed_at?`<div class="meta">Deployed: ${new Date(i.deployed_at).toLocaleString(uiLocale())}</div>`:''}<details data-issue-history="${i.id}"><summary>Issue history</summary><div>Open to load history.</div></details>${i.release_reference?`<div class="meta">Release: ${esc(i.release_reference)}</div>`:''}${i.management_status==='ready_to_test'?`<div class="issue-retest"><strong>How to retest</strong><p>${esc(i.retest_instructions||'Refresh Photo Notes and repeat the steps that caused the problem.')}</p><label for="retestNotes-${i.id}">Optional retest note</label><textarea id="retestNotes-${i.id}" placeholder="Tell us only if something is still wrong."></textarea><div class="issue-retest-actions"><button class="btn" type="button" data-retest-fixed="${i.id}">Fixed on my device</button><button class="btn secondary" type="button" data-retest-broken="${i.id}">Still happening</button></div></div>`:i.tester_result?`<div class="meta">Your retest: ${i.tester_result==='fixed'?'Fixed':'Still happening'}${i.tester_notes?' — '+esc(i.tester_notes):''}</div>`:''}</article>`).join(''):'<p class="status">You have not submitted any issue reports yet.</p>';
+  box.innerHTML=rows.length?rows.map(i=>`<article class="card tester-issue-card"><div class="tester-issue-head"><strong>Issue #${i.id}: ${esc(i.page_name||'Photo Notes')}</strong><span class="badge issue-status-${esc(i.management_status||'new')}">${esc(i.management_status==='ready_to_test'&&(!i.verification||!i.release_reference)?'Ready status needs verification':MY_ISSUE_STATUS[i.management_status]||'Received')}</span></div><div class="meta">Reported ${new Date(i.created_at).toLocaleString(uiLocale())}</div><p>${esc(i.description)}</p>${i.management_status==='blocked'?`<div class="issue-fix-summary"><strong>What stopped and what happens next</strong><p>${esc(i.blocked_reason||'Please add reproduction details.')}</p><label for="issueDetails-${i.id}">Additional details, if requested</label><textarea id="issueDetails-${i.id}" maxlength="5000"></textarea><button class="btn" data-issue-details="${i.id}">Send Details for Review</button></div>`:''}${i.fix_summary?`<div class="issue-fix-summary"><strong>What changed</strong><span>${esc(i.fix_summary)}</span></div>`:''}${i.deployed_at?`<div class="meta">Deployed: ${new Date(i.deployed_at).toLocaleString(uiLocale())}</div>`:''}<details data-issue-history="${i.id}"><summary>Issue history</summary><div>Open to load history.</div></details>${i.release_reference?`<div class="meta">Release: ${esc(i.release_reference)}</div>`:''}${i.management_status==='ready_to_test'&&i.verification&&i.release_reference?`<div class="issue-retest"><strong>How to retest</strong><p>${esc(i.retest_instructions||'Refresh Photo Notes and repeat the steps that caused the problem.')}</p><label for="retestNotes-${i.id}">Optional retest note</label><textarea id="retestNotes-${i.id}" placeholder="Tell us only if something is still wrong."></textarea><div class="issue-retest-actions"><button class="btn" type="button" data-retest-fixed="${i.id}">Fixed on my device</button><button class="btn secondary" type="button" data-retest-broken="${i.id}">Still happening</button></div></div>`:i.tester_result?`<div class="meta">Your retest: ${i.tester_result==='fixed'?'Fixed':'Still happening'}${i.tester_notes?' — '+esc(i.tester_notes):''}</div>`:''}</article>`).join(''):'<p class="status">You have not submitted any issue reports yet.</p>';
   box.querySelectorAll('[data-issue-history]').forEach(details=>details.ontoggle=async()=>{
     if(!details.open||details.dataset.loaded)return;const target=details.querySelector('div');
     try{const r=await api(`/api/issues/${details.dataset.issueHistory}/history`);if(!r.ok)throw Error();const rows=await r.json();target.innerHTML=rows.map(h=>`<p>${esc(MY_ISSUE_STATUS[h.event]||h.event)}: ${new Date(h.created_at).toLocaleString(uiLocale())}</p>`).join('')||'No repair activity yet.';details.dataset.loaded='1';}catch{target.textContent='History could not be loaded. Close and reopen to retry.';}
@@ -416,9 +416,9 @@ async function renderMyIssueReports(){
 }
 async function submitIssueRetest(id,result,button){
   button.disabled=true;const notes=(document.getElementById(`retestNotes-${id}`)||{}).value||'';
-  const r=await api(`/api/issues/${id}/retest`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({result,notes})});
-  if(r.ok){toast(result==='fixed'?'Thank you. The fix is confirmed.':'Thank you. The issue was reopened.');renderMyIssueReports();}
-  else{toast('Your retest result could not be saved');button.disabled=false;}
+  try{const r=await api(`/api/issues/${id}/retest`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({result,notes})});
+  if(r.ok){toast(result==='fixed'?'Thank you. The fix is confirmed.':'Thank you. The issue was reopened.');renderMyIssueReports();refreshIssueAttention();}
+  else{toast('Your retest result could not be saved');button.disabled=false;}}catch{toast('Your retest result could not be saved');button.disabled=false;}
 }
 
 // ================= Tensorman page help (Basic, desktop only) =================

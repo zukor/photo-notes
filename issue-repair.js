@@ -50,7 +50,15 @@ function registerIssueRepair(app,{pool,requireAuth,requireAdmin,requireTestingQu
     }catch(e){if(client)await client.query('ROLLBACK');res.status(500).json({error:'Repair update failed'});}finally{client?.release();}
   });
   app.get('/api/admin/repair-status',requireAdmin,async(req,res)=>{try{const row=(await pool.query('SELECT last_checked FROM issue_worker_state WHERE id=1')).rows[0];res.json({queue_configured:!!process.env.TESTER_QUEUE_TOKEN,email_configured:!!process.env.RESEND_API_KEY,last_checked:row?.last_checked||null});}catch(e){res.status(500).json({error:'Worker status unavailable'});}});
-  app.get('/api/issues/attention',requireAuth,async(req,res)=>{try{const {rows}=await pool.query("SELECT count(*)::int AS count FROM issue_reports WHERE user_id=$1 AND management_status IN ('ready_to_test','blocked')",[req.user.id]);res.json(rows[0]);}catch(e){res.status(500).json({error:'Issue count unavailable'});}});
+  app.get('/api/issues/attention',requireAuth,async(req,res)=>{
+    try{
+      const {rows}=await pool.query(`SELECT u.is_tester,
+        count(i.id) FILTER (WHERE i.management_status IN ('ready_to_test','blocked'))::int AS count,
+        count(i.id) FILTER (WHERE u.is_tester AND i.management_status='ready_to_test' AND i.verification IS NOT NULL AND COALESCE(i.release_reference,'')<>'')::int AS ready_count
+        FROM users u LEFT JOIN issue_reports i ON i.user_id=u.id WHERE u.id=$1 GROUP BY u.id`,[req.user.id]);
+      res.json(rows[0]||{is_tester:false,count:0,ready_count:0});
+    }catch(e){res.status(500).json({error:'Issue count unavailable'});}
+  });
   app.get('/api/issues/:id/history',requireAuth,async(req,res)=>{try{
     const own=await pool.query('SELECT id FROM issue_reports WHERE id=$1 AND (user_id=$2 OR $3)',[req.params.id,req.user.id,req.user.role==='admin']);if(!own.rowCount)return res.status(404).json({error:'Issue not found'});
     // Private admin notes stay within the admin view.
