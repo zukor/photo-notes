@@ -495,7 +495,12 @@
     const issueStatusLabels={blocked:'Needs Information / Blocked',new:'New',reviewing:'Reviewing',fixing:'Working',testing:'Testing',ready_to_test:'Deployed - Awaiting Confirmation',tester_confirmed:'Tester Confirmed',resolved:'Resolved',wont_fix:'Won’t Fix'};
     const issuePriorityLabels={low:'Low',normal:'Normal',high:'High',urgent:'Urgent'};
     function issueDevice(i){const ua=String(i.user_agent||'').toLowerCase(),vp=String(i.viewport||'');if(/android/.test(ua))return {key:'android',label:'Android'};if(/iphone|ipad|ipod/.test(ua))return {key:'ios',label:/ipad/.test(ua)?'iPad':'iPhone'};if(/windows|macintosh|cros|linux/.test(ua))return {key:'desktop',label:'Desktop'};if(/^\d+\s*[×x]\s*\d+$/.test(vp)&&Number(vp.split(/[×x]/)[0].trim())<=900)return {key:'unknown',label:'Mobile / unknown'};return {key:'unknown',label:'Unknown device'};}
-    function populateIssueFilters(){const tester=document.getElementById('issueTesterFilter');if(!tester)return;const selected=tester.value||'all',people=[...new Map(allIssues.map(i=>[String(i.user_id),i.user_name||i.user_email||`User ${i.user_id}`])).entries()].sort((a,b)=>a[1].localeCompare(b[1]));tester.innerHTML='<option value="all">All Testers</option>'+people.map(([id,name])=>`<option value="${esc(id)}">${esc(name)}</option>`).join('');tester.value=people.some(([id])=>id===selected)?selected:'all';}
+    function testerFilterPeople(users,issues){
+      const people=new Map(issues.map(i=>[String(i.user_id),i.user_name||i.user_email||`User ${i.user_id}`]));
+      for(const u of users)if(u.is_tester)people.set(String(u.id),u.name||u.email||`User ${u.id}`);
+      return [...people.entries()].sort((a,b)=>a[1].localeCompare(b[1]));
+    }
+    function populateIssueFilters(){const tester=document.getElementById('issueTesterFilter');if(!tester)return;const selected=tester.value||'all',people=testerFilterPeople(allUsers,allIssues);tester.innerHTML='<option value="all">All Testers</option>'+people.map(([id,name])=>`<option value="${esc(id)}">${esc(name)}</option>`).join('');tester.value=people.some(([id])=>id===selected)?selected:'all';}
     function issueCounts(rows){
       const counts={work:0,awaiting:0,resolved:0,closed:0,urgent:0};
       for(const i of rows){const status=i.management_status||'new';
@@ -638,6 +643,7 @@
       const [r,ur] = await Promise.all([api('/api/admin/users'),api('/api/admin/usage').catch(()=>({ok:false}))]);
       if (!r.ok) { box.innerHTML = '<p class="status">Could not load.</p>'; return; }
       allUsers = await r.json();
+      populateIssueFilters();renderIssues();
       if(ur.ok){const rows=await ur.json();usageByUser=Object.fromEntries(rows.map(x=>[x.user_id,x]));}
       renderSummary(allUsers);
       const sortsel = document.getElementById('sortsel');
