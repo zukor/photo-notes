@@ -1388,6 +1388,8 @@ async function emailIssueReport(report, user) {
 app.post('/api/issues', requireAuth, upload.fields([{name:'screenshot',maxCount:1},{name:'voice',maxCount:1}]), async (req, res) => {
   try {
     const screenshotFile=req.files&&req.files.screenshot&&req.files.screenshot[0],voiceFile=req.files&&req.files.voice&&req.files.voice[0];
+    const issueType=req.body.issue_type||'bug_problem';
+    if(!['bug_problem','ui_improvement','feature_improvement','new_feature'].includes(issueType)){for(const file of [screenshotFile,voiceFile])if(file){try{fs.unlinkSync(file.path);}catch(e){}}return res.status(400).json({error:'invalid issue type'});}
     const description = ticketText(req.body && req.body.description, 10000);
     if (!description) {
       for(const file of [screenshotFile,voiceFile])if(file){try{fs.unlinkSync(file.path);}catch(e){}}
@@ -1401,9 +1403,9 @@ app.post('/api/issues', requireAuth, upload.fields([{name:'screenshot',maxCount:
     let voicePath=null;
     if(voiceFile){if(!String(voiceFile.mimetype||'').startsWith('audio/')){try{fs.unlinkSync(voiceFile.path);}catch(e){}}else voicePath=`/uploads/${path.basename(voiceFile.path)}`;}
     const row = (await pool.query(
-      `INSERT INTO issue_reports (user_id, description, page_name, page_url, screenshot_path, voice_path, viewport, user_agent,reported_edition,app_version)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
-      [req.user.id, description, ticketText(req.body.page_name,100), ticketText(req.body.page_url,500), screenshotPath, voicePath, ticketText(req.body.viewport,100), ticketText(req.body.user_agent,1000),currentEdition(req.user),/^\d{1,12}$/.test(req.body.app_version||'')?req.body.app_version:'unknown'])).rows[0];
+      `INSERT INTO issue_reports (user_id, description, page_name, page_url, screenshot_path, voice_path, viewport, user_agent,reported_edition,app_version,issue_type)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+      [req.user.id, description, ticketText(req.body.page_name,100), ticketText(req.body.page_url,500), screenshotPath, voicePath, ticketText(req.body.viewport,100), ticketText(req.body.user_agent,1000),currentEdition(req.user),/^\d{1,12}$/.test(req.body.app_version||'')?req.body.app_version:'unknown',issueType])).rows[0];
     const user = (await pool.query(`SELECT name,email FROM users WHERE id=$1`, [req.user.id])).rows[0] || req.user;
     let delivery={status:'pending',error:'Notification pending'};
     try{delivery=await emailIssueReport(row,user);await pool.query('UPDATE issue_reports SET email_status=$1,email_error=$2 WHERE id=$3',[delivery.status,delivery.error,row.id]);}catch(e){}
@@ -1425,7 +1427,7 @@ registerCloud(app,{pool,requireAuth,requireAdmin,requireTestingQueueToken});
 
 app.get('/api/issues/mine', requireAuth, async (req,res)=>{
   try{
-    const rows=(await pool.query(`SELECT id,description,page_name,screenshot_path,reported_edition,app_version,blocked_reason,reporter_details,management_status,fix_summary,release_reference,retest_instructions,tester_notification_status,tester_notified_at,tester_result,tester_notes,tester_retested_at,created_at,updated_at,verification,(SELECT max(created_at) FROM issue_repair_events WHERE issue_id=issue_reports.id AND event='ready_to_test') AS deployed_at FROM issue_reports WHERE user_id=$1 ORDER BY created_at DESC`,[req.user.id])).rows;
+    const rows=(await pool.query(`SELECT id,issue_type,description,page_name,screenshot_path,reported_edition,app_version,blocked_reason,reporter_details,management_status,fix_summary,release_reference,retest_instructions,tester_notification_status,tester_notified_at,tester_result,tester_notes,tester_retested_at,created_at,updated_at,verification,(SELECT max(created_at) FROM issue_repair_events WHERE issue_id=issue_reports.id AND event='ready_to_test') AS deployed_at FROM issue_reports WHERE user_id=$1 ORDER BY created_at DESC`,[req.user.id])).rows;
     res.json(rows);
   }catch(e){console.error('[issues.mine]',e);res.status(500).json({error:'failed'});}
 });
