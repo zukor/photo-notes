@@ -246,7 +246,7 @@ function renderLogin() {
       <input id="pw" type="password" autocomplete="current-password" />
       <button class="btn" id="loginBtn">Sign In</button>
       <p class="status" id="loginErr"></p>
-      <div class="footer"><a href="/install.html" target="_blank" rel="noopener">Install Photo Notes on your device</a><br>&copy; ${new Date().getFullYear()} Zukor AI. All Rights Reserved.</div>
+      <div class="footer">&copy; ${new Date().getFullYear()} Zukor AI. All Rights Reserved.<br><a href="/install.html" target="_blank" rel="noopener">Install Photo Notes on your device</a></div>
     </div>`;
   document.getElementById('loginBtn').onclick = doLogin;
   document.getElementById('pw').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
@@ -296,7 +296,7 @@ function renderApp() {
         <button type="button" class="tab ${['send','hoa-maintenance'].includes(state.view)?'on':''}" id="tabSend" aria-current="${['send','hoa-maintenance'].includes(state.view)?'page':'false'}">${isHoaClient()?'Records':'Send'}</button>
       </nav>`}
       <div id="body"></div>
-      <div class="footer"><a href="/install.html" target="_blank" rel="noopener">Install Photo Notes on your device</a><br>&copy; ${new Date().getFullYear()} Zukor AI. All Rights Reserved.</div>
+      <div class="footer">&copy; ${new Date().getFullYear()} Zukor AI. All Rights Reserved.<br><a href="/install.html" target="_blank" rel="noopener">Install Photo Notes on your device</a></div>
     </div>
     <button class="issue-fab ${isRoadIssuesClient()?'road-issue-fab':''}" id="issueFab" type="button" data-html2canvas-ignore="true" aria-label="Report Issue">${issueFabLabel()}</button>
     ${issueReporterMarkup()}`;

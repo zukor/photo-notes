@@ -152,7 +152,7 @@
     label.style.cursor = 'pointer';
     var topicHeading = label.getAttribute('data-topic-heading') || 'Select Topic';
     label.style.textTransform = 'none';
-    label.style.margin = '12px 0 0';
+    label.style.margin = '6px 0 0';
     label.style.userSelect = 'none';
     // Render in the current language so the translation observer cannot fight
     // this observer by repeatedly replacing the same label.

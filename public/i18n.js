@@ -1,6 +1,7 @@
 (function () {
   const STORAGE_KEY = 'photo-notes-language';
   const ES = {
+    "Install Photo Notes on your device": "Instala Photo Notes en tu dispositivo",
     "Testing Hub": "Centro de pruebas",
     "Account menu: fix ready to retest": "Menú de cuenta: corrección lista para probar",
     "Screenshot markup tools": "Herramientas para marcar la captura",
