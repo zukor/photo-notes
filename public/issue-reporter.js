@@ -154,7 +154,6 @@ function issueReporterMarkup(){return `<a id="issueUpdates" class="issue-updates
         <button class="issue-close" id="issueClose" type="button" aria-label="Close">×</button>
         <h2 id="issueTitle">Report Issue</h2><div class="issue-report-layout"><section class="issue-report-fields">
         <label for="issueType">Issue Type</label><select id="issueType"><option value="bug_problem">Bug/Problem</option><option value="ui_improvement">UI Improvement</option><option value="feature_improvement">Feature Improvement Idea</option><option value="new_feature">New Feature Idea</option></select>
-        <p class="status">Answer these short questions. Photo Notes attaches the page and device details automatically.</p>
         <label for="issueAction">What were you trying to do?</label>
         <input id="issueAction" type="text" placeholder="For example: record a note after taking a photo">
         <label for="issueDescription">What went wrong?</label>
@@ -190,7 +189,7 @@ window.addEventListener('focus',refreshIssueAttention);
 setInterval(()=>{if(!document.hidden)refreshIssueAttention();},5000);
 document.addEventListener('visibilitychange',refreshIssueAttention);
 
-function issueNotificationControls(){return `<div class="issue-notification-controls" style="color:#000;text-align:left"><button type="button" class="btn secondary" data-issue-push="enable">Enable issue notifications</button><button type="button" class="btn secondary slim" data-issue-push="disable">Disable on this device</button><p data-push-status role="status" style="color:#000">On iPhone, add Photo Notes to your Home Screen and open it there first.</p></div>`;}
+function issueNotificationControls(){return `<div class="issue-notification-controls" style="color:#000;text-align:left"><button type="button" class="btn secondary" data-issue-push="enable">Enable issue notifications</button><button type="button" class="btn secondary slim" data-issue-push="disable">Disable on this device</button><p data-push-status role="status" style="color:#000"></p></div>`;}
 document.addEventListener('click',async event=>{
   const button=event.target.closest('[data-issue-push]');if(!button)return;
   const status=button.parentElement.querySelector('[data-push-status]');button.disabled=true;
