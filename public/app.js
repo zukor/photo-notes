@@ -195,6 +195,7 @@ function showInstallHelp(){
   document.body.append(dialog);PhotoNotesInstall.mount(dialog.querySelector('#installDeviceGuide'));dialog.querySelector('#closeInstallHelp').onclick=()=>dialog.close();dialog.addEventListener('close',()=>dialog.remove());dialog.showModal();
 }
 function maybeOfferInstall() {
+  if(document.getElementById('issueModal')?.hidden===false)return;
   if (!state.me || installOfferShown || isInstalledApp() || !isPhoneInstallCandidate()) return;
   try{if(localStorage.getItem(INSTALL_PROMPT_KEY))return;}catch(error){}
   const ios = isIOS();

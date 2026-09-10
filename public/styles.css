@@ -687,3 +687,12 @@ input.dimfield.suggested {
 
 /* Keep the paired Capture actions close together. */
 #save + #send { margin-top:9px; }
+
+/* Report fields, screenshot, annotation tools, then submit in reading order. */
+.issue-report-layout { display:block; overflow:auto; }
+.issue-report-fields { overflow:visible; padding:0; }
+.issue-evidence { margin-top:20px; }
+#issueMarkup { flex:none; }
+#issueMarkupStage { flex:none; height:46dvh; }
+.issue-markup-toolbar { margin-top:8px; }
+#issueShotStatus:empty { display:none; }
