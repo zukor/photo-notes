@@ -11,7 +11,7 @@ const styles = fs.readFileSync(path.join(root, 'public', 'styles.css'), 'utf8');
 
 test('core editions keep help and issue reporting while industry camera tools stay gated', () => {
   assert.match(app, /<button class="issue-fab \$\{isRoadIssuesClient\(\)\?'road-issue-fab':''\}"/);
-  assert.match(app, /if \(isIndustryProClient\(\) \|\| isRoadIssuesClient\(\) \|\| !TENSOR_HELP_TOPICS\[state\.view\]\) return/);
+  assert.match(app, /window\.PhotoNotesHelp\.mount/);
   assert.match(app, /isIndustryProClient\(\) && \['ticket_scanner','camera_readers','before_after'\]\.some\(featureOn\)/);
   assert.doesNotMatch(server, /error:'core Photo Notes editions only'/);
 });

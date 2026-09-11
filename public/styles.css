@@ -435,28 +435,7 @@ textarea { min-height: 96px; resize: vertical; }
 .evidence-ok { color:#176b2c; }
 .evidence-missing { color:#8a2c00; font-weight:700; }
 
-/* Tensor Man: contextual Basic help. The slot reserves space so help never
-   covers Capture, Save, or other primary controls. */
-.tensor-help-slot { min-height:44px; display:flex; justify-content:flex-end; position:relative; z-index:25; }
-.tensor-help-widget { position:relative; }
-.tensor-help-badge { display:flex; align-items:center; gap:7px; min-height:38px; padding:3px 9px 3px 4px; border:1px solid #000; border-radius:21px; background:#fff; color:#000; font:700 12px/1.1 Arial,sans-serif; cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,.14); }
-.tensor-help-badge img { display:block; width:32px; height:32px; object-fit:contain; image-rendering:pixelated; }
-.tensor-help-badge:focus-visible { outline:3px solid #ffcf33; outline-offset:2px; }
-.tensor-help-panel { position:absolute; top:43px; right:0; width:340px; max-width:calc(100vw - 34px); padding:15px; border:1px solid #000; border-radius:12px; background:#fff; color:#000; box-shadow:0 10px 30px rgba(0,0,0,.24); }
-.tensor-help-panel h2 { margin:0 0 11px; font-size:18px; }
-.tensor-topic-list { display:grid; gap:6px; }
-.tensor-topic-list button { width:100%; padding:8px 10px; border:1px solid #2455d9; border-radius:7px; background:#fff; color:#163a9f; font-weight:700; text-align:left; cursor:pointer; }
-.tensor-topic-list button:hover, .tensor-topic-list button:focus-visible, .tensor-topic-list button.active { background:#eef4ff; color:#000; }
-.tensor-topic-answer { margin-top:10px; padding:10px; border-left:4px solid #2455d9; background:#f5f8ff; font-size:14px; line-height:1.4; }
-.tensor-ask-toggle { width:100%; margin-top:11px; padding:9px 0; border:0; border-top:1px solid #bbb; border-bottom:1px solid #bbb; background:#fff; color:#000; font-weight:700; text-align:left; cursor:pointer; }
-.tensor-ask-form { margin-top:9px; }
-.tensor-ask-form label { margin-top:0; font-size:11px; }
-.tensor-ask-form > div { display:flex; gap:6px; }
-.tensor-ask-form input { min-width:0; margin:0; }
-.tensor-ask-form button { padding:8px 12px; border:1px solid #000; border-radius:7px; background:#2455d9; color:#fff; font-weight:700; }
-.tensor-chat-status { min-height:18px; margin:6px 0 0; font-size:13px; }
-.tensor-help-actions { display:flex; justify-content:space-between; gap:8px; margin-top:12px; }
-.tensor-help-actions button { padding:5px 0; border:0; background:transparent; color:#000; font-size:12px; text-decoration:underline; cursor:pointer; }
+
 
 .install-prompt {
   position:fixed; inset:0; z-index:120; display:flex; align-items:flex-end; justify-content:center;
@@ -507,7 +486,6 @@ input.dimfield.suggested {
 }
 
 @media (max-width: 899px) {
-  .tensor-help-slot { display:none; }
 }
 
 /* On phones, tablets, and compact browser windows the issue button belongs in
@@ -708,3 +686,38 @@ input.dimfield.suggested {
 .issue-markup-actions input[type=color] { width:30px; height:28px; }
 #issueMarkupHint:empty { display:none; }
 @media(max-width:360px) { .issue-markup-toolbar button { font-size:11px; } }
+
+/* Floating desktop help occupies no space above the workflow. */
+#desktopHelp, #desktopHelp * { box-sizing:border-box; color:#000; font-family:Arial,Helvetica,sans-serif; text-align:left; }
+#desktopHelp button { cursor:pointer; }
+#desktopHelp button:focus-visible, #desktopHelp summary:focus-visible, #desktopHelp input:focus-visible, #desktopHelp select:focus-visible { outline:3px solid #174dcc; outline-offset:3px; }
+#desktopHelp .help-fab { position:fixed; right:22px; bottom:70px; z-index:85; width:58px; height:58px; padding:0; display:grid; place-items:center; border:2px solid #9c7400; border-radius:50%; background:radial-gradient(circle at 32% 23%,#fff4a3 0%,#ffdf38 32%,#ffc400 64%,#b98600 100%); box-shadow:inset 0 3px 3px #fff6bd,inset 0 -5px 5px #bd8500,0 5px 0 #785800,0 9px 14px #0004; transition:right .22s ease,transform .15s ease; }
+#desktopHelp .help-fab span { font-size:36px; line-height:1; font-weight:900; }
+#desktopHelp .help-fab:hover { transform:translateY(-2px); }
+#desktopHelp .help-drawer { position:fixed; right:0; top:0; bottom:0; width:380px; z-index:84; display:flex; flex-direction:column; background:#fff; border-left:2px solid #174dcc; box-shadow:-6px 0 22px #0002; transform:translateX(105%); visibility:hidden; transition:transform .22s ease,visibility .22s; }
+.desktop-help-open #desktopHelp .help-drawer { transform:translateX(0); visibility:visible; }
+.desktop-help-open #desktopHelp .help-fab { right:402px; }
+.desktop-help-open #app { margin-right:380px; }
+.desktop-help-open .issue-fab { right:402px; }
+#desktopHelp header { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; padding:22px 20px 14px; border-bottom:1px solid #000; }
+#desktopHelp h2 { font-size:22px; line-height:1.2; margin:0 0 6px; }
+#desktopHelp p { font-size:14px; line-height:1.55; margin:0; }
+#desktopHelp #helpClose { border:1px solid #000; border-radius:8px; background:#fff; font-size:26px; min-width:36px; height:36px; text-align:center; }
+#desktopHelp .help-search { padding:12px 20px; }
+#desktopHelp label { display:block; font-weight:bold; font-size:13px; margin:0 0 6px; }
+#desktopHelp .help-search > div { display:flex; gap:8px; margin-bottom:12px; }
+#desktopHelp input, #desktopHelp select { width:100%; min-width:0; padding:10px; margin:0; border:1px solid #000; border-radius:6px; background:#fff; font-size:14px; }
+#desktopHelp input::placeholder { color:#000; opacity:1; }
+#desktopHelp button:not(.help-fab):not(#helpClose) { padding:8px 10px; border:1px solid #000; border-radius:6px; font-size:13px; font-weight:bold; background:#fff; }
+#desktopHelp nav { display:flex; gap:8px; margin-top:12px; }
+#desktopHelp nav button:not(.help-fab):not(#helpClose)[aria-pressed="true"] { background:#ffde36; }
+#desktopHelp .help-reading { flex:1; min-height:0; overflow-y:auto; overscroll-behavior:contain; padding:0 20px 20px; }
+#desktopHelp #helpCount { margin:0 0 12px; font-weight:bold; }
+#desktopHelp .help-article { border:1px solid #000; border-radius:8px; margin-bottom:10px; background:#fff; }
+#desktopHelp summary { cursor:pointer; padding:13px; font-size:14px; line-height:1.4; font-weight:bold; }
+#desktopHelp .help-article[open] summary { background:#fff2af; border-radius:8px 8px 0 0; }
+#desktopHelp .help-article p { padding:13px; }
+#desktopHelp footer { padding:12px 20px; border-top:1px solid #000; background:#fff; }
+#desktopHelp footer p { margin-top:6px; font-size:12px; }
+@media (max-width:1099px), (any-hover:none) { #desktopHelp { display:none; } .desktop-help-open #app { margin-right:0; } }
+@media (prefers-reduced-motion:reduce) { #desktopHelp .help-fab, #desktopHelp .help-drawer { transition:none; } }

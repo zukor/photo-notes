@@ -42,7 +42,7 @@
     "Text added. Select it to move or delete it.": "Texto agregado. Selecciónelo para moverlo o eliminarlo.",
 
     "Ready status needs verification": "El estado requiere verificación", "Needs attention": "Requiere atención", "Working": "En curso", "Testing": "En pruebas", "Deployed - awaiting your confirmation": "Publicado - pendiente de su confirmación", "Closed - you confirmed": "Cerrado - confirmado por usted", "What stopped and what happens next": "Qué se detuvo y qué sigue", "Additional details, if requested": "Detalles adicionales, si se solicitan", "Issue history": "Historial del reporte", "Open to load history.": "Abra para cargar el historial.", "No repair activity yet.": "Todavía no hay actividad de reparación.", "History could not be loaded. Close and reopen to retry.": "No se pudo cargar el historial. Cierre y vuelva a abrir para reintentar.",
-    "Topic (optional)": "Tema (opcional)", "Send/Share": "Enviar/Compartir", "Tensorman Help": "Ayuda de Tensorman", "Ask Tensorman something else": "Pregunte algo más a Tensorman", "Tensorman page help": "Ayuda de Tensorman para esta página",
+    "Topic (optional)": "Tema (opcional)", "Send/Share": "Enviar/Compartir",
     "Photo Note saved": "Nota fotográfica guardada", "Tap Share to choose where to send it.": "Toque Compartir para elegir dónde enviarla.", "Could not save this photo. Your draft is still here.": "No se pudo guardar esta foto. Su borrador sigue aquí.",
     "Page screenshot": "Captura de pantalla", "Screenshot of the page being reported": "Captura de la página que se está reportando", "Your recorded notes will appear here as words.": "Sus notas grabadas aparecerán aquí como palabras.",
     "2. Company Branding & Word Template": "2. Marca de la empresa y plantilla de Word",

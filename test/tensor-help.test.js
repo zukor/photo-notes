@@ -7,27 +7,9 @@ const app = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf
 const css = fs.readFileSync(path.join(__dirname, '..', 'public', 'styles.css'), 'utf8');
 const index = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
 
-test('Tensor Man supports core editions and is limited to their workflow pages', () => {
-  assert.match(app, /if \(isIndustryProClient\(\) \|\| isRoadIssuesClient\(\) \|\| !TENSOR_HELP_TOPICS\[state\.view\]\) return/);
-  for (const page of ['capture', 'organize', 'edit', 'create', 'send']) assert.match(app, new RegExp(`\\b${page}: \\[`));
-  assert.doesNotMatch(app, /TENSOR_HELP_TOPICS\s*=\s*\{[\s\S]*?hoa-maintenance:/);
-});
-
-test('Tensor Man has accessible controls, secondary chat fallback, and per-page persistence', () => {
-  assert.match(app, /aria-label="Help with this page"/);
-  assert.match(app, /Need help with this page\?/);
-  assert.match(app, /Ask Tensorman something else/);
-  assert.match(app, /Chat help is coming soon\./);
-  assert.match(app, /badge\.onmouseenter = \(\) => setTensorArt\('hover'\)/);
-  assert.match(app, /setTensorArt\(opening \? 'open' : 'badge'\)/);
-  assert.match(app, /pn_tensor_help_hidden_\$\{page\}/);
-  assert.match(app, /Hide help on this page/);
-  assert.match(app, /Not now/);
-});
-
-test('Tensor Man is hidden at phone and small-tablet widths and cannot cover controls', () => {
-  assert.match(css, /\.tensor-help-slot \{ min-height:44px/);
-  assert.match(css, /@media \(max-width: 899px\) \{\s*\.tensor-help-slot \{ display:none; \}/);
+test('retired mascot and placeholder chat are absent from the app', () => {
+  assert.doesNotMatch(app, /renderTensorHelp|TENSOR_HELP_TOPICS|Chat help is coming soon/);
+  assert.doesNotMatch(css, /tensor-help-slot/);
 });
 
 test('new app and style versions are cache-busted', () => {

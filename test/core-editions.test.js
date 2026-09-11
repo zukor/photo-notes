@@ -11,7 +11,7 @@ test('Basic is capture-only while general Pro owns the complete workflow',()=>{
 test('general Pro retains the former Basic help, issue, and assignment workflows',()=>{
   assert.match(app,/<button class="issue-fab/);
   assert.match(app,/isBasicClient\(\)\|\|isGeneralProClient\(\)\?'<button type="button" id="myAssignment"/);
-  assert.match(app,/if \(isIndustryProClient\(\) \|\| isRoadIssuesClient\(\)/);
+  assert.match(app, /window\.PhotoNotesHelp\.mount/);
   assert.doesNotMatch(server,/error:'core Photo Notes editions only'/);
 });
 test('administrators can create, assign, and switch to general Pro',()=>{
