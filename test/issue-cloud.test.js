@@ -7,7 +7,8 @@ test('durable notification worker respects ownership, retries, and idempotence',
   const url=process.env.PN_CLOUD_TEST_DB;if(!url.startsWith('postgres://postgres@127.0.0.1:55473/'))throw new Error('Disposable database required');
   const {Pool}=require('pg'),pool=new Pool({connectionString:url});
   try{
-    await pool.query(`CREATE TABLE users(id integer PRIMARY KEY,role text);CREATE TABLE issue_reports(id integer PRIMARY KEY,user_id integer,management_status text,repair_lease_until timestamptz,created_at timestamptz DEFAULT now(),updated_at timestamptz DEFAULT now());INSERT INTO users VALUES(1,'admin'),(2,'user'),(3,'user');`);
+    await pool.query(`CREATE TABLE users(id integer PRIMARY KEY,role text);CREATE TABLE issue_reports(id integer PRIMARY KEY,user_id integer,issue_type text DEFAULT 'bug_problem',management_status text,repair_lease_until timestamptz,created_at timestamptz DEFAULT now(),updated_at timestamptz DEFAULT now());INSERT INTO users VALUES(1,'admin'),(2,'user'),(3,'user');`);
+    await pool.query("INSERT INTO issue_reports(id,user_id,issue_type,management_status,created_at) VALUES(20,2,'ui_improvement','new',now()-interval '1 day'),(21,2,'feature_improvement','new',now()-interval '1 day'),(22,2,'new_feature','new',now()-interval '1 day')");
     const keys=await initCloud(pool);assert.ok(keys.private_key);
     for(const id of [1,2,3])await pool.query('INSERT INTO issue_push_subscriptions(user_id,endpoint,subscription) VALUES($1,$2,$3)',[id,sub.endpoint+id,JSON.stringify({...sub,endpoint:sub.endpoint+id})]);
     await pool.query("INSERT INTO issue_reports(id,user_id,management_status) VALUES(10,2,'new')");
@@ -22,7 +23,7 @@ test('durable notification worker respects ownership, retries, and idempotence',
     await pool.query('UPDATE issue_push_delivery SET next_try=now()');await tickCloud(pool,keys,{send,env:{}});assert.equal(sent.length,4);
     const before=keys.public_key;assert.equal((await initCloud(pool)).public_key,before);
     await pool.query("UPDATE issue_reports SET management_status='new',updated_at=now() WHERE id=10");let dispatched=0;
-    const env={ISSUE_CLOUD_RUNNER_ENABLED:'true',ISSUE_GITHUB_TOKEN:'synthetic'},fetcher=async(url)=>{if(url.includes('/runs?'))return {ok:true,json:async()=>({workflow_runs:[]})};dispatched++;return {ok:true,status:204};};
+    const env={ISSUE_CLOUD_RUNNER_ENABLED:'true',ISSUE_GITHUB_TOKEN:'synthetic'},fetcher=async(url,options)=>{if(url.includes('/runs?'))return {ok:true,json:async()=>({workflow_runs:[]})};assert.equal(JSON.parse(options.body).inputs.issue_id,'10','Only the bug is dispatched, even with older ideas pending');dispatched++;return {ok:true,status:204};};
     await tickCloud(pool,keys,{send,env,fetcher});await tickCloud(pool,keys,{send,env,fetcher});assert.equal(dispatched,1);
     // A missed start is retried after the durable deadline, even without a report edit.
     await pool.query("UPDATE issue_cloud_dispatch SET next_try=now()-interval '1 minute'");await pool.query("UPDATE issue_cloud_state SET last_dispatch_check=now()-interval '1 minute'");
