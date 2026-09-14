@@ -12,7 +12,7 @@ Run `node scripts/issue-agent.mjs queue`. The client reads a scoped credential f
 
 ## Repair loop
 
-1. Select an actionable `new`, `reviewing`, or `fixing` issue whose lease is absent or expired. Read its history. Leave blocked and ready-to-test issues alone until reporter or owner feedback changes their state.
+1. Only `bug_problem` reports are eligible for automatic repair. `ui_improvement`, `feature_improvement`, and `new_feature` are ideas reserved for Sam's review, never automatic implementation. The queue, claims, updates, and cloud dispatch enforce this separation. Select an actionable `new`, `reviewing`, or `fixing` issue whose lease is absent or expired. Read its history. Leave blocked and ready-to-test issues alone until reporter or owner feedback changes their state.
 2. `node scripts/issue-agent.mjs claim ISSUE_ID` obtains a 45-minute lease. A conflict means another worker owns it. Renew with `node scripts/issue-agent.mjs renew ISSUE_ID` during long work. Claims are private local files and must not be printed.
 3. Inspect evidence. Download only that issue's attachment using `node scripts/issue-agent.mjs attachment ISSUE_ID --kind screenshot --out /tmp/photo-notes-issue-ID.png` (or `--kind voice` with an appropriate file extension). View screenshots before drawing conclusions. If an audio-only report cannot be understood using available tools, request written reproduction details through the blocked workflow; do not invoke a paid transcription provider without separate authorization.
 4. Reproduce using synthetic data. Use an isolated `codex/` branch/worktree from the latest `origin/main`, preserving ongoing work. One issue per repair unless evidence proves several share one cause. Do not undo authorized features or branding to satisfy a report.
@@ -25,7 +25,7 @@ Run `node scripts/issue-agent.mjs queue`. The client reads a scoped credential f
 
 ## Blocked work
 
-Use update with `management_status: "blocked"` and a specific `blocked_reason`. Ask for the smallest missing detail or decision. The reporter sees that explanation and can submit additional details, which requeue the issue. Security-sensitive changes, uncertain behavior, unreproducible device faults, unavailable dependencies, and destructive data changes should not be improvised.
+Use update with `management_status: "blocked"` and a specific `blocked_reason`. When the fix direction is unclear, pause for Sam to decide and state the specific decision needed in `blocked_reason`. Admin can filter Bug/Problem and Needs Sam Review / Information to find these reports. Ask for the smallest missing detail or decision. The reporter sees that explanation and can submit additional details, which requeue the issue. Security-sensitive changes, uncertain behavior, unreproducible device faults, unavailable dependencies, and destructive data changes should not be improvised.
 
 ## Notifications and limits
 
