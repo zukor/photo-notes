@@ -29,6 +29,8 @@
     "Testing Hub": "Centro de pruebas",
     "Account menu: fix ready to retest": "Menú de cuenta: corrección lista para probar",
     "Screenshot markup tools": "Herramientas para marcar la captura",
+    "Annotate Screenshot": "Anotar captura de pantalla",
+    "Done Annotating - Scroll": "Terminar anotación - Desplazar",
     "Select / Move": "Seleccionar / Mover",
     "Delete selected": "Eliminar selección",
     "Clear markup": "Borrar marcas",

@@ -635,7 +635,11 @@ input.dimfield.suggested {
 #issueMarkupHint { color:#000; font-size:12px; margin:6px 0; }
 #issueMarkupTextRow label { margin-top:6px; }
 #issueMarkupStage { flex:1; min-height:100px; overflow:auto; border:1px solid #000; background:#fff; }
-#issueMarkupCanvas { display:block; touch-action:none; margin:auto; max-width:none; }
+#issueMarkupCanvas { display:block; width:100%; height:auto; touch-action:pan-y pinch-zoom; margin:auto; max-width:100%; }
+#issueMarkup[data-editing="true"] #issueMarkupCanvas { touch-action:none; }
+.issue-markup-mode { position:sticky; top:0; z-index:2; padding:6px 0; background:#fff; }
+#issueMarkupMode { width:100%; min-height:44px; border:1px solid #000; border-radius:6px; background:#fff; color:#000; font:600 14px Arial,sans-serif; cursor:pointer; }
+#issueMarkup[data-editing="true"] #issueMarkupMode { background:#eaf1ff; border:2px solid #2455d9; }
 #issueMarkupCanvas:focus-visible { outline:2px solid #2455d9; outline-offset:-2px; }
 .issue-evidence:has(#issueMarkup:not([hidden])) .issue-screenshot-scroll { display:none; }
 @media(max-width:700px) {
@@ -674,6 +678,9 @@ input.dimfield.suggested {
 #issueMarkupStage { flex:none; height:46dvh; }
 .issue-markup-toolbar { margin-top:8px; }
 #issueShotStatus:empty { display:none; }
+
+/* One scrolling container on phones also keeps the annotation mode control reachable. */
+@media(max-width:700px) { .issue-report-layout { overflow:visible; } }
 
 /* Full-width screenshot with natural height, followed by two tool rows. */
 #issueMarkupStage { height:auto; min-height:0; overflow:visible; }
