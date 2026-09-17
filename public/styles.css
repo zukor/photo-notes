@@ -359,7 +359,7 @@ textarea { min-height: 96px; resize: vertical; }
 .document-preview-cover { display:flex; min-height:720px; align-items:center; flex-direction:column; justify-content:center; text-align:center; }
 .document-preview-cover img { width:auto; max-width:240px; max-height:100px; margin-bottom:24px; object-fit:contain; }
 .document-preview-company { font-size:16px; font-weight:800; }.document-preview-cover h2 { margin:18px 0 8px; font-size:32px; }.document-preview-cover p { max-width:500px; font-size:16px; }
-.document-preview-photos { display:grid; gap:24px; }.document-preview-photos.two-up { grid-template-columns:repeat(2,minmax(0,1fr)); }
+.document-preview-photos { display:grid; gap:24px; }.document-preview-photos.two-up { grid-template-columns:1fr; }
 .document-preview-photos section { min-width:0; }.document-preview-photos h3 { margin:0 0 10px; font-size:20px; }.document-preview-photos img { width:100%; max-height:540px; margin:0; border-radius:6px; object-fit:contain; background:#f2f2f2; }
 .document-preview-photos.two-up img { max-height:300px; }.document-preview-location { margin-top:10px; font-size:12px; font-weight:700; }.document-preview-photos p { font-size:14px; line-height:1.45; }
 .document-preview-empty { display:flex; min-height:650px; align-items:center; justify-content:center; color:#555; text-align:center; }

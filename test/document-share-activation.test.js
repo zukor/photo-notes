@@ -3,7 +3,7 @@ function fixture(failure) {
   let activation=true, calls=0, modal=null, removed=false;
   const nodes={}; for(const key of ['[data-share-open]','[data-share-status]','[data-share-close]','[data-share-download]']) nodes[key]={focus(){},disabled:false};
   const document={activeElement:{focus(){}},body:{appendChild(el){modal=el;}},getElementById(){return null;},createElement(){return{querySelector:s=>nodes[s],querySelectorAll:()=>Object.values(nodes),remove(){removed=true;}};}};
-  const c={document,window:{},uiT:s=>s,toast(){},safeSharedFileName:()=> 'fixture.docx',File:class {constructor(parts,name,opts){this.name=name;this.type=opts.type;}},exportBlob:async()=>{activation=false;return{type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'};},navigator:{canShare:()=>true,share:async()=>{calls++;if(!activation)throw Object.assign(new Error('Permission denied'),{name:'NotAllowedError'});if(failure)throw Object.assign(new Error(failure),{name:failure});}},downloadBlob(){}};
+  const c={document,window:{},uiT:s=>s,toast(){},safeSharedFileName:()=> 'fixture.docx',File:class {constructor(parts,name,opts){this.name=name;this.type=opts.type;}},exportBlob:async()=>{activation=false;return{type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'};},navigator:{canShare:()=>true,share:async()=>{calls++;if(!activation)throw Object.assign(new Error('Permission denied'),{name:'NotAllowedError'});if(failure)throw Object.assign(new Error(failure),{name:failure});}},downloadBlob(){c.downloaded=true;}};
   const src=fs.readFileSync(process.env.APP_SOURCE||'public/app.js','utf8');
   const start=src.includes('function openPreparedExportShare')?src.indexOf('function openPreparedExportShare'):src.indexOf('async function deliverExport');
   vm.runInNewContext(src.slice(start,src.indexOf('async function shareSelectedPhotos')),c);
@@ -20,4 +20,10 @@ test('native sharing cancellation or denial keeps a retry and download path',asy
     assert.equal(f.removed,false);assert.equal(f.nodes['[data-share-open]'].disabled,false);
     assert.match(f.nodes['[data-share-status]'].textContent,reason==='AbortError'?/canceled/:/Use Download/);
   }
+});
+
+test('unsupported Word or ZIP sharing provides a user-activated download',async()=>{
+ const f=fixture();f.c.navigator.canShare=()=>false;
+ await f.c.deliverExport('bundle',42,'share');assert.ok(f.modal);assert.equal(f.nodes['[data-share-open]'].hidden,true);
+ f.nodes['[data-share-download]'].onclick();assert.equal(f.c.downloaded,true);assert.equal(f.removed,true);assert.equal(f.calls,0);
 });

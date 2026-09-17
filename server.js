@@ -12,6 +12,7 @@ const PDFDocument = require('pdfkit');
 const archiver = require('archiver');
 const sharp = require('sharp');
 const PizZip = require('pizzip');
+const {normalizePlaceholders,applyTemplate}=require('./word-template');
 const { Document, Packer, Paragraph, TextRun, ImageRun, HeadingLevel, Table, TableRow, TableCell, WidthType, BorderStyle, Header, Footer, AlignmentType, PageNumber, PageBreak } = require('docx');
 const { pool, init, seedUserAreas } = require('./db');
 const { registerStripeRoutes, registerStripeWebhook } = require('./stripe-integration');
@@ -1938,12 +1939,14 @@ app.post('/api/captures/:id/crop', requireAuth, async (req, res) => {
     if (ext === '.png') out = await s.png().toBuffer();
     else if (ext === '.webp') out = await s.webp().toBuffer();
     else out = await s.jpeg({ quality: 92 }).toBuffer();
-    fs.writeFileSync(p, out);
+    const croppedName = `${crypto.randomUUID()}${ext}`;
+    const croppedPath = path.join(UPLOAD_DIR,croppedName);
+    fs.writeFileSync(croppedPath, out);
 
-    const d = await imageDims(p);
+    const d = await imageDims(croppedPath);
     await pool.query(
-      `UPDATE captures SET photo_original_path = $1, photo_width = $2, photo_height = $3 WHERE id = $4 AND user_id = $5`,
-      [originalPath, d ? d.w : null, d ? d.h : null, id, req.user.id]);
+      `UPDATE captures SET photo_original_path = $1, photo_width = $2, photo_height = $3, photo_path = $6 WHERE id = $4 AND user_id = $5`,
+      [originalPath, d ? d.w : null, d ? d.h : null, id, req.user.id, `/uploads/${croppedName}`]);
     logEvent(req.user.id, 'crop', {});
     await recordCaptureHistory(req.user.id,id,'photo_cropped',{original_preserved:true});
     res.json({ ok: true });
@@ -2027,7 +2030,7 @@ app.post('/api/document-settings/template', requireAuth, upload.single('template
   try {
     if(!req.file)return res.status(400).json({error:'Word template required'});
     if(path.extname(req.file.originalname).toLowerCase()!=='.docx'){try{fs.unlinkSync(req.file.path)}catch(e){};return res.status(400).json({error:'use a .docx Word file'});}
-    let xml='';try{const zip=new PizZip(fs.readFileSync(req.file.path));xml=zip.file('word/document.xml').asText();}catch(e){try{fs.unlinkSync(req.file.path)}catch(x){};return res.status(400).json({error:'invalid Word file'});}
+    let xml='';try{const zip=new PizZip(fs.readFileSync(req.file.path));xml=normalizePlaceholders(zip.file('word/document.xml').asText());}catch(e){try{fs.unlinkSync(req.file.path)}catch(x){};return res.status(400).json({error:'invalid Word file'});}
     if(!xml.includes('{{PHOTO_NOTES_CONTENT}}')){try{fs.unlinkSync(req.file.path)}catch(e){};return res.status(400).json({error:'template must contain {{PHOTO_NOTES_CONTENT}}'});}
     const old=(await pool.query(`SELECT word_template_path FROM users WHERE id=$1`,[req.user.id])).rows[0];
     const templatePath=`/uploads/${req.file.filename}`;await pool.query(`UPDATE users SET word_template_path=$1,word_template_name=$2 WHERE id=$3`,[templatePath,ticketText(req.file.originalname,255),req.user.id]);
@@ -2798,31 +2801,9 @@ function conciseAddress(address) {
 }
 function xmlTextValue(value){return escXml(value||'');}
 function applyStructuredWordTemplate(generatedBuffer, templatePath, values) {
-  const local=localPhoto(templatePath);if(!local)return generatedBuffer;
-  try{
-    const template=new PizZip(fs.readFileSync(local)),generated=new PizZip(generatedBuffer);
-    let txml=template.file('word/document.xml').asText(),gxml=generated.file('word/document.xml').asText();
-    let content=(gxml.match(/<w:body[^>]*>([\s\S]*?)<\/w:body>/)||[])[1]||'';
-    content=content.replace(/<w:sectPr[\s\S]*?<\/w:sectPr>\s*$/,'');
-    let trels=template.file('word/_rels/document.xml.rels')?template.file('word/_rels/document.xml.rels').asText():'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>';
-    const grels=generated.file('word/_rels/document.xml.rels')?generated.file('word/_rels/document.xml.rels').asText():'';
-    let nextId=Math.max(0,...Array.from(trels.matchAll(/Id="rId(\d+)"/g),m=>Number(m[1])))+1;
-    for(const m of grels.matchAll(/<Relationship[^>]*Id="([^"]+)"[^>]*Type="[^"]*\/image"[^>]*Target="media\/([^"]+)"[^>]*\/>/g)){
-      const oldId=m[1],oldName=m[2],newId=`rId${nextId++}`,newName=`pn_${nextId}_${oldName}`;
-      const media=generated.file(`word/media/${oldName}`);if(!media)continue;
-      template.file(`word/media/${newName}`,media.asNodeBuffer());
-      content=content.replaceAll(`r:embed="${oldId}"`,`r:embed="${newId}"`);
-      trels=trels.replace('</Relationships>',`<Relationship Id="${newId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/${newName}"/></Relationships>`);
-    }
-    const marker=/<w:p\b[^>]*>[\s\S]*?\{\{PHOTO_NOTES_CONTENT\}\}[\s\S]*?<\/w:p>/;
-    if(!marker.test(txml))return generatedBuffer;
-    txml=txml.replace(marker,content)
-      .replaceAll('{{TITLE}}',xmlTextValue(values.title))
-      .replaceAll('{{DESCRIPTION}}',xmlTextValue(values.description))
-      .replaceAll('{{COMPANY_NAME}}',xmlTextValue(values.company_name));
-    template.file('word/document.xml',txml);template.file('word/_rels/document.xml.rels',trels);
-    return template.generate({type:'nodebuffer',compression:'DEFLATE'});
-  }catch(e){console.error('[word.template]',e&&e.message);return generatedBuffer;}
+  const local=localPhoto(templatePath);
+  if(!local)throw Error('Saved Word template is unavailable');
+  return applyTemplate(generatedBuffer,fs.readFileSync(local),values);
 }
 // Dimensions for exports: shown unless they are a low-confidence photo estimate
 // the user has not yet confirmed (dim_confirmed = false).
@@ -3035,12 +3016,12 @@ app.get('/api/export/pdf', requireAuth, async (req, res) => {
     doc.pipe(res);
     const pdfFont=['Georgia','Times New Roman'].includes(layout.font)?'Times-Roman':'Helvetica';doc.font(pdfFont);
     const logo=await documentLogoAsset(logoPath,220,90);let pageNumber=0;
-    const drawChrome=()=>{pageNumber++;const oldY=doc.y,oldX=doc.x;if(layout.header&&branding.header_text){doc.font(pdfFont).fontSize(9).fillColor('#333').text(branding.header_text,48,24,{width:516,align:'center'});}if(layout.footer||layout.page_numbers){const bits=[];if(layout.footer&&branding.footer_text)bits.push(branding.footer_text);if(layout.page_numbers)bits.push(`Page ${pageNumber}`);doc.font(pdfFont).fontSize(8).fillColor('#444').text(bits.join('  |  '),48,730,{width:516,height:12,align:'center',lineBreak:false});}doc.y=oldY;doc.x=oldX;};
+    const drawChrome=()=>{pageNumber++;const oldY=doc.y,oldX=doc.x;if(layout.header&&branding.header_text){doc.font(pdfFont).fontSize(9).fillColor('#000').text(branding.header_text,48,24,{width:516,align:'center'});}if(layout.footer||layout.page_numbers){const bits=[];if(layout.footer&&branding.footer_text)bits.push(branding.footer_text);if(layout.page_numbers)bits.push(`Page ${pageNumber}`);doc.font(pdfFont).fontSize(8).fillColor('#000').text(bits.join('  |  '),48,730,{width:516,height:12,align:'center',lineBreak:false});}doc.y=oldY;doc.x=oldX;};
     if(layout.cover_page){
       if(logo)doc.image(logo.buffer,306-logo.width/2,120,{width:logo.width,height:logo.height});
       doc.y=logo?235:170;if(branding.company_name)doc.fontSize(13).fillColor(layout.accent).text(branding.company_name,{align:'center'}).moveDown(.8);
       doc.fontSize(25).fillColor('#000').text(heading||'Document',{align:'center'});if(desc)doc.moveDown(.5).fontSize(13).text(desc,{align:'center'});
-      if(layout.footer&&branding.footer_text)doc.fontSize(9).fillColor('#444').text(branding.footer_text,48,720,{width:516,align:'center'});
+      if(layout.footer&&branding.footer_text)doc.fontSize(9).fillColor('#000').text(branding.footer_text,48,720,{width:516,align:'center'});
     }else if(heading){if(logo)doc.image(logo.buffer,48,48,{fit:[150,55]});doc.y=logo?115:48;doc.fontSize(20).fillColor('#000').text(heading,{align:'center'});if(desc)doc.moveDown(.3).fontSize(12).text(desc,{align:'center'});doc.moveDown(1);drawChrome();}
     doc.on('pageAdded',drawChrome);
     const pairs = pro ? await userPairs(req.user.id) : [];
@@ -3050,7 +3031,7 @@ app.get('/api/export/pdf', requireAuth, async (req, res) => {
       const two=layout.photo_layout==='two_per_page'&&!u.pair;
       const needsPage=(layout.cover_page&&i===0)||(i>0&&(!two||i%2===0));
       if(needsPage){doc.addPage();}
-      else if(two&&i%2===1){doc.y=397;doc.x=48;}
+      else if(two&&i%2===1){if(doc.y>377)doc.addPage();else doc.y=397;doc.x=48;}
       if (u.pair) {
         const { before, after } = u.pair;
         doc.fontSize(13).fillColor('#000').text(before.address || after.address || 'No location');
@@ -3064,6 +3045,7 @@ app.get('/api/export/pdf', requireAuth, async (req, res) => {
         if (aImg) { const r = await renderForEmbedStamped(aImg, imgRes, imgFmt, after); if (r) { try { doc.image(r.buffer, 310, imgTop, { fit: [240, 180] }); } catch (e) {} } }
         doc.y = imgTop + 190; doc.x = 48;
         for (const [lbl, c] of [['Before', before], ['After', after]]) {
+          doc.fontSize(9).fillColor('#000').text([c.photo_title,fmtWhen(c.created_at),(c.area_tags||[]).join(', '),c.address,c.latitude!=null&&c.longitude!=null?`GPS: ${Number(c.latitude).toFixed(5)}, ${Number(c.longitude).toFixed(5)}`:''].filter(Boolean).join(' | '));
           const df = pro ? fmtDefect(c) : ''; const dm = pro ? exportDims(c) : '';
           doc.fontSize(10).fillColor('#000').text(`${lbl}: ${(df ? df + '. ' : '')}${(dm ? dm + '. ' : '')}${c.note || '(no note)'}`, 48, doc.y, { width: 500 });
         }
@@ -3079,7 +3061,7 @@ app.get('/api/export/pdf', requireAuth, async (req, res) => {
           try {
             const meta = await sharp(r.buffer).metadata();
             const maxW = 516;
-            const maxH = Math.min(two ? 225 : (scope === 'selection' ? 520 : 455), Math.max(80, 640-doc.y));
+            const maxH = Math.min(two ? 180 : (scope === 'selection' ? 520 : 455), Math.max(80, 640-doc.y));
             const scale = Math.min(maxW / meta.width, maxH / meta.height);
             const drawW = Math.round(meta.width * scale);
             const drawH = Math.round(meta.height * scale);
@@ -3091,8 +3073,9 @@ app.get('/api/export/pdf', requireAuth, async (req, res) => {
           } catch (e) {}
         }
       }
-      if(c.address)doc.fontSize(9).text(conciseAddress(c.address),{width:516});
-      if (scope !== 'selection' && c.area_tags && c.area_tags.length) doc.fontSize(10).fillColor('#000').text('Area: ' + c.area_tags.join(', '));
+      if(c.address)doc.fontSize(9).text(c.address,{width:516});
+      if(c.latitude!=null&&c.longitude!=null)doc.fontSize(9).text(`GPS: ${Number(c.latitude).toFixed(5)}, ${Number(c.longitude).toFixed(5)}`);
+      if (c.area_tags && c.area_tags.length) doc.fontSize(10).fillColor('#000').text('Topic: ' + c.area_tags.join(', '));
       if (pro) { const df = fmtDefect(c); if (df) doc.fontSize(10).fillColor('#000').text('Defect: ' + df); }
       if (pro) { const dm = exportDims(c); if (dm) doc.fontSize(10).fillColor('#000').text('Dimensions: ' + dm); }
       doc.fontSize(9).fillColor('#000').text(fmtWhen(c.created_at));
@@ -3118,21 +3101,35 @@ app.get('/api/export/docx', requireAuth, async (req, res) => {
     const pairsD = pro ? await userPairs(req.user.id) : [];
     const unitsD = buildRenderUnits(rows, pairsD);
     const arialCell = (runs) => new TableCell({ children: runs });
-    const compactCell=async(c)=>{const kids=[];const img=localPhoto(c.photo_path);if(img){const r=await renderForEmbedStamped(img,imgRes,imgFmt,c);if(r)kids.push(new Paragraph({children:[new ImageRun({type:r.ext==='.png'?'png':'jpg',data:r.buffer,transformation:{width:245,height:184}})]}));}kids.push(new Paragraph({children:[new TextRun({text:c.photo_title||'Untitled Photo',bold:true,font})]}));if(c.address)kids.push(new Paragraph({children:[new TextRun({text:c.address,font,size:18})]}));kids.push(new Paragraph({children:[new TextRun({text:c.note||'(no note)',font,size:19})]}));return new TableCell({children:kids});};
+    const detailParagraphs=c=>[fmtWhen(c.created_at),(c.area_tags||[]).length?'Topic: '+c.area_tags.join(', '):'',c.latitude!=null&&c.longitude!=null?`GPS: ${Number(c.latitude).toFixed(5)}, ${Number(c.longitude).toFixed(5)}`:''].filter(Boolean).map(text=>new Paragraph({children:[new TextRun({text,font,color:'000000',size:18})]}));
+    const imageSize=async(buffer,width,height)=>{const m=await sharp(buffer).metadata(),scale=Math.min(width/m.width,height/m.height);return {width:Math.round(m.width*scale),height:Math.round(m.height*scale)};};
+    const compactCell=async(c)=>{
+      const kids=[new Paragraph({children:[new TextRun({text:c.photo_title||'Untitled Photo',bold:true,font,color:'000000'})]})];
+      const img=localPhoto(c.photo_path);
+      if(img){const r=await renderForEmbedStamped(img,imgRes,imgFmt,c);if(r)kids.push(new Paragraph({children:[new ImageRun({type:r.ext==='.png'?'png':'jpg',data:r.buffer,transformation:await imageSize(r.buffer,480,180)})]}));}
+      if(c.address)kids.push(new Paragraph({children:[new TextRun({text:c.address,font,size:18,color:'000000'})]}));
+      kids.push(...detailParagraphs(c));
+      kids.push(new Paragraph({children:[new TextRun({text:c.note||'(no note)',font,size:20,color:'000000'})]}));
+      return kids;
+    };
+
     for (let unitIndex=0;unitIndex<unitsD.length;unitIndex++) {
       const u=unitsD[unitIndex];
-      if(layout.photo_layout==='two_per_page'&&u.single&&unitsD[unitIndex+1]&&unitsD[unitIndex+1].single){children.push(new Table({width:{size:100,type:WidthType.PERCENTAGE},rows:[new TableRow({children:[await compactCell(u.single),await compactCell(unitsD[++unitIndex].single)]})]}));children.push(new Paragraph({children:[new PageBreak()]}));continue;}
+      if(unitIndex>0)children.push(new Paragraph({children:[new PageBreak()]}));
+      if(layout.photo_layout==='two_per_page'&&u.single){children.push(...await compactCell(u.single));if(unitsD[unitIndex+1]?.single)children.push(...await compactCell(unitsD[++unitIndex].single));continue;}
       if (u.pair) {
         const { before, after } = u.pair;
         children.push(new Paragraph({ spacing: { before: 160 }, children: [new TextRun({ text: before.address || after.address || 'No location', bold: true, color: '000000', font })] }));
         const cellFor = async (lbl, c) => {
           const kids = [new Paragraph({ children: [new TextRun({ text: lbl, bold: true, color: '000000', font })] })];
           const img = localPhoto(c.photo_path);
-          if (img) { const r = await renderForEmbedStamped(img, imgRes, imgFmt, c); if (r) { try { kids.push(new Paragraph({ children: [new ImageRun({ type: r.ext === '.png' ? 'png' : 'jpg', data: r.buffer, transformation: { width: 250, height: 188 } })] })); } catch (e) {} } }
+          if (img) { const r = await renderForEmbedStamped(img, imgRes, imgFmt, c); if (r) { try { kids.push(new Paragraph({ children: [new ImageRun({ type: r.ext === '.png' ? 'png' : 'jpg', data: r.buffer, transformation: await imageSize(r.buffer,250,188) })] })); } catch (e) {} } }
           const df = pro ? fmtDefect(c) : ''; const dm = pro ? exportDims(c) : '';
           if (df) kids.push(new Paragraph({ children: [new TextRun({ text: 'Defect: ' + df, color: '000000', font })] }));
           if (dm) kids.push(new Paragraph({ children: [new TextRun({ text: 'Dimensions: ' + dm, color: '000000', font })] }));
           kids.push(new Paragraph({ children: [new TextRun({ text: c.note || '(no note)', color: '000000', font })] }));
+          kids.push(...detailParagraphs(c));
+          if(c.address)kids.push(new Paragraph({children:[new TextRun({text:c.address,font,color:'000000'})]}));
           return arialCell(kids);
         };
         const row = new TableRow({ children: [await cellFor('BEFORE', before), await cellFor('AFTER', after)] });
@@ -3141,13 +3138,14 @@ app.get('/api/export/docx', requireAuth, async (req, res) => {
         continue;
       }
       const c = u.single;
+      children.push(new Paragraph({children:[new TextRun({text:c.photo_title||'Untitled Photo',bold:true,font,color:'000000'})]}));
+      children.push(...detailParagraphs(c));
       const img = localPhoto(c.photo_path);
       if (img) {
         const r = await renderForEmbedStamped(img, imgRes, imgFmt, c);
-        if (r) { try { children.push(new Paragraph({ children: [new ImageRun({ type: r.ext === '.png' ? 'png' : 'jpg', data: r.buffer, transformation: { width: 420, height: 315 } })] })); } catch (e) {} }
+        if (r) { try { children.push(new Paragraph({ children: [new ImageRun({ type: r.ext === '.png' ? 'png' : 'jpg', data: r.buffer, transformation: await imageSize(r.buffer,480,390) })] })); } catch (e) {} }
       }
       children.push(new Paragraph({ spacing: { before: 120 }, children: [new TextRun({ text: (c.address || 'No location') + (c.kind === 'task' ? '   [TASK]' : ''), bold: true, color: '000000', font })] }));
-      if (c.area_tags && c.area_tags.length) children.push(new Paragraph({ children: [new TextRun({ text: 'Area: ' + c.area_tags.join(', '), color: '000000', font })] }));
       if (pro) { const df = fmtDefect(c); if (df) children.push(new Paragraph({ children: [new TextRun({ text: 'Defect: ' + df, color: '000000', font })] })); }
       if (pro) { const dm = exportDims(c); if (dm) children.push(new Paragraph({ children: [new TextRun({ text: 'Dimensions: ' + dm, color: '000000', font })] })); }
       children.push(new Paragraph({ children: [new TextRun({ text: c.note || '(no note)', color: '000000', font })] }));
@@ -3157,7 +3155,7 @@ app.get('/api/export/docx', requireAuth, async (req, res) => {
     const headers=layout.header&&branding.header_text?{default:new Header({children:[new Paragraph({alignment:AlignmentType.CENTER,children:[new TextRun({text:branding.header_text,font,size:18})]})]})}:undefined;
     const footerRuns=[];if(layout.footer&&branding.footer_text)footerRuns.push(new TextRun({text:branding.footer_text,font,size:16}));if(layout.page_numbers){if(footerRuns.length)footerRuns.push(new TextRun({text:'  |  ',font,size:16}));footerRuns.push(new TextRun({children:['Page ',PageNumber.CURRENT],font,size:16}));}
     const footers=footerRuns.length?{default:new Footer({children:[new Paragraph({alignment:AlignmentType.CENTER,children:footerRuns})]})}:undefined;
-    const doc = new Document({ sections: [{ headers,footers,children }] });
+    const doc = new Document({ styles:{default:{document:{run:{font,color:'000000',size:22},paragraph:{spacing:{after:80}}}}}, sections: [{ properties:{page:{size:{width:12240,height:15840},margin:{top:960,bottom:960,left:960,right:960}}},headers,footers,children }] });
     let buf = await Packer.toBuffer(doc);
     if(templatePath)buf=applyStructuredWordTemplate(buf,templatePath,{title:heading,description:desc,company_name:branding.company_name});
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');

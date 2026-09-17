@@ -490,6 +490,7 @@
     'Microphone access is off for Photo Notes. Allow it for this website, then tap Record Notes again': 'El acceso al micrófono está desactivado para Photo Notes. Permítalo para este sitio y después toque Grabar notas de nuevo',
     'No address': 'Sin dirección', 'No description': 'Sin descripción', 'No location': 'Sin ubicación', 'Note saved': 'Nota guardada',
     'Original photo restored': 'Foto original restaurada', 'PDF ready': 'PDF listo', 'Pairing failed': 'No se pudo emparejar', 'Photo added': 'Foto agregada',
+    'Download this file, then attach it in Teams or another app.': 'Descargue este archivo y adjúntelo en Teams u otra aplicación.',
     'Photo cropped. Original saved.': 'Foto recortada. Se guardó la original.', 'Pick a document or type a new title': 'Elija un documento o escriba un título nuevo',
     'Pick at least one format': 'Elija al menos un formato', 'Plant Address': 'Dirección de la planta', 'Proposal export failed': 'Falló la exportación de la propuesta',
     'Proposal ready': 'Propuesta lista', 'Re-shoot with the ruler in frame.': 'Vuelva a tomar la foto con la regla dentro del encuadre.', 'Record could not be saved': 'No se pudo guardar el registro',
