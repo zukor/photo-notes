@@ -1,3 +1,4 @@
+require('./annotation-fonts');
 const {beginCaptureReceipt,validateCaptureAccount}=require('./capture-receipts');
 const ConcreteCapture = require('./public/concrete-capture');
 const path = require('path');
