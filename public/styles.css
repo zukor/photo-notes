@@ -178,11 +178,13 @@ textarea { min-height: 96px; resize: vertical; }
 .workflow-road-report { width:min(620px,100%); margin:0 auto; }
 .workflow-road-report .road-send { margin-top:22px; }
 .wrap:has(.edition-switcher) { padding-top:4px; }
-.app-header:has(.edition-switcher) { grid-template-rows:auto auto auto; margin-top:0; }
+.app-header:has(.edition-switcher) { grid-template-rows:30px auto auto; margin-top:0; }
 .app-header:has(.edition-switcher) .zukor-corner-logo,
 .app-header:has(.edition-switcher) .header-controls { grid-row:2; }
+.app-header:has(.edition-switcher) .zukor-corner-logo { align-self:start; }
+.app-header:has(.edition-switcher) .header-controls { grid-column:3; }
 .app-header:has(.edition-switcher) .brandrow { grid-row:3; }
-.edition-switcher { grid-column:1 / -1; grid-row:1; justify-self:center; display:block; max-width:100%; margin:0 0 4px; line-height:1; }
+.edition-switcher { grid-column:2; grid-row:2; align-self:start; justify-self:center; display:block; min-width:0; max-width:100%; margin:0; line-height:1; }
 .edition-switcher select { width:auto; max-width:100%; min-width:0; padding:5px 24px 5px 8px; border:1px solid #9db0ca; border-radius:8px; background:#fff; color:#000; font:700 11px/1.2 Arial,Helvetica,sans-serif; cursor:pointer; }
 .edition-switcher select:focus-visible { outline:2px solid #1d4ed8; outline-offset:2px; }
 /* Wide browser header: the company mark is approximately one workflow-tab wide.
