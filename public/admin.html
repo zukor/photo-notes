@@ -43,8 +43,6 @@
     .issue-admin-card { display:grid; grid-template-columns:180px minmax(0,1fr); gap:14px; }
     .issue-admin-card img { width:180px; max-height:220px; object-fit:cover; object-position:top; margin:0; border:1px solid #aaa; border-radius:6px; }
     .issue-description { white-space:pre-wrap; line-height:1.4; margin:8px 0; }
-    .issue-intro { margin:0 0 12px; color:#000; text-align:left; }
-    .issue-intro p { margin:5px 0 0; }
     .issue-help { margin:10px 0; color:#000; text-align:left; }
     .issue-help > summary { cursor:pointer; font-weight:bold; padding:10px 0; }
     .issue-help p, .issue-help li { line-height:1.5; }
@@ -434,7 +432,6 @@
           </section>
           <h2 class="admin-tools-heading">Admin Tools</h2>
 <details class="admin-section" data-admin-tool="issues"><summary>Issue Management Center</summary><div class="admin-section-body">
-          <div class="issue-intro"><strong>Review and manage reports</strong><p>Track reported problems, review ideas, and follow up with testers.</p></div>
           <details class="issue-help"><summary>How reports are handled</summary>
             <ul><li><strong>Bug/Problem:</strong> enters the automatic repair queue. Unclear fixes need Sam’s review.</li><li><strong>Ideas:</strong> UI improvements, feature improvements, and new features go to Sam for review.</li><li><strong>Tester updates:</strong> ready-to-test fixes and requests for details appear in the reporter’s app.</li></ul>
           </details>
