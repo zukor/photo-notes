@@ -1,0 +1,78 @@
+{
+  "title": "Road Issue Reporter testing",
+  "title_es": "Pruebas de Road Issue Reporter",
+  "summary": "For Jose and Gabby, independently. Use your own login and phone. Coordinate with Sam before sending test reports. Test only from a safe location, never while driving. Record device/browser and evidence. A submitted assignment is not a passing result. Sam confirms receipt of road reports.",
+  "summary_es": "Para Jose y Gabby, por separado. Use su propia cuenta y teléfono. Coordine con Sam antes de enviar pruebas. Pruebe desde un lugar seguro, nunca al conducir. Anote dispositivo, navegador y evidencias. Entregar las pruebas no significa que pasaron. Sam confirma la recepción de los reportes viales.",
+  "steps": [
+    {
+      "id": "road-1",
+      "title": "Open the app",
+      "title_es": "Abrir la aplicación",
+      "instruction": "Sign in and open Road Issue Reporter. Check portrait and landscape: labels, photo and Send controls must fit.",
+      "instruction_es": "Inicie sesión y abra Road Issue Reporter. Revise la pantalla vertical y horizontal: etiquetas, foto y Enviar deben caber."
+    },
+    {
+      "id": "road-2",
+      "title": "Choose the category",
+      "title_es": "Elegir la categoría",
+      "instruction": "Select each: Crack, Pothole, Curb, Water Pooling, Road Marking, Sign, Other Road Surface Issue. Confirm your selection remains until changed or sent.",
+      "instruction_es": "Seleccione cada opción: grieta, bache, bordillo, agua acumulada, marcas viales, señal y otro problema vial. Compruebe que la selección se conserva."
+    },
+    {
+      "id": "road-3",
+      "title": "Take and replace a photo",
+      "title_es": "Tomar y reemplazar una foto",
+      "instruction": "Take a test photo, retake it, cancel it, then take another. Confirm the preview shows the latest photo.",
+      "instruction_es": "Tome una foto de prueba, repítala, cancélela y tome otra. Compruebe que la vista previa muestra la más reciente."
+    },
+    {
+      "id": "road-4",
+      "title": "Verify the location",
+      "title_es": "Verificar la ubicación",
+      "instruction": "Allow location outdoors. Compare GPS and address with your actual location. Try Retry location and Correct address. Record any inaccurate or missing information.",
+      "instruction_es": "Permita la ubicación al aire libre. Compare el GPS y la dirección con el lugar real. Pruebe Reintentar ubicación y Corregir dirección. Anote errores o datos ausentes."
+    },
+    {
+      "id": "road-5",
+      "title": "Send and confirm receipt",
+      "title_es": "Enviar y confirmar la recepción",
+      "instruction": "Send one clearly labeled TEST report per category. List category and report numbers in notes. Sam must confirm the photo, location, type and tester name received. Saved with pending email is not confirmed delivery.",
+      "instruction_es": "Envíe un reporte marcado PRUEBA por categoría. Anote categorías y números. Sam debe confirmar la foto, ubicación, tipo y nombre recibidos. Guardado con correo pendiente no confirma la entrega."
+    },
+    {
+      "id": "road-6",
+      "title": "Missing photo and permissions",
+      "title_es": "Foto ausente y permisos",
+      "instruction": "Try Send without a photo. Deny camera or location permission once, restore it and retry. Look for clear messages and no freezing.",
+      "instruction_es": "Pruebe Enviar sin foto. Deniegue una vez el permiso de cámara o ubicación, restáurelo y reintente. Compruebe mensajes claros y ausencia de bloqueos."
+    },
+    {
+      "id": "road-7",
+      "title": "Connection loss",
+      "title_es": "Pérdida de conexión",
+      "instruction": "With a photo ready, turn off Wi-Fi and mobile data, then Send once. No false success should appear. Restore connection and retry; check retained photo and duplicates with Sam.",
+      "instruction_es": "Con una foto lista, apague Wi-Fi y datos y pulse Enviar una vez. No debe indicar éxito falso. Reconecte y reintente; revise foto conservada y duplicados con Sam."
+    },
+    {
+      "id": "road-8",
+      "title": "Repeated tap and new location",
+      "title_es": "Doble pulsación y otra ubicación",
+      "instruction": "Tap Send twice quickly on one report. Ask Sam to check duplicates. Send a new photo from another safe location; verify no old photo or location carries over.",
+      "instruction_es": "Pulse Enviar dos veces rápidamente. Pida a Sam revisar duplicados. Envíe otra foto desde un lugar seguro diferente y compruebe que no conserve foto o ubicación anteriores."
+    },
+    {
+      "id": "road-9",
+      "title": "Both languages",
+      "title_es": "Ambos idiomas",
+      "instruction": "Switch between English and Spanish and complete a report in each. Check labels, errors, confirmations and layout. Record untranslated or confusing wording.",
+      "instruction_es": "Cambie entre inglés y español y complete un reporte en cada idioma. Revise etiquetas, errores, confirmaciones y diseño. Anote texto sin traducir o confuso."
+    },
+    {
+      "id": "road-10",
+      "title": "App problem reporting",
+      "title_es": "Reporte de errores de la aplicación",
+      "instruction": "Use Report Issue for an app problem. Scroll past its screenshot and verify Send is reachable without freezing. If you submit a test, label it TEST. Check My Issue Reports.",
+      "instruction_es": "Use Reportar problema para un error de la aplicación. Desplácese sobre la captura y compruebe que puede llegar a Enviar sin bloqueo. Marque PRUEBA si envía un ensayo. Revise Mis reportes."
+    }
+  ]
+}

@@ -1,0 +1,46 @@
+const test=require('node:test'),assert=require('node:assert/strict');
+test('testing hub publishes isolated assignments, preserves evidence, rejects stale saves and links reports',{skip:!process.env.PN_TESTING_HUB_DB},async()=>{
+ const url=process.env.PN_TESTING_HUB_DB;if(!/^postgres(?:ql)?:\/\/postgres@127\.0\.0\.1:55474\/pn_testing_hub$/.test(url))throw Error('Use the disposable testing hub database');
+ Object.assign(process.env,{DATABASE_URL:url,ADMIN_EMAIL:'admin@testing.invalid',ADMIN_PASSWORD:'local-only-testing',UPLOAD_DIR:'/tmp/pn-testing-hub-uploads',SESSION_SECRET:'local-testing-hub-session-secret-12345'});delete process.env.RESEND_API_KEY;delete process.env.ISSUE_GITHUB_TOKEN;
+ const {pool,init}=require('../db');await init();const {app}=require('../server');const server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));const base=`http://127.0.0.1:${server.address().port}`;let cookie;
+ const call=async(path,body,as=cookie,method='POST')=>{const r=await fetch(base+path,{method:body===undefined?'GET':method,headers:{...(as?{Cookie:as}:{}),...(body instanceof FormData?{}:{'Content-Type':'application/json'})},body:body===undefined?undefined:body instanceof FormData?body:JSON.stringify(body)});return {status:r.status,data:await r.json().catch(()=>null),response:r};};
+ const login=async(email)=>{const r=await fetch(base+'/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password:'local-only-testing'})});assert.equal(r.status,200);return r.headers.get('set-cookie').split(';')[0];};
+ try{
+  const bcrypt=require('bcryptjs'),hash=await bcrypt.hash('local-only-testing',4);
+  const people=[];for(const name of ['Jose','Gabby','Other'])people.push((await pool.query("INSERT INTO users(name,email,password_hash,plan,pro_type,edition_access) VALUES($1,$2,$3,'free','roads',ARRAY['roads']) RETURNING id",[name,name.toLowerCase()+'@testing.invalid',hash])).rows[0].id);
+  cookie=await login('admin@testing.invalid');const jose=await login('jose@testing.invalid'),gabby=await login('gabby@testing.invalid'),other=await login('other@testing.invalid');
+  assert.equal((await call('/api/testing/assignments/mine',undefined,null)).status,401);
+  assert.equal((await call('/api/admin/testing/templates',undefined,jose)).status,403);
+  let drafts=(await call('/api/admin/testing/templates')).data;const seed=drafts.find(t=>t.seed_key==='road-reporter-initial');assert.equal(seed.status,'draft');
+  const draft={...seed,id:undefined,assignee_ids:people.slice(0,2)};let t=(await call('/api/admin/testing/templates',draft)).data;assert.ok(t.id);
+  assert.equal((await call(`/api/admin/testing/templates/${t.id}/publish`,{revision:99})).status,409);
+  const [p1,p2]=await Promise.all([call(`/api/admin/testing/templates/${t.id}/publish`,{revision:t.revision}),call(`/api/admin/testing/templates/${t.id}/publish`,{revision:t.revision})]);assert.equal(p1.status,200);assert.equal(p2.status,200);
+  assert.equal((await pool.query('SELECT count(*)::int AS n FROM testing_assignments WHERE template_id=$1',[t.id])).rows[0].n,2);
+  assert.equal((await call(`/api/admin/testing/templates/${t.id}`,{...t,title:'Changed'},cookie,'PUT')).status,409);
+  let a=(await call('/api/testing/assignments/mine',undefined,jose)).data.find(a=>a.template_id===t.id),g=(await call('/api/testing/assignments/mine',undefined,gabby)).data.find(a=>a.template_id===t.id);assert.notEqual(a.id,g.id);
+  assert.equal((await call('/api/testing/attention',undefined,jose)).data.new_count,1);
+  assert.equal((await call(`/api/testing/assignments/${a.id}/seen`,{},gabby)).status,404);
+  await call(`/api/testing/assignments/${a.id}/seen`,{},jose);assert.equal((await call('/api/testing/attention',undefined,jose)).data.new_count,0);
+  const data={revision:a.revision,results:{[a.steps[0].id]:{status:'failed',notes:'Camera freezes'}},device:'Android / Chrome / ES',tester_notes:'Other steps not yet tested'};
+  assert.equal((await call(`/api/testing/assignments/${a.id}/progress`,data,gabby)).status,404);
+  assert.equal((await call(`/api/testing/assignments/${a.id}/progress`,{...data,results:{unknown:{status:'passed'}}},jose)).status,400);
+  a=(await call(`/api/testing/assignments/${a.id}/progress`,data,jose)).data;assert.equal(a.results[a.steps[0].id].status,'failed');
+  assert.equal((await call(`/api/testing/assignments/${a.id}/progress`,data,jose)).status,409);
+  assert.deepEqual((await call('/api/testing/assignments/mine',undefined,gabby)).data.find(x=>x.id===g.id).results,{});
+  const sharp=require('sharp'),photo=await sharp({create:{width:40,height:30,channels:3,background:'#fff'}}).png().toBuffer(),form=new FormData();form.append('photo',new Blob([photo],{type:'image/png'}),'test.png');
+  const evidence=await call(`/api/testing/assignments/${a.id}/evidence/${a.steps[0].id}`,form,jose);assert.equal(evidence.status,200);const id=evidence.data.id;
+  assert.equal((await fetch(base+`/api/testing/evidence/${id}`,{headers:{Cookie:gabby}})).status,404);assert.equal((await fetch(base+`/api/testing/evidence/${id}`,{headers:{Cookie:jose}})).status,200);
+  const report=new FormData();report.append('description','Synthetic linked testing bug');report.append('issue_type','bug_problem');report.append('testing_assignment_id',a.id);report.append('testing_step_id',a.steps[0].id);
+  assert.equal((await call('/api/issues',report,gabby)).status,400);const issue=await call('/api/issues',report,jose);assert.equal(issue.status,200);assert.ok(issue.data.id);
+  const enriched=(await call('/api/testing/assignments/mine',undefined,jose)).data.find(x=>x.id===a.id);assert.equal(enriched.issues[0].id,issue.data.id);
+  const pdf=await fetch(base+`/api/testing/assignments/${a.id}/download?lang=es`,{headers:{Cookie:jose}});assert.equal(pdf.status,200);assert.equal(Buffer.from(await pdf.arrayBuffer()).subarray(0,4).toString(),'%PDF');
+  assert.equal((await fetch(base+`/api/testing/assignments/${a.id}/download`,{headers:{Cookie:other}})).status,404);
+  const submitted=await call(`/api/testing/assignments/${a.id}/submit`,{revision:a.revision},jose);assert.equal(submitted.status,200);a=submitted.data;assert.equal(a.status,'submitted');assert.equal(a.results[a.steps[0].id].status,'failed');
+  assert.equal((await call(`/api/testing/assignments/${a.id}/progress`,{...data,revision:a.revision},jose)).status,409);
+  assert.equal((await call(`/api/testing/assignments/${a.id}/history`,undefined,jose)).data.length,1);
+  assert.equal((await call(`/api/testing/assignments/${a.id}/history`,undefined,other)).status,404);
+  a=(await call(`/api/admin/testing-assignments/${a.id}/review`,{revision:a.revision,review_status:'retest_requested',review_notes:'Retest camera after repair'})).data;assert.equal(a.status,'in_progress');assert.equal(a.seen_at,null);
+  assert.equal((await call(`/api/testing/assignments/${a.id}/history`,undefined,jose)).data[0].snapshot.results[a.steps[0].id].status,'failed');
+  console.log('Validated real HTTP, PostgreSQL, auth, publishing, result isolation, stale-write protection, photos, linked issues, PDF, failed/incomplete submission and retest history');
+ }finally{await new Promise(r=>server.close(r));await pool.end();}
+});

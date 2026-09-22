@@ -285,10 +285,10 @@ function renderApp() {
               <div class="profile-name">${esc((state.me && state.me.name) || 'Photo Notes User')}</div>
               <div class="profile-email">${esc((state.me && state.me.email) || '')}</div>
               <div class="profile-plan">${isRoadIssuesClient()?'Road Issue Reporter':isGeneralProClient()?'Photo Notes Pro':isProClient()?esc(productName()):'Photo Notes Basic'}</div>
-              ${isBasicClient()||isGeneralProClient()?'<button type="button" id="myAssignment">My Testing Assignment</button>':''}
+              <button type="button" id="myAssignment" ${state.me?.is_tester||state.me?.role==='admin'?'':'hidden'}>Testing Hub</button>
               <button type="button" id="installHelp">Install Photo Notes</button>
               <button type="button" id="pendingPhotos">Pending Photos</button>
-              <button type="button" id="myIssues">${state.me?.is_tester?'Testing Hub':'My Issue Reports'}</button>
+              <button type="button" id="myIssues" ${state.me?.is_tester?'hidden':''}>My Issue Reports</button>
               ${state.me && state.me.role === 'admin' ? '<a href="/admin">Admin Dashboard</a>' : ''}
               <button type="button" id="signout">Sign Out</button>
             </div>
@@ -348,8 +348,8 @@ function renderApp() {
   const tabCreate=document.getElementById('tabCreate');if(tabCreate)tabCreate.onclick = () => { state.view=isHoaClient()?'hoa-inspections':'create'; state.groupId=null; renderApp(); };
   const tabSend=document.getElementById('tabSend');if(tabSend)tabSend.onclick = () => { state.view=isHoaClient()?'hoa-maintenance':'send'; renderApp(); };
   if (state.view === 'my-issues') renderMyIssueReports();
-  else if (isRoadIssuesClient()) { state.view='road-report'; renderRoadIssueReport(); }
   else if (state.view === 'my-assignment') renderMyTestingAssignment();
+  else if (isRoadIssuesClient()) { state.view='road-report'; renderRoadIssueReport(); }
 
   else if (isBasicClient()) { state.view='capture'; renderCapture(); }
   else if (state.view === 'capture') renderCapture();
@@ -378,37 +378,16 @@ function renderApp() {
 
 const MY_ISSUE_STATUS={blocked:'Needs attention',new:'Received',reviewing:'Working',fixing:'Working',testing:'Testing',ready_to_test:'Deployed - awaiting your confirmation',tester_confirmed:'Closed - you confirmed',resolved:'Resolved',wont_fix:'Closed'};
 async function renderMyTestingAssignment(){
-  const body=document.getElementById('body');
-  body.innerHTML='<button class="backlink" id="assignmentBack">← Back</button><div class="workflow-intro"><strong>My Testing Assignment</strong><span>Complete each check here. Your progress saves in Photo Notes, and your administrator can see when you submit it.</span></div><div id="assignmentList"><p class="status">Loading your assignment...</p></div>';
-  document.getElementById('assignmentBack').onclick=()=>{state.view=IS_HANDHELD?'capture':'organize';renderApp();};
-  const r=await api('/api/testing/assignments/mine'),box=document.getElementById('assignmentList');
-  if(!r.ok){box.innerHTML='<p class="status">Your assignment could not be loaded.</p>';return;}
-  const rows=await r.json();
-  if(!rows.length){box.innerHTML='<article class="card"><strong>No assignment is connected to this login yet.</strong><p>Your administrator can connect one after confirming your account name.</p></article>';return;}
-  box.innerHTML=rows.map(a=>testingAssignmentCard(a)).join('');
-  box.querySelectorAll('[data-assignment-check]').forEach(c=>c.onchange=()=>saveTestingProgress(Number(c.dataset.assignmentCheck)));
-  box.querySelectorAll('[data-assignment-notes]').forEach(n=>n.onchange=()=>saveTestingProgress(Number(n.dataset.assignmentNotes)));
-  box.querySelectorAll('[data-assignment-submit]').forEach(b=>b.onclick=()=>submitTestingAssignment(Number(b.dataset.assignmentSubmit),b));
-}
-function testingAssignmentCard(a){
-  const steps=Array.isArray(a.steps)?a.steps:[],done=new Set((Array.isArray(a.completed_step_ids)?a.completed_step_ids:[]).map(String)),submitted=a.status==='submitted',complete=steps.length>0&&steps.every(s=>done.has(String(s.id))),percent=steps.length?Math.round(done.size/steps.length*100):0;
-  return `<article class="card testing-assignment-card" data-assignment="${a.id}"><div class="tester-issue-head"><strong>${esc(a.title)}</strong><span class="badge">${submitted?'Submitted':percent+'% complete'}</span></div><p>${esc(a.summary||'')}</p><div class="assignment-progress" aria-label="${percent}% complete"><span style="width:${percent}%"></span></div><div class="assignment-steps">${steps.map((s,index)=>`<label class="assignment-step ${done.has(String(s.id))?'done':''}"><input type="checkbox" data-assignment-check="${a.id}" value="${esc(s.id)}" ${done.has(String(s.id))?'checked':''} ${submitted?'disabled':''}><span><strong>${index+1}. ${esc(s.title)}</strong><small>${esc(s.instruction)}</small></span></label>`).join('')}</div><label for="assignmentNotes-${a.id}">Notes for the administrator (optional)</label><textarea id="assignmentNotes-${a.id}" data-assignment-notes="${a.id}" ${submitted?'disabled':''} placeholder="Use Report Issue for a problem that needs a screenshot. Use this box only for overall comments.">${esc(a.tester_notes||'')}</textarea>${submitted?`<div class="issue-fix-summary"><strong>Assignment submitted</strong><span>${a.submitted_at?new Date(a.submitted_at).toLocaleString(uiLocale()):''}. No separate email or message is needed.</span></div>`:`<button class="btn slim" type="button" data-assignment-submit="${a.id}" ${complete?'':'disabled'}>Submit Assignment Complete</button><p class="meta">The Submit button becomes available after every checklist item is checked.</p>`}</article>`;
-}
-async function saveTestingProgress(id){
-  const card=document.querySelector(`[data-assignment="${id}"]`),completed=[...card.querySelectorAll('[data-assignment-check]:checked')].map(c=>c.value),notes=document.getElementById(`assignmentNotes-${id}`).value;
-  const r=await api(`/api/testing/assignments/${id}/progress`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({completed_step_ids:completed,tester_notes:notes})});
-  if(!r.ok){toast('Progress could not be saved');return;}toast('Progress saved');renderMyTestingAssignment();
-}
-async function submitTestingAssignment(id,button){
-  button.disabled=true;button.textContent='Submitting...';const notes=document.getElementById(`assignmentNotes-${id}`).value;
-  const r=await api(`/api/testing/assignments/${id}/submit`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tester_notes:notes})});
-  if(!r.ok){const d=await r.json().catch(()=>({}));toast(d.error||'Assignment could not be submitted');button.disabled=false;button.textContent='Submit Assignment Complete';return;}
-  toast('Assignment submitted');renderMyTestingAssignment();
+  return PhotoNotesTesting.renderTester(document.getElementById('body'),{
+    back:()=>{state.view=IS_HANDHELD?'capture':'organize';renderApp();},
+    openIssues:()=>{state.view='my-issues';renderApp();},
+    reportIssue:context=>openIssueReporter(context)
+  });
 }
 async function renderMyIssueReports(){
   const body=document.getElementById('body');
-  body.innerHTML='<button class="backlink" id="issuesBack">← Back</button><div class="workflow-intro"><strong>'+ (state.me?.is_tester?'Testing Hub':'My Issue Reports') +'</strong><span>See what you reported, whether it has been fixed, and what needs another test.</span></div>'+issueNotificationControls()+'<div id="myIssueList"><p class="status">Loading your reports...</p></div>';
-  document.getElementById('issuesBack').onclick=()=>{state.view=IS_HANDHELD?'capture':'organize';renderApp();};
+  body.innerHTML='<button class="backlink" id="issuesBack">← Back</button><div class="workflow-intro"><strong>'+ 'My Issue Reports' +'</strong><span>See what you reported, whether it has been fixed, and what needs another test.</span></div>'+issueNotificationControls()+'<div id="myIssueList"><p class="status">Loading your reports...</p></div>';
+  document.getElementById('issuesBack').onclick=()=>{state.view=state.me?.is_tester?'my-assignment':IS_HANDHELD?'capture':'organize';renderApp();};
   const r=await api('/api/issues/mine'),box=document.getElementById('myIssueList');
   if(!r.ok){box.innerHTML='<p class="status">Your issue reports could not be loaded.</p>';return;}
   const rows=await r.json();
