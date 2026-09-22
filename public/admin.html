@@ -64,7 +64,6 @@
     .issue-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
     .issue-actions .btn { width:auto; margin:0; padding:9px 14px; font-size:14px; }
     .issue-summary { display:flex; gap:7px; flex-wrap:wrap; margin:8px 0; }
-    .issue-comparison { margin:8px 0 12px; padding:10px; border:1px solid #cdd3dc; border-radius:8px; background:#f8fafc; font-size:13px; line-height:1.45; }
     .issue-device { display:inline-block; margin-left:5px; padding:2px 7px; border:1px solid #64748b; border-radius:999px; font-size:11px; color:#172033; background:#fff; }
     .health-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:9px; }
     .health-card { border:1px solid #cdd3dc; border-radius:9px; padding:11px; background:#fff; }
@@ -454,7 +453,6 @@
             <button class="btn secondary" id="refreshIssues" type="button" style="margin:0" title="Reload the latest reports and system status">Refresh reports</button>
           </div>
           <div id="issueSummary" class="issue-summary"></div>
-          <div id="issueComparison" class="issue-comparison"></div>
           <div id="issues"><p class="status">Loading...</p></div>
 
 
@@ -536,13 +534,6 @@
         if(!['resolved','tester_confirmed','wont_fix'].includes(status)&&i.priority==='urgent')counts.urgent++;
       }return counts;
     }
-    function renderIssueComparison(rows){
-      const box=document.getElementById('issueComparison');if(!box)return;
-      const groups=new Map();
-      for(const i of rows){const name=i.user_name||i.user_email||`User ${i.user_id}`,device=issueDevice(i).label,key=`${i.user_id}|${device}`,group=groups.get(key)||{name,device,rows:[]};group.rows.push(i);groups.set(key,group);}
-      const list=[...groups.values()].sort((a,b)=>b.rows.length-a.rows.length||a.name.localeCompare(b.name));
-      box.innerHTML=list.length?'<b>Tester and device comparison</b><br>'+list.map(g=>{const c=issueCounts(g.rows);return `${esc(g.name)} · ${esc(g.device)}: ${g.rows.length} reports, ${c.work} need work, ${c.awaiting} awaiting retest, ${c.resolved} resolved, ${c.ideas} ideas for Sam review${c.closed?`, ${c.closed} closed without a fix`:''}`;}).join('<br>'):'<span class="muted">No reports match these filters.</span>';
-    }
     function issueOptions(values,labels,current){return values.map(v=>`<option value="${v}"${v===current?' selected':''}>${labels[v]}</option>`).join('');}
     function matchesIssueType(issue,type){return type==='all'||(type==='ideas'?['ui_improvement','feature_improvement','new_feature'].includes(issue.issue_type):(issue.issue_type||'bug_problem')===type);}
     function renderIssues(){
@@ -556,8 +547,7 @@
       const scope=allIssues.filter(i=>matchesIssueType(i,category)&&(pf==='all'||(i.priority||'normal')===pf)&&(tf==='all'||String(i.user_id)===tf)&&(df==='all'||issueDevice(i).key===df));
       const rows=scope.filter(i=>sf==='all'||(sf==='open'&&!closed.has(i.management_status||'new'))||i.management_status===sf);
       const counts=issueCounts(scope);
-      document.getElementById('issueSummary').innerHTML=`<span class="pill basic">${counts.work} problems need work</span><span class="pill basic">${counts.blocked} problems need Sam review / information</span><span class="pill basic">${counts.ideas} ideas for Sam review</span><span class="pill basic">${counts.awaiting} awaiting retest</span><span class="pill pro">${counts.resolved} resolved</span>${counts.closed?`<span class="pill basic">${counts.closed} closed without a fix</span>`:''}<span class="pill ${counts.urgent?'role':'basic'}">${counts.urgent} urgent</span><p class="helper">Totals and comparison include all statuses for the selected issue type, tester, device, and priority. The status filter applies to the report list below. Awaiting retest means a fix is deployed but the reporter has not yet confirmed it.</p>`;
-      renderIssueComparison(scope);
+      document.getElementById('issueSummary').innerHTML=`<span class="pill basic">${counts.work} problems need work</span><span class="pill basic">${counts.blocked} problems need Sam review / information</span><span class="pill basic">${counts.ideas} ideas for Sam review</span><span class="pill basic">${counts.awaiting} awaiting retest</span><span class="pill pro">${counts.resolved} resolved</span>${counts.closed?`<span class="pill basic">${counts.closed} closed without a fix</span>`:''}<span class="pill ${counts.urgent?'role':'basic'}">${counts.urgent} urgent</span><p class="helper">Totals include all statuses for the selected issue type, tester, device, and priority. The status filter applies to the report list below. Awaiting retest means a fix is deployed but the reporter has not yet confirmed it.</p>`;
       box.innerHTML=rows.length?rows.map(issueCard).join(''):'<p class="helper">No issue reports match these filters.</p>';
       for(const issue of rows.filter(i=>i.voice_path)){
         const save=box.querySelector(`[data-issue-save="${issue.id}"]`);if(!save)continue;

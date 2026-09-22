@@ -38,9 +38,8 @@ test('Basic paints only the SVG wordmark, without duplicate live title text', ()
   assert.match(suppliedLogo,/<rect x="818\.5" y="24" width="61" height="61" rx="10" fill="#e8231a"\/>/);
 });
 
-test('admin issue center can compare tester and device reports', () => {
+test('admin issue center can filter reports by tester and device', () => {
   assert.match(admin, /id="issueTesterFilter"/);
   assert.match(admin, /id="issueDeviceFilter"/);
   assert.match(admin, /function issueDevice\(i\)/);
-  assert.match(admin, /Tester and device comparison/);
 });
