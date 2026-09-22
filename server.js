@@ -185,52 +185,8 @@ function trimNum(n) {
   return Number.isInteger(r) ? String(r) : String(r);
 }
 
-// ===================== Shared AI vision helper =====================
-// One place for all vision calls. Resizes the photo to a 1568px longest edge
-// JPEG (the app already depends on sharp), sends it base64 to the Anthropic
-// Messages API with a prompt, expects JSON-only back, strips markdown fences,
-// parses defensively, and returns null on ANY failure rather than throwing so
-// callers stay offline-tolerant. The API key lives only on the server.
-const VISION_MODEL = process.env.VISION_MODEL || 'claude-sonnet-4-6';
-function parseJSONLoose(text) {
-  if (text == null) return null;
-  let t = String(text).trim();
-  // strip a ```json ... ``` or ``` ... ``` fence if present
-  t = t.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
-  // fall back to the first {...} block if there is surrounding prose
-  if (t[0] !== '{') { const m = t.match(/\{[\s\S]*\}/); if (m) t = m[0]; }
-  try { return JSON.parse(t); } catch { return null; }
-}
-async function visionJSON(localPath, prompt, opts = {}) {
-  const key = process.env.ANTHROPIC_API_KEY;
-  if (!key || !localPath) return null;
-  try {
-    const jpeg = await sharp(localPath).rotate()
-      .resize({ width: 1568, height: 1568, fit: 'inside', withoutEnlargement: true })
-      .jpeg({ quality: 85 }).toBuffer();
-    const b64 = jpeg.toString('base64');
-    const body = {
-      model: VISION_MODEL,
-      max_tokens: opts.maxTokens || 500,
-      messages: [{
-        role: 'user',
-        content: [
-          { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: b64 } },
-          { type: 'text', text: prompt },
-        ],
-      }],
-    };
-    const r = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
-      body: JSON.stringify(body),
-    });
-    if (!r.ok) { console.error('[vision] http ' + r.status); return null; }
-    const d = await r.json();
-    const text = (d && d.content && d.content[0] && d.content[0].text) || '';
-    return parseJSONLoose(text);
-  } catch (e) { console.error('[vision]', e && e.message); return null; }
-}
+// Shared vision calls report service failures separately from unreadable photos.
+const {visionJSON,visionFeedback}=require('./vision');
 
 // ---- defect classification vocabulary + severity presentation ----
 const DEFECT_TYPES = ['pothole', 'alligator_cracking', 'transverse_cracking', 'longitudinal_cracking', 'rutting', 'raveling', 'edge_cracking', 'joint_failure', 'utility_cut_failure', 'surface_deformation', 'drainage_damage', 'base_failure', 'other', 'none'];
@@ -1084,9 +1040,10 @@ Locate the reference object, use its known length to establish the image scale, 
 Respond with ONLY a JSON object, no prose, no markdown, with exactly these keys:
 {"length_in": number, "width_in": number, "depth_in": number or null, "shape": "rectangle"|"circle"|"irregular", "confidence": "high"|"medium"|"low", "warning": string or null}
 Use "warning" to flag problems such as "no reference object found", "ruler appears angled", or "photo taken at an oblique angle". If you cannot find the reference object, set confidence to "low" and put "no reference object found" in warning.`;
-    const ai = await visionJSON(photoPath, prompt, { maxTokens: 400 });
+    const vision = await visionJSON(photoPath, prompt, { maxTokens: 700 });
+    const ai = vision.data;
     cleanup();
-    if (!ai) return res.status(200).json({ ok: false, error: 'measurement_unavailable' });
+    if (!ai) return res.status(200).json({ ok: false, error: 'measurement_unavailable', ...visionFeedback(vision) });
     // normalize
     const num = (v) => (v == null || v === '' || Number.isNaN(Number(v))) ? null : Number(v);
     const shape = ['rectangle', 'circle', 'irregular'].includes(ai.shape) ? ai.shape : 'irregular';
@@ -1146,7 +1103,8 @@ app.post('/api/asphalt-tickets/scan', requireAuth, upload.single('photo'), async
 Respond with ONLY one JSON object, no prose and no markdown, using exactly these keys:
 {"ticket_number": string|null, "ticket_date": "YYYY-MM-DD"|null, "plant_name": string|null, "plant_address": string|null, "mix_description": string|null, "mix_code": string|null, "truck_number": string|null, "job_number": string|null, "net_tons": number|null, "dispatch_time": string|null, "arrival_time": string|null, "dispatch_temperature_f": number|null, "confidence": "high"|"medium"|"low"}
 Use net tons, not gross or tare weight. Preserve ticket and job identifiers exactly. Times may use the clearly printed format. If a field is unreadable or absent, use null.`;
-    const ai = await visionJSON(req.file.path, prompt, { maxTokens: 700 });
+    const vision = await visionJSON(req.file.path, prompt, { maxTokens: 1000 });
+    const ai = vision.data;
     const data = ai || {};
     const photoPath = `/uploads/${path.basename(req.file.path)}`;
     const values = [
@@ -1163,7 +1121,7 @@ Use net tons, not gross or tare weight. Preserve ticket and job identifiers exac
         truck_number, job_number, net_tons, dispatch_time, arrival_time, dispatch_temperature_f, confidence, raw_ai)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`, values)).rows[0];
     logEvent(req.user.id, 'ticket_scan', { ai: !!ai, confidence: row.confidence });
-    res.json({ ok: true, ai_read: !!ai, ticket: row });
+    res.json({ ok: true, ai_read: !!ai, ...visionFeedback(vision), ticket: row });
   } catch (err) {
     console.error('[ticket.scan]', err);
     res.status(500).json({ error: 'ticket scan failed' });
@@ -1291,7 +1249,8 @@ app.post('/api/camera-readings/scan', requireAuth, upload.single('photo'), async
       return res.status(400).json({ error: 'invalid reader type' });
     }
     if (!req.file || !req.file.path) return res.status(400).json({ error: 'photo required' });
-    const ai = await visionJSON(req.file.path, cameraReaderPrompt(type), { maxTokens: 600 });
+    const vision = await visionJSON(req.file.path, cameraReaderPrompt(type), { maxTokens: 1200 });
+    const ai = vision.data;
     const fields = cameraReaderFields(ai);
     delete fields.confidence;
     const confidence = ai && ['high','medium','low'].includes(ai.confidence) ? ai.confidence : 'low';
@@ -1306,7 +1265,7 @@ app.post('/api/camera-readings/scan', requireAuth, upload.single('photo'), async
        VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
       [req.user.id, type, `/uploads/${path.basename(req.file.path)}`, title, JSON.stringify(fields), confidence, ai ? JSON.stringify(ai) : null])).rows[0];
     logEvent(req.user.id, 'camera_reader_scan', { type, ai: !!ai, confidence });
-    res.json({ ok:true, ai_read:!!ai, reading:row });
+    res.json({ ok:true, ai_read:!!ai, ...visionFeedback(vision), reading:row });
   } catch (err) { console.error('[camera-reader.scan]', err); res.status(500).json({ error:'scan failed' }); }
 });
 
@@ -1559,7 +1518,10 @@ app.get('/api/admin/health', requireAdmin, async (req, res) => {
   } catch (e) { services.push({ id:'uploads', name:'Photo Upload Storage', status:'down', detail:'Storage is not writable' }); }
   services.push({ id:'addresses', name:'Address Lookup', status:'available', detail:`ArcGIS and OpenStreetMap fallbacks${process.env.GOOGLE_MAPS_API_KEY || process.env.MAPBOX_TOKEN ? '; configured provider also available' : ''}` });
   services.push({ id:'upload_persistence', name:'Persistent Photo Storage', status:process.env.UPLOAD_PERSISTENCE_CONFIRMED==='true' ? 'confirmed' : 'needs_confirmation', detail:process.env.UPLOAD_PERSISTENCE_CONFIRMED==='true' ? 'Railway volume or persistent storage confirmed' : 'Writable storage is not proof of persistence across deployments' });
-  services.push({ id:'ai', name:'AI Photo Tools', status:process.env.ANTHROPIC_API_KEY ? 'configured' : 'not_configured', detail:process.env.ANTHROPIC_API_KEY ? `Configured (${VISION_MODEL})` : 'Anthropic API key is missing' });
+  const aiStatus=visionJSON.status();
+  services.push({ id:'ai', name:'AI Photo Tools', status:aiStatus.configured ? 'configured' : 'not_configured',
+    detail:aiStatus.configured ? `Configured (${aiStatus.model}); ${aiStatus.last_result ? 'last scan: '+aiStatus.last_result.status+' at '+aiStatus.last_result.checked_at : 'live extraction not yet verified'}` : 'Anthropic API key is missing',
+    last_result:aiStatus.last_result });
   services.push({ id:'issue_email', name:'Issue Report Email', status:process.env.RESEND_API_KEY ? 'configured' : 'not_configured', detail:process.env.RESEND_API_KEY ? 'Email delivery configured' : 'Resend API key is missing' });
   services.push({ id:'exports', name:'PDF, Word & ZIP Exports', status:'healthy', detail:'Export libraries loaded' });
   services.push({ id:'stripe', name:'Stripe Payments and Invoicing', status:process.env.STRIPE_RESTRICTED_KEY || process.env.STRIPE_SECRET_KEY ? 'configured' : 'not_configured', detail:process.env.STRIPE_RESTRICTED_KEY ? 'Restricted key configured' : process.env.STRIPE_SECRET_KEY ? 'Secret key fallback configured; restricted key preferred' : 'Stripe server key is missing' });
@@ -1589,8 +1551,9 @@ async function classifyCapture(userId, id) {
 Rate severity as low, medium, or high using visible width, depth, and extent cues.
 Respond with ONLY a JSON object, no prose, no markdown, with exactly these keys:
 {"defect_type": one of the list above, "severity": "low"|"medium"|"high", "confidence": "high"|"medium"|"low", "rationale": "one sentence"}`;
-  const ai = await visionJSON(local, prompt, { maxTokens: 300 });
-  if (!ai) return { error: 'classify_unavailable' };
+  const vision = await visionJSON(local, prompt, { maxTokens: 600 });
+  const ai = vision.data;
+  if (!ai) return { error: 'classify_unavailable', ...visionFeedback(vision) };
   const defect_type = DEFECT_TYPES.includes(ai.defect_type) ? ai.defect_type : 'other';
   const severity = SEVERITIES.includes(ai.severity) ? ai.severity : (defect_type === 'none' ? null : 'low');
   const confidence = ['high', 'medium', 'low'].includes(ai.confidence) ? ai.confidence : 'low';
@@ -1608,7 +1571,7 @@ app.post('/api/captures/:id/classify', requireAuth, async (req, res) => {
     const id = parseInt(req.params.id, 10);
     if (!Number.isInteger(id)) return res.status(400).json({ error: 'bad id' });
     const r = await classifyCapture(req.user.id, id);
-    if (r.error) return res.status(r.error === 'not_found' ? 404 : 200).json({ ok: false, error: r.error });
+    if (r.error) return res.status(r.error === 'not_found' ? 404 : 200).json({ ok: false, error: r.error, ai_error:r.ai_error, ai_message:r.ai_message });
     res.json({ ok: true, capture: r.capture });
   } catch (err) { console.error('[classify]', err); res.status(200).json({ ok: false, error: 'classify_unavailable' }); }
 });
@@ -1622,7 +1585,7 @@ app.post('/api/captures/classify-batch', requireAuth, async (req, res) => {
     // sequential (not parallel) per spec so we never hammer the vision API
     for (const id of ids) {
       const r = await classifyCapture(req.user.id, id);
-      results.push({ id, ok: !r.error, error: r.error || null, capture: r.capture || null });
+      results.push({ id, ok: !r.error, error: r.error || null, ai_error:r.ai_error, ai_message:r.ai_message, capture: r.capture || null });
     }
     res.json({ ok: true, results });
   } catch (err) { console.error('[classify-batch]', err); res.status(500).json({ error: 'batch failed' }); }
