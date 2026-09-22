@@ -215,7 +215,7 @@ textarea { min-height: 96px; resize: vertical; }
   background:#fff; color:#000; border:1px solid #000; border-radius:10px;
   box-shadow:0 8px 24px rgba(0,0,0,.16); font-family:Arial, Helvetica, sans-serif;
 }
-.profile-menu[hidden] { display:none; }
+.profile-menu[hidden], .profile-menu [hidden] { display:none; }
 .profile-name { font-size:15px; font-weight:bold; overflow-wrap:anywhere; }
 .profile-email { margin-top:2px; font-size:13px; overflow-wrap:anywhere; }
 .profile-plan { margin:8px 0; font-size:12px; font-weight:bold; }

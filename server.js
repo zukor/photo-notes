@@ -106,7 +106,7 @@ async function requireAuth(req, res, next) {
   const session = readUser(req);
   if (!session || !session.id) return res.status(401).json({ error: 'not authenticated' });
   try {
-    const user=(await pool.query('SELECT id,email,name,role,plan,pro_type,active FROM users WHERE id=$1',[session.id])).rows[0];
+    const user=(await pool.query('SELECT id,email,name,role,plan,pro_type,active,is_testing_manager FROM users WHERE id=$1',[session.id])).rows[0];
     if(!user||!user.active)return res.status(401).json({error:'not authenticated'});
     req.user=user;
   }catch(e){return res.status(503).json({error:'Account could not be checked. Please try again.'});}
@@ -581,9 +581,9 @@ async function featureAllowed(userId, feature) {
 
 app.get('/api/me', requireAuth, async (req, res) => {
   res.setHeader('X-Photo-Notes-Upload-Receipts','1');
-  const row = (await pool.query(`SELECT name,email,role,plan,pro_type,feature_access,edition_access,is_tester FROM users WHERE id=$1 AND active=true`, [req.user.id])).rows[0];
+  const row = (await pool.query(`SELECT name,email,role,plan,pro_type,feature_access,edition_access,is_tester,is_testing_manager FROM users WHERE id=$1 AND active=true`, [req.user.id])).rows[0];
   if (!row) return res.status(401).json({ error:'not authenticated' });
-  res.json({ authed:true, is_tester:row.is_tester, edition_access:editionAccess(row), name:row.name, role:row.role, email:row.email, plan:row.plan === 'pro' ? 'pro' : 'free', pro_type:normalizeProType(row.pro_type), feature_access:await currentFeatureAccess(req.user.id) });
+  res.json({ authed:true, is_tester:row.is_tester, is_testing_manager:row.is_testing_manager, edition_access:editionAccess(row), name:row.name, role:row.role, email:row.email, plan:row.plan === 'pro' ? 'pro' : 'free', pro_type:normalizeProType(row.pro_type), feature_access:await currentFeatureAccess(req.user.id) });
 });
 
 async function hoaCompanyForUser(userId,create=false,db=pool){let row=(await db.query(`SELECT c.*,m.company_role FROM hoa_management_companies c JOIN hoa_company_members m ON m.company_id=c.id WHERE m.user_id=$1 ORDER BY c.id LIMIT 1`,[userId])).rows[0];if(!row&&create){const u=(await pool.query(`SELECT name FROM users WHERE id=$1`,[userId])).rows[0];const client=await pool.connect();try{await client.query('BEGIN');row=(await client.query(`INSERT INTO hoa_management_companies(name) VALUES($1) RETURNING *`,[`${u&&u.name||'HOA'} Management`])).rows[0];await client.query(`INSERT INTO hoa_company_members(company_id,user_id,company_role) VALUES($1,$2,'administrator')`,[row.id,userId]);await client.query('COMMIT');}catch(e){await client.query('ROLLBACK');throw e;}finally{client.release();}}return row||null;}
@@ -2505,7 +2505,7 @@ app.get('/api/ewr/:id/export', requireAuth, async (req, res) => {
 app.get('/api/admin/users', requireAdmin, async (req, res) => {
   try {
     const { rows } = await pool.query(`
-      SELECT u.id, u.email, u.name, u.industry, u.role, u.plan, u.pro_type, u.feature_access, u.edition_access, u.is_tester, u.active, u.created_at, u.last_login_at,
+      SELECT u.id, u.email, u.name, u.industry, u.role, u.plan, u.pro_type, u.feature_access, u.edition_access, u.is_tester, u.is_testing_manager, u.active, u.created_at, u.last_login_at,
         COALESCE(c.cnt, 0)::int      AS capture_count,
         c.first_capture, c.last_capture,
         COALESCE(c.d7, 0)::int       AS last_7d,
@@ -2625,6 +2625,8 @@ app.post('/api/admin/users/:id', requireAdmin, async (req, res) => {
     }
     if (typeof b.email === 'string') { const email=b.email.toLowerCase().trim(); if(!email)return res.status(400).json({error:'email required'}); vals.push(email);sets.push(`email=$${vals.length}`);changed.push('email'); }
     if (typeof b.industry === 'string') { vals.push(b.industry.trim()); sets.push(`industry = $${vals.length}`); changed.push('industry'); }
+    if (b.is_testing_manager !== undefined && typeof b.is_testing_manager !== 'boolean') return res.status(400).json({error:'Testing manager must be true or false'});
+    if (typeof b.is_testing_manager === 'boolean') { vals.push(b.is_testing_manager); sets.push(`is_testing_manager = $${vals.length}`); changed.push('is_testing_manager'); }
     if (b.is_tester !== undefined && typeof b.is_tester !== 'boolean') return res.status(400).json({error:'Tester must be true or false'});
     if (typeof b.is_tester === 'boolean') { vals.push(b.is_tester); sets.push(`is_tester = $${vals.length}`); changed.push('is_tester'); }
     if (typeof b.active === 'boolean') { vals.push(b.active); sets.push(`active = $${vals.length}`); changed.push('active'); }
