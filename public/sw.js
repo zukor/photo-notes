@@ -1,6 +1,6 @@
-const CACHE = 'efc-shell-v203';
-const SHELL = ['/help.js?v=203', '/', '/index.html', '/i18n.js?v=203', '/app.js?v=203', '/styles.css?v=203', '/manifest.json?v=150', '/logo.svg', '/logo-animated.svg?v=83', '/photo-notes-ai-basic-animated.svg?v=118', '/photo-notes-ai-pro-animated.svg?v=127', '/photo-notes-ai-pro-static.svg?v=127', '/photo-notes-ai-general-contractor-pro-animated.svg?v=127', '/photo-notes-ai-general-contractor-pro-static.svg?v=127', '/photo-notes-ai-paving-pro-animated.svg?v=118', '/photo-notes-ai-concrete-pro-animated.svg?v=78', '/photo-notes-ai-hoa-maintenance-pro-animated.svg?v=118', '/photo-notes-ai-road-issue-reporter-animated.svg?v=118', '/photo-notes-ai-roofer-pro-animated.svg?v=118', '/zukor-logo.svg', '/send.js?v=203', '/vendor/html2canvas.min.js?v=59'];
-SHELL.push('/capture-queue.js?v=203', '/install-help.js?v=203', '/install-page.js?v=203', '/install-help.css?v=203', '/install.html', '/issue-markup.js?v=203', '/concrete-capture.js?v=175', '/issue-reporter.js?v=203', '/concrete-footprints.js?v=155', '/app.js?v=203', '/favicon-16.png?v=150', '/favicon-32.png?v=150', '/favicon-48.png?v=150', '/icon-180.png?v=150', '/icon-192.png?v=150', '/icon-512.png?v=150', '/icon-maskable-192.png?v=150', '/icon-maskable-512.png?v=150');
+const CACHE = 'efc-shell-v204';
+const SHELL = ['/document-links.js?v=204', '/help.js?v=204', '/', '/index.html', '/i18n.js?v=204', '/app.js?v=204', '/styles.css?v=204', '/manifest.json?v=150', '/logo.svg', '/logo-animated.svg?v=83', '/photo-notes-ai-basic-animated.svg?v=118', '/photo-notes-ai-pro-animated.svg?v=127', '/photo-notes-ai-pro-static.svg?v=127', '/photo-notes-ai-general-contractor-pro-animated.svg?v=127', '/photo-notes-ai-general-contractor-pro-static.svg?v=127', '/photo-notes-ai-paving-pro-animated.svg?v=118', '/photo-notes-ai-concrete-pro-animated.svg?v=78', '/photo-notes-ai-hoa-maintenance-pro-animated.svg?v=118', '/photo-notes-ai-road-issue-reporter-animated.svg?v=118', '/photo-notes-ai-roofer-pro-animated.svg?v=118', '/zukor-logo.svg', '/send.js?v=204', '/vendor/html2canvas.min.js?v=59'];
+SHELL.push('/capture-queue.js?v=204', '/install-help.js?v=204', '/install-page.js?v=204', '/install-help.css?v=204', '/install.html', '/issue-markup.js?v=204', '/concrete-capture.js?v=175', '/issue-reporter.js?v=204', '/concrete-footprints.js?v=155', '/app.js?v=204', '/favicon-16.png?v=150', '/favicon-32.png?v=150', '/favicon-48.png?v=150', '/icon-180.png?v=150', '/icon-192.png?v=150', '/icon-512.png?v=150', '/icon-maskable-192.png?v=150', '/icon-maskable-512.png?v=150');
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll([...new Set(SHELL)])).then(() => self.skipWaiting()));
@@ -11,7 +11,7 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
   // never cache API or uploads; always go to network
-  if (url.pathname.startsWith('/api') || url.pathname.startsWith('/uploads')) return;
+  if (url.pathname.startsWith('/api') || url.pathname.startsWith('/uploads') || url.pathname.startsWith('/shared-document')) return;
   if(e.request.method!=='GET'||url.origin!==self.location.origin)return;
   e.respondWith(fetch(e.request).catch(async()=>{
     const cached=await caches.match(e.request);
