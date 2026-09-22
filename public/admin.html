@@ -56,6 +56,7 @@
     .issue-toolbar { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:8px; align-items:end; margin:10px 0; }
     .issue-toolbar label { margin:0; font-size:12px; }
     .issue-toolbar select { margin-top:4px; }
+    .issue-toolbar select, .issue-toolbar .btn { height:46px; padding:12px; font-size:16px; font-weight:normal; border-radius:8px; }
     .issue-controls { display:grid; grid-template-columns:minmax(0,180px) minmax(0,180px); gap:8px; margin-top:10px; }
     .issue-controls label { margin:0; font-size:12px; }
     .issue-controls select { margin-top:4px; }
@@ -450,7 +451,7 @@
             <label>Priority Filter<select id="issuePriorityFilter"><option value="all">All Priorities</option><option value="urgent">Urgent</option><option value="high">High</option><option value="normal">Normal</option><option value="low">Low</option></select></label>
             <label>Tester Filter<select id="issueTesterFilter"><option value="all">All Testers</option></select></label>
             <label>Device Filter<select id="issueDeviceFilter"><option value="all">All Devices</option><option value="android">Android</option><option value="ios">iPhone / iPad</option><option value="desktop">Desktop</option><option value="unknown">Unknown</option></select></label>
-            <button class="btn secondary" id="refreshIssues" type="button" style="margin:0">Refresh</button>
+            <button class="btn secondary" id="refreshIssues" type="button" style="margin:0" title="Reload the latest reports and system status">Refresh reports</button>
           </div>
           <div id="issueSummary" class="issue-summary"></div>
           <div id="issueComparison" class="issue-comparison"></div>
