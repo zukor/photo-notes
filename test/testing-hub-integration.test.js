@@ -41,6 +41,28 @@ test('testing hub publishes isolated assignments, preserves evidence, rejects st
   assert.equal((await call(`/api/testing/assignments/${a.id}/history`,undefined,other)).status,404);
   a=(await call(`/api/admin/testing-assignments/${a.id}/review`,{revision:a.revision,review_status:'retest_requested',review_notes:'Retest camera after repair'})).data;assert.equal(a.status,'in_progress');assert.equal(a.seen_at,null);
   assert.equal((await call(`/api/testing/assignments/${a.id}/history`,undefined,jose)).data[0].snapshot.results[a.steps[0].id].status,'failed');
+  // A testing manager uses the same session, without receiving account administration.
+  const managerId=people[2];
+  assert.equal((await call('/api/testing/people',undefined,other)).status,403);
+  assert.equal((await call(`/api/admin/users/${managerId}`,{is_testing_manager:true})).status,200);
+  assert.equal((await call('/api/me',undefined,other)).data.is_testing_manager,true);
+  const roster=await call('/api/testing/people',undefined,other);assert.equal(roster.status,200);
+  assert.ok(roster.data.every(u=>Object.keys(u).every(k=>['id','name','email','active','is_tester'].includes(k))));
+  assert.equal((await call('/api/admin/users',undefined,other)).status,403);
+  assert.equal((await call(`/api/admin/users/${managerId}`,{role:'admin'},other)).status,403);
+  assert.equal((await call('/api/admin/testing-assignments',undefined,other)).status,200);
+  let managed=(await call('/api/admin/testing/templates',{...draft,title:'Manager-created round'},other)).data;assert.ok(managed.id);
+  managed=(await call(`/api/admin/testing/templates/${managed.id}`,{...managed,title:'Manager-reviewed round'},other,'PUT')).data;
+  assert.equal((await call(`/api/admin/testing/templates/${managed.id}/publish`,{revision:managed.revision},other)).status,200);
+  assert.equal((await fetch(base+`/api/testing/evidence/${id}`,{headers:{Cookie:other}})).status,200);
+  assert.equal((await fetch(base+`/api/testing/assignments/${a.id}/download`,{headers:{Cookie:other}})).status,200);
+  assert.equal((await call(`/api/testing/assignments/${a.id}/history`,undefined,other)).status,200);
+  assert.equal((await call(`/api/testing/assignments/${a.id}/progress`,{...data,revision:a.revision},other)).status,404);
+  assert.equal((await call(`/api/admin/testing-assignments/${a.id}/review`,{revision:a.revision,review_status:'retest_requested',review_notes:'Manager requests a retest'},other)).status,200);
+  assert.equal((await call(`/api/admin/users/${managerId}`,{is_testing_manager:false})).status,200);
+  assert.equal((await call('/api/admin/testing/templates',undefined,other)).status,403);
+  assert.equal((await fetch(base+`/api/testing/evidence/${id}`,{headers:{Cookie:other}})).status,404);
+  console.log('Testing manager creation, publication, review, evidence, restricted account access and immediate revocation passed');
   console.log('Validated real HTTP, PostgreSQL, auth, publishing, result isolation, stale-write protection, photos, linked issues, PDF, failed/incomplete submission and retest history');
  }finally{await new Promise(r=>server.close(r));await pool.end();}
 });

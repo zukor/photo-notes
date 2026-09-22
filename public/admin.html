@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="/styles.css?v=200" />
   <script src="/vendor/html2canvas.min.js?v=59"></script>
   <script src="/issue-markup.js?v=200"></script>
-  <script src="/issue-reporter.js?v=207"></script>
+  <script src="/issue-reporter.js?v=208"></script>
   <style>
     .stat { display:inline-block; min-width:84px; margin:4px 14px 4px 0; vertical-align:top; }
     .stat .n { font-size:19px; font-weight:bold; color:#000; }
@@ -149,8 +149,8 @@
     .delete-user-panel h3 { margin-top:0; }
     .delete-user-panel .btn { margin:10px 8px 0 0; }
   </style>
-  <link rel="stylesheet" href="/testing-hub.css?v=207">
-  <script src="/testing-hub.js?v=207"></script>
+  <link rel="stylesheet" href="/testing-hub.css?v=208">
+  <script src="/testing-hub.js?v=208"></script>
 </head>
 <body>
   <div id="app"></div>
@@ -243,7 +243,7 @@
       box.querySelectorAll('[data-active]').forEach(b => b.onclick = () => setActive(parseInt(b.getAttribute('data-active'),10), b.getAttribute('data-to')==='1'));
       box.querySelectorAll('[data-edit-user]').forEach(b => b.onclick = () => toggleAdminPanel(`edit-user-${b.dataset.editUser}`));
       box.querySelectorAll('[data-save-user]').forEach(b => b.onclick = () => saveUserDetails(Number(b.dataset.saveUser), b));
-      box.querySelectorAll('[data-save-tester]').forEach(b=>b.onclick=async()=>{b.disabled=true;try{const r=await api(`/api/admin/users/${b.dataset.saveTester}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({is_tester:box.querySelector('[data-tester]').checked})});if(!r.ok)throw Error();await loadUsers();toast('Tester access saved');}catch{toast('Tester access could not be saved');}finally{b.disabled=false;}});
+      box.querySelectorAll('[data-save-tester]').forEach(b=>b.onclick=async()=>{b.disabled=true;try{const r=await api(`/api/admin/users/${b.dataset.saveTester}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({is_tester:box.querySelector('[data-tester]').checked,is_testing_manager:box.querySelector('[data-testing-manager]').checked})});if(!r.ok)throw Error();await loadUsers();toast('Tester access saved');}catch{toast('Tester access could not be saved');}finally{b.disabled=false;}});
       box.querySelectorAll('[data-save-features]').forEach(b => b.onclick = () => saveFeatureAccess(Number(b.dataset.saveFeatures), b));
     }
 
@@ -286,7 +286,7 @@
               <div class="helper" id="reset-help-${u.id}">Recommended passwords are 10 characters and include uppercase, lowercase, numbers, and symbols.</div>
             </div>
           </div>
-          <fieldset class="version-access"><legend>Testing</legend><label class="feature-item"><input type="checkbox" data-tester="${u.id}" ${u.is_tester?'checked':''}>Tester</label><p class="helper">Gives this user a Testing Hub for their own reports and an alert when a fix is ready to retest.</p><button class="btn" type="button" data-save-tester="${u.id}">Save Tester Access</button></fieldset>
+          <fieldset class="version-access"><legend>Testing</legend><label class="feature-item"><input type="checkbox" data-tester="${u.id}" ${u.is_tester?'checked':''}>Tester</label><p class="helper">Gives this user a Testing Hub for their own reports and an alert when a fix is ready to retest.</p><label class="feature-item"><input type="checkbox" data-testing-manager="${u.id}" ${u.is_testing_manager?'checked':''}>Testing manager</label><p class="helper">Create and publish assignments, review all tester results, and request retesting. Account administration remains restricted to administrators.</p><button class="btn" type="button" data-save-tester="${u.id}">Save Testing Access</button></fieldset>
           <fieldset class="version-access"><legend>Versions</legend><p class="helper">Check every version this user can open. They can switch between their selected versions in the app.</p><div class="feature-grid">${versionChecks(u.id,allowedVersions(u))}</div><button class="btn" type="button" data-save-versions="${u.id}">Save Versions</button></fieldset>
 <details class="admin-section"><summary>Usage &amp; Activity</summary>          <div class="section">
             <h4>Captures</h4>

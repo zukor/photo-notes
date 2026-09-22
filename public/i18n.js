@@ -27,6 +27,7 @@
     "Issue Type": "Tipo de reporte", "Bug/Problem": "Error/Problema", "UI Improvement": "Mejora de la interfaz", "Feature Improvement Idea": "Idea para mejorar una función", "New Feature Idea": "Idea para una nueva función",
     "Install Photo Notes on your device": "Instala Photo Notes en tu dispositivo",
     "Testing Hub": "Centro de pruebas",
+    "Manage Testing": "Administrar pruebas",
     "Account menu: fix ready to retest": "Menú de cuenta: corrección lista para probar",
     "Screenshot markup tools": "Herramientas para marcar la captura",
     "Annotate Screenshot": "Anotar captura de pantalla",

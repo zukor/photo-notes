@@ -1,6 +1,7 @@
 # Testing Hub
 
-Admin > Testing Assignments manages bilingual drafts, account selection, preview,
+Account menu > Manage Testing is available to admins and designated testing
+managers. Admin > Testing Assignments opens the same shared workspace. It manages bilingual drafts, account selection, preview,
 publication, individual results, review notes, and requests to retest. Published
 instructions are frozen. Copy an assignment to create a new round.
 
@@ -18,6 +19,12 @@ No assignment emails are sent by this feature.
 The initial Road Issue Reporter assignment is seeded once as a draft. Jose and
 Gaby/Gabby are suggested only when their first names identify unique active
 accounts. Review the selected names and email addresses before publishing.
+
+Admins can grant or revoke Testing manager under a user's Testing access.
+Managers can manage all assignments and review evidence, history, and downloads.
+They receive only the tester selection roster, without account administration,
+billing, password reset, or version-access controls. Permission is checked from
+the current account on every request, so revocation takes effect immediately.
 
 ## Data and recovery
 

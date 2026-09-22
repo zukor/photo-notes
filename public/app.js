@@ -285,7 +285,8 @@ function renderApp() {
               <div class="profile-name">${esc((state.me && state.me.name) || 'Photo Notes User')}</div>
               <div class="profile-email">${esc((state.me && state.me.email) || '')}</div>
               <div class="profile-plan">${isRoadIssuesClient()?'Road Issue Reporter':isGeneralProClient()?'Photo Notes Pro':isProClient()?esc(productName()):'Photo Notes Basic'}</div>
-              <button type="button" id="myAssignment" ${state.me?.is_tester||state.me?.role==='admin'?'':'hidden'}>Testing Hub</button>
+              <button type="button" id="manageTesting" ${state.me?.is_testing_manager||state.me?.role==='admin'?'':'hidden'}>${uiT('Manage Testing')}</button>
+              <button type="button" id="myAssignment" ${state.me?.is_tester||state.me?.is_testing_manager||state.me?.role==='admin'?'':'hidden'}>Testing Hub</button>
               <button type="button" id="installHelp">Install Photo Notes</button>
               <button type="button" id="pendingPhotos">Pending Photos</button>
               <button type="button" id="myIssues" ${state.me?.is_tester?'hidden':''}>My Issue Reports</button>
@@ -324,6 +325,7 @@ function renderApp() {
   document.getElementById('installHelp').onclick=showInstallHelp;
   document.getElementById('pendingPhotos').onclick=showPendingPhotos;
   const myIssues=document.getElementById('myIssues');if(myIssues)myIssues.onclick=()=>{state.view='my-issues';renderApp();};
+  const manageTesting=document.getElementById('manageTesting');if(manageTesting)manageTesting.onclick=()=>{state.view='manage-testing';renderApp();};
   const myAssignment=document.getElementById('myAssignment');if(myAssignment)myAssignment.onclick=()=>{state.view='my-assignment';renderApp();};
   const editionSwitcher=document.getElementById('editionSwitcher');if(editionSwitcher)editionSwitcher.onchange=async()=>{
     if(captureSavePending){editionSwitcher.value=selectedEdition();toast('Please wait for this photo to finish saving locally.');return;}
@@ -348,6 +350,7 @@ function renderApp() {
   const tabCreate=document.getElementById('tabCreate');if(tabCreate)tabCreate.onclick = () => { state.view=isHoaClient()?'hoa-inspections':'create'; state.groupId=null; renderApp(); };
   const tabSend=document.getElementById('tabSend');if(tabSend)tabSend.onclick = () => { state.view=isHoaClient()?'hoa-maintenance':'send'; renderApp(); };
   if (state.view === 'my-issues') renderMyIssueReports();
+  else if (state.view === 'manage-testing') renderTestingManagement();
   else if (state.view === 'my-assignment') renderMyTestingAssignment();
   else if (isRoadIssuesClient()) { state.view='road-report'; renderRoadIssueReport(); }
 
@@ -377,6 +380,11 @@ function renderApp() {
 }
 
 const MY_ISSUE_STATUS={blocked:'Needs attention',new:'Received',reviewing:'Working',fixing:'Working',testing:'Testing',ready_to_test:'Deployed - awaiting your confirmation',tester_confirmed:'Closed - you confirmed',resolved:'Resolved',wont_fix:'Closed'};
+async function renderTestingManagement(){
+  const body=document.getElementById('body');body.innerHTML='<button class="backlink" id="testingManagementBack">'+uiT('Back')+'</button><h1>'+uiT('Manage Testing')+'</h1><div id="testingManagement"></div>';
+  document.getElementById('testingManagementBack').onclick=()=>{state.view='my-assignment';renderApp();};
+  return PhotoNotesTesting.renderAdmin(document.getElementById('testingManagement'));
+}
 async function renderMyTestingAssignment(){
   return PhotoNotesTesting.renderTester(document.getElementById('body'),{
     back:()=>{state.view=IS_HANDHELD?'capture':'organize';renderApp();},
