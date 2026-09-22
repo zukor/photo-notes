@@ -43,6 +43,16 @@
     .issue-admin-card { display:grid; grid-template-columns:180px minmax(0,1fr); gap:14px; }
     .issue-admin-card img { width:180px; max-height:220px; object-fit:cover; object-position:top; margin:0; border:1px solid #aaa; border-radius:6px; }
     .issue-description { white-space:pre-wrap; line-height:1.4; margin:8px 0; }
+    .issue-intro { margin:0 0 12px; color:#000; text-align:left; }
+    .issue-intro p { margin:5px 0 0; }
+    .issue-help { margin:10px 0; color:#000; text-align:left; }
+    .issue-help > summary { cursor:pointer; font-weight:bold; padding:10px 0; }
+    .issue-help p, .issue-help li { line-height:1.5; }
+    .issue-diagnostics { border:1px solid #b7c2d1; border-radius:8px; padding:0 12px; }
+    .issue-status-grid { display:grid; grid-template-columns:minmax(120px,1fr) minmax(0,2fr); gap:8px 16px; margin:12px 0; font-size:13px; }
+    .issue-status-grid dt { font-weight:bold; }
+    .issue-status-grid dd { margin:0; overflow-wrap:anywhere; }
+    .issue-system-notice { padding:10px 12px; border-left:4px solid #b45309; background:#fff8eb; color:#000; font-size:14px; }
     .issue-toolbar { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:8px; align-items:end; margin:10px 0; }
     .issue-toolbar label { margin:0; font-size:12px; }
     .issue-toolbar select { margin-top:4px; }
@@ -424,8 +434,17 @@
           </section>
           <h2 class="admin-tools-heading">Admin Tools</h2>
 <details class="admin-section" data-admin-tool="issues"><summary>Issue Management Center</summary><div class="admin-section-body">
-          <div class="helper">Bug/Problem reports enter the automatic repair queue. Unclear fixes need Sam review. UI improvements, feature improvements, and new features are ideas for Sam to review separately and are excluded from automatic repair. Ready-to-test fixes and requests for details appear automatically in the reporter’s app.</div>
-          <p id="repairWorkerStatus" class="helper" role="status"></p><div class="issue-toolbar">
+          <div class="issue-intro"><strong>Review and manage reports</strong><p>Track reported problems, review ideas, and follow up with testers.</p></div>
+          <details class="issue-help"><summary>How reports are handled</summary>
+            <ul><li><strong>Bug/Problem:</strong> enters the automatic repair queue. Unclear fixes need Sam’s review.</li><li><strong>Ideas:</strong> UI improvements, feature improvements, and new features go to Sam for review.</li><li><strong>Tester updates:</strong> ready-to-test fixes and requests for details appear in the reporter’s app.</li></ul>
+          </details>
+          <p id="issueSystemNotice" class="issue-system-notice" role="status" hidden></p>
+          <details class="issue-help issue-diagnostics"><summary>System status</summary>
+            <p class="helper">Technical checks for automatic repairs and tester notifications. These describe the services, not the progress of an individual report.</p>
+            <div id="repairWorkerStatus"><p class="helper">Loading repair queue status...</p></div>
+            <div id="cloudWorkerDetail"><p class="helper">Loading background service status...</p></div>
+          </details>
+          <div class="issue-toolbar">
             <label>Issue Type<select id="issueTypeFilter"><option value="all">All Report Types</option><option value="bug_problem">Bug/Problem</option><option value="ideas">All Ideas - Sam Review</option><option value="ui_improvement">UI Improvement</option><option value="feature_improvement">Feature Improvement Idea</option><option value="new_feature">New Feature Idea</option></select></label>
             <label>Status Filter<select id="issueStatusFilter"><option value="open">All Unresolved Issues</option><option value="all">All Issues</option><option value="new">New</option><option value="reviewing">Reviewing</option><option value="fixing">Working</option><option value="testing">Testing</option><option value="blocked">Needs Sam Review / Information</option><option value="ready_to_test">Ready to Test</option><option value="tester_confirmed">Tester Confirmed</option><option value="resolved">Resolved</option><option value="wont_fix">Won’t Fix</option></select></label>
             <label>Priority Filter<select id="issuePriorityFilter"><option value="all">All Priorities</option><option value="urgent">Urgent</option><option value="high">High</option><option value="normal">Normal</option><option value="low">Low</option></select></label>
@@ -559,9 +578,35 @@
       const device=issueDevice(i);
       return `<article class="card issue-admin-card">${i.screenshot_path?`<a href="${esc(i.screenshot_path)}" target="_blank" rel="noopener"><img src="${esc(i.screenshot_path)}" alt="Issue ${i.id} screenshot"></a>`:'<div class="muted">No screenshot</div>'}<div><div class="user-title-row"><div class="userhead">Issue #${i.id}: ${esc(i.page_name||'Photo Notes')}</div><span class="pill ${status==='resolved'?'pro':priority==='urgent'?'role':'basic'}">${esc(status==='ready_to_test'&&(!i.verification||!i.release_reference)?'Ready status needs verification':issueStatusLabels[status]||status)}</span><span class="pill basic">${esc(issuePriorityLabels[priority]||priority)} Priority</span></div><div class="muted">${esc(i.user_name||i.user_email)} · ${fdatetime(i.created_at)} · ${esc(i.viewport||'screen unknown')}<span class="issue-device">${esc(device.label)}</span></div><div class="meta">Issue Type: ${esc(issueTypeLabels[i.issue_type]||'Bug/Problem')}</div><div class="helper">${i.issue_type&&i.issue_type!=='bug_problem'?'Idea for Sam review. Excluded from automatic repair.':status==='blocked'?'Needs Sam review / information. Automatic repair is paused.':'Bug/Problem: automatic repair workflow.'}</div><div class="issue-description">${esc(i.description)}</div><div class="muted">${esc(i.page_url||'')}</div><div class="issue-controls"><label>Status<select id="issue-status-${i.id}">${issueOptions(Object.keys(issueStatusLabels),issueStatusLabels,status)}</select></label><label>Priority<select id="issue-priority-${i.id}">${issueOptions(Object.keys(issuePriorityLabels),issuePriorityLabels,priority)}</select></label></div><label for="issue-fix-${i.id}">What Was Fixed</label><textarea class="issue-notes" id="issue-fix-${i.id}" placeholder="Short explanation the tester can understand">${esc(i.fix_summary||'')}</textarea><label for="issue-release-${i.id}">Release or Commit</label><input id="issue-release-${i.id}" value="${esc(i.release_reference||'')}" placeholder="Commit, deployment, or release reference"><label for="issue-retest-${i.id}">Retest Instructions</label><textarea class="issue-notes" id="issue-retest-${i.id}" placeholder="Exact steps the tester should repeat">${esc(i.retest_instructions||'')}</textarea><label for="issue-blocked-${i.id}">Question or Blocker Visible to Reporter</label><textarea class="issue-notes" id="issue-blocked-${i.id}" placeholder="What information is needed to continue?">${esc(i.blocked_reason||'')}</textarea><label for="issue-notes-${i.id}" style="margin-top:8px">Private Administrator Notes</label><textarea class="issue-notes" id="issue-notes-${i.id}" placeholder="Internal diagnosis and decisions">${esc(i.admin_notes||'')}</textarea><div class="muted">Original report email: ${esc(i.email_status||'pending')}${i.email_error?' · '+esc(i.email_error):''}<br>Tester notification: ${esc(i.tester_notification_status||'not sent')}${i.tester_notification_error?' · '+esc(i.tester_notification_error):''}${i.tester_notified_at?' · '+fdatetime(i.tester_notified_at):''}${i.tester_result?`<br>Retest result: ${i.tester_result==='fixed'?'Fixed':'Still happening'}${i.tester_retested_at?' · '+fdatetime(i.tester_retested_at):''}${i.tester_notes?' · '+esc(i.tester_notes):''}`:''}${i.updated_at?'<br>Last updated '+fdatetime(i.updated_at):''}</div><div class="issue-actions"><button class="btn" type="button" data-issue-save="${i.id}">Save Issue</button>${i.email_status!=='sent'?`<button class="btn secondary" type="button" data-issue-retry="${i.id}">Retry Email</button>`:''}</div></div></article>`;
     }
+    function statusRows(rows){
+      return '<dl class="issue-status-grid">'+rows.map(([label,value])=>`<dt>${esc(label)}</dt><dd>${esc(value)}</dd>`).join('')+'</dl>';
+    }
+    let issueSystemLoad=0;
+    async function loadIssueSystemStatus(){
+      const request=++issueSystemLoad;
+      const results=await Promise.allSettled(['/api/admin/repair-status','/api/admin/cloud-worker'].map(async path=>{
+        const r=await api(path);if(!r.ok)throw new Error('Status unavailable');return r.json();
+      }));
+      if(request!==issueSystemLoad)return;
+      const queueBox=document.getElementById('repairWorkerStatus'),cloudBox=document.getElementById('cloudWorkerDetail'),notice=document.getElementById('issueSystemNotice');
+      if(!queueBox||!cloudBox||!notice)return;
+      const [queue,cloud]=results;
+      let attention=false;
+      if(queue.status==='fulfilled'){
+        const d=queue.value;attention=!d.queue_configured;
+        queueBox.innerHTML=statusRows([['Repair queue',d.queue_configured?'Connected':'Not configured'],['Last repair check',d.last_checked?fdatetime(d.last_checked):'Not yet observed'],['Tester updates',d.email_configured?'In-app and email':'In-app; email not configured']]);
+      }else queueBox.innerHTML='<p class="helper">Repair queue status is temporarily unavailable.</p>';
+      if(cloud.status==='fulfilled'){
+        const d=cloud.value,healthy=d.last_tick&&Date.now()-Date.parse(d.last_tick)<60000;
+        attention=attention||!healthy||!d.runner_enabled||!d.dispatch_configured||!!d.dispatch_error||!!d.last_error||Number(d.failed_deliveries)>0;
+        cloudBox.innerHTML=statusRows([['Background service',healthy?'Running':'Not recently observed'],['Automatic repair dispatch',d.dispatch_error?'Needs attention':d.runner_enabled&&d.dispatch_configured?'Enabled':'Not connected'],['Last dispatch check',d.last_dispatch_check?fdatetime(d.last_dispatch_check):'Not yet observed'],['Repair worker setup',d.runner_configured?'Configured at last worker check':'Not verified'],['Subscribed devices',d.subscribed_devices??'Unknown'],['Failed push notifications',d.failed_deliveries??'Unknown'],...(d.dispatch_error?[['Dispatch error',d.dispatch_error]]:[]),...(d.last_error?[['Service error',d.last_error]]:[])]);
+      }else cloudBox.innerHTML='<p class="helper">Background service status is temporarily unavailable.</p>';
+      const unavailable=results.some(r=>r.status==='rejected');
+      notice.hidden=!attention&&!unavailable;
+      notice.textContent=attention?'Automatic repairs or notifications need attention. Open System status for details.':unavailable?'Some system checks are unavailable. Open System status for details.':'';
+    }
     async function loadIssues(){
-      api('/api/admin/cloud-worker').then(r=>r.json()).then(d=>{const el=document.getElementById('repairWorkerStatus');if(el){const p=document.createElement('p');p.style.color='#000';p.id='cloudWorkerDetail';document.getElementById(p.id)?.remove();const healthy=d.last_tick&&Date.now()-Date.parse(d.last_tick)<60000;p.textContent=`Server worker: ${healthy?'running':'not recently observed'}. Repair dispatch: ${d.runner_enabled&&d.dispatch_configured?'enabled':'not connected'}. Last dispatch check: ${d.last_dispatch_check?fdatetime(d.last_dispatch_check):'not yet observed'}. AI credential: ${d.runner_configured?'configured':'not verified'}. Devices subscribed: ${d.subscribed_devices||0}. Failed notification deliveries: ${d.failed_deliveries||0}. ${d.dispatch_error||d.last_error||''}`;el.after(p);}}).catch(()=>{});
-      api('/api/admin/repair-status').then(r=>r.json()).then(d=>{const el=document.getElementById('repairWorkerStatus');if(el)el.textContent=`Repair queue: ${d.queue_configured?'connected':'not configured'}. Last worker check: ${d.last_checked?fdatetime(d.last_checked):'not yet observed'}. Notifications: in-app${d.email_configured?' and configured email':'; email not configured'}.`;}).catch(()=>{});
+      loadIssueSystemStatus();
       const box=document.getElementById('issues'); if(!box)return; box.innerHTML='<p class="status">Loading...</p>';
       try{const r=await api('/api/admin/issues');if(!r.ok)throw new Error();allIssues=await r.json();populateIssueFilters();renderIssues();}
       catch(e){box.innerHTML='<p class="status">Issue reports could not be loaded.</p>';}
