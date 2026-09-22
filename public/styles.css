@@ -730,3 +730,13 @@ input.dimfield.suggested {
 #desktopHelp footer p { margin-top:6px; font-size:12px; }
 @media (max-width:1099px), (any-hover:none) { #desktopHelp { display:none; } .desktop-help-open #app { margin-right:0; } }
 @media (prefers-reduced-motion:reduce) { #desktopHelp .help-fab, #desktopHelp .help-drawer { transition:none; } }
+
+/* Expiring document links and owner controls. */
+.document-link-panel { color:#000; text-align:left; border-top:1px solid #000; margin-top:16px; padding-top:12px; overflow-wrap:anywhere; }
+.document-link-panel p, .document-link-panel strong { color:#000; }
+.document-link-panel input { box-sizing:border-box; width:100%; min-width:0; color:#000; background:#fff; }
+.document-link-panel .row { flex-wrap:wrap; }
+#sharedDocumentLinks { margin:18px 0; color:#000; }
+#sharedDocumentLinks summary { cursor:pointer; font-weight:bold; }
+
+#exportShareDialog [hidden] { display:none !important; }

@@ -3115,7 +3115,9 @@ async function renderSend() {
     </section>
     <div class="formhead" style="margin-top:30px">Send a Document</div>
     <div id="sendDocs"><p class="status">Loading documents...</p></div>
+    <details id="sharedDocumentLinks"><summary>Shared document links</summary><div id="sharedDocumentLinksList"></div></details>
     <div id="billingOffers"></div>`;
+  document.getElementById('sharedDocumentLinks').ontoggle = event => { if(event.target.open) window.PhotoNotesDocumentLinks?.manage(document.getElementById('sharedDocumentLinksList')); };
   document.getElementById('sharephotos').onclick = shareSelectedPhotos;
   document.getElementById('senddocument').onclick = () => deliverExport(document.getElementById('sendformat').value, null, 'download');
   document.getElementById('selectAllSendCaptures').onclick = selectAllSendCaptures;
@@ -3286,15 +3288,20 @@ function openPreparedExportShare(file, format, groupId) {
   modal.onkeydown = event => {
     if (event.key === 'Escape') close();
     if (event.key === 'Tab') {
-      const buttons = [...modal.querySelectorAll('button')].filter(b => !b.disabled);
+      const buttons = [...modal.querySelectorAll('button,input')].filter(b => !b.disabled && !b.hidden);
       const first = buttons[0], last = buttons[buttons.length - 1];
       if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
       else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
     }
   };
-  const supported=!!navigator.share&&(!navigator.canShare||navigator.canShare({files:[file]}));
+  // Chromium's desktop file allowlist excludes DOCX and ZIP even when
+  // canShare reports true. Offer links immediately on Windows.
+  const windowsFileRestriction = /Windows/.test(navigator.userAgent || '') &&
+    /(?:Chrome|Chromium|Edg)\//.test(navigator.userAgent || '') && ['docx','bundle'].includes(format);
+  let supported=false;
+  try { supported=!windowsFileRestriction&&!!navigator.share&&(!navigator.canShare||navigator.canShare({files:[file]})); } catch {}
   share.hidden=!supported;
-  if(!supported)status.textContent=uiT('Download this file, then attach it in Teams or another app.');
+  if(!supported)status.textContent=uiT('This browser cannot share this file directly. Create a share link below, or use Download.');
   share.onclick = async () => {
     share.disabled = true;
     try {
@@ -3304,9 +3311,10 @@ function openPreparedExportShare(file, format, groupId) {
     } catch (error) {
       status.textContent = uiT(error?.name === 'AbortError'
         ? 'Sharing was canceled. Tap Share to try again.'
-        : 'This browser could not share the document. Use Download, then share it from your Downloads folder.');
+        : 'This browser could not share the document. Create a share link below, or use Download.');
     } finally { share.disabled = false; }
   };
+  window.PhotoNotesDocumentLinks?.mount(modal.querySelector('.photo-viewer-dialog'), file, format);
   document.body.appendChild(modal);
   window.photoNotesI18n?.apply(modal);
   (supported?share:modal.querySelector('[data-share-download]')).focus();

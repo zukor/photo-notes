@@ -18,7 +18,7 @@ test('native sharing cancellation or denial keeps a retry and download path',asy
   for(const reason of ['AbortError','NotAllowedError']) {
     const f=fixture(reason);await f.c.deliverExport('docx',42,'share');await f.tap();
     assert.equal(f.removed,false);assert.equal(f.nodes['[data-share-open]'].disabled,false);
-    assert.match(f.nodes['[data-share-status]'].textContent,reason==='AbortError'?/canceled/:/Use Download/);
+    assert.match(f.nodes['[data-share-status]'].textContent,reason==='AbortError'?/canceled/:/use Download/);
   }
 });
 
@@ -26,4 +26,14 @@ test('unsupported Word or ZIP sharing provides a user-activated download',async(
  const f=fixture();f.c.navigator.canShare=()=>false;
  await f.c.deliverExport('bundle',42,'share');assert.ok(f.modal);assert.equal(f.nodes['[data-share-open]'].hidden,true);
  f.nodes['[data-share-download]'].onclick();assert.equal(f.c.downloaded,true);assert.equal(f.removed,true);assert.equal(f.calls,0);
+});
+
+test('Windows Chromium offers the link path even when canShare accepts Word or ZIP',async()=>{
+ for(const format of ['docx','bundle']){
+  const f=fixture();f.c.navigator.userAgent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/153.0.0.0';
+  let mounted=false;f.c.window.PhotoNotesDocumentLinks={mount(){mounted=true;}};
+  await f.c.deliverExport(format,42,'share');
+  assert.equal(f.nodes['[data-share-open]'].hidden,true);assert.equal(f.calls,0);assert.equal(mounted,true);
+  assert.match(f.nodes['[data-share-status]'].textContent,/Create a share link/);
+ }
 });

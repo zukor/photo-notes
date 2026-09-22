@@ -358,6 +358,18 @@ CREATE TABLE IF NOT EXISTS capture_history (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS capture_history_capture_idx ON capture_history (capture_id, created_at);
+CREATE TABLE IF NOT EXISTS document_share_links (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token TEXT UNIQUE NOT NULL,
+  filename TEXT NOT NULL,
+  mime_type TEXT NOT NULL,
+  content BYTEA NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS document_share_links_owner_idx ON document_share_links(user_id);
+CREATE INDEX IF NOT EXISTS document_share_links_expiry_idx ON document_share_links(expires_at);
 CREATE TABLE IF NOT EXISTS approval_packages (
   id          SERIAL PRIMARY KEY,
   user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
