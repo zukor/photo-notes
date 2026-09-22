@@ -20,3 +20,10 @@ for(const kind of ['reader','ticket']){
  test(kind+' exposes retry when automatic scanning fails',async()=>{const s=scanner(kind,async()=>{throw new Error('offline')});await s.scan();assert.equal(s.elements[s.id].disabled,false);assert.equal(s.elements[s.id].hidden,false);});
 }
 test('offline upload preserves the proposal reason',()=>{const context={FormData};vm.createContext(context);vm.runInContext(app.split('\n').find(x=>x.startsWith('function payloadFormData(')),context);assert.equal(context.payloadFormData({paving_photo_reason:'proposal'}).get('paving_photo_reason'),'proposal');});
+for(const kind of ['reader','ticket']){
+ test(kind+' preserves manual review and retry after a service setup failure',async()=>{
+  const s=scanner(kind,async()=>({ok:true,json:async()=>({ai_read:false,ai_error:'not_configured',ai_message:'Automatic scanning is not set up yet. Your photo is available for manual entry.',reading:{id:5},ticket:{id:6}})}));
+  await s.scan();assert.equal(s.state.review,true);assert.equal(s.elements[s.id].disabled,false);assert.equal(s.elements[s.id].hidden,false);
+  assert.match(s.elements[kind==='reader'?'readerStatus':'ticketScanStatus'].textContent,/not set up/);
+ });
+}

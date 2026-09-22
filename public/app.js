@@ -738,11 +738,27 @@ function renderCameraReader() {
   loadCameraReadings();
 }
 async function scanCameraReader() {
-  if(!cameraReaderFile||document.getElementById('readerRead')?.disabled)return; const cfg=readerConfigs[cameraReaderType], btn=document.getElementById('readerRead'), st=document.getElementById('readerStatus');
-  setPavingToolBusy(['readerTake','readerChoose'],true);cameraReaderDraft=null;btn.disabled=true; btn.textContent='Reading...'; st.textContent='Reading only the information visible in the photo.';
-  try { const fd=new FormData(); fd.append('reading_type',cameraReaderType); fd.append('photo',cameraReaderFile); const r=await api('/api/camera-readings/scan',{method:'POST',body:fd}); const d=await r.json().catch(()=>({})); if(document.getElementById('readerRead')!==btn)return;if(!r.ok||!d.reading)throw new Error(); cameraReaderDraft=d.reading; renderCameraReaderReview(); st.textContent=d.ai_read?'Reading complete. Correct anything needed, then save.':'Automatic reading was unsuccessful. Enter the visible information, then save.'; }
-  catch(e){ if(document.getElementById('readerRead')!==btn)return;btn.hidden=false;st.textContent=`The ${cfg.noun} could not be read. Retake the photo closer, in even light, and avoid glare.`; btn.disabled=false; btn.textContent='Try Again'; }
-  finally{if(document.getElementById('readerRead')===btn)setPavingToolBusy(['readerTake','readerChoose'],false);}
+  if(!cameraReaderFile||document.getElementById('readerRead')?.disabled)return;
+  const btn=document.getElementById('readerRead'), st=document.getElementById('readerStatus');
+  setPavingToolBusy(['readerTake','readerChoose'],true);
+  cameraReaderDraft=null;btn.disabled=true;btn.textContent='Reading...';
+  st.textContent='Reading only the information visible in the photo.';
+  try {
+    const fd=new FormData();fd.append('reading_type',cameraReaderType);fd.append('photo',cameraReaderFile);
+    const r=await api('/api/camera-readings/scan',{method:'POST',body:fd});
+    const d=await r.json().catch(()=>({}));
+    if(document.getElementById('readerRead')!==btn)return;
+    if(!r.ok||!d.reading)throw new Error();
+    cameraReaderDraft=d.reading;renderCameraReaderReview();
+    st.textContent=d.ai_read?'Reading complete. Correct anything needed, then save.':(d.ai_message||'Automatic reading was unsuccessful. Enter the visible information, then save.');
+    if(!d.ai_read){btn.hidden=false;btn.disabled=false;btn.textContent='Try Again';}
+  } catch(e){
+    if(document.getElementById('readerRead')!==btn)return;
+    btn.hidden=false;btn.disabled=false;btn.textContent='Try Again';
+    st.textContent='The scan could not be completed. Your selected photo is still available. Try again.';
+  } finally {
+    if(document.getElementById('readerRead')===btn)setPavingToolBusy(['readerTake','readerChoose'],false);
+  }
 }
 function renderCameraReaderReview() {
   const cfg=readerConfigs[cameraReaderType], f=cameraReaderDraft.fields||{}, box=document.getElementById('readerReview');
@@ -826,6 +842,7 @@ async function scanTicketPhoto() {
   const status = document.getElementById('ticketScanStatus');
   setPavingToolBusy(['ticketTake','ticketChoose'],true);ticketDraft=null;btn.disabled = true; btn.textContent = 'Reading Ticket...';
   status.textContent = 'Reading the printed ticket details. This may take a moment.';
+  let aiRead=false;
   try {
     const fd = new FormData(); fd.append('photo', ticketPhotoFile);
     const r = await api('/api/asphalt-tickets/scan', { method:'POST', body:fd });
@@ -833,15 +850,17 @@ async function scanTicketPhoto() {
     if(document.getElementById('ticketRead')!==btn)return;
     if (!r.ok || !d.ticket) throw new Error(d.error || 'scan failed');
     ticketDraft = d.ticket;
+    aiRead=!!d.ai_read;
+    if(!aiRead)btn.hidden=false;
     renderTicketReview(ticketDraft);
-    status.textContent = d.ai_read ? 'Ticket read. Check every field, correct anything needed, then save.' : 'The ticket could not be read automatically. Enter the details below, then save.';
+    status.textContent = d.ai_read ? 'Ticket read. Check every field, correct anything needed, then save.' : (d.ai_message || 'The ticket could not be read automatically. Enter the details below, then save.');
   } catch (e) {
     if(document.getElementById('ticketRead')!==btn)return;btn.hidden=false;
-    status.textContent = 'The ticket could not be read. Retake it in good light with the full ticket visible.';
+    status.textContent = 'The scan could not be completed. Your selected photo is still available. Try again.';
   } finally {
     if(document.getElementById('ticketRead')===btn){setPavingToolBusy(['ticketTake','ticketChoose'],false);
-    btn.disabled = !!ticketDraft;
-    btn.textContent = ticketDraft ? 'Ticket Read' : 'Try Reading Again';}
+    btn.disabled = aiRead;
+    btn.textContent = aiRead ? 'Ticket Read' : 'Try Reading Again';}
   }
 }
 
@@ -1293,7 +1312,7 @@ async function runMeasure(ref) {
     const r = await api('/api/measure', { method: 'POST', body: fd });
     const d = await r.json().catch(() => ({}));
     if (!r.ok || d.ok === false) {
-      resEl.innerHTML = `<div class="status">Could not measure from this photo right now. You can enter the dimensions by hand, and the record still saves normally.</div>`;
+      resEl.innerHTML = `<div class="status">${esc(d.ai_message || 'Could not measure from this photo right now. You can enter the dimensions by hand, and the record still saves normally.')}</div>`;
       if (panel) panel.innerHTML = '';
       return;
     }
@@ -1995,13 +2014,13 @@ async function classifySelected() {
   const prog = document.getElementById('classifyprog');
   const btn = document.getElementById('classifybatch');
   btn.disabled = true;
-  let done = 0, failed = 0;
+  let done = 0, failed = 0, serviceMessage='';
   for (const id of ids) {
     if (prog) prog.textContent = `Classifying ${done + 1} of ${ids.length}...`;
-    try { const d = await classifyOne(id); if (d && d.ok) done++; else failed++; }
+    try { const d = await classifyOne(id); if (d && d.ok) done++; else { failed++; if(d.ai_message){serviceMessage=d.ai_message;if(!['unreadable','invalid_image'].includes(d.ai_error))break;} } }
     catch (e) { failed++; }
   }
-  if (prog) prog.textContent = `Classified ${done} of ${ids.length}` + (failed ? `, ${failed} could not be classified` : '');
+  if (prog) prog.textContent = serviceMessage || (`Classified ${done} of ${ids.length}` + (failed ? `, ${failed} could not be classified` : ''));
   btn.disabled = false;
   loadCards(document.getElementById('filter').value || '');
 }
