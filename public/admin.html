@@ -450,6 +450,7 @@
             <label>Priority Filter<select id="issuePriorityFilter"><option value="all">All Priorities</option><option value="urgent">Urgent</option><option value="high">High</option><option value="normal">Normal</option><option value="low">Low</option></select></label>
             <label>Tester Filter<select id="issueTesterFilter"><option value="all">All Testers</option></select></label>
             <label>Device Filter<select id="issueDeviceFilter"><option value="all">All Devices</option><option value="android">Android</option><option value="ios">iPhone / iPad</option><option value="desktop">Desktop</option><option value="unknown">Unknown</option></select></label>
+            <label for="issueDateSort"><span>Date reported</span><select id="issueDateSort" aria-label="Date reported"><option value="newest">Newest first</option><option value="oldest">Oldest first</option></select></label>
             <button class="btn secondary" id="refreshIssues" type="button" style="margin:0" title="Reload the latest reports and system status">Refresh reports</button>
           </div>
           <div id="issueSummary" class="issue-summary"></div>
@@ -498,6 +499,7 @@
       document.getElementById('issuePriorityFilter').onchange = renderIssues;
       document.getElementById('issueTesterFilter').onchange = renderIssues;
       document.getElementById('issueDeviceFilter').onchange = renderIssues;
+      document.getElementById('issueDateSort').onchange = renderIssues;
       document.getElementById('refreshIssues').onclick = loadIssues;
       document.getElementById('refreshAssignments').onclick = loadAssignments;
       const toolLoaders={health:loadHealth,billing:loadStripeBilling,activity:loadActivity,issues:loadIssues,testing:loadAssignments};
@@ -546,6 +548,12 @@
       const closed=new Set(['resolved','wont_fix','tester_confirmed']);
       const scope=allIssues.filter(i=>matchesIssueType(i,category)&&(pf==='all'||(i.priority||'normal')===pf)&&(tf==='all'||String(i.user_id)===tf)&&(df==='all'||issueDevice(i).key===df));
       const rows=scope.filter(i=>sf==='all'||(sf==='open'&&!closed.has(i.management_status||'new'))||i.management_status===sf);
+      const direction=document.getElementById('issueDateSort').value==='oldest'?1:-1;
+      rows.sort((a,b)=>{
+        const ad=Date.parse(a.created_at),bd=Date.parse(b.created_at);
+        if(!Number.isFinite(ad)||!Number.isFinite(bd))return Number.isFinite(ad)?-1:Number.isFinite(bd)?1:Number(a.id)-Number(b.id);
+        return direction*(ad-bd||Number(a.id)-Number(b.id));
+      });
       const counts=issueCounts(scope);
       document.getElementById('issueSummary').innerHTML=`<span class="pill basic">${counts.work} problems need work</span><span class="pill basic">${counts.blocked} problems need Sam review / information</span><span class="pill basic">${counts.ideas} ideas for Sam review</span><span class="pill basic">${counts.awaiting} awaiting retest</span><span class="pill pro">${counts.resolved} resolved</span>${counts.closed?`<span class="pill basic">${counts.closed} closed without a fix</span>`:''}<span class="pill ${counts.urgent?'role':'basic'}">${counts.urgent} urgent</span>`;
       box.innerHTML=rows.length?rows.map(issueCard).join(''):'<p class="helper">No issue reports match these filters.</p>';
