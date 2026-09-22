@@ -747,7 +747,7 @@ async function init() {
     if((await pool.query('SELECT 1 FROM retired_testing_assignment_keys WHERE assignment_key=$1',[round.key])).rowCount)continue;
     const steps = sharedSteps.concat(round.extra);
     await pool.query(`INSERT INTO testing_assignments (assignment_key,assignee_name,assignee_email,title,summary,steps)
-      VALUES($1,$2,$3,$4,$5,$6::jsonb) ON CONFLICT (assignment_key) DO UPDATE SET title=EXCLUDED.title,summary=EXCLUDED.summary,steps=EXCLUDED.steps,updated_at=now()`,
+      VALUES($1,$2,$3,$4,$5,$6::jsonb) ON CONFLICT (assignment_key) DO NOTHING`,
       [round.key,round.name,round.email,round.title,round.summary,JSON.stringify(steps)]);
   }
   // Correct the display name while retaining assignment and step IDs so
@@ -756,7 +756,7 @@ async function init() {
     WHERE assignment_key IN ('basic-weekend-hassan-2026-09','basic-hassan-organize-2026-09')
       AND assignee_name='Hassan'`);
   await pool.query(`UPDATE testing_assignments a SET user_id=u.id,updated_at=now() FROM users u
-    WHERE a.user_id IS NULL AND (lower(COALESCE(a.assignee_email,''))=lower(u.email) OR lower(COALESCE(u.name,'')) LIKE lower(a.assignee_name)||'%')`);
+    WHERE a.user_id IS NULL AND a.assignment_key NOT LIKE 'template-%' AND (lower(COALESCE(a.assignee_email,''))=lower(u.email) OR lower(COALESCE(u.name,'')) LIKE lower(a.assignee_name)||'%')`);
 
   // This common property-maintenance topic is available to every existing and
   // future account. Existing custom topics are preserved.
@@ -772,6 +772,7 @@ async function init() {
   const adminAreas = await pool.query(`SELECT 1 FROM user_areas WHERE user_id = $1 LIMIT 1`, [adminId]);
   if (adminAreas.rows.length === 0) await seedUserAreas(adminId);
 
+  await require('./testing-hub').initTestingHub(pool);
   console.log('[db] schema ready');
 }
 

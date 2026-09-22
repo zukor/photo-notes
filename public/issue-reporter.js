@@ -1,3 +1,4 @@
+let issueTestingContext=null;
 // ================= Shared issue reporter =================
 let issueScreenshotBlob = null, issueVoiceBlob = null, issuePageName = '', issueRecognizer = null, issueMediaRecorder = null, issueMediaStream = null;
 let issueScreenshotURL = null, issueMarkupEditor=null;
@@ -13,8 +14,9 @@ async function captureIssueScreenshot(quality=.78){
   try{const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',quality));if(!blob)throw Error('Screenshot could not be encoded');return blob;}
   finally{canvas.width=0;canvas.height=0;}
 }
-async function openIssueReporter() {
+async function openIssueReporter(testingContext=null) {
   closeIssueReporter();
+  issueTestingContext=testingContext?.assignmentId?testingContext:null;
   const generation=issueGeneration;
   const fab=document.getElementById('issueFab'); if(fab){fab.disabled=true;fab.textContent='Capturing...';}
   issuePageName=typeof adminIssuePageName==='function'?adminIssuePageName():(issuePageLabels[state.view]||state.view||'Photo Notes'); issueScreenshotBlob=null;issueVoiceBlob=null;
@@ -35,6 +37,7 @@ async function openIssueReporter() {
   document.getElementById('issueClose').onclick=closeIssueReporter;
   document.getElementById('issueRecord').onclick=toggleIssueDictation;
   document.getElementById('issueSend').onclick=submitIssueReport;
+  if(issueTestingContext){document.getElementById('issueAction').value=issueTestingContext.title+' / '+issueTestingContext.stepTitle;document.getElementById('issueExpected').value=issueTestingContext.instruction;document.getElementById('issueDescription').value=issueTestingContext.notes||'';}
   document.getElementById('issueClose').focus();
   if(issueScreenshotBlob&&typeof IssueMarkup!=='undefined'){const host=document.getElementById('issueMarkup');host.hidden=false;preview.hidden=true;issueMarkupEditor=IssueMarkup.create(host,issueScreenshotBlob);issueMarkupEditor.ready.catch(()=>{if(generation===issueGeneration){issueMarkupEditor?.destroy();issueMarkupEditor=null;host.hidden=true;preview.hidden=false;}});document.getElementById('issueMarkupRetake').onclick=retakeIssueScreenshot;}
   if(fab){fab.disabled=false;fab.textContent=issueFabLabel();}
@@ -47,7 +50,7 @@ async function retakeIssueScreenshot(){
  finally{if(generation===issueGeneration){modal.hidden=false;button.disabled=false;}}
 }
 function stopIssueMediaStream(){if(issueMediaStream){issueMediaStream.getTracks().forEach(track=>track.stop());issueMediaStream=null;}issueMediaRecorder=null;}
-function closeIssueReporter(){if(issueMarkupEditor){issueMarkupEditor.destroy();issueMarkupEditor=null;}const markup=document.getElementById('issueMarkup');if(markup)markup.hidden=true;if(issueScreenshotURL){URL.revokeObjectURL(issueScreenshotURL);issueScreenshotURL=null;}const preview=document.getElementById("issueScreenshot");if(preview){preview.removeAttribute("src");preview.hidden=true;}issueGeneration++;issueMicPending=false;issueDictationActive=false;if(issueDictationRestartTimer)clearTimeout(issueDictationRestartTimer);if(issueDictationWatchdog)clearTimeout(issueDictationWatchdog);issueDictationRestartTimer=null;issueDictationWatchdog=null;if(issueRecognizer){try{issueRecognizer.stop();}catch(e){}}if(issueMediaRecorder&&issueMediaRecorder.state==='recording'){try{issueMediaRecorder.stop();}catch(e){}}stopIssueMediaStream();const m=document.getElementById('issueModal');if(m)m.hidden=true;issueScreenshotBlob=null;issueVoiceBlob=null;issueRecognizer=null;}
+function closeIssueReporter(){issueTestingContext=null;if(issueMarkupEditor){issueMarkupEditor.destroy();issueMarkupEditor=null;}const markup=document.getElementById('issueMarkup');if(markup)markup.hidden=true;if(issueScreenshotURL){URL.revokeObjectURL(issueScreenshotURL);issueScreenshotURL=null;}const preview=document.getElementById("issueScreenshot");if(preview){preview.removeAttribute("src");preview.hidden=true;}issueGeneration++;issueMicPending=false;issueDictationActive=false;if(issueDictationRestartTimer)clearTimeout(issueDictationRestartTimer);if(issueDictationWatchdog)clearTimeout(issueDictationWatchdog);issueDictationRestartTimer=null;issueDictationWatchdog=null;if(issueRecognizer){try{issueRecognizer.stop();}catch(e){}}if(issueMediaRecorder&&issueMediaRecorder.state==='recording'){try{issueMediaRecorder.stop();}catch(e){}}stopIssueMediaStream();const m=document.getElementById('issueModal');if(m)m.hidden=true;issueScreenshotBlob=null;issueVoiceBlob=null;issueRecognizer=null;}
 function cleanSpeechTranscript(value){
   let words=String(value||'').trim().split(/\s+/).filter(Boolean);
   // Android speech services occasionally return the same short fragment three
@@ -155,7 +158,7 @@ async function submitIssueReport(){
   const description=[action&&`Trying to do: ${action}`,whatHappened&&`What happened: ${whatHappened}`,expected&&`Expected: ${expected}`,frequency&&`Frequency: ${frequency}`].filter(Boolean).join('\n');
   if(!whatHappened&&!issueVoiceBlob){st.textContent='Please type what went wrong or attach a voice recording before sending.';ta.focus();return;}
   btn.disabled=true;btn.textContent='Sending...';st.textContent='Saving your report...';
-  try{const screenshot=issueMarkupEditor?await issueMarkupEditor.exportBlob():issueScreenshotBlob;if(generation!==issueGeneration)return;const fd=new FormData();fd.append('description',description||'Voice recording attached for review.');fd.append('issue_type',document.getElementById('issueType')?.value||'bug_problem');fd.append('page_name',issuePageName);fd.append('page_url',location.href);fd.append('viewport',`${window.innerWidth} × ${window.innerHeight}`);fd.append('app_version','206');fd.append('user_agent',navigator.userAgent+' | Photo Notes web 206 | '+((window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches)||navigator.standalone?'installed web app':'browser'));if(screenshot)fd.append('screenshot',screenshot,'issue-screen.jpg');if(issueVoiceBlob)fd.append('voice',issueVoiceBlob,issueVoiceBlob.type.includes('webm')?'issue-voice.webm':'issue-voice.m4a');const r=await api('/api/issues',{method:'POST',body:fd});const d=await r.json().catch(()=>({}));if(generation!==issueGeneration)return;if(!r.ok)throw new Error();st.textContent=d.email_status==='sent'?`Issue #${d.id} sent. Thank you.`:`Issue #${d.id} saved. Thank you.`;btn.textContent='Sent';setTimeout(()=>{if(generation===issueGeneration)closeIssueReporter();},1800);}catch(e){if(generation!==issueGeneration)return;st.textContent='The report could not be sent. Check your connection and try again.';btn.disabled=false;btn.textContent='Send Issue Report';}
+  try{const screenshot=issueMarkupEditor?await issueMarkupEditor.exportBlob():issueScreenshotBlob;if(generation!==issueGeneration)return;const fd=new FormData();fd.append('description',description||'Voice recording attached for review.');if(issueTestingContext){fd.append('testing_assignment_id',issueTestingContext.assignmentId);fd.append('testing_step_id',issueTestingContext.stepId);}fd.append('issue_type',document.getElementById('issueType')?.value||'bug_problem');fd.append('page_name',issuePageName);fd.append('page_url',location.href);fd.append('viewport',`${window.innerWidth} × ${window.innerHeight}`);fd.append('app_version','207');fd.append('user_agent',navigator.userAgent+' | Photo Notes web 207 | '+((window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches)||navigator.standalone?'installed web app':'browser'));if(screenshot)fd.append('screenshot',screenshot,'issue-screen.jpg');if(issueVoiceBlob)fd.append('voice',issueVoiceBlob,issueVoiceBlob.type.includes('webm')?'issue-voice.webm':'issue-voice.m4a');const r=await api('/api/issues',{method:'POST',body:fd});const d=await r.json().catch(()=>({}));if(generation!==issueGeneration)return;if(!r.ok)throw new Error();st.textContent=d.email_status==='sent'?`Issue #${d.id} sent. Thank you.`:`Issue #${d.id} saved. Thank you.`;btn.textContent='Sent';setTimeout(()=>{if(generation===issueGeneration)closeIssueReporter();},1800);}catch(e){if(generation!==issueGeneration)return;st.textContent='The report could not be sent. Check your connection and try again.';btn.disabled=false;btn.textContent='Send Issue Report';}
 }
 
 function issueReporterMarkup(){return `<a id="issueUpdates" class="issue-updates" href="/?issues=1" hidden data-html2canvas-ignore="true"></a>    <div class="issue-modal" id="issueModal" hidden data-html2canvas-ignore="true">
@@ -185,11 +188,13 @@ async function refreshIssueAttention(){
   try{
     const r=await api('/api/issues/attention');if(!r.ok)return;const d=await r.json();
     if(profile&&profile===document.getElementById('profileButton')){
-      const badge=document.getElementById('testerAlert'),menu=document.getElementById('myIssues');
-      if(badge)badge.hidden=!d.ready_count;
+      const badge=document.getElementById('testerAlert'),menu=document.getElementById('myIssues'),hub=document.getElementById('myAssignment');
+      const attention=await api('/api/testing/attention').then(r=>r.ok?r.json():{}).catch(()=>({}));
+      if(badge)badge.hidden=!(d.ready_count||attention.new_count);
       profile.setAttribute('aria-label',typeof uiT==='function'?uiT(d.ready_count?'Account menu: fix ready to retest':'Account menu'):'Account menu');
       if(typeof state!=='undefined'&&state.me)state.me.is_tester=!!d.is_tester;
-      if(menu)menu.textContent=typeof uiT==='function'?uiT(d.is_tester?'Testing Hub':'My Issue Reports'):(d.is_tester?'Testing Hub':'My Issue Reports');
+      if(menu)menu.hidden=!!d.is_tester;
+      if(hub){hub.hidden=!(d.is_tester||attention.open_count||state.me?.role==='admin');hub.textContent=(typeof uiT==='function'?uiT('Testing Hub'):'Testing Hub')+(attention.new_count?' ('+attention.new_count+')':'');}
     }
     if(link){link.hidden=!d.count;link.textContent=`Issue updates (${d.count})`;link.setAttribute('aria-label',`${d.count} issue reports need your attention`);}
   }catch(e){}

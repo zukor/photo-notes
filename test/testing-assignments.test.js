@@ -1,35 +1,6 @@
-const test = require('node:test');
-const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const path = require('node:path');
-
-const root = path.join(__dirname, '..');
-const read = file => fs.readFileSync(path.join(root, file), 'utf8');
-
-test('testing assignments are persisted and seeded for four named testers', () => {
-  const db = read('db.js');
-  assert.match(db, /CREATE TABLE IF NOT EXISTS testing_assignments/);
-  for (const name of ['Jose', 'Rolando', 'Ahsan', 'Gabby']) assert.match(db, new RegExp(`name:'${name}'`));
-  assert.match(db, /completed_step_ids/);
-  assert.match(read('server.js'), /testing_assignment_submitted/);
-});
-
-test('tester checklist and completion APIs are authenticated', () => {
-  const server = read('server.js');
-  assert.match(server, /\/api\/testing\/assignments\/mine', requireAuth/);
-  assert.match(server, /\/api\/testing\/assignments\/:id\/progress', requireAuth/);
-  assert.match(server, /\/api\/testing\/assignments\/:id\/submit', requireAuth/);
-  assert.match(server, /complete every checklist item before submitting/);
-  assert.match(server, /\/api\/admin\/testing-assignments', requireAdmin/);
-});
-
-test('Basic and general Pro account menus expose assignment UI and admin shows live progress', () => {
-  const app = read('public/app.js');
-  const admin = read('public/admin.html');
-  assert.match(app, /My Testing Assignment/);
-  assert.match(app, /isBasicClient\(\)\|\|isGeneralProClient\(\)/);
-  assert.match(app, /Submit Assignment Complete/);
-  assert.match(app, /data-assignment-check/);
-  assert.match(admin, /Testing Assignments/);
-  assert.match(admin, /Checklist progress/);
-});
+const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs');
+const {validateDraft,validateResults,counts}=require('../testing-hub');
+const draft={...require('../testing-road-draft.json'),edition:'roads',assignee_ids:[2,3]};
+test('bilingual Road Issue Reporter draft has stable steps and independent selected testers',()=>{const d=validateDraft(draft);assert.equal(d.steps.length,10);assert.deepEqual(d.assignee_ids,[2,3]);assert.ok(d.steps.every(s=>s.instruction_es&&s.title_es));assert.throws(()=>validateDraft({...draft,steps:[draft.steps[0],draft.steps[0]]}));assert.throws(()=>validateDraft({...draft,edition:'wrong'}));assert.throws(()=>validateDraft({...draft,assignee_ids:['2']}));});
+test('completion checkmarks never imply passed and failed results remain failures on submission',()=>{const a={steps:draft.steps,completed_step_ids:draft.steps.map(s=>s.id),results:{'road-1':{status:'failed',notes:'Did not work'},'road-2':{status:'blocked',notes:'Permission unavailable'},'road-3':{status:'passed',notes:''}}};assert.deepEqual(counts(a),{not_tested:7,passed:1,failed:1,blocked:1});assert.equal(validateResults(a,{results:a.results,device:'Android'}).results['road-1'].status,'failed');assert.throws(()=>validateResults(a,{results:{missing:{status:'passed'}}}));assert.throws(()=>validateResults(a,{results:{'road-1':{status:'complete'}}}));});
+test('every edition routes to the hub before edition-specific screens',()=>{const s=fs.readFileSync('public/app.js','utf8');assert.ok(s.indexOf("else if (state.view === 'my-assignment')")<s.indexOf("else if (isRoadIssuesClient())"));assert.match(s,/PhotoNotesTesting.renderTester/);assert.match(fs.readFileSync('public/admin.html','utf8'),/PhotoNotesTesting.renderAdmin/);});
