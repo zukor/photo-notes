@@ -10,41 +10,50 @@ async function captureIssueScreenshot(quality=.78){
   if(!window.html2canvas)throw Error('Screenshot capture is unavailable');
   const width=window.innerWidth,height=window.innerHeight;
   const scale=Math.min(window.devicePixelRatio||1,1.5,Math.sqrt(4000000/(width*height)));
-  const canvas=await window.html2canvas(document.documentElement,{useCORS:true,allowTaint:false,backgroundColor:'#ffffff',width,height,x:window.scrollX,y:window.scrollY,scrollX:window.scrollX,scrollY:window.scrollY,scale,logging:false});
-  try{const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',quality));if(!blob)throw Error('Screenshot could not be encoded');return blob;}
-  finally{canvas.width=0;canvas.height=0;}
+  let timer;
+  const capture=(async()=>{
+    const canvas=await window.html2canvas(document.documentElement,{useCORS:true,allowTaint:false,backgroundColor:'#ffffff',width,height,x:window.scrollX,y:window.scrollY,scrollX:window.scrollX,scrollY:window.scrollY,scale,logging:false,imageTimeout:5000});
+    try{const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',quality));if(!blob)throw Error('Screenshot could not be encoded');return blob;}
+    finally{canvas.width=0;canvas.height=0;}
+  })();
+  try{return await Promise.race([capture,new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('Screenshot capture timed out')),8000);})]);}
+  finally{clearTimeout(timer);}
 }
 async function openIssueReporter(testingContext=null) {
   closeIssueReporter();
   issueTestingContext=testingContext?.assignmentId?testingContext:null;
   const generation=issueGeneration;
-  const fab=document.getElementById('issueFab'); if(fab){fab.disabled=true;fab.textContent='Capturing...';}
-  issuePageName=typeof adminIssuePageName==='function'?adminIssuePageName():(issuePageLabels[state.view]||state.view||'Photo Notes'); issueScreenshotBlob=null;issueVoiceBlob=null;
+  const fab=document.getElementById('issueFab');
+  issuePageName=typeof adminIssuePageName==='function'?adminIssuePageName():(typeof state!=='undefined'?(issuePageLabels[state.view]||state.view||'Photo Notes'):'Photo Notes'); issueScreenshotBlob=null;issueVoiceBlob=null;
   const send=document.getElementById('issueSend'),description=document.getElementById('issueDescription'),status=document.getElementById('issueStatus');
   if(send){send.disabled=false;send.textContent='Send Issue Report';}
   if(description)description.value='';for(const id of ['issueAction','issueExpected','issueFrequency']){const field=document.getElementById(id);if(field)field.value='';}
   if(status)status.textContent='';
   const type=document.getElementById('issueType');if(type)type.value='bug_problem';
-  try {
-    const shot=await captureIssueScreenshot();if(generation===issueGeneration)issueScreenshotBlob=shot;
-  } catch(e){if(generation===issueGeneration)issueScreenshotBlob=null;}
   const preview=document.getElementById('issueScreenshot');
-  if(preview&&generation===issueGeneration){preview.hidden=!issueScreenshotBlob;if(issueScreenshotBlob){issueScreenshotURL=URL.createObjectURL(issueScreenshotBlob);preview.src=issueScreenshotURL;}}
   const modal=document.getElementById('issueModal'); if(!modal||generation!==issueGeneration)return; modal.hidden=false;
   const record=document.getElementById('issueRecord');record.disabled=false;record.classList.remove('on');record.textContent=isIOS()?'Record Voice Description':'Speak Description';
 
-  document.getElementById('issueShotStatus').textContent=issueScreenshotBlob?'':'Screenshot unavailable; your description will still be saved';
+  document.getElementById('issueShotStatus').textContent=uiPushText('Capturing this page...');
   document.getElementById('issueClose').onclick=closeIssueReporter;
   document.getElementById('issueRecord').onclick=toggleIssueDictation;
   document.getElementById('issueSend').onclick=submitIssueReport;
   if(issueTestingContext){document.getElementById('issueAction').value=issueTestingContext.title+' / '+issueTestingContext.stepTitle;document.getElementById('issueExpected').value=issueTestingContext.instruction;document.getElementById('issueDescription').value=issueTestingContext.notes||'';}
   document.getElementById('issueClose').focus();
-  if(issueScreenshotBlob&&typeof IssueMarkup!=='undefined'){const host=document.getElementById('issueMarkup');host.hidden=false;preview.hidden=true;issueMarkupEditor=IssueMarkup.create(host,issueScreenshotBlob);issueMarkupEditor.ready.catch(()=>{if(generation===issueGeneration){issueMarkupEditor?.destroy();issueMarkupEditor=null;host.hidden=true;preview.hidden=false;}});document.getElementById('issueMarkupRetake').onclick=retakeIssueScreenshot;}
   if(fab){fab.disabled=false;fab.textContent=issueFabLabel();}
+  // Let the dialog paint before screenshot rendering does any expensive work.
+  if(window.requestAnimationFrame)await new Promise(resolve=>window.requestAnimationFrame(()=>window.requestAnimationFrame(resolve)));
+  if(generation!==issueGeneration)return;
+  try {
+    const shot=await captureIssueScreenshot();if(generation!==issueGeneration)return;issueScreenshotBlob=shot;
+  } catch(e){if(generation!==issueGeneration)return;issueScreenshotBlob=null;}
+  if(preview){preview.hidden=!issueScreenshotBlob;if(issueScreenshotBlob){issueScreenshotURL=URL.createObjectURL(issueScreenshotBlob);preview.src=issueScreenshotURL;}}
+  document.getElementById('issueShotStatus').textContent=issueScreenshotBlob?'':uiPushText('Screenshot unavailable; your description will still be saved');
+  if(issueScreenshotBlob&&typeof IssueMarkup!=='undefined'){const host=document.getElementById('issueMarkup');host.hidden=false;preview.hidden=true;issueMarkupEditor=IssueMarkup.create(host,issueScreenshotBlob);issueMarkupEditor.ready.catch(()=>{if(generation===issueGeneration){issueMarkupEditor?.destroy();issueMarkupEditor=null;host.hidden=true;preview.hidden=false;}});document.getElementById('issueMarkupRetake').onclick=retakeIssueScreenshot;}
 }
 async function retakeIssueScreenshot(){
  if(issueMarkupEditor?.hasMarks()&&!confirm('Retake the screenshot and clear its markup?'))return;
- const generation=issueGeneration,modal=document.getElementById('issueModal'),button=document.getElementById('issueMarkupRetake');button.disabled=true;modal.hidden=true;
+ const generation=issueGeneration,modal=document.getElementById('issueModal'),button=document.getElementById('issueMarkupRetake');button.disabled=true;
  try{const blob=await captureIssueScreenshot(.92);if(generation!==issueGeneration)return;if(!blob)throw Error();issueMarkupEditor?.destroy();issueScreenshotBlob=blob;modal.hidden=false;issueMarkupEditor=IssueMarkup.create(document.getElementById('issueMarkup'),blob);await issueMarkupEditor.ready;document.getElementById('issueMarkupRetake').onclick=retakeIssueScreenshot;
  }catch(e){if(generation===issueGeneration)document.getElementById('issueShotStatus').textContent='Could not retake the screenshot. The previous screenshot is retained.';}
  finally{if(generation===issueGeneration){modal.hidden=false;button.disabled=false;}}
@@ -158,7 +167,7 @@ async function submitIssueReport(){
   const description=[action&&`Trying to do: ${action}`,whatHappened&&`What happened: ${whatHappened}`,expected&&`Expected: ${expected}`,frequency&&`Frequency: ${frequency}`].filter(Boolean).join('\n');
   if(!whatHappened&&!issueVoiceBlob){st.textContent='Please type what went wrong or attach a voice recording before sending.';ta.focus();return;}
   btn.disabled=true;btn.textContent='Sending...';st.textContent='Saving your report...';
-  try{const screenshot=issueMarkupEditor?await issueMarkupEditor.exportBlob():issueScreenshotBlob;if(generation!==issueGeneration)return;const fd=new FormData();fd.append('description',description||'Voice recording attached for review.');if(issueTestingContext){fd.append('testing_assignment_id',issueTestingContext.assignmentId);fd.append('testing_step_id',issueTestingContext.stepId);}fd.append('issue_type',document.getElementById('issueType')?.value||'bug_problem');fd.append('page_name',issuePageName);fd.append('page_url',location.href);fd.append('viewport',`${window.innerWidth} × ${window.innerHeight}`);fd.append('app_version','227');fd.append('user_agent',navigator.userAgent+' | Photo Notes web 227 | '+((window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches)||navigator.standalone?'installed web app':'browser'));if(screenshot)fd.append('screenshot',screenshot,'issue-screen.jpg');if(issueVoiceBlob)fd.append('voice',issueVoiceBlob,issueVoiceBlob.type.includes('webm')?'issue-voice.webm':'issue-voice.m4a');const r=await api('/api/issues',{method:'POST',body:fd});const d=await r.json().catch(()=>({}));if(generation!==issueGeneration)return;if(!r.ok)throw new Error();st.textContent=d.email_status==='sent'?`Issue #${d.id} sent. Thank you.`:`Issue #${d.id} saved. Thank you.`;btn.textContent='Sent';setTimeout(()=>{if(generation===issueGeneration)closeIssueReporter();},1800);}catch(e){if(generation!==issueGeneration)return;st.textContent='The report could not be sent. Check your connection and try again.';btn.disabled=false;btn.textContent='Send Issue Report';}
+  try{const screenshot=issueMarkupEditor?await issueMarkupEditor.exportBlob():issueScreenshotBlob;if(generation!==issueGeneration)return;const fd=new FormData();fd.append('description',description||'Voice recording attached for review.');if(issueTestingContext){fd.append('testing_assignment_id',issueTestingContext.assignmentId);fd.append('testing_step_id',issueTestingContext.stepId);}fd.append('issue_type',document.getElementById('issueType')?.value||'bug_problem');fd.append('page_name',issuePageName);fd.append('page_url',location.href);fd.append('viewport',`${window.innerWidth} × ${window.innerHeight}`);fd.append('app_version','228');fd.append('user_agent',navigator.userAgent+' | Photo Notes web 228 | '+((window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches)||navigator.standalone?'installed web app':'browser'));if(screenshot)fd.append('screenshot',screenshot,'issue-screen.jpg');if(issueVoiceBlob)fd.append('voice',issueVoiceBlob,issueVoiceBlob.type.includes('webm')?'issue-voice.webm':'issue-voice.m4a');const r=await api('/api/issues',{method:'POST',body:fd});const d=await r.json().catch(()=>({}));if(generation!==issueGeneration)return;if(!r.ok)throw new Error();st.textContent=d.email_status==='sent'?`Issue #${d.id} sent. Thank you.`:`Issue #${d.id} saved. Thank you.`;btn.textContent='Sent';setTimeout(()=>{if(generation===issueGeneration)closeIssueReporter();},1800);}catch(e){if(generation!==issueGeneration)return;st.textContent='The report could not be sent. Check your connection and try again.';btn.disabled=false;btn.textContent='Send Issue Report';}
 }
 
 function issueReporterMarkup(){return `<a id="issueUpdates" class="issue-updates" href="/?issues=1" hidden data-html2canvas-ignore="true"></a>    <div class="issue-modal" id="issueModal" hidden data-html2canvas-ignore="true">

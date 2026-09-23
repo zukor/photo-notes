@@ -25,7 +25,7 @@ function harness({ios=true,pending=false}={}){
     window:{MediaRecorder:Recorder,SpeechRecognition:Speech,innerWidth:390,innerHeight:844},
     document:{getElementById:id=>elements[id]||=( {value:'',hidden:false,disabled:false,textContent:'',removeAttribute(k){delete this[k];},focus(){},classList:{add(){},remove(){}}}),querySelector:()=>({})},
     state:{view:'capture'},isIOS:()=>ios,uiSpeechLanguage:()=> 'en-US',issueFabLabel:()=> 'Report Issue',
-    toast(){},location:{href:'https://example.test/'},
+    uiPushText:text=>text,toast(){},location:{href:'https://example.test/'},
     setTimeout:fn=>{timers.push(fn);return timers.length;},clearTimeout(){},
     api:async(url,options)=>{requests.push(options.body);return {ok:true,json:async()=>({id:1})};}
   });
