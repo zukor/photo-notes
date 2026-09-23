@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Photo Notes — Admin</title>
   <meta name="theme-color" content="#1d4ed8" />
-  <link rel="stylesheet" href="/styles.css?v=224" />
+  <link rel="stylesheet" href="/styles.css?v=225" />
   <script src="/vendor/html2canvas.min.js?v=59"></script>
   <script src="/issue-markup.js?v=200"></script>
-  <script src="/issue-reporter.js?v=224"></script>
+  <script src="/issue-reporter.js?v=225"></script>
   <style>
     .stat { display:inline-block; min-width:84px; margin:4px 14px 4px 0; vertical-align:top; }
     .stat .n { font-size:19px; font-weight:bold; color:var(--pn-text-000,#000); }
@@ -50,7 +50,7 @@
     .issue-screenshot { margin:10px 0; color:var(--pn-text-000,#000); }
     .issue-screenshot summary { cursor:pointer; font-weight:bold; padding:8px 0; }
     .issue-screenshot[open] .show-screenshot, .issue-screenshot:not([open]) .hide-screenshot { display:none; }
-    .issue-admin-card img { width:180px; max-height:224px; object-fit:cover; object-position:top; margin:0; border:1px solid var(--pn-border-aaa,#aaa); border-radius:6px; }
+    .issue-admin-card img { width:180px; max-height:225px; object-fit:cover; object-position:top; margin:0; border:1px solid var(--pn-border-aaa,#aaa); border-radius:6px; }
     .issue-description { white-space:pre-wrap; line-height:1.4; margin:8px 0; }
     .issue-help { margin:10px 0; color:var(--pn-text-000,#000); text-align:left; }
     .issue-help > summary { cursor:pointer; font-weight:bold; padding:10px 0; }
@@ -149,9 +149,9 @@
     .delete-user-panel h3 { margin-top:0; }
     .delete-user-panel .btn { margin:10px 8px 0 0; }
   </style>
-  <link rel="stylesheet" href="/testing-hub.css?v=224">
-  <script src="/testing-hub.js?v=224"></script>
-<link rel="stylesheet" href="/theme.css?v=224"><script src="/theme.js?v=224"></script></head>
+  <link rel="stylesheet" href="/testing-hub.css?v=225">
+  <script src="/testing-hub.js?v=225"></script>
+<link rel="stylesheet" href="/theme.css?v=225"><script src="/theme.js?v=225"></script></head>
 <body>
   <div id="app"></div>
   <script>
@@ -565,7 +565,7 @@
       const df=(document.getElementById('issueDeviceFilter')||{}).value||'all';
       const closed=new Set(['resolved','wont_fix','tester_confirmed']);
       const scope=allIssues.filter(i=>matchesIssueType(i,category)&&(pf==='all'||(i.priority||'normal')===pf)&&(tf==='all'||String(i.user_id)===tf)&&(df==='all'||issueDevice(i).key===df));
-      const rows=scope.filter(i=>sf==='all'||(sf==='open'&&!closed.has(i.management_status||'new')&&!issueHasDeployedFix(i))||i.management_status===sf);
+      const rows=scope.filter(i=>sf==='all'||(sf==='open'&&!closed.has(i.management_status||'new')&&!issueHasDeployedFix(i))||(sf==='resolved'&&i.management_status==='tester_confirmed')||i.management_status===sf);
       const direction=document.getElementById('issueDateSort').value==='oldest'?1:-1;
       rows.sort((a,b)=>{
         const ad=Date.parse(a.created_at),bd=Date.parse(b.created_at);
