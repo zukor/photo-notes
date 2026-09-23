@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Photo Notes — Admin</title>
   <meta name="theme-color" content="#1d4ed8" />
-  <link rel="stylesheet" href="/styles.css?v=214" />
+  <link rel="stylesheet" href="/styles.css?v=215" />
   <script src="/vendor/html2canvas.min.js?v=59"></script>
   <script src="/issue-markup.js?v=200"></script>
-  <script src="/issue-reporter.js?v=214"></script>
+  <script src="/issue-reporter.js?v=215"></script>
   <style>
     .stat { display:inline-block; min-width:84px; margin:4px 14px 4px 0; vertical-align:top; }
     .stat .n { font-size:19px; font-weight:bold; color:var(--pn-text-000,#000); }
@@ -107,7 +107,7 @@
     .wrap { max-width:1080px; }
     [hidden] { display:none !important; }
     .users-heading { display:flex; gap:20px; align-items:center; justify-content:space-between; margin:24px 0 18px; }
-    .users-heading h1 { margin:0 0 5px; font-size:30px; text-align:left; }
+    .admin-page-title { margin:24px 0 18px; font-size:30px; text-align:center; }
     .users-heading > div,.user-list-copy,.user-list-copy strong { text-align:left; }
     .users-heading .btn { width:auto; flex:none; margin:0; }
     .user-list-tools { display:grid; grid-template-columns:1fr 210px; gap:14px; margin-bottom:16px; }
@@ -149,9 +149,9 @@
     .delete-user-panel h3 { margin-top:0; }
     .delete-user-panel .btn { margin:10px 8px 0 0; }
   </style>
-  <link rel="stylesheet" href="/testing-hub.css?v=214">
-  <script src="/testing-hub.js?v=214"></script>
-<link rel="stylesheet" href="/theme.css?v=214"><script src="/theme.js?v=214"></script></head>
+  <link rel="stylesheet" href="/testing-hub.css?v=215">
+  <script src="/testing-hub.js?v=215"></script>
+<link rel="stylesheet" href="/theme.css?v=215"><script src="/theme.js?v=215"></script></head>
 <body>
   <div id="app"></div>
   <script>
@@ -421,8 +421,9 @@
             </div>
           </div>
 
-          <section id="usersSection" aria-labelledby="usersHeading">
-            <div class="users-heading"><div><h1 id="usersHeading">Users</h1><p class="helper">Select a user to edit their details, password, and version access.</p></div><button class="btn" type="button" id="addUser" aria-expanded="false" aria-controls="createUserPanel">Add User</button></div>
+          <h1 class="admin-page-title">Admin</h1>
+          <details id="usersSection" class="admin-section"><summary id="usersHeading">Users</summary><div class="admin-section-body">
+            <div class="users-heading"><div><p class="helper">Select a user to edit their details, password, and version access.</p></div><button class="btn" type="button" id="addUser" aria-expanded="false" aria-controls="createUserPanel">Add User</button></div>
             <div id="createUserPanel" class="admin-panel" hidden>          <h2>Create User</h2>
           <div class="helper">Create access for a person. First name, last name, email, and password are required; industry is optional.</div>
           <label for="cname">First and Last Name</label><input id="cname" type="text" placeholder="First and last name" autocomplete="name" />
@@ -440,7 +441,7 @@
 <button class="btn secondary" type="button" id="cancelCreate">Cancel</button></div>
             <div id="userListTools" class="user-list-tools"><label for="userSearch">Find a user<input id="userSearch" type="search" placeholder="Search name or email"></label><label for="sortsel">Sort<select id="sortsel"><option value="name">Name (A–Z)</option><option value="active">Recently active</option><option value="newest">Newest login</option><option value="captures">Most captures</option></select></label></div>
             <div id="users" aria-live="polite"></div>
-          </section>
+          </div></details>
           <h2 class="admin-tools-heading">Admin Tools</h2>
 <details class="admin-section" data-admin-tool="issues"><summary>Issue Management Center</summary><div class="admin-section-body">
           <details class="issue-help"><summary>How reports are handled</summary>
