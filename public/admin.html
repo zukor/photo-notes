@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Photo Notes — Admin</title>
   <meta name="theme-color" content="#1d4ed8" />
-  <link rel="stylesheet" href="/styles.css?v=220" />
+  <link rel="stylesheet" href="/styles.css?v=221" />
   <script src="/vendor/html2canvas.min.js?v=59"></script>
   <script src="/issue-markup.js?v=200"></script>
-  <script src="/issue-reporter.js?v=220"></script>
+  <script src="/issue-reporter.js?v=221"></script>
   <style>
     .stat { display:inline-block; min-width:84px; margin:4px 14px 4px 0; vertical-align:top; }
     .stat .n { font-size:19px; font-weight:bold; color:var(--pn-text-000,#000); }
@@ -50,7 +50,7 @@
     .issue-screenshot { margin:10px 0; color:var(--pn-text-000,#000); }
     .issue-screenshot summary { cursor:pointer; font-weight:bold; padding:8px 0; }
     .issue-screenshot[open] .show-screenshot, .issue-screenshot:not([open]) .hide-screenshot { display:none; }
-    .issue-admin-card img { width:180px; max-height:220px; object-fit:cover; object-position:top; margin:0; border:1px solid var(--pn-border-aaa,#aaa); border-radius:6px; }
+    .issue-admin-card img { width:180px; max-height:221px; object-fit:cover; object-position:top; margin:0; border:1px solid var(--pn-border-aaa,#aaa); border-radius:6px; }
     .issue-description { white-space:pre-wrap; line-height:1.4; margin:8px 0; }
     .issue-help { margin:10px 0; color:var(--pn-text-000,#000); text-align:left; }
     .issue-help > summary { cursor:pointer; font-weight:bold; padding:10px 0; }
@@ -149,9 +149,9 @@
     .delete-user-panel h3 { margin-top:0; }
     .delete-user-panel .btn { margin:10px 8px 0 0; }
   </style>
-  <link rel="stylesheet" href="/testing-hub.css?v=220">
-  <script src="/testing-hub.js?v=220"></script>
-<link rel="stylesheet" href="/theme.css?v=220"><script src="/theme.js?v=220"></script></head>
+  <link rel="stylesheet" href="/testing-hub.css?v=221">
+  <script src="/testing-hub.js?v=221"></script>
+<link rel="stylesheet" href="/theme.css?v=221"><script src="/theme.js?v=221"></script></head>
 <body>
   <div id="app"></div>
   <script>
@@ -462,8 +462,8 @@
             <div id="cloudWorkerDetail"><p class="helper">Loading background service status...</p></div>
           </details>
           <div class="issue-toolbar">
-            <label>Issue Type<select id="issueTypeFilter"><option value="all">All Report Types</option><option value="bug_problem">Bug/Problem</option><option value="ideas">All Ideas - Sam Review</option><option value="ui_improvement">UI Improvement</option><option value="feature_improvement">Feature Improvement Idea</option><option value="new_feature">New Feature Idea</option></select></label>
-            <label>Status Filter<select id="issueStatusFilter"><option value="open">All Unresolved Issues</option><option value="all">All Issues</option><option value="new">New</option><option value="reviewing">Reviewing</option><option value="fixing">Working</option><option value="testing">Testing</option><option value="blocked">Needs Sam Review / Information</option><option value="ready_to_test">Ready to Test</option><option value="tester_confirmed">Tester Confirmed</option><option value="resolved">Resolved</option><option value="wont_fix">Won’t Fix</option></select></label>
+            <label>Issue Type<select id="issueTypeFilter"><option value="all">All Report Types</option><option value="bug_problem" selected>Bug/Problem</option><option value="ideas">All Ideas - Sam Review</option><option value="ui_improvement">UI Improvement</option><option value="feature_improvement">Feature Improvement Idea</option><option value="new_feature">New Feature Idea</option></select></label>
+            <label>Status Filter<select id="issueStatusFilter"><option value="open">Unresolved - no verified fix</option><option value="all">All Issues</option><option value="new">New</option><option value="reviewing">Reviewing</option><option value="fixing">Working</option><option value="testing">Testing</option><option value="blocked">Needs Sam Review / Information</option><option value="ready_to_test">Fix Deployed - Awaiting Retest</option><option value="tester_confirmed">Tester Confirmed</option><option value="resolved">Resolved</option><option value="wont_fix">Won’t Fix</option></select></label>
             <label>Priority Filter<select id="issuePriorityFilter"><option value="all">All Priorities</option><option value="urgent">Urgent</option><option value="high">High</option><option value="normal">Normal</option><option value="low">Low</option></select></label>
             <label>Tester Filter<select id="issueTesterFilter"><option value="all">All Testers</option></select></label>
             <label>Device Filter<select id="issueDeviceFilter"><option value="all">All Devices</option><option value="android">Android</option><option value="ios">iPhone / iPad</option><option value="desktop">Desktop</option><option value="unknown">Unknown</option></select></label>
@@ -565,7 +565,7 @@
       const df=(document.getElementById('issueDeviceFilter')||{}).value||'all';
       const closed=new Set(['resolved','wont_fix','tester_confirmed']);
       const scope=allIssues.filter(i=>matchesIssueType(i,category)&&(pf==='all'||(i.priority||'normal')===pf)&&(tf==='all'||String(i.user_id)===tf)&&(df==='all'||issueDevice(i).key===df));
-      const rows=scope.filter(i=>sf==='all'||(sf==='open'&&!closed.has(i.management_status||'new'))||i.management_status===sf);
+      const rows=scope.filter(i=>sf==='all'||(sf==='open'&&!closed.has(i.management_status||'new')&&!issueHasDeployedFix(i))||i.management_status===sf);
       const direction=document.getElementById('issueDateSort').value==='oldest'?1:-1;
       rows.sort((a,b)=>{
         const ad=Date.parse(a.created_at),bd=Date.parse(b.created_at);
@@ -573,7 +573,7 @@
         return direction*(ad-bd||Number(a.id)-Number(b.id));
       });
       const counts=issueCounts(scope);
-      document.getElementById('issueSummary').innerHTML=`<span class="pill basic">${counts.work} problems need work</span><span class="pill basic">${counts.blocked} problems need Sam review / information</span><span class="pill basic">${counts.ideas} ideas for Sam review</span><span class="pill basic">${counts.awaiting} awaiting retest</span><span class="pill pro">${counts.resolved} resolved</span>${counts.closed?`<span class="pill basic">${counts.closed} closed without a fix</span>`:''}<span class="pill ${counts.urgent?'role':'basic'}">${counts.urgent} urgent</span>`;
+      document.getElementById('issueSummary').innerHTML=`<span class="pill basic">${counts.work} unresolved bugs</span><span class="pill basic">${counts.blocked} awaiting technical review</span><span class="pill basic">${counts.ideas} ideas for Sam review</span><span class="pill basic">${counts.awaiting} fixes deployed - awaiting retest</span><span class="pill pro">${counts.resolved} resolved</span>${counts.closed?`<span class="pill basic">${counts.closed} closed without a fix</span>`:''}<span class="pill ${counts.urgent?'role':'basic'}">${counts.urgent} urgent</span>`;
       box.innerHTML=rows.length?rows.map(issueCard).join(''):'<p class="helper">No issue reports match these filters.</p>';
       for(const issue of rows.filter(i=>i.voice_path)){
         const save=box.querySelector(`[data-issue-save="${issue.id}"]`);if(!save)continue;
@@ -597,10 +597,18 @@
       if(!text)return issue.voice_path?'Voice report attached':'No written description';
       return text.length>180?text.slice(0,177).replace(/\s+\S*$/,'')+'...':text;
     }
+    function issueHasDeployedFix(i){return i.management_status==='ready_to_test'&&!!i.verification&&!!i.release_reference;}
+    function issueOutcome(i){
+      if(['resolved','tester_confirmed'].includes(i.management_status))return 'Fixed';
+      if(i.management_status==='wont_fix')return 'Closed without a fix';
+      if(i.issue_type&&i.issue_type!=='bug_problem')return 'Idea - awaiting review';
+      if(issueHasDeployedFix(i))return 'Fix deployed - awaiting retest';
+      return 'Unresolved';
+    }
     function issueCard(i){
       const status=i.management_status||'new',priority=i.priority||'normal';
       const device=issueDevice(i);
-      return `<details class="card issue-admin-card"><summary><span class="user-title-row"><span class="userhead">Issue #${i.id}: ${esc(i.page_name||'Photo Notes')}</span><span class="pill ${status==='resolved'?'pro':priority==='urgent'?'role':'basic'}">${esc(status==='ready_to_test'&&(!i.verification||!i.release_reference)?'Ready status needs verification':issueStatusLabels[status]||status)}</span><span class="pill basic">${esc(issuePriorityLabels[priority]||priority)} Priority</span></span><span class="issue-headline">${esc(issueHeadline(i))}</span></summary><div class="issue-detail-body"><div class="muted">${esc(i.user_name||i.user_email)} · ${fdatetime(i.created_at)} · ${esc(i.viewport||'screen unknown')}<span class="issue-device">${esc(device.label)}</span></div><div class="meta">Issue Type: ${esc(issueTypeLabels[i.issue_type]||'Bug/Problem')}</div><div class="helper">${i.issue_type&&i.issue_type!=='bug_problem'?'Idea for Sam review. Excluded from automatic repair.':status==='blocked'?'Needs Sam review / information. Automatic repair is paused.':'Bug/Problem: automatic repair workflow.'}</div>${i.testing_assignment_id?`<p>Testing assignment #${i.testing_assignment_id} · Step ${esc(i.testing_step_id)}</p>`:''}<div class="issue-description">${esc(i.description)}</div>${i.screenshot_path?`<details class="issue-screenshot"><summary><span class="show-screenshot">Show Screenshot</span><span class="hide-screenshot">Hide Screenshot</span></summary><a href="${esc(i.screenshot_path)}" target="_blank" rel="noopener"><img loading="lazy" src="${esc(i.screenshot_path)}" alt="Issue ${i.id} screenshot"></a></details>`:''}<div class="muted">${esc(i.page_url||'')}</div><div class="issue-controls"><label>Status<select id="issue-status-${i.id}">${issueOptions(Object.keys(issueStatusLabels),issueStatusLabels,status)}</select></label><label>Priority<select id="issue-priority-${i.id}">${issueOptions(Object.keys(issuePriorityLabels),issuePriorityLabels,priority)}</select></label></div><label for="issue-fix-${i.id}">What Was Fixed</label><textarea class="issue-notes" id="issue-fix-${i.id}" placeholder="Short explanation the tester can understand">${esc(i.fix_summary||'')}</textarea><label for="issue-release-${i.id}">Release or Commit</label><input id="issue-release-${i.id}" value="${esc(i.release_reference||'')}" placeholder="Commit, deployment, or release reference"><label for="issue-retest-${i.id}">Retest Instructions</label><textarea class="issue-notes" id="issue-retest-${i.id}" placeholder="Exact steps the tester should repeat">${esc(i.retest_instructions||'')}</textarea><label for="issue-blocked-${i.id}">Question or Blocker Visible to Reporter</label><textarea class="issue-notes" id="issue-blocked-${i.id}" placeholder="What information is needed to continue?">${esc(i.blocked_reason||'')}</textarea><label for="issue-notes-${i.id}" style="margin-top:8px">Private Administrator Notes</label><textarea class="issue-notes" id="issue-notes-${i.id}" placeholder="Internal diagnosis and decisions">${esc(i.admin_notes||'')}</textarea><div class="muted">Original report email: ${esc(i.email_status||'pending')}${i.email_error?' · '+esc(i.email_error):''}<br>Tester notification: ${esc(i.tester_notification_status||'not sent')}${i.tester_notification_error?' · '+esc(i.tester_notification_error):''}${i.tester_notified_at?' · '+fdatetime(i.tester_notified_at):''}${i.tester_result?`<br>Retest result: ${i.tester_result==='fixed'?'Fixed':'Still happening'}${i.tester_retested_at?' · '+fdatetime(i.tester_retested_at):''}${i.tester_notes?' · '+esc(i.tester_notes):''}`:''}${i.updated_at?'<br>Last updated '+fdatetime(i.updated_at):''}</div><div class="issue-actions"><button class="btn" type="button" data-issue-save="${i.id}">Save Issue</button>${i.email_status!=='sent'?`<button class="btn secondary" type="button" data-issue-retry="${i.id}">Retry Email</button>`:''}</div></div></details>`;
+      return `<details class="card issue-admin-card"><summary><span class="user-title-row"><span class="userhead">Issue #${i.id}: ${esc(i.page_name||'Photo Notes')}</span><span class="pill basic">${esc(issueTypeLabels[i.issue_type]||'Bug/Problem')}</span><span class="pill issue-outcome">${esc(issueOutcome(i))}</span><span class="pill ${status==='resolved'?'pro':priority==='urgent'?'role':'basic'}">${esc(status==='ready_to_test'&&(!i.verification||!i.release_reference)?'Ready status needs verification':issueStatusLabels[status]||status)}</span><span class="pill basic">${esc(issuePriorityLabels[priority]||priority)} Priority</span></span><span class="issue-headline">${esc(issueHeadline(i))}</span></summary><div class="issue-detail-body"><div class="muted">${esc(i.user_name||i.user_email)} · ${fdatetime(i.created_at)} · ${esc(i.viewport||'screen unknown')}<span class="issue-device">${esc(device.label)}</span></div><div class="meta">Issue Type: ${esc(issueTypeLabels[i.issue_type]||'Bug/Problem')}</div><div class="helper">${i.issue_type&&i.issue_type!=='bug_problem'?'Idea for Sam review. Excluded from automatic repair.':status==='blocked'?'Needs Sam review / information. Automatic repair is paused.':'Bug/Problem: automatic repair workflow.'}</div>${i.testing_assignment_id?`<p>Testing assignment #${i.testing_assignment_id} · Step ${esc(i.testing_step_id)}</p>`:''}<div class="issue-description">${esc(i.description)}</div>${i.screenshot_path?`<details class="issue-screenshot"><summary><span class="show-screenshot">Show Screenshot</span><span class="hide-screenshot">Hide Screenshot</span></summary><a href="${esc(i.screenshot_path)}" target="_blank" rel="noopener"><img loading="lazy" src="${esc(i.screenshot_path)}" alt="Issue ${i.id} screenshot"></a></details>`:''}<div class="muted">${esc(i.page_url||'')}</div><div class="issue-controls"><label>Status<select id="issue-status-${i.id}">${issueOptions(Object.keys(issueStatusLabels),issueStatusLabels,status)}</select></label><label>Priority<select id="issue-priority-${i.id}">${issueOptions(Object.keys(issuePriorityLabels),issuePriorityLabels,priority)}</select></label></div><label for="issue-fix-${i.id}">What Was Fixed</label><textarea class="issue-notes" id="issue-fix-${i.id}" placeholder="Short explanation the tester can understand">${esc(i.fix_summary||'')}</textarea><label for="issue-release-${i.id}">Release or Commit</label><input id="issue-release-${i.id}" value="${esc(i.release_reference||'')}" placeholder="Commit, deployment, or release reference"><label for="issue-retest-${i.id}">Retest Instructions</label><textarea class="issue-notes" id="issue-retest-${i.id}" placeholder="Exact steps the tester should repeat">${esc(i.retest_instructions||'')}</textarea><label for="issue-blocked-${i.id}">Questions or blockers visible to tester</label><textarea class="issue-notes" id="issue-blocked-${i.id}" placeholder="What information is needed to continue?">${esc(i.blocked_reason||'')}</textarea><label for="issue-notes-${i.id}" style="margin-top:8px">Repair diagnostics and run history</label><p class="helper">Automatic repair attempts and technical investigation notes. An older failed attempt does not override the current issue status.</p><textarea class="issue-notes" id="issue-notes-${i.id}" placeholder="Automatic repair results and technical investigation notes">${esc((i.admin_notes||'').replaceAll('No successful repair is claimed.','This repair attempt did not verify a deployed fix. See the current status above.'))}</textarea><div class="muted">Original report email: ${esc(i.email_status||'pending')}${i.email_error?' · '+esc(i.email_error):''}<br>Tester notification: ${esc(i.tester_notification_status||'not sent')}${i.tester_notification_error?' · '+esc(i.tester_notification_error):''}${i.tester_notified_at?' · '+fdatetime(i.tester_notified_at):''}${i.tester_result?`<br>Retest result: ${i.tester_result==='fixed'?'Fixed':'Still happening'}${i.tester_retested_at?' · '+fdatetime(i.tester_retested_at):''}${i.tester_notes?' · '+esc(i.tester_notes):''}`:''}${i.updated_at?'<br>Last updated '+fdatetime(i.updated_at):''}</div><div class="issue-actions"><button class="btn" type="button" data-issue-save="${i.id}">Save Issue</button>${i.email_status!=='sent'?`<button class="btn secondary" type="button" data-issue-retry="${i.id}">Retry Email</button>`:''}</div></div></details>`;
     }
     function statusRows(rows){
       return '<dl class="issue-status-grid">'+rows.map(([label,value])=>`<dt>${esc(label)}</dt><dd>${esc(value)}</dd>`).join('')+'</dl>';
