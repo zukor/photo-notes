@@ -27,6 +27,12 @@
     "Undo": "Deshacer",
     "Zoom": "Zoom",
 
+    "Description added. Click to speak description to continue.": "Descripción añadida. Haz clic para dictar la descripción y continuar.",
+    "Click to speak description": "Haz clic para dictar la descripción",
+    "Describe the bug or problem": "Describe el error o problema",
+    "Describe the suggested UI improvement": "Describe la mejora sugerida de la interfaz",
+    "Describe the suggested feature improvement idea": "Describe la idea sugerida para mejorar una función",
+    "Describe the new feature idea": "Describe la idea para una nueva función",
     "Issue Type": "Tipo de reporte", "Bug/Problem": "Error/Problema", "UI Improvement": "Mejora de la interfaz", "Feature Improvement Idea": "Idea para mejorar una función", "New Feature Idea": "Idea para una nueva función",
     "Install Photo Notes on your device": "Instala Photo Notes en tu dispositivo",
     "Testing Hub": "Centro de pruebas",
