@@ -1,3 +1,4 @@
+const {isSuperAdmin}=require('./super-admin');
 const crypto=require('crypto'),path=require('path');
 const digest=value=>crypto.createHash('sha256').update(String(value||'')).digest('hex');
 const sha=value=>typeof value==='string'&&/^[a-f0-9]{40}$/.test(value);
@@ -60,9 +61,9 @@ function registerIssueRepair(app,{pool,requireAuth,requireAdmin,requireTestingQu
     }catch(e){res.status(500).json({error:'Issue count unavailable'});}
   });
   app.get('/api/issues/:id/history',requireAuth,async(req,res)=>{try{
-    const own=await pool.query('SELECT id FROM issue_reports WHERE id=$1 AND (user_id=$2 OR $3)',[req.params.id,req.user.id,req.user.role==='admin']);if(!own.rowCount)return res.status(404).json({error:'Issue not found'});
+    const own=await pool.query('SELECT id FROM issue_reports WHERE id=$1 AND (user_id=$2 OR $3)',[req.params.id,req.user.id,isSuperAdmin(req.user)]);if(!own.rowCount)return res.status(404).json({error:'Issue not found'});
     // Private admin notes stay within the admin view.
-    const {rows}=await pool.query('SELECT event,detail,created_at FROM issue_repair_events WHERE issue_id=$1 ORDER BY created_at',[req.params.id]);res.json(req.user.role==='admin'?rows:rows.map(r=>({event:r.event,created_at:r.created_at})));
+    const {rows}=await pool.query('SELECT event,detail,created_at FROM issue_repair_events WHERE issue_id=$1 ORDER BY created_at',[req.params.id]);res.json(isSuperAdmin(req.user)?rows:rows.map(r=>({event:r.event,created_at:r.created_at})));
   }catch(e){res.status(500).json({error:'History unavailable'});}});
   app.post('/api/issues/:id/details',requireAuth,async(req,res)=>{const detail=String(req.body?.details||'').trim();if(!detail||detail.length>5000)return res.status(400).json({error:'Enter 1–5,000 characters'});let client;
     try{client=await pool.connect();await client.query('BEGIN');const {rows}=await client.query("UPDATE issue_reports SET reporter_details=$1,management_status='new',blocked_reason=NULL,repair_claim_hash=NULL,repair_lease_until=NULL,updated_at=now() WHERE id=$2 AND user_id=$3 AND management_status='blocked' RETURNING id",[detail,req.params.id,req.user.id]);if(!rows.length){await client.query('ROLLBACK');return res.status(404).json({error:'Issue is not waiting for details'});}

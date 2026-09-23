@@ -14,7 +14,7 @@ const express=require('express');
  if(path==='/api/issues'&&route.request().method()==='POST'){sent=true;data={id:999,email_status:'sent'};}
  return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(data)});});
  await page.goto(`http://127.0.0.1:${server.address().port}/${role==='user'?'':'admin.html'}`);await page.locator('#issueFab').waitFor();
- if(role!=='user'){await page.locator('[data-admin-tool="issues"] > summary').click();await page.locator('.issue-admin-card').first().waitFor();}
+ if(role==='super'){await page.locator('[data-admin-tool="issues"] > summary').click();await page.locator('.issue-admin-card').first().waitFor();}
  await page.evaluate(()=>{window.html2canvas=async()=>{throw Error('Synthetic capture unavailable');};});
  await page.locator('#issueFab').dispatchEvent('click');await page.locator('#issueModal').waitFor();
  for(const width of [320,390,1440]){

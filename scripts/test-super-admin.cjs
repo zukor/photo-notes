@@ -21,15 +21,15 @@ const express=require('express');
  const labels=await page.locator('[data-admin-tool] > summary').allTextContents();
  assert(labels.includes('Users'));assert.deepEqual(labels,[...labels].sort((a,b)=>a.localeCompare(b,'en')));
  assert(await page.locator('.admin-tools-heading').evaluate(heading=>[...document.querySelectorAll('[data-admin-tool]')].every(tool=>!!(heading.compareDocumentPosition(tool)&Node.DOCUMENT_POSITION_FOLLOWING))));
- for(const tool of ['health','billing','activity'])assert.equal(await page.locator(`[data-admin-tool="${tool}"]`).count(),owner?1:0);
- assert.equal(await page.locator('.issue-diagnostics').count(),owner?1:0);
+ for(const tool of ['health','billing','activity','issues','system-status'])assert.equal(await page.locator(`[data-admin-tool="${tool}"]`).count(),owner?1:0);
+ assert.equal(await page.locator('.issue-diagnostics').count(),0);
  assert.equal(await page.locator('#addUser').count(),owner?1:0);
  assert.equal(await page.locator('[data-admin-tool="summary"]').count(),0);
  assert.equal(await page.locator('#userTotals').count(),owner?1:0);
  if(owner)assert.equal(await page.locator('#usersSection #userTotals').count(),1);
  assert.equal(await page.locator('#createUserPanel').count(),owner?1:0);
- await page.locator('[data-admin-tool="issues"] > summary').click();await page.locator('#issues .helper').waitFor();
- if(!owner)assert(!requests.some(path=>/\/(health|activity|repair-status|cloud-worker)$/.test(path)||path.includes('/billing/')));
+ if(owner){await page.locator('[data-admin-tool="issues"] > summary').click();await page.locator('#issues .helper').waitFor();assert(await page.getByRole('heading',{name:'How issue reports are handled'}).isVisible());assert.equal(await page.locator('[data-admin-tool="issues"] [data-admin-tool="system-status"]').count(),0);assert(!requests.includes('/api/admin/repair-status'));await page.locator('[data-admin-tool="system-status"] > summary').click();await page.waitForFunction(()=>document.querySelector('#repairWorkerStatus dl'));}
+ if(!owner)assert(!requests.some(path=>/\/(issues|health|activity|repair-status|cloud-worker)$/.test(path)||path.includes('/billing/')));
  await page.locator('#usersHeading').click();
  if(owner){await page.locator('#userTotals > summary').click();assert(await page.locator('#summary .card').isVisible());}
  await page.locator('[data-open-user="1"]').click();

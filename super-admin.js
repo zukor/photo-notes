@@ -9,7 +9,7 @@ function adminAccessBoundary(env=process.env){
   return (req,res,next)=>{
     let path;
     try{path=decodeURIComponent(req.path).toLowerCase();}catch{return res.status(400).json({error:'Invalid path'});}
-    const restricted=/^\/(?:billing(?:\/|$)|health\/?$|activity\/?$|repair-status\/?$|cloud-worker\/?$)/.test(path);
+    const restricted=/^\/(?:issues(?:\/|$)|billing(?:\/|$)|health\/?$|activity\/?$|repair-status\/?$|cloud-worker\/?$)/.test(path);
     const target=path.match(/^\/users\/([^/]+)(?:\/|$)/);
     const protectedAccount=target&&superAdminIds(env).has(String(parseInt(target[1],10)));
     const userRoute=/^\/users(?:\/|$)/.test(path);

@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Photo Notes — Admin</title>
   <meta name="theme-color" content="#1d4ed8" />
-  <link rel="stylesheet" href="/styles.css?v=235" />
+  <link rel="stylesheet" href="/styles.css?v=236" />
   <script src="/vendor/html2canvas.min.js?v=59"></script>
-  <script src="/issue-markup.js?v=235"></script>
-  <script src="/issue-reporter.js?v=235"></script>
+  <script src="/issue-markup.js?v=236"></script>
+  <script src="/issue-reporter.js?v=236"></script>
   <style>
     .stat { display:inline-block; min-width:84px; margin:4px 14px 4px 0; vertical-align:top; }
     .stat .n { font-size:19px; font-weight:bold; color:var(--pn-text-000,#000); }
@@ -149,9 +149,9 @@
     .delete-user-panel h3 { margin-top:0; }
     .delete-user-panel .btn { margin:10px 8px 0 0; }
   </style>
-  <link rel="stylesheet" href="/testing-hub.css?v=235">
-  <script src="/testing-hub.js?v=235"></script>
-<link rel="stylesheet" href="/theme.css?v=235"><script src="/theme.js?v=235"></script></head>
+  <link rel="stylesheet" href="/testing-hub.css?v=236">
+  <script src="/testing-hub.js?v=236"></script>
+<link rel="stylesheet" href="/theme.css?v=236"><script src="/theme.js?v=236"></script></head>
 <body>
   <div id="app"></div>
   <script>
@@ -452,15 +452,9 @@
             <div id="users" aria-live="polite"></div>
           </div></details>
 <details class="admin-section" data-admin-tool="issues"><summary>Issue Management Center</summary><div class="admin-section-body">
-          <details class="issue-help"><summary>How reports are handled</summary>
+          <section class="issue-help"><h3>How issue reports are handled</h3>
             <ul><li><strong>Bug/Problem:</strong> enters the automatic repair queue. Unclear fixes need Sam’s review.</li><li><strong>Ideas:</strong> UI improvements, feature improvements, and new features go to Sam for review.</li><li><strong>Tester updates:</strong> ready-to-test fixes and requests for details appear in the reporter’s app.</li></ul>
-          </details>
-          <p id="issueSystemNotice" class="issue-system-notice" role="status" hidden></p>
-          <details class="issue-help issue-diagnostics"><summary>System status</summary>
-            <p class="helper">Technical checks for automatic repairs and tester notifications. These describe the services, not the progress of an individual report.</p>
-            <div id="repairWorkerStatus"><p class="helper">Loading repair queue status...</p></div>
-            <div id="cloudWorkerDetail"><p class="helper">Loading background service status...</p></div>
-          </details>
+          </section>
           <div id="issueSummary" class="issue-summary"></div>
           <div class="issue-toolbar">
             <label>Issue Type<select id="issueTypeFilter"><option value="all">All Report Types</option><option value="bug_problem" selected>Bug/Problem</option><option value="ui_improvement">UI Improvement</option><option value="feature_improvement">Feature Improvement Idea</option><option value="new_feature">New Feature Idea</option></select></label>
@@ -472,6 +466,12 @@
           </div>
           <div id="issues"><p class="status">Loading...</p></div>
 
+
+</div></details><details class="admin-section" data-admin-tool="system-status"><summary>System Status</summary><div class="admin-section-body">          <p id="issueSystemNotice" class="issue-system-notice" role="status" hidden></p>
+
+            <p class="helper">Technical checks for automatic repairs and tester notifications. These describe the services, not the progress of an individual report.</p>
+            <div id="repairWorkerStatus"><p class="helper">Loading repair queue status...</p></div>
+            <div id="cloudWorkerDetail"><p class="helper">Loading background service status...</p></div>
 
 </div></details><details class="admin-section" data-admin-tool="testing"><summary>Testing Assignments</summary><div class="admin-section-body">
           <div class="helper">Create assignments, publish to individual testers, and review results and linked issues.</div>
@@ -496,7 +496,7 @@
                   </div>
         <button class="issue-fab" id="issueFab" type="button" data-html2canvas-ignore="true">Report Issue</button>
         ${issueReporterMarkup()}`;
-      if(!currentUser?.is_super_admin)document.querySelectorAll('[data-admin-tool="health"],[data-admin-tool="billing"],[data-admin-tool="activity"],.issue-diagnostics,#issueSystemNotice,#addUser,#createUserPanel,#userTotals').forEach(section=>section.remove());
+      if(!currentUser?.is_super_admin)document.querySelectorAll('[data-admin-tool="issues"],[data-admin-tool="system-status"],[data-admin-tool="health"],[data-admin-tool="billing"],[data-admin-tool="activity"],.issue-diagnostics,#issueSystemNotice,#addUser,#createUserPanel,#userTotals').forEach(section=>section.remove());
       const tools=[...document.querySelectorAll('[data-admin-tool]')];
       tools.sort((a,b)=>a.querySelector('summary').textContent.trim().localeCompare(b.querySelector('summary').textContent.trim(),'en',{sensitivity:'base'}));
       tools.forEach(tool=>tool.parentElement.appendChild(tool));
@@ -512,14 +512,16 @@
         document.getElementById('generatepass').onclick = generatePassword;
         document.getElementById('copypass').onclick = copyPassword;
       }
+      if(currentUser?.is_super_admin){
       document.getElementById('issueTypeFilter').onchange = renderIssues;
       document.getElementById('issueStatusFilter').onchange = renderIssues;
       document.getElementById('issuePriorityFilter').onchange = renderIssues;
       document.getElementById('issueTesterFilter').onchange = renderIssues;
       document.getElementById('issueDeviceFilter').onchange = renderIssues;
       document.getElementById('issueDateSort').onchange = renderIssues;
+      }
       document.getElementById('refreshAssignments').onclick = loadAssignments;
-      const toolLoaders={health:loadHealth,billing:loadStripeBilling,activity:loadActivity,issues:loadIssues,testing:loadAssignments};
+      const toolLoaders={'system-status':loadIssueSystemStatus,health:loadHealth,billing:loadStripeBilling,activity:loadActivity,issues:loadIssues,testing:loadAssignments};
       document.querySelectorAll('[data-admin-tool]').forEach(panel=>panel.ontoggle=()=>{if(panel.open&&!panel.dataset.loaded){panel.dataset.loaded='true';const load=toolLoaders[panel.dataset.adminTool];if(load)load();}});
       const createPanel=document.getElementById('createUserPanel'),add=document.getElementById('addUser');
       if(add&&createPanel){
@@ -639,10 +641,9 @@
       }else cloudBox.innerHTML='<p class="helper">Background service status is temporarily unavailable.</p>';
       const unavailable=results.some(r=>r.status==='rejected');
       notice.hidden=!attention&&!unavailable;
-      notice.textContent=attention?'Automatic repairs or notifications need attention. Open System status for details.':unavailable?'Some system checks are unavailable. Open System status for details.':'';
+      notice.textContent=attention?'Automatic repairs or notifications need attention. See the checks below for details.':unavailable?'Some system checks are unavailable. See the checks below for details.':'';
     }
     async function loadIssues(){
-      loadIssueSystemStatus();
       const box=document.getElementById('issues'); if(!box)return; box.innerHTML='<p class="status">Loading...</p>';
       try{const r=await api('/api/admin/issues');if(!r.ok)throw new Error();allIssues=await r.json();populateIssueFilters();renderIssues();}
       catch(e){box.innerHTML='<p class="status">Issue reports could not be loaded.</p>';}
