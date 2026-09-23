@@ -35,7 +35,7 @@ async function openIssueReporter(testingContext=null) {
   issuePageName=typeof adminIssuePageName==='function'?adminIssuePageName():(typeof state!=='undefined'?(issuePageLabels[state.view]||state.view||'Photo Notes'):'Photo Notes'); issueScreenshotBlob=null;issueVoiceBlob=null;
   const send=document.getElementById('issueSend'),description=document.getElementById('issueDescription'),status=document.getElementById('issueStatus');
   if(send){send.disabled=false;send.textContent='Send Issue Report';}
-  if(description)description.value='';for(const id of ['issueAction','issueExpected','issueFrequency']){const field=document.getElementById(id);if(field)field.value='';}
+  if(description)description.value='';for(const id of ['issueFrequency']){const field=document.getElementById(id);if(field)field.value='';}
   if(status)status.textContent='';
   const type=document.getElementById('issueType');if(type)type.value='bug_problem';
   const preview=document.getElementById('issueScreenshot');
@@ -46,7 +46,7 @@ async function openIssueReporter(testingContext=null) {
   document.getElementById('issueClose').onclick=closeIssueReporter;
   document.getElementById('issueRecord').onclick=toggleIssueDictation;
   document.getElementById('issueSend').onclick=submitIssueReport;
-  if(issueTestingContext){document.getElementById('issueAction').value=issueTestingContext.title+' / '+issueTestingContext.stepTitle;document.getElementById('issueExpected').value=issueTestingContext.instruction;document.getElementById('issueDescription').value=issueTestingContext.notes||'';}
+  if(issueTestingContext){document.getElementById('issueDescription').value=issueTestingContext.notes||'';}
   document.getElementById('issueClose').focus();
   if(fab){fab.disabled=false;fab.textContent=issueFabLabel();}
   // Let the dialog paint before screenshot rendering does any expensive work.
@@ -171,11 +171,11 @@ async function submitIssueReport(){
 
   issueDictationActive=false;if(issueDictationRestartTimer)clearTimeout(issueDictationRestartTimer);if(issueDictationWatchdog)clearTimeout(issueDictationWatchdog);issueDictationRestartTimer=null;issueDictationWatchdog=null;
   if(issueRecognizer){try{issueRecognizer.stop();}catch(e){}}
-  const ta=document.getElementById('issueDescription'),whatHappened=ta.value.trim(),action=document.getElementById('issueAction').value.trim(),expected=document.getElementById('issueExpected').value.trim(),frequency=document.getElementById('issueFrequency').value,btn=document.getElementById('issueSend'),st=document.getElementById('issueStatus');
-  const description=[action&&`Trying to do: ${action}`,whatHappened&&`What happened: ${whatHappened}`,expected&&`Expected: ${expected}`,frequency&&`Frequency: ${frequency}`].filter(Boolean).join('\n');
+  const ta=document.getElementById('issueDescription'),whatHappened=ta.value.trim(),frequency=document.getElementById('issueFrequency').value,btn=document.getElementById('issueSend'),st=document.getElementById('issueStatus');
+  const description=[whatHappened&&`What happened: ${whatHappened}`,frequency&&`Frequency: ${frequency}`].filter(Boolean).join('\n');
   if(!whatHappened&&!issueVoiceBlob){st.textContent='Please type what went wrong or attach a voice recording before sending.';ta.focus();return;}
   btn.disabled=true;btn.textContent='Sending...';st.textContent='Saving your report...';
-  try{const screenshot=issueMarkupEditor?await issueMarkupEditor.exportBlob():issueScreenshotBlob;if(generation!==issueGeneration)return;const fd=new FormData();fd.append('description',description||'Voice recording attached for review.');if(issueTestingContext){fd.append('testing_assignment_id',issueTestingContext.assignmentId);fd.append('testing_step_id',issueTestingContext.stepId);}fd.append('issue_type',document.getElementById('issueType')?.value||'bug_problem');fd.append('page_name',issuePageName);fd.append('page_url',location.href);fd.append('viewport',`${window.innerWidth} × ${window.innerHeight}`);fd.append('app_version','230');fd.append('user_agent',navigator.userAgent+' | Photo Notes web 230 | '+((window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches)||navigator.standalone?'installed web app':'browser'));if(screenshot)fd.append('screenshot',screenshot,'issue-screen.jpg');if(issueVoiceBlob)fd.append('voice',issueVoiceBlob,issueVoiceBlob.type.includes('webm')?'issue-voice.webm':'issue-voice.m4a');const r=await api('/api/issues',{method:'POST',body:fd});const d=await r.json().catch(()=>({}));if(generation!==issueGeneration)return;if(!r.ok)throw new Error();st.textContent=d.email_status==='sent'?`Issue #${d.id} sent. Thank you.`:`Issue #${d.id} saved. Thank you.`;btn.textContent='Sent';setTimeout(()=>{if(generation===issueGeneration)closeIssueReporter();},1800);}catch(e){if(generation!==issueGeneration)return;st.textContent='The report could not be sent. Check your connection and try again.';btn.disabled=false;btn.textContent='Send Issue Report';}
+  try{const screenshot=issueMarkupEditor?await issueMarkupEditor.exportBlob():issueScreenshotBlob;if(generation!==issueGeneration)return;const fd=new FormData();fd.append('description',description||'Voice recording attached for review.');if(issueTestingContext){fd.append('testing_assignment_id',issueTestingContext.assignmentId);fd.append('testing_step_id',issueTestingContext.stepId);}fd.append('issue_type',document.getElementById('issueType')?.value||'bug_problem');fd.append('page_name',issuePageName);fd.append('page_url',location.href);fd.append('viewport',`${window.innerWidth} × ${window.innerHeight}`);fd.append('app_version','231');fd.append('user_agent',navigator.userAgent+' | Photo Notes web 231 | '+((window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches)||navigator.standalone?'installed web app':'browser'));if(screenshot)fd.append('screenshot',screenshot,'issue-screen.jpg');if(issueVoiceBlob)fd.append('voice',issueVoiceBlob,issueVoiceBlob.type.includes('webm')?'issue-voice.webm':'issue-voice.m4a');const r=await api('/api/issues',{method:'POST',body:fd});const d=await r.json().catch(()=>({}));if(generation!==issueGeneration)return;if(!r.ok)throw new Error();st.textContent=d.email_status==='sent'?`Issue #${d.id} sent. Thank you.`:`Issue #${d.id} saved. Thank you.`;btn.textContent='Sent';setTimeout(()=>{if(generation===issueGeneration)closeIssueReporter();},1800);}catch(e){if(generation!==issueGeneration)return;st.textContent='The report could not be sent. Check your connection and try again.';btn.disabled=false;btn.textContent='Send Issue Report';}
 }
 
 function issueReporterMarkup(){return `<a id="issueUpdates" class="issue-updates" href="/?issues=1" hidden data-html2canvas-ignore="true"></a>    <div class="issue-modal" id="issueModal" hidden data-html2canvas-ignore="true">
@@ -183,13 +183,9 @@ function issueReporterMarkup(){return `<a id="issueUpdates" class="issue-updates
         <button class="issue-close" id="issueClose" type="button" aria-label="Close">×</button>
         <h2 id="issueTitle">Report Issue</h2><div class="issue-report-layout"><section class="issue-report-fields">
         <label for="issueType">Issue Type</label><select id="issueType"><option value="bug_problem">Bug/Problem</option><option value="ui_improvement">UI Improvement</option><option value="feature_improvement">Feature Improvement Idea</option><option value="new_feature">New Feature Idea</option></select>
-        <label for="issueAction">What were you trying to do?</label>
-        <input id="issueAction" type="text" placeholder="For example: record a note after taking a photo">
         <label for="issueDescription">What went wrong?</label>
         <button class="btn" id="issueRecord" type="button">Speak Description</button>
         <textarea id="issueDescription" placeholder="Describe the problem in detail..."></textarea>
-        <label for="issueExpected">What did you expect to happen?</label>
-        <input id="issueExpected" type="text" placeholder="Tell us what should have happened">
         <label for="issueFrequency">How often does it happen?</label>
         <select id="issueFrequency"><option value="">Choose one</option><option>Every time</option><option>Sometimes</option><option>Only happened once</option><option>Not sure</option></select>
         <section class="issue-evidence"><h3>Page screenshot</h3>${typeof IssueMarkup!=='undefined'?IssueMarkup.markup():''}<div class="issue-screenshot-scroll"><img id="issueScreenshot" alt="Screenshot of the page being reported" hidden></div><div class="status" id="issueShotStatus" role="status"></div></section>

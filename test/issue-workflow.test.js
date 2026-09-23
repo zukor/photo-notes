@@ -9,9 +9,9 @@ const server=fs.readFileSync(path.join(__dirname,'..','server.js'),'utf8');
 const db=fs.readFileSync(path.join(__dirname,'..','db.js'),'utf8');
 
 test('tester report form collects structured reproduction details and automatic context',()=>{
-  for(const id of ['issueAction','issueDescription','issueExpected','issueFrequency'])assert.match(app,new RegExp(`id="${id}"`));
+  for(const id of ['issueDescription','issueFrequency'])assert.match(app,new RegExp(`id="${id}"`));
   assert.match(app,/page_name/);assert.match(app,/user_agent/);assert.match(app,/issueScreenshotBlob/);
-  assert.match(app,/Trying to do:/);assert.match(app,/What happened:/);assert.match(app,/Expected:/);assert.match(app,/Frequency:/);
+  assert.match(app,/What happened:/);assert.match(app,/Frequency:/);
 });
 
 test('iPhone issue reports attach a real voice recording instead of relying on short Safari recognition sessions',()=>{
