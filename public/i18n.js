@@ -28,7 +28,8 @@
     "Zoom": "Zoom",
 
     "Description added. Click to speak description to continue.": "Descripción añadida. Haz clic para dictar la descripción y continuar.",
-    "Click to speak description": "Haz clic para dictar la descripción",
+    "Click To Speak Description": "Haz Clic Para Dictar La Descripción",
+    "Describe issue": "Describe el asunto", "DESCRIBE ISSUE": "DESCRIBE EL ASUNTO",
     "Describe the bug or problem": "Describe el error o problema",
     "Describe the suggested UI improvement": "Describe la mejora sugerida de la interfaz",
     "Describe the suggested feature improvement idea": "Describe la idea sugerida para mejorar una función",
