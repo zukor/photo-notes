@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Photo Notes — Admin</title>
   <meta name="theme-color" content="#1d4ed8" />
-  <link rel="stylesheet" href="/styles.css?v=240" />
+  <link rel="stylesheet" href="/styles.css?v=241" />
   <script src="/vendor/html2canvas.min.js?v=59"></script>
-  <script src="/issue-markup.js?v=240"></script>
-  <script src="/issue-reporter.js?v=240"></script>
+  <script src="/issue-markup.js?v=241"></script>
+  <script src="/issue-reporter.js?v=241"></script>
   <style>
     .stat { display:inline-block; min-width:84px; margin:4px 14px 4px 0; vertical-align:top; }
     .stat .n { font-size:19px; font-weight:bold; color:var(--pn-text-000,#000); }
@@ -149,9 +149,9 @@
     .delete-user-panel h3 { margin-top:0; }
     .delete-user-panel .btn { margin:10px 8px 0 0; }
   </style>
-  <link rel="stylesheet" href="/testing-hub.css?v=240">
-  <script src="/testing-hub.js?v=240"></script>
-<link rel="stylesheet" href="/theme.css?v=240"><script src="/theme.js?v=240"></script></head>
+  <link rel="stylesheet" href="/testing-hub.css?v=241">
+  <script src="/testing-hub.js?v=241"></script>
+<link rel="stylesheet" href="/theme.css?v=241"><script src="/theme.js?v=241"></script></head>
 <body>
   <div id="app"></div>
   <script>
@@ -420,7 +420,6 @@
                   <div class="profile-email">${esc((currentUser && currentUser.email) || '')}</div>
                   <div class="profile-plan">${currentUser && currentUser.pro_type==='roads' ? 'Road Issue Reporter' : currentUser && currentUser.plan === 'pro' ? (currentUser.pro_type==='general'?'Photo Notes Pro':currentUser.pro_type==='contractor'?'General Contractor Pro':currentUser.pro_type==='hoa'?'HOA Maintenance Pro':currentUser.pro_type==='concrete'?'Concrete Pro':currentUser.pro_type==='roofer'?'Roofer Pro':'Paving Pro') : 'Basic Plan'} · Administrator</div>
                   <a href="/admin?view=admin">Admin Dashboard</a>
-                  <a href="/">Open Photo Notes</a>
                   ${accountIsSuperAdmin?'<a href="/admin?view=super">Super Admin Dashboard</a>':''}
                   <button type="button" id="signout">Sign Out</button>
                 </div>
