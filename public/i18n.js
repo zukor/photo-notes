@@ -1,6 +1,8 @@
 (function () {
   const STORAGE_KEY = 'photo-notes-language';
   const ES = {
+    'Show issues':'Mostrar reportes', 'Open issues':'Reportes abiertos', 'Closed issues':'Reportes cerrados', 'All issues':'Todos los reportes',
+    'No open issues.':'No hay reportes abiertos.', 'No closed issues.':'No hay reportes cerrados.',
     'Light mode':'Modo claro', 'Dark mode':'Modo oscuro', 'Appearance':'Apariencia',
     "Delete Selected": "Eliminar selección", "Line": "Línea",
     "What were you trying to do?": "¿Qué intentaba hacer?",
