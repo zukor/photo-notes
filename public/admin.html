@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Photo Notes — Admin</title>
   <meta name="theme-color" content="#1d4ed8" />
-  <link rel="stylesheet" href="/styles.css?v=225" />
+  <link rel="stylesheet" href="/styles.css?v=226" />
   <script src="/vendor/html2canvas.min.js?v=59"></script>
   <script src="/issue-markup.js?v=200"></script>
-  <script src="/issue-reporter.js?v=225"></script>
+  <script src="/issue-reporter.js?v=226"></script>
   <style>
     .stat { display:inline-block; min-width:84px; margin:4px 14px 4px 0; vertical-align:top; }
     .stat .n { font-size:19px; font-weight:bold; color:var(--pn-text-000,#000); }
@@ -149,9 +149,9 @@
     .delete-user-panel h3 { margin-top:0; }
     .delete-user-panel .btn { margin:10px 8px 0 0; }
   </style>
-  <link rel="stylesheet" href="/testing-hub.css?v=225">
-  <script src="/testing-hub.js?v=225"></script>
-<link rel="stylesheet" href="/theme.css?v=225"><script src="/theme.js?v=225"></script></head>
+  <link rel="stylesheet" href="/testing-hub.css?v=226">
+  <script src="/testing-hub.js?v=226"></script>
+<link rel="stylesheet" href="/theme.css?v=226"><script src="/theme.js?v=226"></script></head>
 <body>
   <div id="app"></div>
   <script>
@@ -573,7 +573,7 @@
         return direction*(ad-bd||Number(a.id)-Number(b.id));
       });
       const counts=issueCounts(scope);
-      document.getElementById('issueSummary').innerHTML=`<span class="pill basic">${counts.work} unresolved bugs</span><span class="pill basic">${counts.blocked} awaiting technical review</span><span class="pill basic">${counts.ideas} ideas for Sam review</span><span class="pill basic">${counts.awaiting} fixes deployed - awaiting retest</span><span class="pill pro">${counts.resolved} resolved</span>${counts.closed?`<span class="pill basic">${counts.closed} closed without a fix</span>`:''}<span class="pill ${counts.urgent?'role':'basic'}">${counts.urgent} urgent</span>`;
+      document.getElementById('issueSummary').innerHTML=`<span class="pill basic">${counts.work} unresolved bugs</span><span class="pill basic">${counts.blocked} awaiting technical review</span><span class="pill basic">${counts.ideas} ideas for Sam review</span><span class="pill basic">${counts.awaiting} fixes deployed - awaiting retest</span><span class="pill basic">${counts.resolved} resolved</span>${counts.closed?`<span class="pill basic">${counts.closed} closed without a fix</span>`:''}<span class="pill ${counts.urgent?'role':'basic'}">${counts.urgent} urgent</span>`;
       box.innerHTML=rows.length?rows.map(issueCard).join(''):'<p class="helper">No issue reports match these filters.</p>';
       for(const issue of rows.filter(i=>i.voice_path)){
         const save=box.querySelector(`[data-issue-save="${issue.id}"]`);if(!save)continue;
