@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Photo Notes — Admin</title>
   <meta name="theme-color" content="#1d4ed8" />
-  <link rel="stylesheet" href="/styles.css?v=219" />
+  <link rel="stylesheet" href="/styles.css?v=220" />
   <script src="/vendor/html2canvas.min.js?v=59"></script>
   <script src="/issue-markup.js?v=200"></script>
-  <script src="/issue-reporter.js?v=219"></script>
+  <script src="/issue-reporter.js?v=220"></script>
   <style>
     .stat { display:inline-block; min-width:84px; margin:4px 14px 4px 0; vertical-align:top; }
     .stat .n { font-size:19px; font-weight:bold; color:var(--pn-text-000,#000); }
@@ -149,9 +149,9 @@
     .delete-user-panel h3 { margin-top:0; }
     .delete-user-panel .btn { margin:10px 8px 0 0; }
   </style>
-  <link rel="stylesheet" href="/testing-hub.css?v=219">
-  <script src="/testing-hub.js?v=219"></script>
-<link rel="stylesheet" href="/theme.css?v=219"><script src="/theme.js?v=219"></script></head>
+  <link rel="stylesheet" href="/testing-hub.css?v=220">
+  <script src="/testing-hub.js?v=220"></script>
+<link rel="stylesheet" href="/theme.css?v=220"><script src="/theme.js?v=220"></script></head>
 <body>
   <div id="app"></div>
   <script>
@@ -468,7 +468,6 @@
             <label>Tester Filter<select id="issueTesterFilter"><option value="all">All Testers</option></select></label>
             <label>Device Filter<select id="issueDeviceFilter"><option value="all">All Devices</option><option value="android">Android</option><option value="ios">iPhone / iPad</option><option value="desktop">Desktop</option><option value="unknown">Unknown</option></select></label>
             <label for="issueDateSort"><span>Date reported</span><select id="issueDateSort" aria-label="Date reported"><option value="newest">Newest first</option><option value="oldest">Oldest first</option></select></label>
-            <button class="btn secondary" id="refreshIssues" type="button" style="margin:0" title="Reload the latest reports and system status">Refresh reports</button>
           </div>
           <div id="issueSummary" class="issue-summary"></div>
           <div id="issues"><p class="status">Loading...</p></div>
@@ -519,7 +518,6 @@
       document.getElementById('issueTesterFilter').onchange = renderIssues;
       document.getElementById('issueDeviceFilter').onchange = renderIssues;
       document.getElementById('issueDateSort').onchange = renderIssues;
-      document.getElementById('refreshIssues').onclick = loadIssues;
       document.getElementById('refreshAssignments').onclick = loadAssignments;
       const toolLoaders={health:loadHealth,billing:loadStripeBilling,activity:loadActivity,issues:loadIssues,testing:loadAssignments};
       document.querySelectorAll('[data-admin-tool]').forEach(panel=>panel.ontoggle=()=>{if(panel.open&&!panel.dataset.loaded){panel.dataset.loaded='true';const load=toolLoaders[panel.dataset.adminTool];if(load)load();}});
