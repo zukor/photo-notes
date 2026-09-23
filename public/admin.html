@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Photo Notes — Admin</title>
   <meta name="theme-color" content="#1d4ed8" />
-  <link rel="stylesheet" href="/styles.css?v=217" />
+  <link rel="stylesheet" href="/styles.css?v=218" />
   <script src="/vendor/html2canvas.min.js?v=59"></script>
   <script src="/issue-markup.js?v=200"></script>
-  <script src="/issue-reporter.js?v=217"></script>
+  <script src="/issue-reporter.js?v=218"></script>
   <style>
     .stat { display:inline-block; min-width:84px; margin:4px 14px 4px 0; vertical-align:top; }
     .stat .n { font-size:19px; font-weight:bold; color:var(--pn-text-000,#000); }
@@ -149,9 +149,9 @@
     .delete-user-panel h3 { margin-top:0; }
     .delete-user-panel .btn { margin:10px 8px 0 0; }
   </style>
-  <link rel="stylesheet" href="/testing-hub.css?v=217">
-  <script src="/testing-hub.js?v=217"></script>
-<link rel="stylesheet" href="/theme.css?v=217"><script src="/theme.js?v=217"></script></head>
+  <link rel="stylesheet" href="/testing-hub.css?v=218">
+  <script src="/testing-hub.js?v=218"></script>
+<link rel="stylesheet" href="/theme.css?v=218"><script src="/theme.js?v=218"></script></head>
 <body>
   <div id="app"></div>
   <script>
@@ -424,7 +424,8 @@
           </div>
 
           <h1 class="admin-page-title">${currentUser?.is_super_admin?'Super Admin':'Admin'}</h1>
-          <details id="usersSection" class="admin-section"><summary id="usersHeading">Users</summary><div class="admin-section-body">
+          <h2 class="admin-tools-heading">Admin Tools</h2>
+          <details id="usersSection" class="admin-section" data-admin-tool="users"><summary id="usersHeading">Users</summary><div class="admin-section-body">
             <div class="users-heading"><div><p class="helper">${currentUser?.is_super_admin?'Select a user to edit their details, password, and version access.':'Select a user to view their details and change version access.'}</p></div><button class="btn" type="button" id="addUser" aria-expanded="false" aria-controls="createUserPanel">Add User</button></div>
             <div id="createUserPanel" class="admin-panel" hidden>          <h2>Create User</h2>
           <div class="helper">Create access for a person. First name, last name, email, and password are required; industry is optional.</div>
@@ -444,7 +445,6 @@
             <div id="userListTools" class="user-list-tools"><label for="userSearch">Find a user<input id="userSearch" type="search" placeholder="Search name or email"></label><label for="sortsel">Sort<select id="sortsel"><option value="name">Name (A–Z)</option><option value="active">Recently active</option><option value="newest">Newest login</option><option value="captures">Most captures</option></select></label></div>
             <div id="users" aria-live="polite"></div>
           </div></details>
-          <h2 class="admin-tools-heading">Admin Tools</h2>
 <details class="admin-section" data-admin-tool="issues"><summary>Issue Management Center</summary><div class="admin-section-body">
           <details class="issue-help"><summary>How reports are handled</summary>
             <ul><li><strong>Bug/Problem:</strong> enters the automatic repair queue. Unclear fixes need Sam’s review.</li><li><strong>Ideas:</strong> UI improvements, feature improvements, and new features go to Sam for review.</li><li><strong>Tester updates:</strong> ready-to-test fixes and requests for details appear in the reporter’s app.</li></ul>
@@ -496,6 +496,9 @@
         <button class="issue-fab" id="issueFab" type="button" data-html2canvas-ignore="true">Report Issue</button>
         ${issueReporterMarkup()}`;
       if(!currentUser?.is_super_admin)document.querySelectorAll('[data-admin-tool="health"],[data-admin-tool="billing"],[data-admin-tool="activity"],.issue-diagnostics,#issueSystemNotice,#addUser,#createUserPanel').forEach(section=>section.remove());
+      const tools=[...document.querySelectorAll('[data-admin-tool]')];
+      tools.sort((a,b)=>a.querySelector('summary').textContent.trim().localeCompare(b.querySelector('summary').textContent.trim(),'en',{sensitivity:'base'}));
+      tools.forEach(tool=>tool.parentElement.appendChild(tool));
       document.getElementById('issueFab').onclick=openIssueReporter;
       refreshIssueAttention();
       const profileButton=document.getElementById('profileButton');
