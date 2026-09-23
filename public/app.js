@@ -777,7 +777,7 @@ async function saveCameraReading() {
   if(document.getElementById('readerSave')!==btn)return;if(!r.ok)throw new Error();toast('Record saved');setPavingToolBusy([],false);renderCameraReader();}catch(e){if(document.getElementById('readerSave')===btn){toast('Record could not be saved');btn.disabled=false;btn.textContent='Save Record';}}finally{if(document.getElementById('readerSave')===btn)setPavingToolBusy(['readerTake','readerChoose'],false);}
 }
 async function loadCameraReadings() {
-  const box=document.getElementById('readerSaved'); if(!box)return; try{const r=await api(`/api/camera-readings?type=${cameraReaderType}`);if(!r.ok)throw new Error();const rows=await r.json();box.innerHTML=rows.length?`<div class="camera-reading-list">${rows.map(x=>`<article class="card camera-reading-card">${x.photo_path?`<img src="${photoSrc(x.photo_path)}" alt="Source">`:''}<div><strong>${esc(x.title||'Untitled record')}</strong>${Object.entries(x.fields||{}).filter(([,v])=>v).slice(0,4).map(([k,v])=>`<div class="meta"><span>${esc(k.replaceAll('_',' '))}:</span> ${esc(v)}</div>`).join('')}</div></article>`).join('')}</div>`:'<p class="empty">No saved records yet.</p>'; }catch(e){box.innerHTML='<p class="status">Saved records could not be loaded.</p>';}
+  const box=document.getElementById('readerSaved'); if(!box)return; try{const r=await api(`/api/camera-readings?type=${cameraReaderType}`);if(!r.ok)throw new Error();const rows=await r.json();box.innerHTML=rows.length?`<div class="camera-reading-list">${rows.map(x=>`<article class="card camera-reading-card">${x.photo_path?`<img src="${photoSrc(x.photo_path)}" alt="Source">`:''}<div><strong>${esc(x.title||'Untitled record')}</strong>${Object.entries(x.fields||{}).filter(([,v])=>v).map(([k,v])=>`<div class="meta"><span>${esc(k.replaceAll('_',' '))}:</span> ${esc(v)}</div>`).join('')}</div></article>`).join('')}</div>`:'<p class="empty">No saved records yet.</p>'; }catch(e){box.innerHTML='<p class="status">Saved records could not be loaded.</p>';}
 }
 
 let alignmentBefore=null, alignmentAfterFile=null, alignmentCaptures=[], alignmentPairedIds=new Set();
@@ -1198,7 +1198,7 @@ function dimBlockHtml() {
   return `
     <label>Measure From Photo</label>
     <button type="button" class="btn secondary slim" id="measureBtn">Measure From Photo (AI)</button>
-    <div class="status" id="measureHint">Lay the ruler flat on the pavement next to the damage and shoot from directly above.</div>
+    <div class="status" id="measureHint">Before using AI, check this photo: a ruler, tape measure, or another object of known length must already be visible beside the area being measured. Selecting a reference below does not add it to the image. If this photo has no reference, enter Dimensions manually.</div>
     <div id="measurePanel"></div>
     <div id="measureResult"></div>
 
