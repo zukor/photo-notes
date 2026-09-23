@@ -20,14 +20,15 @@ const express=require('express');
  for(const width of [320,390,1440]){
  await page.setViewportSize({width,height:1000});
  for(const [type,label] of Object.entries({bug_problem:'Describe the bug or problem',ui_improvement:'Describe the suggested UI improvement',feature_improvement:'Describe the suggested feature improvement idea',new_feature:'Describe the new feature idea'})){
- await page.locator('#issueType').selectOption(type);assert.equal(await page.locator('#issueDescriptionLabel').textContent(),label);
- assert.equal(await page.locator('#issueDescription').getAttribute('placeholder'),label);
+ await page.locator('#issueType').selectOption(type);assert.equal(await page.locator('#issueDescriptionLabel').textContent(),'DESCRIBE ISSUE');
+ assert.equal(await page.locator('#issueDescription').getAttribute('placeholder'),'Describe issue');
  const heading=await page.locator('#issueDescriptionLabel').boundingBox(),button=await page.locator('#issueRecord').boundingBox(),field=await page.locator('#issueDescription').boundingBox();
  assert(button.x>=heading.x+heading.width,'speech control must be right of label');assert(button.width<field.width/2,'speech control is compact');assert(heading.y<field.y&&button.y<field.y,'heading and speech control above textarea');
  }
  }
- assert.equal(await page.locator('#issueRecord').textContent(),'Click to speak description');
- if(role==='user'){await page.evaluate(()=>photoNotesI18n.setLanguage('es'));await page.locator('#issueType').selectOption('bug_problem');assert.equal(await page.locator('#issueDescriptionLabel').textContent(),'Describe el error o problema');}
+ assert.deepEqual(await page.locator('#issueRecord').evaluate(el=>[getComputedStyle(el).backgroundColor,getComputedStyle(el).color]),['rgb(29, 78, 216)','rgb(255, 255, 255)']);
+ assert.equal(await page.locator('#issueRecord').textContent(),'Click To Speak Description');
+ if(role==='user'){await page.evaluate(()=>photoNotesI18n.setLanguage('es'));await page.locator('#issueType').selectOption('bug_problem');assert.equal(await page.locator('#issueDescriptionLabel').textContent(),'DESCRIBE EL ASUNTO');}
  assert.deepEqual(errors,[]);
  await page.close();console.log(engine.name(),role,'description heading PASS');
  }
