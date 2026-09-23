@@ -64,6 +64,7 @@ textarea { min-height: 96px; resize: vertical; }
 .photo-notes-box { min-height:64px; padding:10px 12px; border:1px solid var(--pn-border-000,#000); border-radius:8px; background:var(--pn-bg-fff,#fff); line-height:1.4; white-space:pre-wrap; overflow-wrap:anywhere; }
 .photo-notes-panel .editnote { display:inline-flex; width:auto; margin:6px 0 0; }
 .tester-issue-card { margin-bottom:14px; }
+#myIssueFilter { min-height:44px; font:inherit; margin-bottom:16px; }
 .tester-issue-head { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
 .tester-issue-head .badge { flex:0 0 auto; text-align:center; }
 .issue-fix-summary,.issue-retest { margin-top:12px; padding:12px; border:1px solid var(--pn-border-1d4ed8,#1d4ed8); border-radius:9px; background:var(--pn-bg-f4f7ff,#f4f7ff); }
