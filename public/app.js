@@ -1179,7 +1179,7 @@ function dimBlockHtml() {
   return `
     <label>Measure From Photo</label>
     <button type="button" class="btn secondary slim" id="measureBtn">Measure From Photo (AI)</button>
-    <div class="status" id="measureHint">Lay the ruler flat on the pavement next to the damage and shoot from directly above.</div>
+    <div class="status" id="measureHint">Before using AI, check this photo: a ruler, tape measure, or another object of known length must already be visible beside the area being measured. Selecting a reference below does not add it to the image. If this photo has no reference, enter Dimensions manually.</div>
     <div id="measurePanel"></div>
     <div id="measureResult"></div>
 
