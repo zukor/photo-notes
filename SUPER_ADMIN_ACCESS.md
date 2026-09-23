@@ -7,3 +7,5 @@ Only Super Admin accounts can access System Health, Stripe Invoicing, Administra
 All admin routes targeting a configured Super Admin account, including edits, password resets, version access and deletion, are denied to other accounts. The normal user editor cannot assign Super Admin membership. To grant it, an authorized deployment operator must verify the user's identity and ID, update `SUPER_ADMIN_USER_IDS`, and deploy. Never configure IDs from an unverified request.
 
 Production initially grants membership only to Samuel Turcotte's verified existing account. No user database migration is needed. Browser checks: `node scripts/test-super-admin.cjs`. Server authorization tests: `node --test test/super-admin.test.js`.
+
+Only Super Admin can create users or change account details, passwords, roles, active status, tester permissions, or feature settings, or delete users. Regular admins can view users and update version access through POST `/api/admin/users/:id/versions`, except for protected Super Admin accounts. All other user mutation routes are denied by default.

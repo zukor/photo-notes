@@ -12,7 +12,11 @@ function adminAccessBoundary(env=process.env){
     const restricted=/^\/(?:billing(?:\/|$)|health\/?$|activity\/?$|repair-status\/?$|cloud-worker\/?$)/.test(path);
     const target=path.match(/^\/users\/([^/]+)(?:\/|$)/);
     const protectedAccount=target&&superAdminIds(env).has(String(parseInt(target[1],10)));
-    if((restricted||protectedAccount)&&!isSuperAdmin(req.user,env))return res.status(403).json({error:'Super Admin access required'});
+    const userRoute=/^\/users(?:\/|$)/.test(path);
+    const versionUpdate=req.method==='POST'&&/^\/users\/[^/]+\/versions\/?$/.test(path);
+    const userMutation=userRoute&&!['GET','HEAD','OPTIONS'].includes(req.method)&&!versionUpdate;
+    const deletionPreview=userRoute&&/\/deletion\/?$/.test(path);
+    if((restricted||protectedAccount||userMutation||deletionPreview)&&!isSuperAdmin(req.user,env))return res.status(403).json({error:'Super Admin access required'});
     if(req.body&&Object.prototype.hasOwnProperty.call(req.body,'is_super_admin'))return res.status(403).json({error:'Super Admin membership is managed in server configuration'});
     next();
   };

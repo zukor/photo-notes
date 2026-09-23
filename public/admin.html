@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Photo Notes — Admin</title>
   <meta name="theme-color" content="#1d4ed8" />
-  <link rel="stylesheet" href="/styles.css?v=216" />
+  <link rel="stylesheet" href="/styles.css?v=217" />
   <script src="/vendor/html2canvas.min.js?v=59"></script>
   <script src="/issue-markup.js?v=200"></script>
-  <script src="/issue-reporter.js?v=216"></script>
+  <script src="/issue-reporter.js?v=217"></script>
   <style>
     .stat { display:inline-block; min-width:84px; margin:4px 14px 4px 0; vertical-align:top; }
     .stat .n { font-size:19px; font-weight:bold; color:var(--pn-text-000,#000); }
@@ -149,9 +149,9 @@
     .delete-user-panel h3 { margin-top:0; }
     .delete-user-panel .btn { margin:10px 8px 0 0; }
   </style>
-  <link rel="stylesheet" href="/testing-hub.css?v=216">
-  <script src="/testing-hub.js?v=216"></script>
-<link rel="stylesheet" href="/theme.css?v=216"><script src="/theme.js?v=216"></script></head>
+  <link rel="stylesheet" href="/testing-hub.css?v=217">
+  <script src="/testing-hub.js?v=217"></script>
+<link rel="stylesheet" href="/theme.css?v=217"><script src="/theme.js?v=217"></script></head>
 <body>
   <div id="app"></div>
   <script>
@@ -232,6 +232,7 @@
       }
       const user=allUsers.find(u=>u.id===selectedUserId);if(!user){selectedUserId=null;return renderUserList();}
       box.innerHTML='<button class="backlink" type="button" id="backToUsers">← All Users</button>'+userCard(user);
+      if(!currentUser?.is_super_admin)box.querySelectorAll('[data-super-admin-only]').forEach(section=>section.remove());
       document.getElementById('backToUsers').onclick=()=>showUser(null);
       box.querySelectorAll('[data-save-versions]').forEach(b=>b.onclick=()=>saveVersions(Number(b.dataset.saveVersions),b));
 
@@ -264,7 +265,7 @@
           <div class="muted">${esc(u.email)}${u.industry ? ' · Industry: ' + esc(u.industry) : ''}</div>
           <div class="muted">Joined ${fdate(u.created_at)} · Last login ${fdatetime(u.last_login_at)} · Login count ${num(u.logins)} · Last active ${fdatetime(u.last_activity)}</div>
 
-          <div class="account-actions">
+          <div class="account-actions" data-super-admin-only>
             <h4>Account settings</h4>
             <div class="helper">Edit login details and access, deactivate the login, or permanently delete the user.</div>
             <div class="row">
@@ -287,7 +288,7 @@
               <div class="helper" id="reset-help-${u.id}">Recommended passwords are 10 characters and include uppercase, lowercase, numbers, and symbols.</div>
             </div>
           </div>
-          <fieldset class="version-access"><legend>Testing</legend><label class="feature-item"><input type="checkbox" data-tester="${u.id}" ${u.is_tester?'checked':''}>Tester</label><p class="helper">Gives this user a Testing Hub for their own reports and an alert when a fix is ready to retest.</p><label class="feature-item"><input type="checkbox" data-testing-manager="${u.id}" ${u.is_testing_manager?'checked':''}>Testing manager</label><p class="helper">Create and publish assignments, review all tester results, and request retesting. Account administration remains restricted to administrators.</p><button class="btn" type="button" data-save-tester="${u.id}">Save Testing Access</button></fieldset>
+          <fieldset class="version-access" data-super-admin-only><legend>Testing</legend><label class="feature-item"><input type="checkbox" data-tester="${u.id}" ${u.is_tester?'checked':''}>Tester</label><p class="helper">Gives this user a Testing Hub for their own reports and an alert when a fix is ready to retest.</p><label class="feature-item"><input type="checkbox" data-testing-manager="${u.id}" ${u.is_testing_manager?'checked':''}>Testing manager</label><p class="helper">Create and publish assignments, review all tester results, and request retesting. Account administration remains restricted to administrators.</p><button class="btn" type="button" data-save-tester="${u.id}">Save Testing Access</button></fieldset>
           <fieldset class="version-access"><legend>Versions</legend><p class="helper">Check every version this user can open. They can switch between their selected versions in the app.</p><div class="feature-grid">${versionChecks(u.id,allowedVersions(u))}</div><button class="btn" type="button" data-save-versions="${u.id}">Save Versions</button></fieldset>
 <details class="admin-section"><summary>Usage &amp; Activity</summary>          <div class="section">
             <h4>Captures</h4>
@@ -424,7 +425,7 @@
 
           <h1 class="admin-page-title">${currentUser?.is_super_admin?'Super Admin':'Admin'}</h1>
           <details id="usersSection" class="admin-section"><summary id="usersHeading">Users</summary><div class="admin-section-body">
-            <div class="users-heading"><div><p class="helper">Select a user to edit their details, password, and version access.</p></div><button class="btn" type="button" id="addUser" aria-expanded="false" aria-controls="createUserPanel">Add User</button></div>
+            <div class="users-heading"><div><p class="helper">${currentUser?.is_super_admin?'Select a user to edit their details, password, and version access.':'Select a user to view their details and change version access.'}</p></div><button class="btn" type="button" id="addUser" aria-expanded="false" aria-controls="createUserPanel">Add User</button></div>
             <div id="createUserPanel" class="admin-panel" hidden>          <h2>Create User</h2>
           <div class="helper">Create access for a person. First name, last name, email, and password are required; industry is optional.</div>
           <label for="cname">First and Last Name</label><input id="cname" type="text" placeholder="First and last name" autocomplete="name" />
@@ -494,7 +495,7 @@
                   </div>
         <button class="issue-fab" id="issueFab" type="button" data-html2canvas-ignore="true">Report Issue</button>
         ${issueReporterMarkup()}`;
-      if(!currentUser?.is_super_admin)document.querySelectorAll('[data-admin-tool="health"],[data-admin-tool="billing"],[data-admin-tool="activity"],.issue-diagnostics,#issueSystemNotice').forEach(section=>section.remove());
+      if(!currentUser?.is_super_admin)document.querySelectorAll('[data-admin-tool="health"],[data-admin-tool="billing"],[data-admin-tool="activity"],.issue-diagnostics,#issueSystemNotice,#addUser,#createUserPanel').forEach(section=>section.remove());
       document.getElementById('issueFab').onclick=openIssueReporter;
       refreshIssueAttention();
       const profileButton=document.getElementById('profileButton');
@@ -502,9 +503,11 @@
       profileButton.onclick=(e)=>{ e.stopPropagation(); profileMenu.hidden=!profileMenu.hidden; profileButton.setAttribute('aria-expanded',String(!profileMenu.hidden)); };
       document.onclick=(e)=>{ if(!e.target.closest('.account-menu-wrap')){ profileMenu.hidden=true; profileButton.setAttribute('aria-expanded','false'); } };
       document.getElementById('signout').onclick = async () => { await api('/api/logout', { method:'POST' }); currentUser=null; renderLogin(); };
-      document.getElementById('createbtn').onclick = createUser;
-      document.getElementById('generatepass').onclick = generatePassword;
-      document.getElementById('copypass').onclick = copyPassword;
+      if(currentUser?.is_super_admin){
+        document.getElementById('createbtn').onclick = createUser;
+        document.getElementById('generatepass').onclick = generatePassword;
+        document.getElementById('copypass').onclick = copyPassword;
+      }
       document.getElementById('issueTypeFilter').onchange = renderIssues;
       document.getElementById('issueStatusFilter').onchange = renderIssues;
       document.getElementById('issuePriorityFilter').onchange = renderIssues;
@@ -516,8 +519,10 @@
       const toolLoaders={health:loadHealth,billing:loadStripeBilling,activity:loadActivity,issues:loadIssues,testing:loadAssignments};
       document.querySelectorAll('[data-admin-tool]').forEach(panel=>panel.ontoggle=()=>{if(panel.open&&!panel.dataset.loaded){panel.dataset.loaded='true';const load=toolLoaders[panel.dataset.adminTool];if(load)load();}});
       const createPanel=document.getElementById('createUserPanel'),add=document.getElementById('addUser');
+      if(add&&createPanel){
       add.onclick=()=>{createPanel.hidden=!createPanel.hidden;add.setAttribute('aria-expanded',String(!createPanel.hidden));if(!createPanel.hidden)document.getElementById('cname').focus();};
       document.getElementById('cancelCreate').onclick=()=>{createPanel.hidden=true;add.setAttribute('aria-expanded','false');add.focus();};
+      }
       document.getElementById('userSearch').oninput=renderUserList;
       loadUsers();
     }

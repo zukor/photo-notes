@@ -14,13 +14,21 @@ test('sensitive admin routes and owner account operations reject direct regular-
  app.use((req,res)=>res.json({ok:true}));
  const server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));t.after(()=>server.close());
  const base=`http://127.0.0.1:${server.address().port}`;
- for(const path of ['/health','/HEALTH/','/activity','/billing/status','/billing/invoices','/repair-status','/cloud-worker','/users/1','/users/1/password','/users/1/versions','/users/1/delete-preview']){
+ for(const path of ['/health','/HEALTH/','/activity','/billing/status','/billing/invoices','/repair-status','/cloud-worker','/users/1','/users/1/password','/users/1/versions','/users/1/deletion']){
   for(const method of ['GET','POST','DELETE']){
    assert.equal((await fetch(base+'/api/admin'+path,{method})).status,403,method+' '+path);
    assert.equal((await fetch(base+'/api/admin'+path,{method,headers:{'test-user':'1'}})).status,200,'owner '+path);
   }
  }
  for(const path of ['/issues','/users','/users/2','/users/2/password','/usage','/testing/assignments'])assert.equal((await fetch(base+'/api/admin'+path)).status,200,path);
+ for(const path of ['/users','/users/2','/users/2/password','/users/2/versions','/users/2/future-setting']){
+  for(const method of ['POST','PATCH','PUT','DELETE']){
+   const allowed=path==='/users/2/versions'&&method==='POST';
+   assert.equal((await fetch(base+'/api/admin'+path,{method})).status,allowed?200:403,method+' '+path);
+   assert.equal((await fetch(base+'/api/admin'+path,{method,headers:{'test-user':'1'}})).status,200);
+  }
+ }
+ assert.equal((await fetch(base+'/api/admin/users/2/deletion')).status,403);
  assert.equal((await fetch(base+'/api/admin/users/2',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({is_super_admin:true})})).status,403);
 });
 test('server mounts the boundary before sensitive routes and exposes server-derived membership',()=>{
