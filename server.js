@@ -23,6 +23,7 @@ const { EDITIONS, currentEdition, editionAccess, validateEditions, registerEditi
 const {registerIssueRepair}=require('./issue-repair');
 const {registerCloud,startCloud}=require('./issue-cloud');
 const {registerUserDeletion}=require('./user-deletion');
+const {isSuperAdmin,adminAccessBoundary}=require('./super-admin');
 const {registerConcreteFootprints,footprintSummary}=require('./concrete-footprints');
 
 const PORT = process.env.PORT || 3000;
@@ -124,6 +125,8 @@ function requireTestingQueueToken(req,res,next){
   if(!expected||!supplied||supplied.length!==expected.length||!crypto.timingSafeEqual(Buffer.from(supplied),Buffer.from(expected)))return res.status(401).json({error:'not authorized'});
   next();
 }
+// Enforce sensitive admin access before any admin routes are registered.
+app.use('/api/admin',requireAuth,adminAccessBoundary());
 registerStripeRoutes(app, { pool, requireAuth, requireAdmin });
 require('./document-links').registerDocumentLinks(app,{pool,requireAuth});
 // Single source of truth for Pro gating. Pro features must not render or store
@@ -583,7 +586,7 @@ app.get('/api/me', requireAuth, async (req, res) => {
   res.setHeader('X-Photo-Notes-Upload-Receipts','1');
   const row = (await pool.query(`SELECT name,email,role,plan,pro_type,feature_access,edition_access,is_tester,is_testing_manager FROM users WHERE id=$1 AND active=true`, [req.user.id])).rows[0];
   if (!row) return res.status(401).json({ error:'not authenticated' });
-  res.json({ authed:true, is_tester:row.is_tester, is_testing_manager:row.is_testing_manager, edition_access:editionAccess(row), name:row.name, role:row.role, email:row.email, plan:row.plan === 'pro' ? 'pro' : 'free', pro_type:normalizeProType(row.pro_type), feature_access:await currentFeatureAccess(req.user.id) });
+  res.json({ authed:true, is_super_admin:isSuperAdmin(req.user), is_tester:row.is_tester, is_testing_manager:row.is_testing_manager, edition_access:editionAccess(row), name:row.name, role:row.role, email:row.email, plan:row.plan === 'pro' ? 'pro' : 'free', pro_type:normalizeProType(row.pro_type), feature_access:await currentFeatureAccess(req.user.id) });
 });
 
 async function hoaCompanyForUser(userId,create=false,db=pool){let row=(await db.query(`SELECT c.*,m.company_role FROM hoa_management_companies c JOIN hoa_company_members m ON m.company_id=c.id WHERE m.user_id=$1 ORDER BY c.id LIMIT 1`,[userId])).rows[0];if(!row&&create){const u=(await pool.query(`SELECT name FROM users WHERE id=$1`,[userId])).rows[0];const client=await pool.connect();try{await client.query('BEGIN');row=(await client.query(`INSERT INTO hoa_management_companies(name) VALUES($1) RETURNING *`,[`${u&&u.name||'HOA'} Management`])).rows[0];await client.query(`INSERT INTO hoa_company_members(company_id,user_id,company_role) VALUES($1,$2,'administrator')`,[row.id,userId]);await client.query('COMMIT');}catch(e){await client.query('ROLLBACK');throw e;}finally{client.release();}}return row||null;}
@@ -2576,7 +2579,7 @@ app.get('/api/admin/users', requireAdmin, async (req, res) => {
         FROM events GROUP BY user_id
       ) e ON e.user_id = u.id
       ORDER BY u.created_at ASC`);
-    res.json(rows);
+    res.json(rows.map(user=>({...user,is_super_admin:isSuperAdmin(user)})));
   } catch (err) { console.error('[admin.users]', err); res.status(500).json({ error: 'failed to list users' }); }
 });
 
