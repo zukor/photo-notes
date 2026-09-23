@@ -18,6 +18,7 @@ test('sensitive admin routes and owner account operations reject direct regular-
   for(const method of ['GET','POST','DELETE']){
    assert.equal((await fetch(base+'/api/admin'+path,{method})).status,403,method+' '+path);
    assert.equal((await fetch(base+'/api/admin'+path,{method,headers:{'test-user':'1'}})).status,200,'owner '+path);
+   assert.equal((await fetch(base+'/api/admin'+path,{method,headers:{'test-user':'1','X-Photo-Notes-Admin-View':'regular'}})).status,403,'regular view '+path);
   }
  }
  for(const path of ['/users','/users/2','/users/2/password','/usage','/testing/assignments'])assert.equal((await fetch(base+'/api/admin'+path)).status,200,path);
