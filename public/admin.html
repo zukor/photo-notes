@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Photo Notes — Admin</title>
   <meta name="theme-color" content="#1d4ed8" />
-  <link rel="stylesheet" href="/styles.css?v=218" />
+  <link rel="stylesheet" href="/styles.css?v=219" />
   <script src="/vendor/html2canvas.min.js?v=59"></script>
   <script src="/issue-markup.js?v=200"></script>
-  <script src="/issue-reporter.js?v=218"></script>
+  <script src="/issue-reporter.js?v=219"></script>
   <style>
     .stat { display:inline-block; min-width:84px; margin:4px 14px 4px 0; vertical-align:top; }
     .stat .n { font-size:19px; font-weight:bold; color:var(--pn-text-000,#000); }
@@ -149,9 +149,9 @@
     .delete-user-panel h3 { margin-top:0; }
     .delete-user-panel .btn { margin:10px 8px 0 0; }
   </style>
-  <link rel="stylesheet" href="/testing-hub.css?v=218">
-  <script src="/testing-hub.js?v=218"></script>
-<link rel="stylesheet" href="/theme.css?v=218"><script src="/theme.js?v=218"></script></head>
+  <link rel="stylesheet" href="/testing-hub.css?v=219">
+  <script src="/testing-hub.js?v=219"></script>
+<link rel="stylesheet" href="/theme.css?v=219"><script src="/theme.js?v=219"></script></head>
 <body>
   <div id="app"></div>
   <script>
@@ -188,6 +188,7 @@
     }
 
     function renderSummary(users){
+      if(!currentUser?.is_super_admin)return;
       const box = document.getElementById('summary');
       if (!box) return;
       const people = users.length;
@@ -442,6 +443,11 @@
           <button class="btn" id="createbtn">Create User</button>
 
 <button class="btn secondary" type="button" id="cancelCreate">Cancel</button></div>
+            <details class="admin-section" id="userTotals"><summary>Totals Across All Users</summary><div class="admin-section-body">
+          <div class="helper">Combined account and activity counts for all users.</div>
+          <div id="summary"></div>
+
+          </div></details>
             <div id="userListTools" class="user-list-tools"><label for="userSearch">Find a user<input id="userSearch" type="search" placeholder="Search name or email"></label><label for="sortsel">Sort<select id="sortsel"><option value="name">Name (A–Z)</option><option value="active">Recently active</option><option value="newest">Newest login</option><option value="captures">Most captures</option></select></label></div>
             <div id="users" aria-live="polite"></div>
           </div></details>
@@ -473,10 +479,6 @@
           <button class="btn secondary" id="refreshAssignments" type="button" style="width:auto;margin:0 0 10px">Refresh Assignments</button>
           <div id="assignments"><p class="status">Loading...</p></div>
 
-          </div></details><details class="admin-section" data-admin-tool="summary"><summary>Totals Across All Users</summary><div class="admin-section-body">
-          <div class="helper">Combined account and activity counts for every user listed below.</div>
-          <div id="summary"></div>
-
           </div></details><details class="admin-section" data-admin-tool="health"><summary>System Health</summary><div class="admin-section-body">
           <div class="helper">A safe operational check of the services Photo Notes needs. This shows configuration and availability without displaying passwords or API keys.</div>
           <div id="health"><p class="status">Checking...</p></div>
@@ -495,7 +497,7 @@
                   </div>
         <button class="issue-fab" id="issueFab" type="button" data-html2canvas-ignore="true">Report Issue</button>
         ${issueReporterMarkup()}`;
-      if(!currentUser?.is_super_admin)document.querySelectorAll('[data-admin-tool="health"],[data-admin-tool="billing"],[data-admin-tool="activity"],.issue-diagnostics,#issueSystemNotice,#addUser,#createUserPanel').forEach(section=>section.remove());
+      if(!currentUser?.is_super_admin)document.querySelectorAll('[data-admin-tool="health"],[data-admin-tool="billing"],[data-admin-tool="activity"],.issue-diagnostics,#issueSystemNotice,#addUser,#createUserPanel,#userTotals').forEach(section=>section.remove());
       const tools=[...document.querySelectorAll('[data-admin-tool]')];
       tools.sort((a,b)=>a.querySelector('summary').textContent.trim().localeCompare(b.querySelector('summary').textContent.trim(),'en',{sensitivity:'base'}));
       tools.forEach(tool=>tool.parentElement.appendChild(tool));
