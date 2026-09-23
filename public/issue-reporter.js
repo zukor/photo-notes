@@ -175,7 +175,7 @@ async function submitIssueReport(){
   const description=[whatHappened&&`What happened: ${whatHappened}`,frequency&&`Frequency: ${frequency}`].filter(Boolean).join('\n');
   if(!whatHappened&&!issueVoiceBlob){st.textContent='Please type what went wrong or attach a voice recording before sending.';ta.focus();return;}
   btn.disabled=true;btn.textContent='Sending...';st.textContent='Saving your report...';
-  try{const screenshot=issueMarkupEditor?await issueMarkupEditor.exportBlob():issueScreenshotBlob;if(generation!==issueGeneration)return;const fd=new FormData();fd.append('description',description||'Voice recording attached for review.');if(issueTestingContext){fd.append('testing_assignment_id',issueTestingContext.assignmentId);fd.append('testing_step_id',issueTestingContext.stepId);}fd.append('issue_type',document.getElementById('issueType')?.value||'bug_problem');fd.append('page_name',issuePageName);fd.append('page_url',location.href);fd.append('viewport',`${window.innerWidth} × ${window.innerHeight}`);fd.append('app_version','232');fd.append('user_agent',navigator.userAgent+' | Photo Notes web 232 | '+((window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches)||navigator.standalone?'installed web app':'browser'));if(screenshot)fd.append('screenshot',screenshot,'issue-screen.jpg');if(issueVoiceBlob)fd.append('voice',issueVoiceBlob,issueVoiceBlob.type.includes('webm')?'issue-voice.webm':'issue-voice.m4a');const r=await api('/api/issues',{method:'POST',body:fd});const d=await r.json().catch(()=>({}));if(generation!==issueGeneration)return;if(!r.ok)throw new Error();st.textContent=d.email_status==='sent'?`Issue #${d.id} sent. Thank you.`:`Issue #${d.id} saved. Thank you.`;btn.textContent='Sent';setTimeout(()=>{if(generation===issueGeneration)closeIssueReporter();},1800);}catch(e){if(generation!==issueGeneration)return;st.textContent='The report could not be sent. Check your connection and try again.';btn.disabled=false;btn.textContent='Send Issue Report';}
+  try{const screenshot=issueMarkupEditor?await issueMarkupEditor.exportBlob():issueScreenshotBlob;if(generation!==issueGeneration)return;const fd=new FormData();fd.append('description',description||'Voice recording attached for review.');if(issueTestingContext){fd.append('testing_assignment_id',issueTestingContext.assignmentId);fd.append('testing_step_id',issueTestingContext.stepId);}fd.append('issue_type',document.getElementById('issueType')?.value||'bug_problem');fd.append('page_name',issuePageName);fd.append('page_url',location.href);fd.append('viewport',`${window.innerWidth} × ${window.innerHeight}`);fd.append('app_version','233');fd.append('user_agent',navigator.userAgent+' | Photo Notes web 233 | '+((window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches)||navigator.standalone?'installed web app':'browser'));if(screenshot)fd.append('screenshot',screenshot,'issue-screen.jpg');if(issueVoiceBlob)fd.append('voice',issueVoiceBlob,issueVoiceBlob.type.includes('webm')?'issue-voice.webm':'issue-voice.m4a');const r=await api('/api/issues',{method:'POST',body:fd});const d=await r.json().catch(()=>({}));if(generation!==issueGeneration)return;if(!r.ok)throw new Error();st.textContent=d.email_status==='sent'?`Issue #${d.id} sent. Thank you.`:`Issue #${d.id} saved. Thank you.`;btn.textContent='Sent';setTimeout(()=>{if(generation===issueGeneration)closeIssueReporter();},1800);}catch(e){if(generation!==issueGeneration)return;st.textContent='The report could not be sent. Check your connection and try again.';btn.disabled=false;btn.textContent='Send Issue Report';}
 }
 
 function issueReporterMarkup(){return `<a id="issueUpdates" class="issue-updates" href="/?issues=1" hidden data-html2canvas-ignore="true"></a>    <div class="issue-modal" id="issueModal" hidden data-html2canvas-ignore="true">
@@ -190,7 +190,7 @@ function issueReporterMarkup(){return `<a id="issueUpdates" class="issue-updates
         <select id="issueFrequency"><option value="">Choose one</option><option>Every time</option><option>Sometimes</option><option>Only happened once</option><option>Not sure</option></select>
         <section class="issue-evidence"><h3>Page screenshot</h3>${typeof IssueMarkup!=='undefined'?IssueMarkup.markup():''}<div class="issue-screenshot-scroll"><img id="issueScreenshot" alt="Screenshot of the page being reported" hidden></div><div class="status" id="issueShotStatus" role="status"></div></section>
         <button class="btn" id="issueSend" type="button">Send Issue Report</button>
-        <div class="status" id="issueStatus" role="status" aria-live="polite"></div>${issueNotificationControls()}</section></div>
+        <div class="status" id="issueStatus" role="status" aria-live="polite"></div></section></div>
       </div>
     </div>`;}
 
@@ -209,6 +209,7 @@ async function refreshIssueAttention(){
       if(menu)menu.hidden=!!d.is_tester;
       if(hub){hub.hidden=!(d.is_tester||attention.open_count||state.me?.is_testing_manager||state.me?.role==='admin');hub.textContent=(typeof uiT==='function'?uiT('Testing Hub'):'Testing Hub')+(attention.new_count?' ('+attention.new_count+')':'');}
     }
+    syncIssuePushNotifications();
     if(link){link.hidden=!d.count;link.textContent=`Issue updates (${d.count})`;link.setAttribute('aria-label',`${d.count} issue reports need your attention`);}
   }catch(e){}
 }
@@ -216,18 +217,32 @@ window.addEventListener('focus',refreshIssueAttention);
 setInterval(()=>{if(!document.hidden)refreshIssueAttention();},5000);
 document.addEventListener('visibilitychange',refreshIssueAttention);
 
+// In-app updates always run. Restore browser push automatically when permission
+// already exists; requesting new permission still requires an explicit user action.
+let issuePushSyncPending=false,issuePushSyncAt=0;
+async function syncIssuePushNotifications(){
+  if(issuePushSyncPending||Date.now()-issuePushSyncAt<60000||!('Notification' in window)||Notification.permission!=='granted')return;
+  issuePushSyncPending=true;issuePushSyncAt=Date.now();
+  try{await registerIssuePushNotifications();}catch(e){}finally{issuePushSyncPending=false;}
+}
+async function registerIssuePushNotifications(){
+  if(!('serviceWorker' in navigator)||!('PushManager' in window))throw new Error('Notifications are unavailable here. On iPhone, open Photo Notes from your Home Screen.');
+  const registration=await navigator.serviceWorker.getRegistration();if(!registration)throw new Error('Reload Photo Notes before enabling notifications.');
+  let subscription=await registration.pushManager.getSubscription();
+  if(!subscription){
+    const r=await api('/api/issues/push-key');if(!r.ok)throw new Error('Notifications are temporarily unavailable.');const {publicKey}=await r.json();if(!publicKey)throw new Error('Notifications are starting. Try again shortly.');
+    subscription=await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:publicKey});
+  }
+  const saved=await api('/api/issues/push-subscription',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(subscription.toJSON())});if(!saved.ok)throw new Error('Could not save notification settings. Try again.');
+}
 function issueNotificationControls(){return `<div class="issue-notification-controls" style="color:#000;text-align:left"><button type="button" class="btn secondary" data-issue-push="enable">Enable issue notifications</button><p data-push-status role="status" style="color:#000"></p></div>`;}
 document.addEventListener('click',async event=>{
   const button=event.target.closest('[data-issue-push="enable"]');if(!button)return;
   const status=button.parentElement.querySelector('[data-push-status]');button.disabled=true;
   try{
-    if(!('serviceWorker' in navigator)||!('PushManager' in window))throw new Error('Notifications are unavailable here. On iPhone, open Photo Notes from your Home Screen.');
-    const registration=await navigator.serviceWorker.getRegistration();if(!registration)throw new Error('Reload Photo Notes before enabling notifications.');
-    let subscription=await registration.pushManager.getSubscription();
+    if(!('Notification' in window))throw new Error('Notifications are unavailable here. On iPhone, open Photo Notes from your Home Screen.');
     const permission=await Notification.requestPermission();if(permission!=='granted')throw new Error('Notifications were not allowed. You can change this in your browser settings.');
-    const r=await api('/api/issues/push-key');if(!r.ok)throw new Error('Notifications are temporarily unavailable.');const {publicKey}=await r.json();if(!publicKey)throw new Error('Notifications are starting. Try again shortly.');
-    subscription=subscription||await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:publicKey});
-    const saved=await api('/api/issues/push-subscription',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(subscription.toJSON())});if(!saved.ok)throw new Error('Could not save notification settings. Try again.');
+    await registerIssuePushNotifications();
     status.textContent=uiPushText('Issue notifications enabled on this device.');
   }catch(e){status.textContent=uiPushText(e.message);}finally{button.disabled=false;}
 });
