@@ -247,9 +247,7 @@
     'Optional': 'Opcional', 'Type topic name here': 'Escriba el nombre del tema aquí',
     'Photo': 'Foto',
     'Enable issue notifications':'Activar notificaciones de problemas',
-    'Disable on this device':'Desactivar en este dispositivo',
     'On iPhone, add Photo Notes to your Home Screen and open it there first.':'En iPhone, agregue Photo Notes a la pantalla de inicio y ábralo desde allí primero.',
-    'Notifications disabled on this device.':'Notificaciones desactivadas en este dispositivo.',
     'Issue notifications enabled on this device.':'Notificaciones de problemas activadas en este dispositivo.',
 
     "Job Evidence Word": "Evidencia del trabajo en Word",
