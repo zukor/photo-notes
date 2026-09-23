@@ -14,7 +14,7 @@ const express=require('express');
  if(path==='/api/issues'&&route.request().method()==='POST'){sent=true;data={id:999,email_status:'sent'};}
  return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(data)});});
  await page.goto(`http://127.0.0.1:${server.address().port}/${role==='user'?'':'admin.html'}`);await page.locator('#issueFab').waitFor();
- if(role!=='user'){await page.locator('[data-admin-tool="issues"] > summary').click();await page.locator('.issue-admin-card').first().waitFor();}
+ if(role==='super'){await page.locator('[data-admin-tool="issues"] > summary').click();await page.locator('.issue-admin-card').first().waitFor();}
  // Real capture remains available on both admin roles and the app.
  await page.locator('#issueFab').dispatchEvent('click');await page.locator('#issueModal').waitFor({timeout:2000}).catch(async e=>{console.log(await page.evaluate(()=>({modals:[...document.querySelectorAll('#issueModal')].map(m=>({hidden:m.hidden,rect:m.getBoundingClientRect().toJSON(),display:getComputedStyle(m).display})),text:document.querySelector('#issueShotStatus')?.textContent})));await page.screenshot({path:'/tmp/pn-capture-failure.png'});throw e;});await page.locator('#issueMarkupCanvas').waitFor({timeout:12000});await page.locator('#issueClose').click();
  // Unresponsive capture must not block typing, closing, reopening, or submitting.
