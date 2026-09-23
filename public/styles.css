@@ -698,7 +698,7 @@ input.dimfield.suggested {
 #desktopHelp, #desktopHelp * { box-sizing:border-box; color:var(--pn-text-000,#000); font-family:Arial,Helvetica,sans-serif; text-align:left; }
 #desktopHelp button { cursor:pointer; }
 #desktopHelp button:focus-visible, #desktopHelp summary:focus-visible, #desktopHelp input:focus-visible, #desktopHelp select:focus-visible { outline:3px solid var(--pn-border-174dcc,#174dcc); outline-offset:3px; }
-#desktopHelp .help-fab { position:fixed; right:22px; bottom:70px; z-index:85; width:58px; height:58px; padding:0; display:grid; place-items:center; border:2px solid var(--pn-border-9c7400,#9c7400); border-radius:50%; background:radial-gradient(circle at 32% 23%,var(--pn-bg-fff4a3,#fff4a3) 0%,var(--pn-bg-ffdf38,#ffdf38) 32%,var(--pn-bg-ffc400,#ffc400) 64%,#b98600 100%); box-shadow:inset 0 3px 3px var(--pn-bg-fff6bd,#fff6bd),inset 0 -5px 5px #bd8500,0 5px 0 var(--pn-bg-785800,#785800),0 9px 14px #0004; transition:right .22s ease,transform .15s ease; }
+#desktopHelp .help-fab { position:fixed; right:22px; bottom:132px; z-index:85; width:58px; height:58px; padding:0; display:grid; place-items:center; border:2px solid var(--pn-border-9c7400,#9c7400); border-radius:50%; background:radial-gradient(circle at 32% 23%,var(--pn-bg-fff4a3,#fff4a3) 0%,var(--pn-bg-ffdf38,#ffdf38) 32%,var(--pn-bg-ffc400,#ffc400) 64%,#b98600 100%); box-shadow:inset 0 3px 3px var(--pn-bg-fff6bd,#fff6bd),inset 0 -5px 5px #bd8500,0 5px 0 var(--pn-bg-785800,#785800),0 9px 14px #0004; transition:right .22s ease,transform .15s ease; }
 #desktopHelp .help-fab span { font-size:36px; line-height:1; font-weight:900; }
 #desktopHelp .help-fab:hover { transform:translateY(-2px); }
 #desktopHelp .help-drawer { position:fixed; right:0; top:0; bottom:0; width:380px; z-index:84; display:flex; flex-direction:column; background:var(--pn-bg-fff,#fff); border-left:2px solid var(--pn-border-174dcc,#174dcc); box-shadow:-6px 0 22px #0002; transform:translateX(105%); visibility:hidden; transition:transform .22s ease,visibility .22s; }
@@ -748,3 +748,10 @@ input.dimfield.suggested {
 .issue-description-heading #issueRecord { background:#1d4ed8; color:#fff; border-color:#1d4ed8; }
 
 #issueSend { width:auto; padding:12px 18px; align-self:flex-start; }
+
+.export-share-modal {position:fixed;inset:0;z-index:150;background:#0008;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;}
+.export-share-dialog {background:var(--pn-bg-fff,#fff);color:var(--pn-text-000,#000);border:2px solid #000;border-radius:14px;padding:20px;width:min(440px,100%);max-height:85vh;overflow:auto;box-sizing:border-box;}
+.export-share-dialog h2 {margin-top:0;}
+.export-share-dialog .btn {margin:6px 0;}
+
+.word-template-preview {display:block;width:100%;height:850px;border:1px solid #000;background:white;}

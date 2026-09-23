@@ -79,6 +79,8 @@ app.use(express.json());
 app.use(cookieParser());
 
 // ---- static frontend + uploaded photos ----
+app.get('/vendor/jszip.min.js',(req,res)=>res.sendFile(require.resolve('jszip/dist/jszip.min.js')));
+app.get('/vendor/docx-preview.min.js',(req,res)=>res.sendFile(path.join(path.dirname(require.resolve('docx-preview')),'docx-preview.min.js')));
 app.get('/vendor/html2canvas.min.js', (req, res) => res.sendFile(require.resolve('html2canvas/dist/html2canvas.min.js')));
 app.get('/sw.js', (req, res) => {
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
@@ -916,7 +918,7 @@ app.get('/api/concrete/report',requireAuth,requireConcrete,async(req,res)=>{try{
   logEvent(req.user.id,'concrete_photo_report',{format,photos:rows.length,supporting_photos:links.length,job_id:job&&job.id});
   if(format==='pdf'){res.setHeader('Content-Type','application/pdf');res.setHeader('Content-Disposition','attachment; filename="concrete-photo-evidence-report.pdf"');const pdf=new PDFDocument({size:'LETTER',margin:48});pdf.pipe(res);pdf.fontSize(19).text('Concrete Pro - Photo Evidence Report',{align:'center'});if(job)pdf.fontSize(14).text(job.name,{align:'center'});pdf.fontSize(10).text(summary,{align:'center'});
     for(const unit of pairs){const captures=unit.pair?[unit.pair.before,unit.pair.after]:[unit.single];for(const capture of captures){pdf.addPage();pdf.fontSize(14).text(`${String(capture.concrete_element||'Concrete').replaceAll('_',' ')} - ${ConcreteCapture.summary(capture)||String(capture.concrete_stage||'Photo').replaceAll('_',' ')}`).fontSize(9).text([capture.concrete_location,capture.concrete_mix&&`Mix/spec: ${capture.concrete_mix}`,capture.note,...(capture.footprints||[]).map(footprintSummary)].filter(Boolean).join(' | '));const image=localPhoto(capture.photo_path);if(image){const rendered=await renderForEmbedStamped(image,'standard','jpeg',capture);if(rendered)try{pdf.image(rendered.buffer,48,pdf.y+10,{fit:[500,330]});}catch(e){}}pdf.y+=350;for(const ticket of capture.supporting_photos||[]){pdf.fontSize(10).text(ticket.reference_type==='specification'?'LINKED SPECIFICATION PHOTO':'LINKED BATCH TICKET PHOTO');const ti=localPhoto(ticket.photo_path);if(ti){const rendered=await renderForEmbedStamped(ti,'standard','jpeg',ticket);if(rendered)try{pdf.image(rendered.buffer,48,pdf.y+8,{fit:[500,250]});}catch(e){}}pdf.y+=270;}}}pdf.end();return;}
-  const children=[new Paragraph({heading:HeadingLevel.HEADING_1,children:[new TextRun({text:'Concrete Pro - Photo Evidence Report',bold:true,font:'Arial'})]}),new Paragraph({children:[new TextRun({text:job?job.name:summary,bold:!!job,font:'Arial'})]}),...(job?[new Paragraph({children:[new TextRun({text:summary,font:'Arial'})]})]:[])];for(const row of rows){children.push(new Paragraph({heading:HeadingLevel.HEADING_2,children:[new TextRun({text:`${String(row.concrete_element||'Concrete').replaceAll('_',' ')} - ${ConcreteCapture.summary(row)||String(row.concrete_stage||'Photo').replaceAll('_',' ')}`,bold:true,font:'Arial'})]}));const image=localPhoto(row.photo_path);if(image){const rendered=await renderForEmbedStamped(image,'standard','jpeg',row);if(rendered)children.push(new Paragraph({children:[new ImageRun({type:rendered.ext==='.png'?'png':'jpg',data:rendered.buffer,transformation:{width:480,height:320}})]}));}children.push(new Paragraph({children:[new TextRun({text:[row.concrete_location,row.concrete_mix&&`Mix/spec: ${row.concrete_mix}`,row.note,...(row.footprints||[]).map(footprintSummary)].filter(Boolean).join(' | '),font:'Arial'})]}));for(const ticket of row.supporting_photos||[]){children.push(new Paragraph({children:[new TextRun({text:ticket.reference_type==='specification'?'LINKED SPECIFICATION PHOTO':'LINKED BATCH TICKET PHOTO',bold:true,font:'Arial'})]}));const ti=localPhoto(ticket.photo_path);if(ti){const rendered=await renderForEmbedStamped(ti,'standard','jpeg',ticket);if(rendered)children.push(new Paragraph({children:[new ImageRun({type:rendered.ext==='.png'?'png':'jpg',data:rendered.buffer,transformation:{width:400,height:260}})]}));}}}const buffer=await Packer.toBuffer(new Document({sections:[{children}]}));res.setHeader('Content-Type','application/vnd.openxmlformats-officedocument.wordprocessingml.document');res.setHeader('Content-Disposition','attachment; filename="concrete-photo-evidence-report.docx"');res.send(buffer);
+  const children=[new Paragraph({heading:HeadingLevel.HEADING_1,children:[new TextRun({text:'Concrete Pro - Photo Evidence Report',bold:true,font:'Arial'})]}),new Paragraph({children:[new TextRun({text:job?job.name:summary,bold:!!job,font:'Arial'})]}),...(job?[new Paragraph({children:[new TextRun({text:summary,font:'Arial'})]})]:[])];for(const row of rows){children.push(new Paragraph({heading:HeadingLevel.HEADING_2,children:[new TextRun({text:`${String(row.concrete_element||'Concrete').replaceAll('_',' ')} - ${ConcreteCapture.summary(row)||String(row.concrete_stage||'Photo').replaceAll('_',' ')}`,bold:true,font:'Arial'})]}));const image=localPhoto(row.photo_path);if(image){const rendered=await renderForEmbedStamped(image,'standard','jpeg',row);if(rendered)children.push(new Paragraph({children:[new ImageRun({type:rendered.ext==='.png'?'png':'jpg',data:rendered.buffer,transformation:await fittedWordImage(rendered.buffer,480,320)})]}));}children.push(new Paragraph({children:[new TextRun({text:[row.concrete_location,row.concrete_mix&&`Mix/spec: ${row.concrete_mix}`,row.note,...(row.footprints||[]).map(footprintSummary)].filter(Boolean).join(' | '),font:'Arial'})]}));for(const ticket of row.supporting_photos||[]){children.push(new Paragraph({children:[new TextRun({text:ticket.reference_type==='specification'?'LINKED SPECIFICATION PHOTO':'LINKED BATCH TICKET PHOTO',bold:true,font:'Arial'})]}));const ti=localPhoto(ticket.photo_path);if(ti){const rendered=await renderForEmbedStamped(ti,'standard','jpeg',ticket);if(rendered)children.push(new Paragraph({children:[new ImageRun({type:rendered.ext==='.png'?'png':'jpg',data:rendered.buffer,transformation:await fittedWordImage(rendered.buffer,400,260)})]}));}}}const buffer=await Packer.toBuffer(new Document({sections:[{children}]}));res.setHeader('Content-Type','application/vnd.openxmlformats-officedocument.wordprocessingml.document');res.setHeader('Content-Disposition','attachment; filename="concrete-photo-evidence-report.docx"');res.send(buffer);
 }catch(e){console.error('[concrete.report]',e);res.status(500).json({error:'concrete report failed'});}});
 
 app.get('/api/captures/search', requireAuth, async (req,res)=>{
@@ -977,7 +979,7 @@ app.get('/api/hoa/report',requireAuth,requireHoa,async(req,res)=>{try{
     pdf.end();return;
   }
   const children=[new Paragraph({heading:HeadingLevel.HEADING_1,children:[new TextRun({text:title,bold:true,font:'Arial'})]}),new Paragraph({children:[new TextRun({text:summary,font:'Arial'})]})];
-  for(const item of items){children.push(new Paragraph({heading:HeadingLevel.HEADING_2,children:[new TextRun({text:item.title,bold:true,font:'Arial'})]}),new Paragraph({children:[new TextRun({text:`${item.community_name} | ${String(item.priority||'').replaceAll('_',' ')} | ${String(item.status||'').replaceAll('_',' ')}`,font:'Arial'})]}));if(item.description)children.push(new Paragraph({children:[new TextRun({text:item.description,font:'Arial'})]}));const before=item.photos.find(p=>['initial','inspection'].includes(p.photo_stage))||item.photos[0],after=[...item.photos].reverse().find(p=>['completed_work','final_verification'].includes(p.photo_stage)),entries=after&&after.id!==before.id?[['ORIGINAL CONDITION',before],['COMPLETED / VERIFIED',after]]:[['PHOTO EVIDENCE',before]],cells=[];for(const [label,photo] of entries){const content=[new Paragraph({children:[new TextRun({text:label,bold:true,font:'Arial'})]})],image=localPhoto(photo.photo_path);if(image){const rendered=await renderForEmbedStamped(image,'standard','jpeg',photo);if(rendered)content.push(new Paragraph({children:[new ImageRun({type:rendered.ext==='.png'?'png':'jpg',data:rendered.buffer,transformation:{width:entries.length===2?245:400,height:entries.length===2?184:300}})]}));}cells.push(new TableCell({children:content}));}children.push(new Table({width:{size:100,type:WidthType.PERCENTAGE},rows:[new TableRow({children:cells})]}),new Paragraph({children:[new TextRun({text:`Area: ${item.area||'Not specified'} | Budget: ${String(item.budget_source||'unassigned').replaceAll('_',' ')} | Board approval: ${String(item.board_approval||'not_required').replaceAll('_',' ')}`,font:'Arial'})]}));}
+  for(const item of items){children.push(new Paragraph({heading:HeadingLevel.HEADING_2,children:[new TextRun({text:item.title,bold:true,font:'Arial'})]}),new Paragraph({children:[new TextRun({text:`${item.community_name} | ${String(item.priority||'').replaceAll('_',' ')} | ${String(item.status||'').replaceAll('_',' ')}`,font:'Arial'})]}));if(item.description)children.push(new Paragraph({children:[new TextRun({text:item.description,font:'Arial'})]}));const before=item.photos.find(p=>['initial','inspection'].includes(p.photo_stage))||item.photos[0],after=[...item.photos].reverse().find(p=>['completed_work','final_verification'].includes(p.photo_stage)),entries=after&&after.id!==before.id?[['ORIGINAL CONDITION',before],['COMPLETED / VERIFIED',after]]:[['PHOTO EVIDENCE',before]],cells=[];for(const [label,photo] of entries){const content=[new Paragraph({children:[new TextRun({text:label,bold:true,font:'Arial'})]})],image=localPhoto(photo.photo_path);if(image){const rendered=await renderForEmbedStamped(image,'standard','jpeg',photo);if(rendered)content.push(new Paragraph({children:[new ImageRun({type:rendered.ext==='.png'?'png':'jpg',data:rendered.buffer,transformation:await fittedWordImage(rendered.buffer,entries.length===2?245:400,entries.length===2?184:300)})]}));}cells.push(new TableCell({children:content}));}children.push(new Table({width:{size:100,type:WidthType.PERCENTAGE},rows:[new TableRow({children:cells})]}),new Paragraph({children:[new TextRun({text:`Area: ${item.area||'Not specified'} | Budget: ${String(item.budget_source||'unassigned').replaceAll('_',' ')} | Board approval: ${String(item.board_approval||'not_required').replaceAll('_',' ')}`,font:'Arial'})]}));}
   const buffer=await Packer.toBuffer(new Document({sections:[{children}]}));res.setHeader('Content-Type','application/vnd.openxmlformats-officedocument.wordprocessingml.document');res.setHeader('Content-Disposition','attachment; filename="hoa-board-photo-maintenance-report.docx"');res.send(buffer);
 }catch(e){console.error('[hoa.report]',e);if(!res.headersSent)res.status(500).json({error:'report failed'});}});
 function hoaEvidenceChecklist(photos){const stages=new Set(photos.map(p=>p.photo_stage).filter(Boolean));return evidenceChecklist([{key:'initial',label:'Initial condition is photographed',complete:stages.has('initial')||stages.has('inspection'),warning:'Add an initial-condition or inspection photo.'},{key:'progress',label:'Work in progress is photographed',complete:stages.has('work_in_progress'),warning:'Add a work-in-progress photo.'},{key:'completed',label:'Completed work is photographed',complete:stages.has('completed_work'),warning:'Add a completed-work photo.'},{key:'verification',label:'Final result is verified by photo',complete:stages.has('final_verification'),warning:'Add a final-verification photo.'},{key:'notes',label:'Every photo has a note',complete:photos.length>0&&photos.every(p=>String(p.note||'').trim()),warning:'Add a note to every maintenance photo.'}]);}
@@ -1001,7 +1003,17 @@ app.post('/api/captures/batch',requireAuth,async(req,res)=>{try{const b=req.body
 // ---- expiring customer approval packages ----
 app.get('/api/approvals',requireAuth,async(req,res)=>{try{res.json((await pool.query(`SELECT id,job_id,title,status,customer_name,customer_comment,responded_at,expires_at,created_at,cardinality(capture_ids)::int photo_count,token FROM approval_packages WHERE user_id=$1 ORDER BY created_at DESC`,[req.user.id])).rows);}catch(e){res.status(500).json({error:'approvals failed'});}});
 app.post('/api/approvals',requireAuth,async(req,res)=>{try{const b=req.body||{},ids=Array.isArray(b.ids)?b.ids.map(Number).filter(Number.isInteger).slice(0,100):[];if(!ids.length)return res.status(400).json({error:'select photos'});if(!(await ownsCaptures(req.user.id,ids)))return res.status(403).json({error:'invalid photos'});let jobId=Number.isInteger(Number(b.job_id))?Number(b.job_id):null;if(jobId&&!(await pool.query(`SELECT 1 FROM jobs WHERE id=$1 AND user_id=$2`,[jobId,req.user.id])).rowCount)return res.status(403).json({error:'invalid job'});const token=crypto.randomBytes(24).toString('base64url'),title=ticketText(b.title,200)||'Photo Review',expires=new Date(Date.now()+14*86400000);const row=(await pool.query(`INSERT INTO approval_packages(user_id,job_id,token,title,message,capture_ids,expires_at) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *`,[req.user.id,jobId,token,title,ticketText(b.message,1000),ids,expires])).rows[0];logEvent(req.user.id,'approval_package',{count:ids.length});res.json({...row,url:`${req.protocol}://${req.get('host')}/review/${token}`});}catch(e){console.error('[approvals.create]',e);res.status(500).json({error:'approval failed'});}});
-app.get('/review/:token',async(req,res)=>{try{const p=(await pool.query(`SELECT * FROM approval_packages WHERE token=$1`,[req.params.token])).rows[0];if(!p)return res.status(404).send('Review link not found.');if(new Date(p.expires_at)<new Date())return res.status(410).send('This review link has expired.');const photos=(await pool.query(`SELECT id,photo_path,note,address,created_at FROM captures WHERE user_id=$1 AND id=ANY($2) ORDER BY created_at`,[p.user_id,p.capture_ids])).rows;const cards=photos.map(c=>`<article><img src="${escXml(c.photo_path||'')}" alt="Project photo"><p><b>${escXml(c.address||'')}</b></p><p>${escXml(c.note||'')}</p><small>${new Date(c.created_at).toLocaleString()}</small></article>`).join('');res.send(`<!doctype html><html><head><meta name="viewport" content="width=device-width"><title>${escXml(p.title)}</title><style>body{font-family:Arial;margin:auto;max-width:850px;padding:20px;color:#111}article{border:1px solid #ccc;border-radius:10px;padding:12px;margin:18px 0}img{width:100%;max-height:650px;object-fit:contain}textarea,input,button{box-sizing:border-box;width:100%;padding:12px;margin:6px 0;font-size:16px}button{background:#2455d9;color:white;border:0;border-radius:8px;font-weight:bold}.changes{background:#555}.status{padding:12px;background:#eef3ff}</style></head><body><h1>${escXml(p.title)}</h1>${p.message?`<p>${escXml(p.message)}</p>`:''}<div class="status">Status: ${escXml(p.status)}</div>${cards}${p.status==='pending'?`<form method="post" action="/review/${p.token}"><input name="customer_name" placeholder="Your name" required><textarea name="comment" placeholder="Comment (optional)"></textarea><button name="decision" value="approved">Approve Photos</button><button class="changes" name="decision" value="changes_requested">Request Changes</button></form>`:`<p><b>Response received. Thank you.</b></p>`}</body></html>`);}catch(e){res.status(500).send('Review unavailable.');}});
+app.get('/review/:token/photos/:id',async(req,res)=>{
+  try{
+    const p=(await pool.query(`SELECT user_id,capture_ids FROM approval_packages WHERE token=$1 AND expires_at>now()`,[req.params.token])).rows[0];
+    const id=Number(req.params.id);if(!p||!p.capture_ids.map(Number).includes(id))return res.sendStatus(404);
+    const c=(await pool.query('SELECT * FROM captures WHERE id=$1 AND user_id=$2',[id,p.user_id])).rows[0];
+    const image=c&&localPhoto(c.photo_path);if(!image)return res.sendStatus(404);
+    const rendered=await renderForEmbedStamped(image,'standard','jpeg',c);if(!rendered)return res.sendStatus(404);
+    res.setHeader('Cache-Control','private, no-store');res.type('jpeg').send(rendered.buffer);
+  }catch(e){res.sendStatus(500);}
+});
+app.get('/review/:token',async(req,res)=>{try{const p=(await pool.query(`SELECT * FROM approval_packages WHERE token=$1`,[req.params.token])).rows[0];if(!p)return res.status(404).send('Review link not found.');if(new Date(p.expires_at)<new Date())return res.status(410).send('This review link has expired.');const photos=(await pool.query(`SELECT id,photo_path,note,address,created_at FROM captures WHERE user_id=$1 AND id=ANY($2) ORDER BY created_at`,[p.user_id,p.capture_ids])).rows;const cards=photos.map(c=>`<article><img src="/review/${encodeURIComponent(p.token)}/photos/${c.id}" alt="Project photo"><p><b>${escXml(c.address||'')}</b></p><p>${escXml(c.note||'')}</p><small>${new Date(c.created_at).toLocaleString()}</small></article>`).join('');res.send(`<!doctype html><html><head><meta name="viewport" content="width=device-width"><title>${escXml(p.title)}</title><style>body{font-family:Arial;margin:auto;max-width:850px;padding:20px;color:#111}article{border:1px solid #ccc;border-radius:10px;padding:12px;margin:18px 0}img{width:100%;max-height:650px;object-fit:contain}textarea,input,button{box-sizing:border-box;width:100%;padding:12px;margin:6px 0;font-size:16px}button{background:#2455d9;color:white;border:0;border-radius:8px;font-weight:bold}.changes{background:#555}.status{padding:12px;background:#eef3ff}</style></head><body><h1>${escXml(p.title)}</h1>${p.message?`<p>${escXml(p.message)}</p>`:''}<div class="status">Status: ${escXml(p.status)}</div>${cards}${p.status==='pending'?`<form method="post" action="/review/${p.token}"><input name="customer_name" placeholder="Your name" required><textarea name="comment" placeholder="Comment (optional)"></textarea><button name="decision" value="approved">Approve Photos</button><button class="changes" name="decision" value="changes_requested">Request Changes</button></form>`:`<p><b>Response received. Thank you.</b></p>`}</body></html>`);}catch(e){res.status(500).send('Review unavailable.');}});
 app.post('/review/:token',express.urlencoded({extended:false}),async(req,res)=>{try{const decision=req.body.decision==='approved'?'approved':'changes_requested';const row=(await pool.query(`UPDATE approval_packages SET status=$1,customer_name=$2,customer_comment=$3,responded_at=now() WHERE token=$4 AND status='pending' AND expires_at>now() RETURNING token`,[decision,ticketText(req.body.customer_name,200),ticketText(req.body.comment,1000),req.params.token])).rows[0];if(!row)return res.status(400).send('This review can no longer be changed.');res.redirect(`/review/${row.token}`);}catch(e){res.status(500).send('Response could not be saved.');}});
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
@@ -1085,9 +1097,15 @@ function ticketNumber(value) {
   return Number.isFinite(n) ? n : null;
 }
 function ticketDate(value) {
-  const s = ticketText(value, 10);
-  return s && /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
+  const raw = String(value || '').trim();
+  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})(?:T.*)?$/);
+  const us = raw.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
+  const parts = iso ? [Number(iso[1]),Number(iso[2]),Number(iso[3])] : us ? [Number(us[3]),Number(us[1]),Number(us[2])] : null;
+  if(!parts)return null;
+  const [y,m,d]=parts,date=new Date(Date.UTC(y,m-1,d));
+  return date.getUTCFullYear()===y&&date.getUTCMonth()===m-1&&date.getUTCDate()===d ? `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}` : null;
 }
+
 async function ownedJobId(userId, value) {
   const id = Number.parseInt(value, 10);
   if (!Number.isInteger(id)) return null;
@@ -1102,7 +1120,7 @@ app.post('/api/asphalt-tickets/scan', requireAuth, upload.single('photo'), async
     }
     if (!req.file || !req.file.path) return res.status(400).json({ error: 'ticket photo required' });
     const prompt =
-`You are reading an asphalt plant delivery ticket for a paving contractor. Extract only information visibly printed or written on the ticket. Never guess a missing value.
+`You are reading an asphalt plant delivery ticket for a paving contractor. Extract only information visibly printed or written on the ticket. Never guess a missing, blurred or partly obscured value. Do not complete digits from context or plausible totals. Use null for every uncertain field, even if other fields are clear.
 Respond with ONLY one JSON object, no prose and no markdown, using exactly these keys:
 {"ticket_number": string|null, "ticket_date": "YYYY-MM-DD"|null, "plant_name": string|null, "plant_address": string|null, "mix_description": string|null, "mix_code": string|null, "truck_number": string|null, "job_number": string|null, "net_tons": number|null, "dispatch_time": string|null, "arrival_time": string|null, "dispatch_temperature_f": number|null, "confidence": "high"|"medium"|"low"}
 Use net tons, not gross or tare weight. Preserve ticket and job identifiers exactly. Times may use the clearly printed format. If a field is unreadable or absent, use null.`;
@@ -1132,27 +1150,34 @@ Use net tons, not gross or tare weight. Preserve ticket and job identifiers exac
 });
 
 app.post('/api/asphalt-tickets/:id', requireAuth, async (req, res) => {
+  let client;
   try {
     if (!(await featureAllowed(req.user.id, 'ticket_scanner'))) return res.status(403).json({ error: 'feature unavailable' });
     const id = parseInt(req.params.id, 10);
     if (!Number.isInteger(id)) return res.status(400).json({ error: 'bad id' });
     const b = req.body || {};
     const jobId = await ownedJobId(req.user.id, b.job_id);
+    if(b.job_id && !jobId)return res.status(400).json({error:'Selected job is unavailable. Choose a job again.'});
+    client=await pool.connect();await client.query('BEGIN');
+    await client.query('SELECT id FROM users WHERE id=$1 FOR UPDATE',[req.user.id]);
+    const duplicate=ticketText(b.ticket_number)?(await client.query(`SELECT id FROM asphalt_tickets WHERE user_id=$1 AND id<>$2 AND status='saved' AND lower(trim(ticket_number))=lower(trim($3)) AND COALESCE(lower(trim(plant_name)),'')=COALESCE(lower(trim($4)),'') AND ticket_date IS NOT DISTINCT FROM $5::date LIMIT 1`,[req.user.id,id,ticketText(b.ticket_number),ticketText(b.plant_name),ticketDate(b.ticket_date)])).rows[0]:null;
+    if(duplicate){await client.query('ROLLBACK');return res.status(409).json({error:'This ticket number, plant and date are already saved. The duplicate was not added.'});}
     const values = [
       ticketText(b.ticket_number), ticketDate(b.ticket_date), ticketText(b.plant_name), ticketText(b.plant_address),
       ticketText(b.mix_description), ticketText(b.mix_code), ticketText(b.truck_number), ticketText(b.job_number),
       ticketNumber(b.net_tons), ticketText(b.dispatch_time, 40), ticketText(b.arrival_time, 40),
       ticketNumber(b.dispatch_temperature_f), jobId, id, req.user.id,
     ];
-    const row = (await pool.query(
+    const row = (await client.query(
       `UPDATE asphalt_tickets SET ticket_number=$1, ticket_date=$2, plant_name=$3, plant_address=$4,
        mix_description=$5, mix_code=$6, truck_number=$7, job_number=$8, net_tons=$9,
        dispatch_time=$10, arrival_time=$11, dispatch_temperature_f=$12, job_id=$13, status='saved', updated_at=now()
        WHERE id=$14 AND user_id=$15 RETURNING *`, values)).rows[0];
-    if (!row) return res.status(404).json({ error: 'not found' });
+    if (!row){await client.query('ROLLBACK');return res.status(404).json({error:'not found'});}
+    await client.query('COMMIT');
     logEvent(req.user.id, 'ticket_save', { has_tons: row.net_tons != null });
     res.json({ ok: true, ticket: row });
-  } catch (err) { console.error('[ticket.save]', err); res.status(500).json({ error: 'ticket save failed' }); }
+  } catch (err) { if(client)await client.query('ROLLBACK').catch(()=>{});console.error('[ticket.save]', err); res.status(500).json({ error: 'ticket save failed' }); }finally{if(client)client.release();}
 });
 
 app.get('/api/asphalt-tickets', requireAuth, async (req, res) => {
@@ -1162,6 +1187,7 @@ app.get('/api/asphalt-tickets', requireAuth, async (req, res) => {
     const params = [req.user.id];
     let where = `user_id=$1 AND status='saved'`;
     if (date) { params.push(date); where += ` AND ticket_date=$2`; }
+    if(req.query.saved_from && req.query.saved_to){const from=new Date(req.query.saved_from),to=new Date(req.query.saved_to);if(!Number.isFinite(+from)||!Number.isFinite(+to)||to<=from)return res.status(400).json({error:'invalid saved date range'});params.push(from.toISOString(),to.toISOString());where+=` AND updated_at >= $${params.length-1} AND updated_at < $${params.length}`;}
     const rows = (await pool.query(`SELECT * FROM asphalt_tickets WHERE ${where} ORDER BY COALESCE(ticket_date, created_at::date) DESC, created_at DESC LIMIT 100`, params)).rows;
     const total = rows.reduce((sum, row) => sum + (Number(row.net_tons) || 0), 0);
     res.json({ tickets: rows, total_tons: Math.round(total * 100) / 100 });
@@ -1209,13 +1235,15 @@ app.get('/api/paving/jobs/:id/report', requireAuth, async (req, res) => {
         pdf.y=top+(unit.pair?210:370);pdf.x=48;
         for(const [label,capture] of entries) pdf.fontSize(10).text(`${label}: ${capture.note||'(no note)'}${capture.address?' | '+capture.address:''}`,{width:510});
       }
-      if(tickets.length){pdf.addPage();pdf.fontSize(15).text('Delivery Ticket Evidence');pdf.moveDown(.5);for(const ticket of tickets)pdf.fontSize(10).text(`${ticket.ticket_date||''} | Ticket ${ticket.ticket_number||'not entered'} | ${ticket.mix_description||ticket.mix_code||'Mix not entered'} | ${ticket.net_tons==null?'Tons not entered':Number(ticket.net_tons).toFixed(2)+' tons'}`);}
+      for(const ticket of tickets){pdf.addPage();pdf.fontSize(15).text('Delivery Ticket Evidence');pdf.moveDown(.5).fontSize(10).text(`${ticket.ticket_date?String(ticket.ticket_date).slice(0,10):''} | Ticket ${ticket.ticket_number||'not entered'} | ${ticket.mix_description||ticket.mix_code||'Mix not entered'} | ${ticket.net_tons==null?'Tons not entered':Number(ticket.net_tons).toFixed(2)+' tons'}`);const image=localPhoto(ticket.photo_path);if(image){const rendered=await renderForEmbed(image,'standard','jpeg');if(rendered)pdf.image(rendered.buffer,48,pdf.y+12,{fit:[516,550]});}}
+
       if(extraWork.length){pdf.addPage();pdf.fontSize(15).text('Photo-Backed Extra Work');pdf.moveDown(.5);for(const item of extraWork)pdf.fontSize(10).text(`${ewrReasonLabel(item.reason_category,item.reason_other_text)} | ${ewrStatusLabel(item.status)}\n${item.description_text||'(no description)'}`).moveDown(.5);}
       pdf.end(); return;
     }
     const children=[new Paragraph({heading:HeadingLevel.HEADING_1,children:[new TextRun({text:'Paving Pro - Job Photo Evidence',bold:true,font:'Arial'})]}),new Paragraph({children:[new TextRun({text:job.name,bold:true,font:'Arial'})]}),new Paragraph({children:[new TextRun({text:[job.job_number,job.customer,job.address].filter(Boolean).join(' | '),font:'Arial'})]}),new Paragraph({children:[new TextRun({text:`${captures.length} job photos | ${tickets.length} delivery tickets | ${totalTons.toFixed(2)} documented tons | ${extraWork.length} extra-work records`,font:'Arial'})]}),new Paragraph({children:[new TextRun({text:`Evidence readiness: ${completeness.complete}/${completeness.total}`,bold:true,font:'Arial'})]}),...completeness.warnings.map(w=>new Paragraph({children:[new TextRun({text:`Missing: ${w}`,font:'Arial'})]}))];
-    for(const unit of pairs){const entries=unit.pair?[['BEFORE',unit.pair.before],['AFTER',unit.pair.after]]:[['PHOTO',unit.single]];const cells=[];for(const [label,capture] of entries){const kids=[new Paragraph({children:[new TextRun({text:label,bold:true,font:'Arial'})]})];const image=localPhoto(capture.photo_path);if(image){const rendered=await renderForEmbedStamped(image,'standard','jpeg',capture);if(rendered)kids.push(new Paragraph({children:[new ImageRun({type:rendered.ext==='.png'?'png':'jpg',data:rendered.buffer,transformation:{width:unit.pair?245:400,height:unit.pair?184:300}})]}));}kids.push(new Paragraph({children:[new TextRun({text:capture.note||'(no note)',font:'Arial'})]}));cells.push(new TableCell({children:kids}));}children.push(new Table({width:{size:100,type:WidthType.PERCENTAGE},rows:[new TableRow({children:cells})]}));}
-    if(tickets.length){children.push(new Paragraph({heading:HeadingLevel.HEADING_2,children:[new TextRun({text:'Delivery Ticket Evidence',bold:true,font:'Arial'})]}));for(const ticket of tickets)children.push(new Paragraph({children:[new TextRun({text:`${ticket.ticket_date||''} | Ticket ${ticket.ticket_number||'not entered'} | ${ticket.mix_description||ticket.mix_code||'Mix not entered'} | ${ticket.net_tons==null?'Tons not entered':Number(ticket.net_tons).toFixed(2)+' tons'}`,font:'Arial'})]}));}
+    for(const unit of pairs){const entries=unit.pair?[['BEFORE',unit.pair.before],['AFTER',unit.pair.after]]:[['PHOTO',unit.single]];const cells=[];for(const [label,capture] of entries){const kids=[new Paragraph({children:[new TextRun({text:label,bold:true,font:'Arial'})]})];const image=localPhoto(capture.photo_path);if(image){const rendered=await renderForEmbedStamped(image,'standard','jpeg',capture);if(rendered)kids.push(new Paragraph({children:[new ImageRun({type:rendered.ext==='.png'?'png':'jpg',data:rendered.buffer,transformation:await fittedWordImage(rendered.buffer,unit.pair?245:400,unit.pair?184:300)})]}));}kids.push(new Paragraph({children:[new TextRun({text:capture.note||'(no note)',font:'Arial'})]}));cells.push(new TableCell({children:kids}));}children.push(new Table({width:{size:100,type:WidthType.PERCENTAGE},rows:[new TableRow({children:cells})]}));}
+    for(const ticket of tickets){children.push(new Paragraph({pageBreakBefore:true,heading:HeadingLevel.HEADING_2,children:[new TextRun({text:'Delivery Ticket Evidence',bold:true,font:'Arial'})]}),new Paragraph({children:[new TextRun({text:`${ticket.ticket_date?String(ticket.ticket_date).slice(0,10):''} | Ticket ${ticket.ticket_number||'not entered'} | ${ticket.mix_description||ticket.mix_code||'Mix not entered'} | ${ticket.net_tons==null?'Tons not entered':Number(ticket.net_tons).toFixed(2)+' tons'}`,font:'Arial'})]}));const image=localPhoto(ticket.photo_path);if(image){const rendered=await renderForEmbed(image,'standard','jpeg');if(rendered)children.push(new Paragraph({children:[new ImageRun({type:rendered.ext==='.png'?'png':'jpg',data:rendered.buffer,transformation:await fittedWordImage(rendered.buffer,480,550)})]}));}}
+
     if(extraWork.length){children.push(new Paragraph({heading:HeadingLevel.HEADING_2,children:[new TextRun({text:'Photo-Backed Extra Work',bold:true,font:'Arial'})]}));for(const item of extraWork)children.push(new Paragraph({children:[new TextRun({text:`${ewrReasonLabel(item.reason_category,item.reason_other_text)} | ${ewrStatusLabel(item.status)} - ${item.description_text||'(no description)'}`,font:'Arial'})]}));}
     const buffer=await Packer.toBuffer(new Document({sections:[{children}]}));res.setHeader('Content-Type','application/vnd.openxmlformats-officedocument.wordprocessingml.document');res.setHeader('Content-Disposition',`attachment; filename="paving-${slug(job.name)||job.id}-evidence.docx"`);res.send(buffer);
   } catch (error) { console.error('[paving.job-report]', error); if(!res.headersSent)res.status(500).json({error:'paving report failed'}); }
@@ -1234,7 +1262,7 @@ function cameraReaderFields(value) {
 }
 function cameraReaderPrompt(type) {
   if (type === 'equipment_plate') return `You are reading a photographed equipment identification or data plate for a paving contractor. Extract only information visibly printed on the plate. Never guess. Respond with ONLY JSON using exactly these keys: {"manufacturer":string|null,"model":string|null,"serial_number":string|null,"year":string|null,"equipment_type":string|null,"specifications":string|null,"confidence":"high"|"medium"|"low"}. Preserve identifiers exactly. Put other useful rated capacities, voltage, power, weight, or engine information in specifications as a concise line. Use null when absent or unreadable.`;
-  if (type === 'gauge') return `You are reading a photographed gauge, meter, scale display, hour meter, fuel display, thermometer, or other job-site instrument. Extract only what is visibly shown. Never guess. Respond with ONLY JSON using exactly these keys: {"instrument_type":string|null,"reading":string|null,"unit":string|null,"equipment_name":string|null,"observed_at":string|null,"notes":string|null,"confidence":"high"|"medium"|"low"}. Preserve the displayed value and decimal point exactly. Describe ambiguity in notes. Use null when absent or unreadable.`;
+  if (type === 'gauge') return `You are reading a photographed gauge, meter, scale display, hour meter, fuel display, thermometer, or other job-site instrument. Extract only what is visibly shown. Never guess. Respond with ONLY JSON using exactly these keys: {"instrument_type":string|null,"reading":string|null,"unit":string|null,"equipment_name":string|null,"observed_at":string|null,"notes":string|null,"confidence":"high"|"medium"|"low"}. Read every visible dial independently, including separate Celsius and Fahrenheit scales. Preserve the displayed values and decimal points exactly. Never calculate or convert one scale into another. Put multiple observed readings with their units in reading, and describe disagreement or ambiguity in notes. Use null when absent or unreadable.`;
   if (type === 'material_label') return `You are reading a photographed construction-material container label. Extract only information visibly printed on the label. Never infer missing product data. Respond with ONLY JSON using exactly these keys: {"product_name":string|null,"manufacturer":string|null,"product_code":string|null,"lot_number":string|null,"quantity":string|null,"manufactured_date":string|null,"expiration_date":string|null,"instructions":string|null,"warnings":string|null,"confidence":"high"|"medium"|"low"}. Preserve codes, dates, quantities, and units exactly. Summarize only visible instructions and warnings. Use null when absent or unreadable.`;
   if (type === 'business_card') return `You are reading a photographed business card. Extract only information visibly printed on the card. Never guess or supplement it. Respond with ONLY JSON using exactly these keys: {"name":string|null,"job_title":string|null,"company":string|null,"phone":string|null,"email":string|null,"address":string|null,"website":string|null,"confidence":"high"|"medium"|"low"}. Preserve spelling, phone extensions, and email addresses exactly. Use null when absent or unreadable.`;
   return `You are reading a photographed construction plan, marked-up plan, or field sketch. Extract only text and dimensions clearly visible in the image. Do not calculate, infer, or invent measurements. Respond with ONLY JSON using exactly these keys: {"project_name":string|null,"site_address":string|null,"sheet_title":string|null,"sheet_number":string|null,"revision_date":string|null,"scale":string|null,"visible_dimensions":string|null,"visible_notes":string|null,"confidence":"high"|"medium"|"low"}. Preserve dimension values and units exactly. visible_notes should be a concise transcription of legible handwritten or printed work notes. Use null for anything absent, cut off, or unreadable.`;
@@ -1288,6 +1316,24 @@ app.post('/api/camera-readings/:id', requireAuth, async (req, res) => {
   } catch (err) { console.error('[camera-reader.save]', err); res.status(500).json({ error:'save failed' }); }
 });
 
+// Explicitly publish a reviewed scanner record into the existing photo workflow.
+app.post('/api/camera-readings/:id/library',requireAuth,async(req,res)=>{
+  let client;
+  try{
+    if(!(await featureAllowed(req.user.id,'camera_readers')))return res.sendStatus(403);
+    client=await pool.connect();await client.query('BEGIN');
+    const row=(await client.query("SELECT * FROM camera_readings WHERE id=$1 AND user_id=$2 AND status='saved' FOR UPDATE",[Number(req.params.id),req.user.id])).rows[0];
+    if(!row){await client.query('ROLLBACK');return res.sendStatus(404);}
+    let id=row.capture_id;
+    if(!id){const fields=row.fields||{},note=Object.entries(fields).filter(([,v])=>v).map(([k,v])=>k.replaceAll('_',' ')+': '+v).join('\n'),dims=await imageDims(localPhoto(row.photo_path));
+      id=(await client.query(`INSERT INTO captures(user_id,captured_by,photo_path,photo_width,photo_height,photo_title,note,address,area_tags,kind) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,'note') RETURNING id`,[req.user.id,req.user.name,row.photo_path,dims&&dims.w,dims&&dims.h,row.title,note,fields.site_address||fields.address||null,[row.reading_type.replaceAll('_',' ')]] )).rows[0].id;
+      await client.query('UPDATE camera_readings SET capture_id=$1 WHERE id=$2',[id,row.id]);}
+    await client.query('COMMIT');res.json({ok:true,capture_id:id});
+  }catch(e){if(client)await client.query('ROLLBACK').catch(()=>{});res.status(500).json({error:'Could not add record to library'});}finally{if(client)client.release();}
+});
+app.delete('/api/camera-readings/:id',requireAuth,async(req,res)=>{
+  try{if(!(await featureAllowed(req.user.id,'camera_readers')))return res.sendStatus(403);const result=await pool.query('DELETE FROM camera_readings WHERE id=$1 AND user_id=$2 RETURNING id',[Number(req.params.id),req.user.id]);if(!result.rowCount)return res.sendStatus(404);res.json({ok:true});}catch(e){res.sendStatus(500);}
+});
 app.get('/api/camera-readings', requireAuth, async (req, res) => {
   try {
     if (!(await featureAllowed(req.user.id, 'camera_readers'))) return res.json([]);
@@ -1982,19 +2028,17 @@ async function ownsGroup(groupId, userId) {
   const g = (await pool.query(`SELECT id FROM groups WHERE id = $1 AND user_id = $2`, [groupId, userId])).rows[0];
   return !!g;
 }
-async function addToGroup(groupId, userId, captureIds) {
-  // only add captures the user actually owns
-  const owned = (await pool.query(`SELECT id FROM captures WHERE id = ANY($1) AND user_id = $2`, [captureIds, userId])).rows.map((r) => r.id);
-  if (!owned.length) return 0;
-  const maxRow = await pool.query(`SELECT COALESCE(MAX(position), -1) AS m FROM group_items WHERE group_id = $1`, [groupId]);
-  let pos = Number(maxRow.rows[0].m) + 1;
-  for (const cid of owned) {
-    await pool.query(
-      `INSERT INTO group_items (group_id, capture_id, position) VALUES ($1,$2,$3)
-       ON CONFLICT (group_id, capture_id) DO NOTHING`, [groupId, cid, pos]);
-    pos++;
-  }
-  return owned.length;
+async function addToGroup(groupId,userId,captureIds){
+ const client=await pool.connect();
+ try{
+  await client.query('BEGIN');
+  const group=await client.query('SELECT id FROM groups WHERE id=$1 AND user_id=$2 FOR UPDATE',[groupId,userId]);
+  if(!group.rowCount){await client.query('ROLLBACK');return 0;}
+  const owned=(await client.query('SELECT id FROM captures WHERE id=ANY($1::int[]) AND user_id=$2 ORDER BY array_position($1::int[],id)',[captureIds,userId])).rows;
+  let position=Number((await client.query('SELECT COALESCE(MAX(position),-1) AS m FROM group_items WHERE group_id=$1',[groupId])).rows[0].m)+1,added=0;
+  for(const {id} of owned){const result=await client.query('INSERT INTO group_items(group_id,capture_id,position) VALUES($1,$2,$3) ON CONFLICT(group_id,capture_id) DO NOTHING',[groupId,id,position]);if(result.rowCount){position++;added++;}}
+  await client.query('COMMIT');return added;
+ }catch(e){await client.query('ROLLBACK');throw e;}finally{client.release();}
 }
 
 app.get('/api/groups', requireAuth, async (req, res) => {
@@ -2149,8 +2193,8 @@ app.post('/api/pairs', requireAuth, async (req, res) => {
       [req.user.id, beforeId, afterId])).rows;
     if (existing.length) return res.status(409).json({ error: 'one of these is already paired' });
     const row = (await pool.query(
-      `INSERT INTO capture_pairs (user_id, before_id, after_id) VALUES ($1,$2,$3) RETURNING *`,
-      [req.user.id, beforeId, afterId])).rows[0];
+      `INSERT INTO capture_pairs (user_id, before_id, after_id,comparison_opacity) VALUES ($1,$2,$3,$4) RETURNING *`,
+      [req.user.id, beforeId, afterId, b.comparison_opacity==null?null:Math.max(0,Math.min(1,Number(b.comparison_opacity)||0))])).rows[0];
     logEvent(req.user.id, 'pair_create', {});
     res.json({ ok: true, pair: row });
   } catch (err) {
@@ -2494,7 +2538,7 @@ app.get('/api/ewr/:id/export', requireAuth, async (req, res) => {
       const p = photos[i];
       pdf.addPage();
       const img = localPhoto(p.photo_path);
-      if (img) { const r = await renderForEmbed(img, imgRes, imgFmt); if (r) { try { pdf.image(r.buffer, { fit: [480, 340], align: 'center' }); pdf.moveDown(0.4); } catch (er) {} } }
+      if (img) { const r = await renderForEmbed(img, imgRes, imgFmt); if (r) { try { const top=pdf.y;pdf.image(r.buffer,48,top,{fit:[480,340],align:'center'});pdf.y=top+350;pdf.x=48; } catch (er) {} } }
       pdf.fontSize(12).fillColor('#000').text(`Photo ${i + 1}${p.caption ? ': ' + p.caption : ''}`);
       pdf.fontSize(10).fillColor('#000').text(fmtWhen(p.created_at) + (p.latitude != null ? `   GPS ${Number(p.latitude).toFixed(5)}, ${Number(p.longitude).toFixed(5)}` : ''));
     }
@@ -2748,6 +2792,24 @@ function exportDims(c) { if (c && c.dim_confirmed === false) return ''; return f
 
 // Group export rows into render units: a single capture, or a before/after pair
 // when both members are present in the row set. Order follows the row order.
+function pairRenderUnit(before,after,pair){
+ if(pair.comparison_opacity==null)return {pair:{before,after}};
+ return {single:{...before,photo_title:'Before and after comparison',overlays:[],note:[`BEFORE: ${before.note||''}`,fmtWhen(before.created_at),before.address,`AFTER: ${after.note||''}`,fmtWhen(after.created_at),after.address].filter(Boolean).join('\n'),_comparison:{before,after,opacity:Number(pair.comparison_opacity)}}};
+}
+async function renderPairComparison(pair){
+ const b=await renderForEmbedStamped(localPhoto(pair.before.photo_path),'web','jpeg',pair.before),a=await renderForEmbedStamped(localPhoto(pair.after.photo_path),'web','png',pair.after);
+ if(!b||!a)return null;
+ const meta=await sharp(b.buffer).metadata(),layer=await sharp(a.buffer).resize(meta.width,meta.height,{fit:'contain',background:{r:255,g:255,b:255,alpha:0}}).ensureAlpha().raw().toBuffer();
+ for(let i=3;i<layer.length;i+=4)layer[i]=Math.round(layer[i]*Math.max(0,Math.min(1,pair.opacity)));
+ const buffer=await sharp(b.buffer).composite([{input:layer,raw:{width:meta.width,height:meta.height,channels:4}}]).jpeg({quality:90}).toBuffer();
+ return {buffer,ext:'.jpg',mime:'image/jpeg'};
+}
+app.get('/api/pairs/:id/comparison',requireAuth,async(req,res)=>{
+ try{if(!(await featureAllowed(req.user.id,'before_after')))return res.sendStatus(403);const pair=(await pool.query('SELECT * FROM capture_pairs WHERE id=$1 AND user_id=$2',[Number(req.params.id),req.user.id])).rows[0];if(!pair||pair.comparison_opacity==null)return res.sendStatus(404);
+ const rows=(await pool.query('SELECT * FROM captures WHERE id=ANY($1) AND user_id=$2',[[pair.before_id,pair.after_id],req.user.id])).rows,before=rows.find(c=>c.id===pair.before_id),after=rows.find(c=>c.id===pair.after_id);if(!before||!after)return res.sendStatus(404);
+ const image=await renderPairComparison({before,after,opacity:Number(pair.comparison_opacity)});if(!image)return res.sendStatus(404);res.set('Cache-Control','private, no-store').type('jpeg').send(image.buffer);
+ }catch(e){res.sendStatus(500);}
+});
 function buildRenderUnits(rows, pairs) {
   const byId = {}; rows.forEach(r => { byId[r.id] = r; });
   const beforeOf = {}, afterOf = {};
@@ -2758,12 +2820,12 @@ function buildRenderUnits(rows, pairs) {
     if (consumed.has(r.id)) continue;
     const asBefore = beforeOf[r.id];
     if (asBefore && byId[asBefore.after_id] && !consumed.has(asBefore.after_id)) {
-      units.push({ pair: { before: r, after: byId[asBefore.after_id] } });
+      units.push(pairRenderUnit(r,byId[asBefore.after_id],asBefore));
       consumed.add(r.id); consumed.add(asBefore.after_id); continue;
     }
     const asAfter = afterOf[r.id];
     if (asAfter && byId[asAfter.before_id] && !consumed.has(asAfter.before_id)) {
-      units.push({ pair: { before: byId[asAfter.before_id], after: r } });
+      units.push(pairRenderUnit(byId[asAfter.before_id],r,asAfter));
       consumed.add(r.id); consumed.add(asAfter.before_id); continue;
     }
     units.push({ single: r });
@@ -2800,8 +2862,9 @@ async function resolveExport(req) {
   }
   const rows = await getCaptures({ userId, area, ids, group: groupId });
   const scope = groupId ? 'group' : (ids ? 'selection' : (area ? 'area' : 'all'));
+  if(!groupId){layout.cover_page=false;heading=heading||(rows.length===1?rows[0].photo_title||'Photo Note':'Photo Notes');}
   const u=(await pool.query(`SELECT document_branding,document_logo_path,word_template_path FROM users WHERE id=$1`,[userId])).rows[0]||{};
-  return { imgRes, imgFmt, heading, desc, fnameBase, rows, scope, layout, branding:cleanDocumentBranding(u.document_branding), logoPath:u.document_logo_path||null, templatePath:u.word_template_path||null };
+  return { imgRes, imgFmt, heading, desc, fnameBase, rows, scope, layout, branding:cleanDocumentBranding(groupId?u.document_branding:{}), logoPath:groupId?u.document_logo_path||null:null, templatePath:groupId?u.word_template_path||null:null };
 }
 
 const RES_PRESETS = {
@@ -2837,6 +2900,7 @@ async function renderForEmbed(localPath, imgRes, imgFmt) {
   }
   try { return await renderImage(localPath, imgRes, f); } catch (e) { return null; }
 }
+async function fittedWordImage(buffer,width,height){const m=await sharp(buffer).metadata(),scale=Math.min(width/m.width,height/m.height);return {width:Math.round(m.width*scale),height:Math.round(m.height*scale)};}
 async function documentLogoAsset(logoPath,maxWidth=220,maxHeight=90){const local=localPhoto(logoPath);if(!local)return null;try{const buffer=await sharp(local).rotate().resize({width:maxWidth,height:maxHeight,fit:'inside',withoutEnlargement:true}).png().toBuffer(),meta=await sharp(buffer).metadata();return{buffer,width:meta.width||maxWidth,height:meta.height||maxHeight};}catch(e){return null;}}
 
 // ===================== Photo overlays / stamps =====================
@@ -2908,6 +2972,7 @@ async function burnOverlays(buffer, width, height, overlays, c) {
 }
 // Render an export image and burn the capture's overlays into it (if any).
 async function renderForEmbedStamped(localPath, imgRes, imgFmt, c) {
+  if(c&&c._comparison)return renderPairComparison(c._comparison);
   const r = await renderForEmbed(localPath, imgRes, imgFmt);
   if (!r || !c || !Array.isArray(c.overlays) || !c.overlays.length) return r;
   try { const m = await sharp(r.buffer).metadata(); r.buffer = await burnOverlays(r.buffer, m.width, m.height, c.overlays, c); } catch (e) {}
@@ -2989,7 +3054,7 @@ app.get('/api/export/pdf', requireAuth, async (req, res) => {
         continue;
       }
       const c = u.single;
-      doc.font(pdfFont).fontSize(two?11:13).fillColor('#000').text((c.photo_title||conciseAddress(c.address)||'Untitled Photo') + (c.kind === 'task' ? '   [TASK]' : ''), { width: 516 });
+      doc.font(pdfFont).fontSize(two?11:13).fillColor('#000').text((c.photo_title||'Untitled Photo') + (c.kind === 'task' ? '   [TASK]' : ''), { width: 516 });
       doc.moveDown(0.3);
       const img = localPhoto(c.photo_path);
       if (img) {
@@ -3030,11 +3095,11 @@ app.get('/api/export/docx', requireAuth, async (req, res) => {
     const pro = await currentPlan(req.user.id) === 'pro';
     logEvent(req.user.id, 'export', { format: 'docx', scope, count: rows.length, res: imgRes, fmt: imgFmt });
     const font=layout.font,children=[],logo=await documentLogoAsset(logoPath,220,90);
-    if(logo)children.push(new Paragraph({alignment:AlignmentType.CENTER,children:[new ImageRun({type:'png',data:logo.buffer,transformation:{width:logo.width,height:logo.height}})]}));
-    if(branding.company_name)children.push(new Paragraph({alignment:AlignmentType.CENTER,children:[new TextRun({text:branding.company_name,bold:true,color:layout.accent.replace('#',''),font})]}));
-    children.push(new Paragraph({ heading: HeadingLevel.HEADING_1, alignment:AlignmentType.CENTER, children: [new TextRun({ text: heading, bold: true, color: '000000', font })] }));
-    if (desc) children.push(new Paragraph({ alignment:AlignmentType.CENTER,children: [new TextRun({ text: desc, color: '000000', font })] }));
-    if(layout.cover_page)children.push(new Paragraph({children:[new PageBreak()]}));
+    if(!templatePath&&logo)children.push(new Paragraph({alignment:AlignmentType.CENTER,children:[new ImageRun({type:'png',data:logo.buffer,transformation:{width:logo.width,height:logo.height}})]}));
+    if(!templatePath&&branding.company_name)children.push(new Paragraph({alignment:AlignmentType.CENTER,children:[new TextRun({text:branding.company_name,bold:true,color:layout.accent.replace('#',''),font})]}));
+    if(!templatePath)children.push(new Paragraph({ heading: HeadingLevel.HEADING_1, alignment:AlignmentType.CENTER, children: [new TextRun({ text: heading, bold: true, color: '000000', font })] }));
+    if (!templatePath&&desc) children.push(new Paragraph({ alignment:AlignmentType.CENTER,children: [new TextRun({ text: desc, color: '000000', font })] }));
+    if(!templatePath&&layout.cover_page)children.push(new Paragraph({children:[new PageBreak()]}));
     const pairsD = pro ? await userPairs(req.user.id) : [];
     const unitsD = buildRenderUnits(rows, pairsD);
     const arialCell = (runs) => new TableCell({ children: runs });
@@ -3275,14 +3340,14 @@ app.get('/api/export/proposal', requireAuth, async (req, res) => {
         for (const [label, capture] of [['BEFORE', before], ['AFTER', c]]) {
           const cellChildren = [new Paragraph({ children: [new TextRun({ text: label, bold: true, color: '000000', font: 'Arial' })] })];
           const img = localPhoto(capture.photo_path);
-          if (img) { const r = await renderForEmbedStamped(img, imgRes, imgFmt, capture); if (r) { try { cellChildren.push(new Paragraph({ children: [new ImageRun({ type: r.ext === '.png' ? 'png' : 'jpg', data: r.buffer, transformation: { width: 245, height: 184 } })] })); } catch (e) {} } }
+          if (img) { const r = await renderForEmbedStamped(img, imgRes, imgFmt, capture); if (r) { try { cellChildren.push(new Paragraph({ children: [new ImageRun({ type: r.ext === '.png' ? 'png' : 'jpg', data: r.buffer, transformation: await fittedWordImage(r.buffer,245,184) })] })); } catch (e) {} } }
           cellChildren.push(new Paragraph({ children: [new TextRun({ text: capture.note || '(no note)', color: '000000', font: 'Arial' })] }));
           pairCells.push(new TableCell({ children: cellChildren }));
         }
         children.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: [new TableRow({ children: pairCells })] }));
       } else {
         const img = localPhoto(c.photo_path);
-        if (img) { const r = await renderForEmbedStamped(img, imgRes, imgFmt, c); if (r) { try { children.push(new Paragraph({ children: [new ImageRun({ type: r.ext === '.png' ? 'png' : 'jpg', data: r.buffer, transformation: { width: 400, height: 300 } })] })); } catch (e) {} } }
+        if (img) { const r = await renderForEmbedStamped(img, imgRes, imgFmt, c); if (r) { try { children.push(new Paragraph({ children: [new ImageRun({ type: r.ext === '.png' ? 'png' : 'jpg', data: r.buffer, transformation: await fittedWordImage(r.buffer,400,300) })] })); } catch (e) {} } }
       }
       children.push(new Paragraph({ spacing: { before: 120 }, children: [new TextRun({ text: `${i + 1}. ${c.address || 'No location'}`, bold: true, color: '000000', font: 'Arial' })] }));
       const df = fmtDefect(c); if (df) children.push(new Paragraph({ children: [new TextRun({ text: 'Defect: ' + df, color: '000000', font: 'Arial' })] }));

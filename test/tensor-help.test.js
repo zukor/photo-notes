@@ -52,7 +52,7 @@ test('speech cleanup collapses only obvious repeated recognition fragments', () 
 
 test('Android location lookup retries and remains recoverable', () => {
   assert.match(app, /id="retryLocation">Retry location and address/);
-  assert.match(app, /enableHighAccuracy:false, timeout:15000, maximumAge:60000/);
+  assert.match(app, /enableHighAccuracy:false, timeout:15000, maximumAge:force\?0:60000/);
   assert.match(app, /Exact address not found\. GPS coordinates will still be saved\./);
   assert.match(app, /Tap Retry location and address, or save without an address\./);
   assert.match(app, /id="correctAddress">Correct address/);

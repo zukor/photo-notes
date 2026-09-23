@@ -112,7 +112,15 @@ function userInitials(user) {
 }
 
 function photoSrc(p) { return p ? `${p}?v=${state.imgv}` : ''; }
+function retryPhotoImages(container){
+ container.querySelectorAll('img').forEach(img=>{
+  let attempts=0;
+  const retry=()=>{if(attempts>=2||!img.isConnected)return;const url=new URL(img.src,location.href);if(url.origin!==location.origin||!/^\/(uploads|api\/captures)\//.test(url.pathname))return;attempts++;setTimeout(()=>{if(!img.isConnected)return;url.searchParams.set('retry',Date.now());img.src=url.href;},attempts*600);};
+  img.addEventListener('error',retry);if(img.complete&&!img.naturalWidth)retry();
+ });
+}
 function capturePhotoSrc(c) {
+  if(c&&c._comparisonUrl)return c._comparisonUrl;
   return c && Array.isArray(c.overlays) && c.overlays.length
     ? `/api/captures/${c.id}/stamped?res=standard&v=${state.imgv}` : photoSrc(c.photo_path);
 }
@@ -278,6 +286,7 @@ function sortAccountMenu(){
 document.addEventListener('photo-notes-languagechange',sortAccountMenu);
 
 function renderApp() {
+  document.getElementById('captureShareDialog')?.remove();
   el.innerHTML = `
     <div class="wrap">
       <div class="app-header">
@@ -662,7 +671,7 @@ function renderCapture() {
 
   // preserve any typed note across re-renders
   if (state._note) document.getElementById('note').value = state._note;
-  document.getElementById('note').addEventListener('input', e => state._note = e.target.value);
+  document.getElementById('note').addEventListener('input', e => { state._note = e.target.value; if(dictationActive){stopCaptureDictation();dictationBase=e.target.value;} });
 
   // if a photo is already chosen (e.g. re-render after picking an area), keep it and its location visible
   if (state.photoFile) {
@@ -788,7 +797,13 @@ async function saveCameraReading() {
   if(document.getElementById('readerSave')!==btn)return;if(!r.ok)throw new Error();toast('Record saved');setPavingToolBusy([],false);renderCameraReader();}catch(e){if(document.getElementById('readerSave')===btn){toast('Record could not be saved');btn.disabled=false;btn.textContent='Save Record';}}finally{if(document.getElementById('readerSave')===btn)setPavingToolBusy(['readerTake','readerChoose'],false);}
 }
 async function loadCameraReadings() {
-  const box=document.getElementById('readerSaved'); if(!box)return; try{const r=await api(`/api/camera-readings?type=${cameraReaderType}`);if(!r.ok)throw new Error();const rows=await r.json();box.innerHTML=rows.length?`<div class="camera-reading-list">${rows.map(x=>`<article class="card camera-reading-card">${x.photo_path?`<img src="${photoSrc(x.photo_path)}" alt="Source">`:''}<div><strong>${esc(x.title||'Untitled record')}</strong>${Object.entries(x.fields||{}).filter(([,v])=>v).map(([k,v])=>`<div class="meta"><span>${esc(k.replaceAll('_',' '))}:</span> ${esc(v)}</div>`).join('')}</div></article>`).join('')}</div>`:'<p class="empty">No saved records yet.</p>'; }catch(e){box.innerHTML='<p class="status">Saved records could not be loaded.</p>';}
+  const box=document.getElementById('readerSaved');if(!box)return;
+  try{
+    const r=await api(`/api/camera-readings?type=${cameraReaderType}`);if(!r.ok)throw new Error();const rows=await r.json();if(!box.isConnected)return;
+    box.innerHTML=rows.length?`<div class="camera-reading-list">${rows.map(x=>`<article class="card camera-reading-card">${x.photo_path?`<img src="${photoSrc(x.photo_path)}" alt="Source">`:''}<div><strong>${esc(x.title||'Untitled record')}</strong>${Object.entries(x.fields||{}).filter(([,v])=>v).map(([k,v])=>`<div><b>${esc(k.replaceAll('_',' '))}:</b> ${esc(v)}</div>`).join('')}<div class="row"><button class="btn secondary slim" data-reader-library="${x.id}">Open in Photo Library</button><button class="btn secondary slim" data-reader-delete="${x.id}">Delete Record</button></div></div></article>`).join('')}</div>`:'<p class="empty">No saved records yet.</p>';
+    box.querySelectorAll('[data-reader-library]').forEach(button=>button.onclick=async()=>{button.disabled=true;try{const r=await api(`/api/camera-readings/${button.dataset.readerLibrary}/library`,{method:'POST'});if(!r.ok)throw new Error();const d=await r.json();await loadAreas();state.selectedIds=new Set([String(d.capture_id)]);state.view='organize';renderApp();}catch(e){toast('Record could not be opened');button.disabled=false;}});
+    box.querySelectorAll('[data-reader-delete]').forEach(button=>button.onclick=async()=>{if(!confirm(uiT('Delete this saved scanner record? Photos already added to the library are kept.')))return;button.disabled=true;try{const r=await api(`/api/camera-readings/${button.dataset.readerDelete}`,{method:'DELETE'});if(!r.ok)throw new Error();loadCameraReadings();}catch(e){toast('Record could not be deleted');button.disabled=false;}});
+  }catch(e){box.innerHTML='<p class="status">Saved records could not be loaded.</p>';}
 }
 
 let alignmentBefore=null, alignmentAfterFile=null, alignmentCaptures=[], alignmentPairedIds=new Set();
@@ -801,7 +816,7 @@ async function renderAlignmentTool() {
 function renderAlignmentChoices(){const box=document.getElementById('alignBeforeList');if(!box)return;const photos=alignmentCaptures.filter(c=>c.photo_path&&!alignmentPairedIds.has(Number(c.id))).slice(0,30);box.innerHTML=photos.length?`<div class="alignment-choice-grid">${photos.map(c=>`<button class="alignment-choice" data-id="${c.id}"><span class="photo-title">${esc(c.photo_title||'Untitled photo')}</span><img src="${capturePhotoSrc(c)}" alt=""><span><strong>GPS</strong><br>${esc(formatGpsClient(c))}<br><strong>Address</strong><br>${esc(c.address||'No address')}</span></button>`).join('')}</div>`:'<p class="empty">There are no unpaired project photos available. Save a new project photo first, then return here.</p>';box.querySelectorAll('.alignment-choice').forEach(b=>b.onclick=()=>chooseAlignmentBefore(Number(b.dataset.id)));}
 function chooseAlignmentBefore(id){alignmentBefore=alignmentCaptures.find(c=>c.id===id);document.querySelectorAll('.alignment-choice').forEach(b=>b.classList.toggle('selected',Number(b.dataset.id)===id));document.getElementById('alignReference').src=photoSrc(alignmentBefore.photo_path);document.getElementById('alignTakeStep').hidden=false;document.getElementById('alignTake').onclick=()=>document.getElementById('alignCam').click();document.getElementById('alignChoose').onclick=()=>document.getElementById('alignLib').click();const pick=e=>{const f=e.target.files&&e.target.files[0];if(!f)return;alignmentAfterFile=f;showAlignmentComparison();e.target.value='';};document.getElementById('alignCam').onchange=pick;document.getElementById('alignLib').onchange=pick;document.getElementById('alignTakeStep').scrollIntoView({behavior:'smooth'});}
 function showAlignmentComparison(){document.getElementById('alignBeforeImage').src=photoSrc(alignmentBefore.photo_path);document.getElementById('alignAfterImage').src=URL.createObjectURL(alignmentAfterFile);document.getElementById('alignCompareStep').hidden=false;const range=document.getElementById('alignOpacity'),after=document.getElementById('alignAfterImage');range.oninput=()=>after.style.opacity=String(Number(range.value)/100);after.style.opacity='.5';document.getElementById('alignRetake').onclick=()=>document.getElementById('alignCam').click();document.getElementById('alignSave').onclick=saveAlignedPair;document.getElementById('alignCompareStep').scrollIntoView({behavior:'smooth'});}
-async function saveAlignedPair(){if(!alignmentBefore||!alignmentAfterFile)return;const before=alignmentBefore,file=alignmentAfterFile,embedded=pavingToolEmbedded(),btn=document.getElementById('alignSave');setPavingToolBusy(['alignTake','alignChoose','alignRetake'],true);btn.disabled=true;btn.textContent='Saving...';try{const fd=new FormData();fd.append('photo',file);fd.append('note',document.getElementById('alignNote').value.trim());fd.append('kind','note');fd.append('area_tags',JSON.stringify(before.area_tags||[]));const loc=await getLocationOnce();if(loc){fd.append('latitude',loc.lat);fd.append('longitude',loc.lng);}const cr=await api('/api/captures',{method:'POST',body:fd});if(!cr.ok)throw new Error();const after=await cr.json();const pr=await api('/api/pairs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({before_id:before.id,after_id:after.id})});if(!pr.ok)throw new Error();if(document.getElementById('alignSave')!==btn)return;toast('Before and after pair saved');setPavingToolBusy([],false);if(embedded)renderAlignmentTool();else{state.view='organize';renderApp();}}catch(e){if(document.getElementById('alignSave')!==btn)return;toast('Matched pair could not be saved');btn.disabled=false;btn.textContent='Save Matched Pair';}finally{if(document.getElementById('alignSave')===btn)setPavingToolBusy(['alignTake','alignChoose','alignRetake'],false);}}
+async function saveAlignedPair(){if(!alignmentBefore||!alignmentAfterFile)return;const before=alignmentBefore,file=alignmentAfterFile,embedded=pavingToolEmbedded(),btn=document.getElementById('alignSave');setPavingToolBusy(['alignTake','alignChoose','alignRetake'],true);btn.disabled=true;btn.textContent='Saving...';try{const fd=new FormData();fd.append('photo',file);fd.append('note',document.getElementById('alignNote').value.trim());fd.append('kind','note');fd.append('area_tags',JSON.stringify(before.area_tags||[]));if(before.job_id)fd.append('job_id',String(before.job_id));const loc=await getLocationOnce();if(loc){fd.append('latitude',loc.lat);fd.append('longitude',loc.lng);}const cr=await api('/api/captures',{method:'POST',body:fd});if(!cr.ok)throw new Error();const after=await cr.json();const pr=await api('/api/pairs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({before_id:before.id,after_id:after.id,comparison_opacity:Number(document.getElementById('alignOpacity').value)/100})});if(!pr.ok)throw new Error();if(document.getElementById('alignSave')!==btn)return;toast('Before and after pair saved');setPavingToolBusy([],false);if(embedded)renderAlignmentTool();else{state.view='organize';renderApp();}}catch(e){if(document.getElementById('alignSave')!==btn)return;toast('Matched pair could not be saved');btn.disabled=false;btn.textContent='Save Matched Pair';}finally{if(document.getElementById('alignSave')===btn)setPavingToolBusy(['alignTake','alignChoose','alignRetake'],false);}}
 
 // ================= Paving Pro ticket scanner =================
 let ticketPhotoFile = null, ticketDraft = null;
@@ -891,9 +906,9 @@ function renderTicketReview(t) {
     <section class="ticket-review-panel">
       <div class="formhead">2. Review and Save</div>
       <div class="status">AI confidence: <strong>${esc(t.confidence || 'low')}</strong>. The photographed ticket is the source of truth.</div>
-      <label for="tkJobLink">Link Ticket Photo to Job</label><select id="tkJobLink"><option value="">No job selected</option>${state.jobs.map(job=>`<option value="${job.id}" ${String(t.job_id||'')===String(job.id)?'selected':''}>${esc(job.job_number?job.job_number+' - '+job.name:job.name)}</option>`).join('')}</select>
+      <label for="tkJobLink">Link Ticket Photo to Job</label><select id="tkJobLink"><option value="">No job selected</option>${state.jobs.map(job=>`<option value="${job.id}" ${String(t.job_id||state.jobId||'')===String(job.id)?'selected':''}>${esc(job.job_number?job.job_number+' - '+job.name:job.name)}</option>`).join('')}</select>
       <div class="ticket-form-grid">
-        <div>${ticketField('tkNumber','Ticket Number',t.ticket_number)}${ticketField('tkDate','Ticket Date',t.ticket_date || localDateValue(),'date')}</div>
+        <div>${ticketField('tkNumber','Ticket Number',t.ticket_number)}${ticketField('tkDate','Ticket Date',t.ticket_date ? String(t.ticket_date).slice(0,10) : '', 'date')}</div>
         <div>${ticketField('tkJob','Job Number',t.job_number)}${ticketField('tkTruck','Truck Number',t.truck_number)}</div>
         <div>${ticketField('tkPlant','Plant Name',t.plant_name)}${ticketField('tkPlantAddress','Plant Address',t.plant_address)}</div>
         <div>${ticketField('tkMix','Mix Description',t.mix_description)}${ticketField('tkMixCode','Mix Code',t.mix_code)}</div>
@@ -916,16 +931,16 @@ async function saveTicketReview() {
   };
   const btn = document.getElementById('ticketSave'); btn.disabled = true; btn.textContent = 'Saving...';
   setPavingToolBusy(['ticketTake','ticketChoose'],true);try{const r = await api(`/api/asphalt-tickets/${ticketDraft.id}`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
-  if(document.getElementById('ticketSave')!==btn)return;if(!r.ok)throw new Error();
+  if(document.getElementById('ticketSave')!==btn)return;if(!r.ok){const d=await r.json().catch(()=>({}));throw new Error(d.error||'Ticket could not be saved');}
     setPavingToolBusy([],false);toast('Ticket saved'); ticketPhotoFile = null; ticketDraft = null; renderTicketScanner();
-  }catch(e){if(document.getElementById('ticketSave')===btn){toast('Ticket could not be saved');btn.disabled=false;btn.textContent='Save Ticket';}}finally{if(document.getElementById('ticketSave')===btn)setPavingToolBusy(['ticketTake','ticketChoose'],false);}
+  }catch(e){if(document.getElementById('ticketSave')===btn){toast(e.message||'Ticket could not be saved');btn.disabled=false;btn.textContent='Save Ticket';}}finally{if(document.getElementById('ticketSave')===btn)setPavingToolBusy(['ticketTake','ticketChoose'],false);}
 }
 
 async function loadTodayTickets() {
   const box = document.getElementById('ticketToday');
   if (!box) return;
   try {
-    const r = await api(`/api/asphalt-tickets?date=${localDateValue()}`);
+    const r = await api(`/api/asphalt-tickets?saved_from=${encodeURIComponent(new Date(new Date().setHours(0,0,0,0)).toISOString())}&saved_to=${encodeURIComponent(new Date(new Date().setHours(24,0,0,0)).toISOString())}`);
     if (!r.ok) throw new Error('bad');
     const d = await r.json(); const rows = d.tickets || [];
     box.innerHTML = `<div class="ticket-total"><span>Today’s Total</span><strong>${Number(d.total_tons || 0).toLocaleString(uiLocale(),{minimumFractionDigits:2,maximumFractionDigits:2})} tons</strong></div>` +
@@ -1042,7 +1057,7 @@ function acquireLocation(force=false) {
       if (firstError && firstError.code === 1) throw firstError;
       // Android browsers can time out while enabling precise GPS immediately
       // after permission is granted. Retry with a recent/network location.
-      pos = await browserPosition({ enableHighAccuracy:false, timeout:15000, maximumAge:60000 });
+      pos = await browserPosition({ enableHighAccuracy:false, timeout:15000, maximumAge:force?0:60000 });
     }
     try {
       if (!isCurrent()) return;
@@ -1180,7 +1195,7 @@ function startDictationSession(SR) {
       dictationBase=mergeSpeechTranscript(dictationBase,sessionText);
       if (dictationBase) dictationBase+=' ';
     }
-    if (dictationActive&&!ios) {
+    if (dictationActive && document.getElementById('note')===noteEl && state.photoFile===photoForSession) {
       const btn=document.getElementById('dictate');
       if (btn) btn.textContent='Listening... tap to stop';
       dictationRestartTimer=setTimeout(()=>startDictationSession(SR),300);
@@ -1652,7 +1667,8 @@ async function drainQueue() {
   const account=queueAccount, edition=selectedEdition();
   try{
     while(bgQueue.length&&queueAccount===account&&selectedEdition()===edition){
-      if(navigator.onLine===false)break;
+      // Hotspots can report offline while the server is reachable. The request
+      // and existing retry delay determine whether an upload can proceed.
       const item=bgQueue[0];
       if(item.blocked)break;
       if(!PhotoNotesQueue.eligible(item,account,edition))break;
@@ -1860,6 +1876,7 @@ async function renderList() {
       <section class="organize-panel">
         <label>Apply Batch Changes</label>
         <select id="batchJob"><option value="">Move to Job...</option>${state.jobs.map(j=>`<option value="${j.id}">${esc(j.name)}</option>`).join('')}</select>
+        <select id="batchDocument" style="margin-top:8px"><option value="">Add to Document...</option></select>
         <select id="batchTemplate" style="margin-top:8px"><option value="">Apply Annotation Template...</option><option value="date_address">Date + Address</option><option value="evidence">Evidence Details</option><option value="copyright">Copyright Only</option></select>
         <button class="btn secondary slim" id="runBatch" type="button">Apply Batch Changes</button>
       </section>
@@ -1909,7 +1926,18 @@ async function loadPavingReadiness(){const box=document.getElementById('pavingRe
 async function createJob(){const name=document.getElementById('newJobName').value.trim();if(!name){toast('Enter a job name');return;}const body={name,job_number:document.getElementById('newJobNumber').value.trim(),customer:document.getElementById('newJobCustomer').value.trim(),address:document.getElementById('newJobAddress').value.trim()};const r=await api('/api/jobs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});if(!r.ok){toast('Job could not be created');return;}const job=await r.json();await loadJobs();state.jobId=String(job.id);toast('Job created');renderList();}
 async function showSelectedJobTimeline(){const id=(document.getElementById('jobFilter')||{}).value;if(!id){toast('Choose a job first');return;}const r=await api(`/api/jobs/${id}/timeline`);if(!r.ok){toast('Timeline could not be loaded');return;}const d=await r.json(),body=document.getElementById('body');body.innerHTML=`<button class="backlink" id="timelineBack">← Back to Organize</button><div class="workflow-intro"><strong>${esc(d.job.name)} Timeline</strong><span>${esc([d.job.job_number,d.job.customer,d.job.address].filter(Boolean).join(' · '))}</span></div><div class="row"><span class="badge">${esc(d.job.status)}</span><button class="btn secondary slim" id="jobStatusBtn">${d.job.status==='active'?'Mark Job Complete':'Reopen Job'}</button></div><div>${d.captures.length?d.captures.map((c,i)=>`<div style="display:grid;grid-template-columns:90px 1fr;gap:12px;border-left:3px solid var(--pn-border-2455d9,#2455d9);padding:0 0 20px 16px"><div><strong>${new Date(c.created_at).toLocaleDateString(uiLocale())}</strong><div class="meta">${new Date(c.created_at).toLocaleTimeString(uiLocale(),{hour:'numeric',minute:'2-digit'})}</div></div><div class="card" style="margin:0"><div class="photo-title">${esc(c.photo_title||'Untitled photo')}</div>${c.photo_path?`<img src="${capturePhotoSrc(c)}" alt="Timeline photo">`:''}${photoLocationHtml(c)}<div>${esc(c.note||'(no note)')}</div></div></div>`).join(''):'<p class="empty">No photos are assigned to this job yet.</p>'}</div>`;document.getElementById('timelineBack').onclick=renderList;document.getElementById('jobStatusBtn').onclick=async()=>{const u=await api(`/api/jobs/${id}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:d.job.status==='active'?'completed':'active'})});if(u.ok){toast('Job status updated');await loadJobs();renderList();}else toast('Job status could not be updated');};}
 const ANNOTATION_TEMPLATES={date_address:[{t:'datetime',x:4,y:4,size:3,color:'#ffffff',font:'sans',outline:true},{t:'address',x:4,y:11,size:3,color:'#ffffff',font:'sans',outline:true}],evidence:[{t:'datetime',x:4,y:4,size:2.5,color:'#ffffff',font:'sans',outline:true},{t:'address',x:4,y:10,size:2.5,color:'#ffffff',font:'sans',outline:true},{t:'gps',x:4,y:16,size:2.5,color:'#ffffff',font:'sans',outline:true},{t:'copyright',x:4,y:92,size:2.2,color:'#ffffff',font:'sans',outline:true}],copyright:[{t:'copyright',x:4,y:92,size:2.2,color:'#ffffff',font:'sans',outline:true}]};
-async function runBatchChanges(){const ids=selectedCaptureIds();if(!ids.length){toast('Select at least one capture');return;}const job=document.getElementById('batchJob').value,template=document.getElementById('batchTemplate').value,body={ids};if(job)body.job_id=Number(job);if(template)body.overlays=ANNOTATION_TEMPLATES[template];if(!job&&!template){toast('Choose a batch change');return;}const r=await api('/api/captures/batch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const d=await r.json().catch(()=>({}));if(!r.ok){toast('Batch changes failed');return;}toast(`Updated ${d.updated} photos`);await loadJobs();runSmartSearch();}
+async function runBatchChanges(){
+ const ids=selectedCaptureIds();if(!ids.length)return toast('Select at least one capture');
+ const job=document.getElementById('batchJob').value,template=document.getElementById('batchTemplate').value,group=document.getElementById('batchDocument').value,body={ids};
+ if(!job&&!template&&!group)return toast('Choose a batch change');
+ if(job)body.job_id=Number(job);if(template)body.overlays=ANNOTATION_TEMPLATES[template];
+ const button=document.getElementById('runBatch');button.disabled=true;
+ try{if(job||template){const r=await api('/api/captures/batch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});if(!r.ok)throw new Error('Photo details could not be updated');}
+ if(group){const r=await api(`/api/groups/${group}/add`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids})});if(!r.ok)throw new Error('Document could not be updated. Check the selection and try again.');}
+ state.imgv++;toast(`Updated ${ids.length} photos`);await loadGroupOptions();runSmartSearch();
+ }catch(e){toast(e.message);}finally{button.disabled=false;}
+}
+
 function compareSelectedPhotos(){const ids=selectedCaptureIds();if(ids.length!==2){toast('Select exactly two photos to compare');return;}const rows=window._lastCards||[],a=rows.find(x=>x.id===ids[0]),b=rows.find(x=>x.id===ids[1]);if(!a?.photo_path||!b?.photo_path){toast('Both selections must have photos');return;}const m=document.createElement('div');m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:90;padding:16px;overflow:auto';m.innerHTML=`<section style="max-width:900px;margin:auto;background:var(--pn-bg-fff,#fff);border-radius:12px;padding:16px"><div class="row"><strong>Photo Comparison &amp; Alignment</strong><button class="iconbtn" id="cmpClose">×</button></div><p class="status">Use side-by-side view for details or the overlay slider to check whether fixed objects line up.</p><div id="cmpSide" class="row" style="align-items:flex-start"><img src="${photoSrc(a.photo_path)}" style="width:50%;max-height:65vh;object-fit:contain"><img src="${photoSrc(b.photo_path)}" style="width:50%;max-height:65vh;object-fit:contain"></div><div id="cmpOverlay" style="display:none;position:relative;max-width:700px;margin:auto"><img src="${photoSrc(a.photo_path)}" style="width:100%;display:block"><img id="cmpTop" src="${photoSrc(b.photo_path)}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;opacity:.5"></div><label>View</label><div class="row"><button class="btn secondary" id="cmpSideBtn">Side by Side</button><button class="btn secondary" id="cmpOverlayBtn">Overlay</button></div><label>Overlay Opacity</label><input id="cmpOpacity" type="range" min="0" max="100" value="50"></section>`;document.body.appendChild(m);m.querySelector('#cmpClose').onclick=()=>m.remove();m.onclick=e=>{if(e.target===m)m.remove();};m.querySelector('#cmpSideBtn').onclick=()=>{m.querySelector('#cmpSide').style.display='flex';m.querySelector('#cmpOverlay').style.display='none';};m.querySelector('#cmpOverlayBtn').onclick=()=>{m.querySelector('#cmpSide').style.display='none';m.querySelector('#cmpOverlay').style.display='block';};m.querySelector('#cmpOpacity').oninput=e=>m.querySelector('#cmpTop').style.opacity=Number(e.target.value)/100;}
 
 async function createOrganizeTopic() {
@@ -1961,12 +1989,13 @@ async function renderEdit() {
     <div class="row" style="margin-top:10px"><button class="btn secondary" id="selall">Select All</button><button class="btn secondary" id="selnone">Clear</button></div>
     <div class="row" style="margin-top:8px"><button class="btn secondary" id="fixaddr">Fix Addresses</button><button class="btn" id="delbtn" style="background:var(--pn-bg-b3261e,#b3261e)">Delete Selected</button></div>
     <div id="cards" style="margin-top:16px"></div>`;
-  document.getElementById('filter').onchange = e => loadCards(e.target.value);
+  document.getElementById('filter').onchange = e => {state.editTopic=e.target.value;loadCards(e.target.value);};
   document.getElementById('selall').onclick = () => document.querySelectorAll('.capchk').forEach(c => { c.checked = true; state.selectedIds.add(String(c.value)); });
   document.getElementById('selnone').onclick = () => { state.selectedIds.clear(); document.querySelectorAll('.capchk').forEach(c => c.checked = false); };
   document.getElementById('fixaddr').onclick = doFixAddresses;
   document.getElementById('delbtn').onclick = doDeleteSelected;
-  loadCards('');
+  document.getElementById('filter').value=state.editTopic||'';
+  loadCards(state.editTopic||'');
 }
 
 async function pairSelected() {
@@ -2082,10 +2111,11 @@ async function loadGroupOptions() {
   const groups = r.ok ? await r.json() : [];
   sel.innerHTML = '<option value="">Choose Document</option>' +
     groups.map(g => `<option value="${g.id}">${esc(g.title || 'Untitled')} (${g.item_count})</option>`).join('');
+  const batch=document.getElementById('batchDocument');if(batch)batch.innerHTML='<option value="">Add to Document...</option>'+groups.map(g=>`<option value="${g.id}">${esc(g.title||'Untitled')}</option>`).join('');
 }
 
 async function addSelectedToGroup() {
-  const ids = Array.from(document.querySelectorAll('.capchk:checked')).map(x => x.value);
+  const ids = selectedCaptureIds();
   if (!ids.length) { toast('Select at least one capture'); return; }
   const newName = document.getElementById('newgroupname').value.trim();
   const sel = document.getElementById('groupsel');
@@ -2210,14 +2240,15 @@ async function loadCards(area, query = '', filters = {}) {
   for (const c of rows) {
     if (consumed.has(c.id)) continue;
     const ab = beforeOf[c.id];
-    if (ab && byId[ab.after_id] && !consumed.has(ab.after_id)) { html.push(pairCardHtml(c, byId[ab.after_id])); consumed.add(c.id); consumed.add(ab.after_id); continue; }
+    if (ab && byId[ab.after_id] && !consumed.has(ab.after_id)) { html.push(pairCardHtml(c, byId[ab.after_id],ab)); consumed.add(c.id); consumed.add(ab.after_id); continue; }
     const aa = afterOf[c.id];
-    if (aa && byId[aa.before_id] && !consumed.has(aa.before_id)) { html.push(pairCardHtml(byId[aa.before_id], c)); consumed.add(c.id); consumed.add(aa.before_id); continue; }
+    if (aa && byId[aa.before_id] && !consumed.has(aa.before_id)) { html.push(pairCardHtml(byId[aa.before_id], c,aa)); consumed.add(c.id); consumed.add(aa.before_id); continue; }
     html.push(captureCardHtml(c));
     consumed.add(c.id);
   }
   cards.innerHTML = html.join('');
   wireCards(cards, rows);
+  retryPhotoImages(cards);
   cards.querySelectorAll('.capchk').forEach(c => { c.checked = state.selectedIds.has(String(c.value)); });
   if (state._focusCapture) {
     const chk = cards.querySelector(`.capchk[value="${state._focusCapture}"]`);
@@ -2332,7 +2363,8 @@ const photoViewerObserver=new MutationObserver(records=>{for(const record of rec
 photoViewerObserver.observe(document.body,{childList:true,subtree:true});
 
 // A combined before/after card: two photos side by side with labels + Unpair.
-function pairCardHtml(before, after) {
+function pairCardHtml(before, after, pair={}) {
+  const comparison=pair.comparison_opacity!=null;
   const side = (c, label) => {
     const dims = measurementOn() ? fmtDimsClient(c) : '';
     const badge = isIndustryProClient() && c.defect_type ? defectBadgeHtml(c) : '';
@@ -2344,7 +2376,7 @@ function pairCardHtml(before, after) {
         <input type="checkbox" class="capchk" value="${c.id}" style="width:18px;height:18px"> Select
       </label>
       <div class="phototitlewrap" data-id="${c.id}"><div class="photo-title">${esc(c.photo_title||'Untitled photo')}</div>${titleAction?`<button class="editlink edittitle" data-id="${c.id}" type="button">${titleAction}</button>`:''}</div>
-      ${c.photo_path ? `<img src="${capturePhotoSrc(c)}" alt="${label}" />` : ''}
+      ${!comparison&&c.photo_path ? `<img src="${capturePhotoSrc(c)}" alt="${label}" />` : ''}
       <div class="rotaterow">${rotateButtons(c.id)}</div>
       ${badge ? `<div style="margin:4px 0">${badge}</div>` : ''}
       ${photoLocationHtml(c)}
@@ -2359,6 +2391,7 @@ function pairCardHtml(before, after) {
   };
   return `<div class="card">
     <div style="font-weight:bold;margin-bottom:6px">${esc(before.address || after.address || 'No location')} <span class="badge">Before / After</span></div>
+    ${comparison?`<img src="/api/pairs/${pair.id}/comparison?v=${state.imgv}" alt="Before and after comparison">`:""}
     <div class="row" style="gap:12px;align-items:flex-start">${side(before, 'BEFORE')}${side(after, 'AFTER')}</div>
     <button class="btn secondary slim unpairbtn" data-id="${before.id}" style="margin-top:8px">Unpair</button>
   </div>`;
@@ -2491,12 +2524,13 @@ function addOverlayItem(t) {
   } else if (t === 'arrow') {
     item = { t: 'arrow', x: 25, y: 25, w: 40, h: 30, color: '#ff0000', thickness: 0.8, dir: 'se' };
   } else {
-    item = { t, text: t === 'copyright' ? ('© ' + new Date().getFullYear() + ' Zukor AI. All Rights Reserved.') : (t === 'custom' ? 'Text' : ''), x: 4, y: 84, size: 1.25, color: '#ffffff', font: 'sans', outline: true };
+    item = { t, text: t === 'copyright' ? ('© ' + new Date().getFullYear() + ' Zukor AI. All Rights Reserved.') : (t === 'custom' ? 'Text' : ''), x: 4, y: 84, size: 3, color: '#ffffff', font: 'sans', outline: true };
   }
   editorOverlays.push(item);
   editorSel = editorOverlays.length - 1;
   drawOverlayItems();
   renderStampCtl();
+  if(t==='custom'){const input=document.getElementById('ovText');if(input){input.focus();input.select();input.scrollIntoView({block:'center'});}}
 }
 function drawOverlayItems() {
   const st = document.getElementById('stampStage');
@@ -2868,6 +2902,10 @@ function startEditTopics(id, rows) {
 
 // ---- Map (Pro): satellite view of captures + measurement zones ----
 let mapObj = null, mapMarkers = [], mapZoneLayers = [];
+function installMapTileFallback(layer,map,onFallback){
+ layer.on('tileerror',event=>{const level=Number(event.coords&&event.coords.z),current=Number(layer.options.maxNativeZoom||19);if(!Number.isFinite(level)||level>current||level<=13)return;layer.options.maxNativeZoom=level-1;onFallback?.();setTimeout(()=>{if(map.hasLayer(layer))layer.redraw();},250);});
+ return layer;
+}
 function loadLeaflet() {
   return new Promise((resolve) => {
     if (window.L) return resolve();
@@ -2910,9 +2948,9 @@ async function renderMap() {
   const div = document.getElementById('mapdiv');
   mapObj = L.map(div).setView([29.5, -98.5], 12);
   if (cfg.mapbox_token) {
-    L.tileLayer(`https://api.mapbox.com/styles/v1/mapbox/satellite-v9/tiles/512/{z}/{x}/{y}@2x?access_token=${cfg.mapbox_token}`, { tileSize: 512, zoomOffset: -1, maxZoom: 22, attribution: '&copy; Mapbox &copy; Maxar' }).addTo(mapObj);
+    L.tileLayer(`https://api.mapbox.com/styles/v1/mapbox/satellite-v9/tiles/512/{z}/{x}/{y}@2x?access_token=${cfg.mapbox_token}`, { tileSize: 512, zoomOffset: -1, maxZoom: 22, maxNativeZoom: 19, attribution: '&copy; Mapbox &copy; Maxar' }).addTo(mapObj);
   } else {
-    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 22, maxNativeZoom: 19, attribution: 'Tiles &copy; Esri, Maxar, Earthstar Geographics' }).addTo(mapObj);
+    installMapTileFallback(L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}?blankTile=false', { maxZoom: 22, maxNativeZoom: 19, attribution: 'Tiles &copy; Esri, Maxar, Earthstar Geographics' }),mapObj).addTo(mapObj);
   }
   mapObj.on('popupopen', (e) => {
     const btn = e.popup.getElement().querySelector('.mapopen');
@@ -3001,6 +3039,8 @@ function initMeasureUI() {
 }
 function startDraw(mode, existing) {
   cancelDraw();
+  if(!mapObj)return;
+  mapObj.getContainer().style.cursor='crosshair';mapObj.doubleClickZoom.disable();
   window._draw = { mode, points: [], markers: [], poly: null, line: null, editId: (existing && existing.id) || null };
   document.getElementById('drawCancel').style.display = '';
   document.getElementById('drawFinish').style.display = '';
@@ -3061,7 +3101,7 @@ function cancelDraw() {
   const d = window._draw;
   if (d && mapObj) { d.markers.forEach(m => mapObj.removeLayer(m)); if (d.poly) mapObj.removeLayer(d.poly); if (d.line) mapObj.removeLayer(d.line); }
   window._draw = null;
-  if (mapObj) mapObj.off('click', onDrawClick);
+  if (mapObj) {mapObj.off('click', onDrawClick);mapObj.getContainer().style.cursor='';mapObj.doubleClickZoom.enable();}
   ['drawCancel', 'drawFinish'].forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
   ['drawArea', 'drawSpan'].forEach(id => { const el = document.getElementById(id); if (el) el.style.display = ''; });
   const ro = document.getElementById('drawReadout'); if (ro) ro.textContent = '';
@@ -3211,9 +3251,8 @@ async function loadSendCenter() {
     const format = control.querySelector('.document-delivery-format');
     const print = control.querySelector('[data-document-action="print"]');
     const syncActions = () => {
-      const printable = format.value === 'pdf';
-      print.disabled = !printable;
-      print.title = printable ? 'Open the PDF for printing' : 'Printing is available for PDF documents';
+      print.disabled = false;
+      print.title = 'Open the printable PDF version';
     };
     format.onchange = syncActions;
     syncActions();
@@ -3357,6 +3396,7 @@ function openPreparedExportShare(file, format, groupId) {
 }
 
 async function deliverExport(format, groupId, action = 'download') {
+  if(action==='print')format='pdf';
   const ext = format === 'bundle' ? 'zip' : format;
   const name = safeSharedFileName(format, groupId, ext);
   try {
@@ -3398,7 +3438,7 @@ async function shareSelectedPhotos() {
     setStatus(`${photoRows.length} photos is too many for one phone share. Select 20 or fewer, or use Download with Markdown + Photos.`, true);
     return;
   }
-  const signature = photoRows.map(c => c.id).join(',');
+  const signature = JSON.stringify([state.imgv,photoRows.map(c=>[c.id,c.photo_path,c.note,c.address,c.overlays])]);
   // If preparation outlasted the browser's permitted user gesture, the next
   // tap reaches navigator.share immediately with the already-prepared files.
   if (preparedPhotoShare.signature === signature && preparedPhotoShare.files.length) {
@@ -3426,7 +3466,9 @@ async function shareSelectedPhotos() {
         const r = await api(`/api/captures/${c.id}/share-photo`);
         if (!r.ok) throw new Error(`Photo ${index + 1} could not be prepared`);
         const blob = await r.blob();
-        files[index] = new File([blob], `photo-${c.id}.jpg`, { type: 'image/jpeg' });
+        const original=new File([blob], `photo-${c.id}.jpg`, { type: 'image/jpeg' });
+        const details=[shareAddress(c.address),c.note,c.created_at?new Date(c.created_at).toLocaleString(uiLocale()):''].filter(Boolean).join('\n');
+        files[index] = window.PhotoNotesShareImage ? await window.PhotoNotesShareImage.withDetails(original,details) : original;
         complete += 1;
         setStatus(`Preparing ${complete} of ${photoRows.length} share-sized photos...`);
       }
@@ -3434,7 +3476,7 @@ async function shareSelectedPhotos() {
     await Promise.all(Array.from({ length: Math.min(4, photoRows.length) }, worker));
     // A shared photo starts with the job-site address, followed by its note.
     // Topics are organizational metadata and do not belong in the message.
-    const text = rows.map(c => [shareAddress(c.address), c.note].filter(Boolean).join('\n')).join('\n\n');
+    const text = rows.map(c => [shareAddress(c.address), c.note, c.created_at?new Date(c.created_at).toLocaleString(uiLocale()):''].filter(Boolean).join('\n')).join('\n\n');
     if (navigator.canShare && !navigator.canShare({ files })) {
       setStatus('This phone cannot share these photos together. Select fewer photos, or use Download.', true);
       return;
@@ -3951,7 +3993,13 @@ function renderDocumentLayoutControls(){const box=document.getElementById('docum
 function layoutFromControls(){return{cover_page:document.getElementById('documentCover').checked,header:document.getElementById('documentHeader').checked,footer:document.getElementById('documentFooter').checked,page_numbers:document.getElementById('documentPageNumbers').checked,font:document.getElementById('documentFont').value,photo_layout:document.getElementById('documentPhotoLayout').value,accent:document.getElementById('documentAccent').value};}
 function renderDocumentPreviewFromControls(){renderDocumentPreview(layoutFromControls());}
 async function saveDocumentLayout(){const layout=layoutFromControls(),r=await api(`/api/groups/${currentGroup.id}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({layout})});if(r.ok){currentGroup.layout=layout;toast('Layout saved');renderDocumentPreview(layout);}else toast('Layout could not be saved');}
-function renderDocumentPreview(layoutOverride){const box=document.getElementById('documentPreview');if(!box)return;const l=layoutOverride||normalizedDocumentLayout(),b=currentDocumentSettings.branding||{},perPage=l.photo_layout==='two_per_page'?2:1,pages=[];for(let i=0;i<currentGroupItems.length;i+=perPage)pages.push(currentGroupItems.slice(i,i+perPage));let pageNo=0;const chrome=(content)=>{pageNo++;return `<article class="document-preview-page" style="font-family:${esc(l.font)}"><div class="document-preview-header">${l.header?esc(b.header_text||b.company_name||''):''}</div><div class="document-preview-content">${content}</div><div class="document-preview-footer">${l.footer?esc(b.footer_text||''):''}${l.page_numbers?`${l.footer&&b.footer_text?' · ':''}Page ${pageNo}`:''}</div></article>`;};let html='';if(l.cover_page)html+=chrome(`<div class="document-preview-cover">${currentDocumentSettings.logo_path?`<img src="${esc(currentDocumentSettings.logo_path)}" alt="Company logo">`:''}<div class="document-preview-company" style="color:${esc(l.accent)}">${esc(b.company_name||'')}</div><h2>${esc(currentGroup.title||'Untitled Document')}</h2><p>${esc(currentGroup.description||'')}</p></div>`);if(!pages.length)html+=chrome(`<div class="document-preview-empty">Add photos from Organize to preview the document.</div>`);for(const page of pages)html+=chrome(`<div class="document-preview-photos ${perPage===2?'two-up':''}">${page.map(c=>`<section><h3>${esc(c.photo_title||'Untitled Photo')}</h3>${c.photo_path?`<img src="${capturePhotoSrc(c)}" alt="${esc(c.photo_title||'Photo')}">`:''}${photoLocationHtml(c)}<div>${esc(new Date(c.created_at).toLocaleString(uiLocale()))}</div><div>${esc((c.area_tags||[]).join(', '))}</div><p>${esc(c.note||'No notes')}</p></section>`).join('')}</div>`);box.innerHTML=html;}
+function documentPreviewItems(){
+ const byId=new Map(currentGroupItems.map(c=>[Number(c.id),c])),used=new Set(),rows=[];
+ for(const c of currentGroupItems){if(used.has(c.id))continue;const pair=(currentGroupPairs||[]).find(p=>p.comparison_opacity!=null&&(p.before_id===c.id||p.after_id===c.id)&&byId.has(p.before_id)&&byId.has(p.after_id));
+  if(!pair){rows.push(c);continue;}const before=byId.get(pair.before_id),after=byId.get(pair.after_id);used.add(before.id);used.add(after.id);rows.push({...before,photo_title:'Before and after comparison',_comparisonUrl:`/api/pairs/${pair.id}/comparison?v=${state.imgv}`,note:`BEFORE: ${before.note||''}\nAFTER: ${after.note||''}`});
+ }return rows;
+}
+function renderDocumentPreview(layoutOverride){const box=document.getElementById('documentPreview');if(!box)return;if(currentDocumentSettings.template_ready&&window.PhotoNotesWordPreview){const target=document.createElement('div');box.replaceChildren(target);window.PhotoNotesWordPreview.render(target,currentGroup.id);return;}const l=layoutOverride||normalizedDocumentLayout(),b=currentDocumentSettings.branding||{},perPage=l.photo_layout==='two_per_page'?2:1,pages=[],previewItems=documentPreviewItems();for(let i=0;i<previewItems.length;i+=perPage)pages.push(previewItems.slice(i,i+perPage));let pageNo=0;const chrome=(content)=>{pageNo++;return `<article class="document-preview-page" style="font-family:${esc(l.font)}"><div class="document-preview-header">${l.header?esc(b.header_text||b.company_name||''):''}</div><div class="document-preview-content">${content}</div><div class="document-preview-footer">${l.footer?esc(b.footer_text||''):''}${l.page_numbers?`${l.footer&&b.footer_text?' · ':''}Page ${pageNo}`:''}</div></article>`;};let html='';if(l.cover_page)html+=chrome(`<div class="document-preview-cover">${currentDocumentSettings.logo_path?`<img src="${esc(currentDocumentSettings.logo_path)}" alt="Company logo">`:''}<div class="document-preview-company" style="color:${esc(l.accent)}">${esc(b.company_name||'')}</div><h2>${esc(currentGroup.title||'Untitled Document')}</h2><p>${esc(currentGroup.description||'')}</p></div>`);if(!pages.length)html+=chrome(`<div class="document-preview-empty">Add photos from Organize to preview the document.</div>`);for(const page of pages)html+=chrome(`<div class="document-preview-photos ${perPage===2?'two-up':''}">${page.map(c=>`<section><h3>${esc(c.photo_title||'Untitled Photo')}</h3>${c.photo_path?`<img src="${capturePhotoSrc(c)}" alt="${esc(c.photo_title||'Photo')}">`:''}${photoLocationHtml(c)}<div>${esc(new Date(c.created_at).toLocaleString(uiLocale()))}</div><div>${esc((c.area_tags||[]).join(', '))}</div><p>${esc(c.note||'No notes')}</p></section>`).join('')}</div>`);box.innerHTML=html;}
 
 function renderTitleView() {
   const box = document.getElementById('titleview');
@@ -4050,7 +4098,8 @@ function renderGroupPairPreview() {
   if (!pairs.length) { box.innerHTML = ''; return; }
   box.innerHTML = `<div class="formhead" style="margin-top:18px">Before &amp; After Evidence</div>
     <div class="status">Matched photos stay together in PDF, Word, and proposal exports.</div>
-    ${pairs.map(({ before, after }) => `<article class="card before-after-preview">
+    ${pairs.map(({ pair,before, after }) => `<article class="card before-after-preview">
+      ${pair.comparison_opacity!=null?`<img style="grid-column:1/-1" src="/api/pairs/${pair.id}/comparison?v=${state.imgv}" alt="Before and after comparison">`:""}
       <div class="before-after-column"><strong>BEFORE</strong><div class="photo-title">${esc(before.photo_title||'Untitled photo')}</div><img src="${capturePhotoSrc(before)}" alt="Before photo">${photoLocationHtml(before)}<div>${esc(before.note || '(no caption)')}</div><div class="meta">${new Date(before.created_at).toLocaleDateString(uiLocale())}</div></div>
       <div class="before-after-column"><strong>AFTER</strong><div class="photo-title">${esc(after.photo_title||'Untitled photo')}</div><img src="${capturePhotoSrc(after)}" alt="After photo">${photoLocationHtml(after)}<div>${esc(after.note || '(no caption)')}</div><div class="meta">${new Date(after.created_at).toLocaleDateString(uiLocale())}</div></div>
     </article>`).join('')}`;

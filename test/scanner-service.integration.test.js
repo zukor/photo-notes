@@ -17,6 +17,7 @@ test('scanner routes retain photos, extract fields, save reviews and report serv
  };
  try {
   user=(await pool.query("INSERT INTO users(email,password_hash,role,plan,pro_type) VALUES($1,'not-a-password','admin','pro','paving') RETURNING id",['scanner-'+Date.now()+'@example.invalid'])).rows[0];
+  process.env.SUPER_ADMIN_USER_IDS=String(user.id);
   const cookie='pn_token='+jwt.sign({id:user.id},process.env.SESSION_SECRET);
   const image=await sharp({create:{width:100,height:100,channels:3,background:'white'}}).jpeg().toBuffer();
   const scan=async(route,type)=>{
