@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Photo Notes — Admin</title>
   <meta name="theme-color" content="#1d4ed8" />
-  <link rel="stylesheet" href="/styles.css?v=215" />
+  <link rel="stylesheet" href="/styles.css?v=216" />
   <script src="/vendor/html2canvas.min.js?v=59"></script>
   <script src="/issue-markup.js?v=200"></script>
-  <script src="/issue-reporter.js?v=215"></script>
+  <script src="/issue-reporter.js?v=216"></script>
   <style>
     .stat { display:inline-block; min-width:84px; margin:4px 14px 4px 0; vertical-align:top; }
     .stat .n { font-size:19px; font-weight:bold; color:var(--pn-text-000,#000); }
@@ -149,9 +149,9 @@
     .delete-user-panel h3 { margin-top:0; }
     .delete-user-panel .btn { margin:10px 8px 0 0; }
   </style>
-  <link rel="stylesheet" href="/testing-hub.css?v=215">
-  <script src="/testing-hub.js?v=215"></script>
-<link rel="stylesheet" href="/theme.css?v=215"><script src="/theme.js?v=215"></script></head>
+  <link rel="stylesheet" href="/testing-hub.css?v=216">
+  <script src="/testing-hub.js?v=216"></script>
+<link rel="stylesheet" href="/theme.css?v=216"><script src="/theme.js?v=216"></script></head>
 <body>
   <div id="app"></div>
   <script>
@@ -248,6 +248,7 @@
     }
 
     function userCard(u){
+      if(u.is_super_admin&&!currentUser?.is_super_admin)return `<div class="admin-panel"><strong>${esc(u.name||u.email)}</strong><p>Super Admin account. Only a Super Admin can manage this account.</p></div>`;
       const usage=usageByUser[u.id]||{}, features=u.feature_access||{};
       const orientedKnown = u.dims_known || 0;
       const photoLine = orientedKnown
@@ -421,7 +422,7 @@
             </div>
           </div>
 
-          <h1 class="admin-page-title">Admin</h1>
+          <h1 class="admin-page-title">${currentUser?.is_super_admin?'Super Admin':'Admin'}</h1>
           <details id="usersSection" class="admin-section"><summary id="usersHeading">Users</summary><div class="admin-section-body">
             <div class="users-heading"><div><p class="helper">Select a user to edit their details, password, and version access.</p></div><button class="btn" type="button" id="addUser" aria-expanded="false" aria-controls="createUserPanel">Add User</button></div>
             <div id="createUserPanel" class="admin-panel" hidden>          <h2>Create User</h2>
@@ -493,6 +494,7 @@
                   </div>
         <button class="issue-fab" id="issueFab" type="button" data-html2canvas-ignore="true">Report Issue</button>
         ${issueReporterMarkup()}`;
+      if(!currentUser?.is_super_admin)document.querySelectorAll('[data-admin-tool="health"],[data-admin-tool="billing"],[data-admin-tool="activity"],.issue-diagnostics,#issueSystemNotice').forEach(section=>section.remove());
       document.getElementById('issueFab').onclick=openIssueReporter;
       refreshIssueAttention();
       const profileButton=document.getElementById('profileButton');
@@ -597,6 +599,7 @@
     }
     let issueSystemLoad=0;
     async function loadIssueSystemStatus(){
+      if(!currentUser?.is_super_admin)return;
       const request=++issueSystemLoad;
       const results=await Promise.allSettled(['/api/admin/repair-status','/api/admin/cloud-worker'].map(async path=>{
         const r=await api(path);if(!r.ok)throw new Error('Status unavailable');return r.json();
@@ -733,6 +736,7 @@
     }
     const activityLabels={admin_user_delete:'Permanently deleted user',admin_user_create:'Created login',admin_user_update:'Changed user settings',admin_password_reset:'Reset password',admin_issue_update:'Updated issue',admin_issue_email_retry:'Retried issue email'};
     async function loadActivity(){
+      if(!currentUser?.is_super_admin)return;
       const box=document.getElementById('activity');if(!box)return;
       try{const r=await api('/api/admin/activity');if(!r.ok)throw new Error();const rows=await r.json();box.innerHTML=rows.length?`<table class="activity-table"><thead><tr><th>When</th><th>Administrator</th><th>Action</th><th>Details</th></tr></thead><tbody>${rows.map(a=>`<tr><td>${fdatetime(a.created_at)}</td><td>${esc(a.admin_name||a.admin_email||'Administrator')}</td><td>${esc(activityLabels[a.action]||a.action)}</td><td>${esc(activityDetail(a))}</td></tr>`).join('')}</tbody></table>`:'<p class="helper">No administrative changes have been recorded yet.</p>';}
       catch(e){box.innerHTML='<p class="status">Administrative activity could not be loaded.</p>';}
