@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Photo Notes — Admin</title>
   <meta name="theme-color" content="#1d4ed8" />
-  <link rel="stylesheet" href="/styles.css?v=236" />
+  <link rel="stylesheet" href="/styles.css?v=237" />
   <script src="/vendor/html2canvas.min.js?v=59"></script>
-  <script src="/issue-markup.js?v=236"></script>
-  <script src="/issue-reporter.js?v=236"></script>
+  <script src="/issue-markup.js?v=237"></script>
+  <script src="/issue-reporter.js?v=237"></script>
   <style>
     .stat { display:inline-block; min-width:84px; margin:4px 14px 4px 0; vertical-align:top; }
     .stat .n { font-size:19px; font-weight:bold; color:var(--pn-text-000,#000); }
@@ -149,14 +149,15 @@
     .delete-user-panel h3 { margin-top:0; }
     .delete-user-panel .btn { margin:10px 8px 0 0; }
   </style>
-  <link rel="stylesheet" href="/testing-hub.css?v=236">
-  <script src="/testing-hub.js?v=236"></script>
-<link rel="stylesheet" href="/theme.css?v=236"><script src="/theme.js?v=236"></script></head>
+  <link rel="stylesheet" href="/testing-hub.css?v=237">
+  <script src="/testing-hub.js?v=237"></script>
+<link rel="stylesheet" href="/theme.css?v=237"><script src="/theme.js?v=237"></script></head>
 <body>
   <div id="app"></div>
   <script>
     const el = document.getElementById('app');
-    async function api(path, opts = {}) { return fetch(path, { credentials: 'same-origin', ...opts }); }
+    const regularAdminView=new URLSearchParams(location.search).get('view')==='admin';
+    async function api(path, opts = {}) { const headers=new Headers(opts.headers);if(regularAdminView&&path.startsWith('/api/admin/'))headers.set('X-Photo-Notes-Admin-View','regular');return fetch(path, { credentials: 'same-origin', ...opts, headers }); }
     function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
     function fdate(d){ if(!d) return '—'; try { return new Date(d).toLocaleDateString(); } catch { return '—'; } }
     function fdatetime(d){ if(!d) return 'never'; try { return new Date(d).toLocaleString([], { year:'numeric', month:'numeric', day:'numeric', hour:'numeric', minute:'2-digit' }); } catch { return 'never'; } }
@@ -180,7 +181,7 @@
     let allIssues = [];
     let allAssignments = [];
     let usageByUser = {};
-    let currentUser = null;
+    let currentUser = null, accountIsSuperAdmin=false;
     function userInitials(user){
       const source=String((user && (user.name || user.email)) || 'User').trim();
       const words=source.split(/\s+/).filter(Boolean);
@@ -363,7 +364,8 @@
       if (!r.ok) return renderLogin();
       const me = await r.json();
       if (me.role !== 'admin') return renderDenied();
-      currentUser = me;
+      accountIsSuperAdmin=!!me.is_super_admin;
+      currentUser = {...me,is_super_admin:accountIsSuperAdmin&&!regularAdminView};
       renderAdmin();
     }
 
@@ -417,7 +419,9 @@
                   <div class="profile-name">${esc((currentUser && currentUser.name) || 'Administrator')}</div>
                   <div class="profile-email">${esc((currentUser && currentUser.email) || '')}</div>
                   <div class="profile-plan">${currentUser && currentUser.pro_type==='roads' ? 'Road Issue Reporter' : currentUser && currentUser.plan === 'pro' ? (currentUser.pro_type==='general'?'Photo Notes Pro':currentUser.pro_type==='contractor'?'General Contractor Pro':currentUser.pro_type==='hoa'?'HOA Maintenance Pro':currentUser.pro_type==='concrete'?'Concrete Pro':currentUser.pro_type==='roofer'?'Roofer Pro':'Paving Pro') : 'Basic Plan'} · Administrator</div>
+                  <a href="/admin?view=admin">Admin Dashboard</a>
                   <a href="/">Open Photo Notes</a>
+                  ${accountIsSuperAdmin?'<a href="/admin?view=super">Super Admin Dashboard</a>':''}
                   <button type="button" id="signout">Sign Out</button>
                 </div>
               </div>
@@ -497,6 +501,8 @@
         <button class="issue-fab" id="issueFab" type="button" data-html2canvas-ignore="true">Report Issue</button>
         ${issueReporterMarkup()}`;
       if(!currentUser?.is_super_admin)document.querySelectorAll('[data-admin-tool="issues"],[data-admin-tool="system-status"],[data-admin-tool="health"],[data-admin-tool="billing"],[data-admin-tool="activity"],.issue-diagnostics,#issueSystemNotice,#addUser,#createUserPanel,#userTotals').forEach(section=>section.remove());
+      const menu=document.getElementById('profileMenu'),signout=document.getElementById('signout');
+      [...menu.children].filter(item=>item.matches('a,button')&&item!==signout).sort((a,b)=>a.textContent.trim().localeCompare(b.textContent.trim(),'en')).forEach(item=>menu.insertBefore(item,signout));
       const tools=[...document.querySelectorAll('[data-admin-tool]')];
       tools.sort((a,b)=>a.querySelector('summary').textContent.trim().localeCompare(b.querySelector('summary').textContent.trim(),'en',{sensitivity:'base'}));
       tools.forEach(tool=>tool.parentElement.appendChild(tool));

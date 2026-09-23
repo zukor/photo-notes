@@ -4,19 +4,20 @@ const express=require('express');
 (async()=>{
  const app=express();app.use(express.static(require('node:path').join(__dirname,'../public')));
  const server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));
- try{for(const engine of [chromium,webkit]){const browser=await engine.launch();try{for(const owner of [false,true]){
+ try{for(const engine of [chromium,webkit]){const browser=await engine.launch();try{for(const [accountOwner,preview] of [[false,false],[true,false],[true,true]]){const owner=accountOwner&&!preview;
  const page=await browser.newPage({viewport:{width:390,height:844},serviceWorkers:'block'}),errors=[],requests=[];
  page.on('pageerror',e=>errors.push(e.message));
  await page.route('**/api/**',route=>{
   const path=new URL(route.request().url()).pathname;requests.push(path);let data=[];
-  if(path==='/api/me')data={name:'Admin Tester',role:'admin',is_super_admin:owner,plan:'pro'};
+  if(path==='/api/me')data={name:'Admin Tester',role:'admin',is_super_admin:accountOwner,plan:'pro'};
   if(path==='/api/admin/users')data=[{id:1,name:'Owner Account',email:'owner@example.invalid',role:'admin',is_super_admin:true,active:true,edition_access:['basic']},{id:2,name:'Regular User',email:'user@example.invalid',role:'user',active:true,edition_access:['basic','paving']}];
   if(path==='/api/issues/attention')data={count:0};
   if(path==='/api/admin/usage')data=[];
   return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(data)});
  });
- await page.goto(`http://127.0.0.1:${server.address().port}/admin.html`);
+ await page.goto(`http://127.0.0.1:${server.address().port}/admin.html${preview?'?view=admin':''}`);
  await page.locator('#usersHeading').waitFor();
+ const menuLabels=await page.locator('#profileMenu > a, #profileMenu > button').allTextContents();assert.equal(menuLabels.pop(),'Sign Out');assert.deepEqual(menuLabels,[...menuLabels].sort((a,b)=>a.localeCompare(b,'en')));assert.equal(await page.locator('#profileMenu a[href="/admin?view=super"]').count(),accountOwner?1:0);
  assert.equal(await page.locator('h1').textContent(),owner?'Super Admin':'Admin');
  const labels=await page.locator('[data-admin-tool] > summary').allTextContents();
  assert(labels.includes('Users'));assert.deepEqual(labels,[...labels].sort((a,b)=>a.localeCompare(b,'en')));

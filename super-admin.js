@@ -16,7 +16,7 @@ function adminAccessBoundary(env=process.env){
     const versionUpdate=req.method==='POST'&&/^\/users\/[^/]+\/versions\/?$/.test(path);
     const userMutation=userRoute&&!['GET','HEAD','OPTIONS'].includes(req.method)&&!versionUpdate;
     const deletionPreview=userRoute&&/\/deletion\/?$/.test(path);
-    if((restricted||protectedAccount||userMutation||deletionPreview)&&!isSuperAdmin(req.user,env))return res.status(403).json({error:'Super Admin access required'});
+    if((restricted||protectedAccount||userMutation||deletionPreview)&&(!isSuperAdmin(req.user,env)||req.get('X-Photo-Notes-Admin-View')==='regular'))return res.status(403).json({error:'Super Admin access required'});
     if(req.body&&Object.prototype.hasOwnProperty.call(req.body,'is_super_admin'))return res.status(403).json({error:'Super Admin membership is managed in server configuration'});
     next();
   };

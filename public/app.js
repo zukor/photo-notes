@@ -299,7 +299,8 @@ function renderApp() {
               <button type="button" id="installHelp">Install Photo Notes</button>
               <button type="button" id="pendingPhotos">Pending Photos</button>
               <button type="button" id="myIssues" ${state.me?.is_tester?'hidden':''}>My Issue Reports</button>
-              ${state.me && state.me.role === 'admin' ? '<a href="/admin">Admin Dashboard</a>' : ''}
+              ${state.me?.is_super_admin ? '<a href="/admin?view=super">Super Admin Dashboard</a>' : ''}
+              ${state.me && state.me.role === 'admin' ? '<a href="/admin?view=admin">Admin Dashboard</a>' : ''}
               <button type="button" id="signout">Sign Out</button>
             </div>
           </div>
