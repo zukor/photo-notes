@@ -5,6 +5,14 @@ let issueScreenshotURL = null, issueMarkupEditor=null;
 let issueGeneration = 0, issueMicPending = false;
 let issueDictationActive = false, issueDictationBase = '', issueDictationRestartTimer = null, issueDictationWatchdog = null;
 const issuePageLabels = { capture:'Capture', organize:'Organize', edit:'Edit', create:'Create', send:'Send', map:'Job Site Map' };
+// Hidden panels and closed details contribute no visible pixels, but cloning them
+// can load hundreds of images and block Safari while it waits for those images.
+function ignoreIssueCaptureElement(element){
+  if(['STYLE','LINK','HEAD','META','TITLE'].includes(element.tagName))return false;
+  if(element.hidden||element.classList.contains('html2canvas-container'))return true;
+  if(element.parentElement?.tagName==='DETAILS'&&!element.parentElement.open&&element.tagName!=='SUMMARY')return true;
+  return window.getComputedStyle(element).display==='none';
+}
 // Capture the visible screen, not the full report list, which can exceed canvas limits.
 async function captureIssueScreenshot(quality=.78){
   if(!window.html2canvas)throw Error('Screenshot capture is unavailable');
@@ -12,7 +20,7 @@ async function captureIssueScreenshot(quality=.78){
   const scale=Math.min(window.devicePixelRatio||1,1.5,Math.sqrt(4000000/(width*height)));
   let timer;
   const capture=(async()=>{
-    const canvas=await window.html2canvas(document.documentElement,{useCORS:true,allowTaint:false,backgroundColor:'#ffffff',width,height,x:window.scrollX,y:window.scrollY,scrollX:window.scrollX,scrollY:window.scrollY,scale,logging:false,imageTimeout:5000});
+    const canvas=await window.html2canvas(document.documentElement,{useCORS:true,allowTaint:false,backgroundColor:'#ffffff',width,height,x:window.scrollX,y:window.scrollY,scrollX:window.scrollX,scrollY:window.scrollY,scale,logging:false,imageTimeout:5000,ignoreElements:ignoreIssueCaptureElement});
     try{const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',quality));if(!blob)throw Error('Screenshot could not be encoded');return blob;}
     finally{canvas.width=0;canvas.height=0;}
   })();
@@ -42,7 +50,7 @@ async function openIssueReporter(testingContext=null) {
   document.getElementById('issueClose').focus();
   if(fab){fab.disabled=false;fab.textContent=issueFabLabel();}
   // Let the dialog paint before screenshot rendering does any expensive work.
-  if(window.requestAnimationFrame)await new Promise(resolve=>window.requestAnimationFrame(()=>window.requestAnimationFrame(resolve)));
+  if(window.requestAnimationFrame)await new Promise(resolve=>setTimeout(resolve,150));
   if(generation!==issueGeneration)return;
   try {
     const shot=await captureIssueScreenshot();if(generation!==issueGeneration)return;issueScreenshotBlob=shot;
@@ -167,7 +175,7 @@ async function submitIssueReport(){
   const description=[action&&`Trying to do: ${action}`,whatHappened&&`What happened: ${whatHappened}`,expected&&`Expected: ${expected}`,frequency&&`Frequency: ${frequency}`].filter(Boolean).join('\n');
   if(!whatHappened&&!issueVoiceBlob){st.textContent='Please type what went wrong or attach a voice recording before sending.';ta.focus();return;}
   btn.disabled=true;btn.textContent='Sending...';st.textContent='Saving your report...';
-  try{const screenshot=issueMarkupEditor?await issueMarkupEditor.exportBlob():issueScreenshotBlob;if(generation!==issueGeneration)return;const fd=new FormData();fd.append('description',description||'Voice recording attached for review.');if(issueTestingContext){fd.append('testing_assignment_id',issueTestingContext.assignmentId);fd.append('testing_step_id',issueTestingContext.stepId);}fd.append('issue_type',document.getElementById('issueType')?.value||'bug_problem');fd.append('page_name',issuePageName);fd.append('page_url',location.href);fd.append('viewport',`${window.innerWidth} × ${window.innerHeight}`);fd.append('app_version','228');fd.append('user_agent',navigator.userAgent+' | Photo Notes web 228 | '+((window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches)||navigator.standalone?'installed web app':'browser'));if(screenshot)fd.append('screenshot',screenshot,'issue-screen.jpg');if(issueVoiceBlob)fd.append('voice',issueVoiceBlob,issueVoiceBlob.type.includes('webm')?'issue-voice.webm':'issue-voice.m4a');const r=await api('/api/issues',{method:'POST',body:fd});const d=await r.json().catch(()=>({}));if(generation!==issueGeneration)return;if(!r.ok)throw new Error();st.textContent=d.email_status==='sent'?`Issue #${d.id} sent. Thank you.`:`Issue #${d.id} saved. Thank you.`;btn.textContent='Sent';setTimeout(()=>{if(generation===issueGeneration)closeIssueReporter();},1800);}catch(e){if(generation!==issueGeneration)return;st.textContent='The report could not be sent. Check your connection and try again.';btn.disabled=false;btn.textContent='Send Issue Report';}
+  try{const screenshot=issueMarkupEditor?await issueMarkupEditor.exportBlob():issueScreenshotBlob;if(generation!==issueGeneration)return;const fd=new FormData();fd.append('description',description||'Voice recording attached for review.');if(issueTestingContext){fd.append('testing_assignment_id',issueTestingContext.assignmentId);fd.append('testing_step_id',issueTestingContext.stepId);}fd.append('issue_type',document.getElementById('issueType')?.value||'bug_problem');fd.append('page_name',issuePageName);fd.append('page_url',location.href);fd.append('viewport',`${window.innerWidth} × ${window.innerHeight}`);fd.append('app_version','229');fd.append('user_agent',navigator.userAgent+' | Photo Notes web 229 | '+((window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches)||navigator.standalone?'installed web app':'browser'));if(screenshot)fd.append('screenshot',screenshot,'issue-screen.jpg');if(issueVoiceBlob)fd.append('voice',issueVoiceBlob,issueVoiceBlob.type.includes('webm')?'issue-voice.webm':'issue-voice.m4a');const r=await api('/api/issues',{method:'POST',body:fd});const d=await r.json().catch(()=>({}));if(generation!==issueGeneration)return;if(!r.ok)throw new Error();st.textContent=d.email_status==='sent'?`Issue #${d.id} sent. Thank you.`:`Issue #${d.id} saved. Thank you.`;btn.textContent='Sent';setTimeout(()=>{if(generation===issueGeneration)closeIssueReporter();},1800);}catch(e){if(generation!==issueGeneration)return;st.textContent='The report could not be sent. Check your connection and try again.';btn.disabled=false;btn.textContent='Send Issue Report';}
 }
 
 function issueReporterMarkup(){return `<a id="issueUpdates" class="issue-updates" href="/?issues=1" hidden data-html2canvas-ignore="true"></a>    <div class="issue-modal" id="issueModal" hidden data-html2canvas-ignore="true">
