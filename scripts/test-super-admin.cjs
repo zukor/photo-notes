@@ -24,10 +24,15 @@ const express=require('express');
  for(const tool of ['health','billing','activity'])assert.equal(await page.locator(`[data-admin-tool="${tool}"]`).count(),owner?1:0);
  assert.equal(await page.locator('.issue-diagnostics').count(),owner?1:0);
  assert.equal(await page.locator('#addUser').count(),owner?1:0);
+ assert.equal(await page.locator('[data-admin-tool="summary"]').count(),0);
+ assert.equal(await page.locator('#userTotals').count(),owner?1:0);
+ if(owner)assert.equal(await page.locator('#usersSection #userTotals').count(),1);
  assert.equal(await page.locator('#createUserPanel').count(),owner?1:0);
  await page.locator('[data-admin-tool="issues"] > summary').click();await page.locator('#issues .helper').waitFor();
  if(!owner)assert(!requests.some(path=>/\/(health|activity|repair-status|cloud-worker)$/.test(path)||path.includes('/billing/')));
- await page.locator('#usersHeading').click();await page.locator('[data-open-user="1"]').click();
+ await page.locator('#usersHeading').click();
+ if(owner){await page.locator('#userTotals > summary').click();assert(await page.locator('#summary .card').isVisible());}
+ await page.locator('[data-open-user="1"]').click();
  assert.equal(await page.locator('[data-reset]').count(),owner?1:0);
  assert.equal(await page.locator('[data-edit-user]').count(),owner?1:0);
  await page.locator('#backToUsers').click();await page.locator('[data-open-user="2"]').click();
