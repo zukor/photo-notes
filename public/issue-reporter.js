@@ -13,6 +13,31 @@ function ignoreIssueCaptureElement(element){
   if(element.parentElement?.tagName==='DETAILS'&&!element.parentElement.open&&element.tagName!=='SUMMARY')return true;
   return window.getComputedStyle(element).display==='none';
 }
+// Rasterize SVG branding at its displayed size. html2canvas can use the wrong
+// intrinsic SVG dimensions, enlarging the artwork inside an otherwise correct box.
+async function issueScreenshotBranding(){
+  const selectors=['.app-header .zukor-corner-logo','.app-header .brand'];
+  const copies=await Promise.all(selectors.map(async selector=>{
+    const element=document.querySelector(selector);if(!element)return null;
+    const rect=element.getBoundingClientRect();if(!rect.width||!rect.height)return null;
+    const style=getComputedStyle(element),isImage=element.tagName==='IMG';
+    // This PNG is the original image embedded in zukor-logo.svg, extracted unchanged.
+    const source=isImage?'/zukor-logo.png':style.backgroundImage.match(/^url\(["']?(.*?)["']?\)$/)?.[1];
+    if(!source)return null;
+    const image=new Image();image.src=source;await image.decode();
+    const canvas=document.createElement('canvas');canvas.width=Math.ceil(rect.width*2);canvas.height=Math.ceil(rect.height*2);
+    const ctx=canvas.getContext('2d'),ratio=Math.min(canvas.width/image.naturalWidth,canvas.height/image.naturalHeight);
+    const w=image.naturalWidth*ratio,h=image.naturalHeight*ratio;
+    ctx.drawImage(image,isImage?0:(canvas.width-w)/2,(canvas.height-h)/2,w,h);
+    const data=canvas.toDataURL('image/png');canvas.width=canvas.height=0;
+    return {selector,data,width:rect.width,height:rect.height,isImage};
+  }));
+  return async doc=>{for(const copy of copies){if(!copy)continue;const element=doc.querySelector(copy.selector);if(!element)continue;
+    if(copy.isImage){element.removeAttribute('srcset');element.src=copy.data;await element.decode();}
+    else{element.style.setProperty('background-image',`url("${copy.data}")`,'important');element.style.setProperty('background-size','100% 100%','important');}
+    element.style.setProperty('width',copy.width+'px','important');element.style.setProperty('height',copy.height+'px','important');
+  }};
+}
 // Capture the visible screen, not the full report list, which can exceed canvas limits.
 async function captureIssueScreenshot(quality=.78){
   if(!window.html2canvas)throw Error('Screenshot capture is unavailable');
@@ -20,7 +45,8 @@ async function captureIssueScreenshot(quality=.78){
   const scale=Math.min(window.devicePixelRatio||1,1.5,Math.sqrt(4000000/(width*height)));
   let timer;
   const capture=(async()=>{
-    const canvas=await window.html2canvas(document.documentElement,{useCORS:true,allowTaint:false,backgroundColor:'#ffffff',width,height,x:window.scrollX,y:window.scrollY,scrollX:window.scrollX,scrollY:window.scrollY,scale,logging:false,imageTimeout:5000,ignoreElements:ignoreIssueCaptureElement});
+    const onclone=await issueScreenshotBranding();
+    const canvas=await window.html2canvas(document.documentElement,{useCORS:true,allowTaint:false,backgroundColor:'#ffffff',width,height,x:window.scrollX,y:window.scrollY,scrollX:window.scrollX,scrollY:window.scrollY,scale,logging:false,imageTimeout:5000,ignoreElements:ignoreIssueCaptureElement,onclone});
     try{const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',quality));if(!blob)throw Error('Screenshot could not be encoded');return blob;}
     finally{canvas.width=0;canvas.height=0;}
   })();
@@ -175,7 +201,7 @@ async function submitIssueReport(){
   const description=[whatHappened&&`What happened: ${whatHappened}`,frequency&&`Frequency: ${frequency}`].filter(Boolean).join('\n');
   if(!whatHappened&&!issueVoiceBlob){st.textContent='Please type what went wrong or attach a voice recording before sending.';ta.focus();return;}
   btn.disabled=true;btn.textContent='Sending...';st.textContent='Saving your report...';
-  try{const screenshot=issueMarkupEditor?await issueMarkupEditor.exportBlob():issueScreenshotBlob;if(generation!==issueGeneration)return;const fd=new FormData();fd.append('description',description||'Voice recording attached for review.');if(issueTestingContext){fd.append('testing_assignment_id',issueTestingContext.assignmentId);fd.append('testing_step_id',issueTestingContext.stepId);}fd.append('issue_type',document.getElementById('issueType')?.value||'bug_problem');fd.append('page_name',issuePageName);fd.append('page_url',location.href);fd.append('viewport',`${window.innerWidth} × ${window.innerHeight}`);fd.append('app_version','233');fd.append('user_agent',navigator.userAgent+' | Photo Notes web 233 | '+((window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches)||navigator.standalone?'installed web app':'browser'));if(screenshot)fd.append('screenshot',screenshot,'issue-screen.jpg');if(issueVoiceBlob)fd.append('voice',issueVoiceBlob,issueVoiceBlob.type.includes('webm')?'issue-voice.webm':'issue-voice.m4a');const r=await api('/api/issues',{method:'POST',body:fd});const d=await r.json().catch(()=>({}));if(generation!==issueGeneration)return;if(!r.ok)throw new Error();st.textContent=d.email_status==='sent'?`Issue #${d.id} sent. Thank you.`:`Issue #${d.id} saved. Thank you.`;btn.textContent='Sent';setTimeout(()=>{if(generation===issueGeneration)closeIssueReporter();},1800);}catch(e){if(generation!==issueGeneration)return;st.textContent='The report could not be sent. Check your connection and try again.';btn.disabled=false;btn.textContent='Send Issue Report';}
+  try{const screenshot=issueMarkupEditor?await issueMarkupEditor.exportBlob():issueScreenshotBlob;if(generation!==issueGeneration)return;const fd=new FormData();fd.append('description',description||'Voice recording attached for review.');if(issueTestingContext){fd.append('testing_assignment_id',issueTestingContext.assignmentId);fd.append('testing_step_id',issueTestingContext.stepId);}fd.append('issue_type',document.getElementById('issueType')?.value||'bug_problem');fd.append('page_name',issuePageName);fd.append('page_url',location.href);fd.append('viewport',`${window.innerWidth} × ${window.innerHeight}`);fd.append('app_version','234');fd.append('user_agent',navigator.userAgent+' | Photo Notes web 234 | '+((window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches)||navigator.standalone?'installed web app':'browser'));if(screenshot)fd.append('screenshot',screenshot,'issue-screen.jpg');if(issueVoiceBlob)fd.append('voice',issueVoiceBlob,issueVoiceBlob.type.includes('webm')?'issue-voice.webm':'issue-voice.m4a');const r=await api('/api/issues',{method:'POST',body:fd});const d=await r.json().catch(()=>({}));if(generation!==issueGeneration)return;if(!r.ok)throw new Error();st.textContent=d.email_status==='sent'?`Issue #${d.id} sent. Thank you.`:`Issue #${d.id} saved. Thank you.`;btn.textContent='Sent';setTimeout(()=>{if(generation===issueGeneration)closeIssueReporter();},1800);}catch(e){if(generation!==issueGeneration)return;st.textContent='The report could not be sent. Check your connection and try again.';btn.disabled=false;btn.textContent='Send Issue Report';}
 }
 
 function issueReporterMarkup(){return `<a id="issueUpdates" class="issue-updates" href="/?issues=1" hidden data-html2canvas-ignore="true"></a>    <div class="issue-modal" id="issueModal" hidden data-html2canvas-ignore="true">
