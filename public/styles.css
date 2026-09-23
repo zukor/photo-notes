@@ -746,3 +746,5 @@ input.dimfield.suggested {
 .issue-description-heading #issueRecord { flex:0 0 auto; width:auto; max-width:48%; min-height:40px; margin:0; padding:8px 12px; font-size:13px; line-height:1.3; }
 
 .issue-description-heading #issueRecord { background:#1d4ed8; color:#fff; border-color:#1d4ed8; }
+
+#issueSend { width:auto; padding:12px 18px; align-self:flex-start; }
