@@ -640,9 +640,6 @@ input.dimfield.suggested {
 #issueMarkupStage { flex:1; min-height:100px; overflow:auto; border:1px solid var(--pn-border-000,#000); background:var(--pn-bg-fff,#fff); }
 #issueMarkupCanvas { display:block; width:100%; height:auto; touch-action:pan-y pinch-zoom; margin:auto; max-width:100%; }
 #issueMarkup[data-editing="true"] #issueMarkupCanvas { touch-action:none; }
-.issue-markup-mode { position:sticky; top:0; z-index:2; padding:6px 0; background:var(--pn-bg-fff,#fff); }
-#issueMarkupMode { width:100%; min-height:44px; border:1px solid var(--pn-border-000,#000); border-radius:6px; background:var(--pn-bg-fff,#fff); color:var(--pn-text-000,#000); font:600 14px Arial,sans-serif; cursor:pointer; }
-#issueMarkup[data-editing="true"] #issueMarkupMode { background:var(--pn-bg-eaf1ff,#eaf1ff); border:2px solid var(--pn-border-2455d9,#2455d9); }
 #issueMarkupCanvas:focus-visible { outline:2px solid var(--pn-border-2455d9,#2455d9); outline-offset:-2px; }
 .issue-evidence:has(#issueMarkup:not([hidden])) .issue-screenshot-scroll { display:none; }
 @media(max-width:700px) {
@@ -741,3 +738,5 @@ input.dimfield.suggested {
 #sharedDocumentLinks summary { cursor:pointer; font-weight:bold; }
 
 #exportShareDialog [hidden] { display:none !important; }
+
+.issue-markup-label { margin:10px 0 4px; color:var(--pn-text-000,#000); text-align:left; font-weight:bold; }
