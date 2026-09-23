@@ -32,5 +32,5 @@ test('ready-to-test issues carry fix details while Sam controls tester contact',
   assert.match(server,/management_status==='ready_to_test'/);
   assert.match(server,/mark-tester-notified/);
   assert.doesNotMatch(server,/emailIssueReadyForRetest/);
-  assert.match(admin,/What Was Fixed/);assert.match(admin,/Release or Commit/);assert.match(admin,/Retest Instructions/);assert.match(admin,/Copy Retest Message/);assert.match(admin,/Mark Tester Notified/);
+  assert.match(admin,/What Was Fixed/);assert.doesNotMatch(admin,/Release or Commit/);assert.match(admin,/Retest Instructions/);assert.match(admin,/Copy Retest Message/);assert.match(admin,/Mark Tester Notified/);
 });
