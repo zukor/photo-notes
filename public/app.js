@@ -2902,6 +2902,10 @@ function startEditTopics(id, rows) {
 
 // ---- Map (Pro): satellite view of captures + measurement zones ----
 let mapObj = null, mapMarkers = [], mapZoneLayers = [];
+function installMapTileFallback(layer,map,onFallback){
+ layer.on('tileerror',event=>{const level=Number(event.coords&&event.coords.z),current=Number(layer.options.maxNativeZoom||19);if(!Number.isFinite(level)||level>current||level<=13)return;layer.options.maxNativeZoom=level-1;onFallback?.();setTimeout(()=>{if(map.hasLayer(layer))layer.redraw();},250);});
+ return layer;
+}
 function loadLeaflet() {
   return new Promise((resolve) => {
     if (window.L) return resolve();
@@ -2946,7 +2950,7 @@ async function renderMap() {
   if (cfg.mapbox_token) {
     L.tileLayer(`https://api.mapbox.com/styles/v1/mapbox/satellite-v9/tiles/512/{z}/{x}/{y}@2x?access_token=${cfg.mapbox_token}`, { tileSize: 512, zoomOffset: -1, maxZoom: 22, maxNativeZoom: 19, attribution: '&copy; Mapbox &copy; Maxar' }).addTo(mapObj);
   } else {
-    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 22, maxNativeZoom: 19, attribution: 'Tiles &copy; Esri, Maxar, Earthstar Geographics' }).addTo(mapObj);
+    installMapTileFallback(L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}?blankTile=false', { maxZoom: 22, maxNativeZoom: 19, attribution: 'Tiles &copy; Esri, Maxar, Earthstar Geographics' }),mapObj).addTo(mapObj);
   }
   mapObj.on('popupopen', (e) => {
     const btn = e.popup.getElement().querySelector('.mapopen');

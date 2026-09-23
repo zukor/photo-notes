@@ -57,7 +57,8 @@ async function renderConcreteFootprintMap(){
   let cfg={};try{const r=await api('/api/config');if(r.ok)cfg=await r.json();}catch(e){}
   if(!root.isConnected)return;
   map=concreteFootprintMap=L.map(q('areaMap')).setView([29.5,-98.5],12);
-  const tiles=cfg.mapbox_token?L.tileLayer(`https://api.mapbox.com/styles/v1/mapbox/satellite-v9/tiles/512/{z}/{x}/{y}@2x?access_token=${cfg.mapbox_token}`,{tileSize:512,zoomOffset:-1,maxZoom:22,maxNativeZoom:19,attribution:'© Mapbox © Maxar'}):L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:22,maxNativeZoom:19,attribution:'Tiles © Esri, Maxar, Earthstar Geographics'});
+  const tiles=cfg.mapbox_token?L.tileLayer(`https://api.mapbox.com/styles/v1/mapbox/satellite-v9/tiles/512/{z}/{x}/{y}@2x?access_token=${cfg.mapbox_token}`,{tileSize:512,zoomOffset:-1,maxZoom:22,maxNativeZoom:19,attribution:'© Mapbox © Maxar'}):L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}?blankTile=false',{maxZoom:22,maxNativeZoom:19,attribution:'Tiles © Esri, Maxar, Earthstar Geographics'});
+  installMapTileFallback(tiles,map,()=>{if(root.isConnected)q('areaMapStatus').textContent='Using available imagery at a lower resolution. The map stays at your selected zoom.';});
   tiles.on('tileerror',()=>{if(root.isConnected)q('areaMapStatus').textContent='Some imagery could not load. Check your connection or zoom out. Field dimensions remain available.';});tiles.addTo(map);
   map.on('click',e=>{if(!tracing)return;if(points.length>=100){status.textContent='Maximum 100 corners per area.';return;}points.push({lat:e.latlng.lat,lng:e.latlng.lng});draw();});
   // A user may already have entered field dimensions while imagery loaded.
