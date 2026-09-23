@@ -43,6 +43,7 @@
   }
 
   function toast(m) {
+    if(typeof window.toast==='function'){window.toast(tr(m));return;}
     var t = q('toast');
     if (t) { t.textContent = tr(m); t.style.display = 'block'; setTimeout(function () { t.style.display = 'none'; }, 2200); }
   }
@@ -71,7 +72,8 @@
 
   var sending = false;
   function showSavedShare(file, text) {
-    var modal = document.createElement('div');modal.className='export-share-modal';
+    document.getElementById('captureShareDialog')?.remove();
+    var modal = document.createElement('div');modal.id='captureShareDialog';modal.className='export-share-modal';
     modal.innerHTML='<section class="export-share-dialog" role="dialog" aria-modal="true" aria-labelledby="captureShareTitle"><h2 id="captureShareTitle">'+tr('Photo saved on this device')+'</h2><p>'+tr('Tap Share to choose where to send it.')+'</p><button class="btn" data-share>'+tr('Share')+'</button><button class="btn secondary" data-close>'+tr('Close')+'</button></section>';
     var close=function(){modal.remove();q('send')?.focus();};
     modal.querySelector('[data-close]').onclick=close;
@@ -87,7 +89,10 @@
     try {
       var saved=await saveCapture({requireDurable:true});
       if(!saved)return;
-      lastFile=null;showSavedShare(f,t);
+      lastFile=null;
+      if(f&&window.PhotoNotesShareImage){try{f=await window.PhotoNotesShareImage.withDetails(f,t);}catch(e){toast(e.message);}}
+      if(typeof state!=='undefined'&&state.view&&state.view!=='capture')return;
+      showSavedShare(f,t);
     } catch(e){toast('Could not save this photo. Your draft is still here.');}
     finally{sending=false;if(q('send'))q('send').disabled=false;if(q('save'))q('save').disabled=false;}
   }

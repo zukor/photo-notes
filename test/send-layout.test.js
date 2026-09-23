@@ -31,7 +31,7 @@ test('Document delivery separates file format from share, download, and print ac
   assert.match(app,/data-document-action="share">Share<\/button>/);
   assert.match(app,/data-document-action="download">Download<\/button>/);
   assert.match(app,/data-document-action="print">Print<\/button>/);
-  assert.match(app,/print\.disabled = !printable/);
+  assert.match(app,/if\(action==='print'\)format='pdf'/);
   assert.match(app,/deliverExport\(format\.value, control\.dataset\.group, button\.dataset\.documentAction\)/);
   assert.doesNotMatch(app,/Share PDF|Save PDF|Save Word|>AI ZIP</);
   assert.match(css,/\.document-delivery-actions \.btn \{[^}]*width:auto/);
