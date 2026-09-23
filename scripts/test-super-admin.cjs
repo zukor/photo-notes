@@ -10,7 +10,7 @@ const express=require('express');
  await page.route('**/api/**',route=>{
   const path=new URL(route.request().url()).pathname;requests.push(path);let data=[];
   if(path==='/api/me')data={name:'Admin Tester',role:'admin',is_super_admin:owner,plan:'pro'};
-  if(path==='/api/admin/users')data=[{id:1,name:'Owner Account',email:'owner@example.invalid',role:'admin',is_super_admin:true,active:true,edition_access:['basic']}];
+  if(path==='/api/admin/users')data=[{id:1,name:'Owner Account',email:'owner@example.invalid',role:'admin',is_super_admin:true,active:true,edition_access:['basic']},{id:2,name:'Regular User',email:'user@example.invalid',role:'user',active:true,edition_access:['basic','paving']}];
   if(path==='/api/issues/attention')data={count:0};
   if(path==='/api/admin/usage')data=[];
   return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(data)});
@@ -20,11 +20,16 @@ const express=require('express');
  assert.equal(await page.locator('h1').textContent(),owner?'Super Admin':'Admin');
  for(const tool of ['health','billing','activity'])assert.equal(await page.locator(`[data-admin-tool="${tool}"]`).count(),owner?1:0);
  assert.equal(await page.locator('.issue-diagnostics').count(),owner?1:0);
+ assert.equal(await page.locator('#addUser').count(),owner?1:0);
+ assert.equal(await page.locator('#createUserPanel').count(),owner?1:0);
  await page.locator('[data-admin-tool="issues"] > summary').click();await page.locator('#issues .helper').waitFor();
  if(!owner)assert(!requests.some(path=>/\/(health|activity|repair-status|cloud-worker)$/.test(path)||path.includes('/billing/')));
  await page.locator('#usersHeading').click();await page.locator('[data-open-user="1"]').click();
  assert.equal(await page.locator('[data-reset]').count(),owner?1:0);
  assert.equal(await page.locator('[data-edit-user]').count(),owner?1:0);
+ await page.locator('#backToUsers').click();await page.locator('[data-open-user="2"]').click();
+ for(const selector of ['[data-reset]','[data-edit-user]','[data-delete-user]','[data-active]','[data-save-tester]','[data-save-features]'])assert.equal(await page.locator(selector).count(),owner?1:0,selector);
+ assert.equal(await page.locator('[data-save-versions]').count(),1);
  assert.deepEqual(errors,[]);await page.screenshot({path:`/tmp/pn-super-${engine.name()}-${owner}.png`});
  console.log(engine.name(),owner?'super admin':'regular admin','PASS');await page.close();
  }}finally{await browser.close();}}}finally{server.close();}
