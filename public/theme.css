@@ -1,0 +1,125 @@
+/* Light mode retains the existing palette; dark mode changes UI surfaces only. */
+:root { color-scheme:light; }
+html[data-theme="dark"] { color-scheme:dark;
+  --pn-bg-000:#0b1220;
+  --pn-bg-111:#0b1220;
+  --pn-bg-1254a3:#1254a3;
+  --pn-bg-173fae:#173fae;
+  --pn-bg-1b7a3d:#1b7a3d;
+  --pn-bg-444444:#0b1220;
+  --pn-bg-785800:#785800;
+  --pn-bg-b3261e:#b3261e;
+  --pn-bg-cfd4dc:#111827;
+  --pn-bg-d9dde4:#111827;
+  --pn-bg-e8edf6:#111827;
+  --pn-bg-e9f0ff:#172235;
+  --pn-bg-eaf1ff:#172235;
+  --pn-bg-eaf2ff:#172235;
+  --pn-bg-eee:#111827;
+  --pn-bg-eef4ff:#111827;
+  --pn-bg-eef5ff:#111827;
+  --pn-bg-effaf1:#111827;
+  --pn-bg-f0f5ff:#111827;
+  --pn-bg-f1f1f1:#111827;
+  --pn-bg-f1f3f5:#111827;
+  --pn-bg-f2f2f2:#111827;
+  --pn-bg-f4f7ff:#111827;
+  --pn-bg-f4f8ff:#111827;
+  --pn-bg-f8f8f8:#111827;
+  --pn-bg-f8fafc:#111827;
+  --pn-bg-f8faff:#111827;
+  --pn-bg-ffc400:#ffc400;
+  --pn-bg-ffde36:#ffde36;
+  --pn-bg-ffdf38:#ffdf38;
+  --pn-bg-ffdf40:#ffdf40;
+  --pn-bg-fff:#111827;
+  --pn-bg-fff1ef:#111827;
+  --pn-bg-fff2af:#443719;
+  --pn-bg-fff3f2:#111827;
+  --pn-bg-fff4a3:#443719;
+  --pn-bg-fff6bd:#172235;
+  --pn-bg-fff8c4:#172235;
+  --pn-bg-fff8eb:#172235;
+  --pn-bg-fff8f7:#111827;
+  --pn-border-000:#718198;
+  --pn-border-111:#718198;
+  --pn-border-1254a3:#9fc5ff;
+  --pn-border-17324f:#718198;
+  --pn-border-174dcc:#9fc5ff;
+  --pn-border-1b7a3d:#9fc5ff;
+  --pn-border-1d4ed8:#9fc5ff;
+  --pn-border-238636:#9fc5ff;
+  --pn-border-2455d9:#9fc5ff;
+  --pn-border-2f76c6:#9fc5ff;
+  --pn-border-64748b:#718198;
+  --pn-border-7d8796:#718198;
+  --pn-border-888:#718198;
+  --pn-border-8aa9d6:#9fc5ff;
+  --pn-border-8fa6c2:#718198;
+  --pn-border-9c7400:#ffd481;
+  --pn-border-9db0c7:#718198;
+  --pn-border-9db0ca:#718198;
+  --pn-border-a8afb9:#718198;
+  --pn-border-aaa:#718198;
+  --pn-border-aab3bf:#718198;
+  --pn-border-aabbd0:#718198;
+  --pn-border-aeb7c5:#718198;
+  --pn-border-aebed2:#718198;
+  --pn-border-b3261e:#ffb4a9;
+  --pn-border-b42318:#ffb4a9;
+  --pn-border-b45309:#ffb4a9;
+  --pn-border-b4c5da:#718198;
+  --pn-border-b7c2d1:#718198;
+  --pn-border-b9c9e1:#718198;
+  --pn-border-c5cbd4:#718198;
+  --pn-border-c6d2e1:#718198;
+  --pn-border-ccd5e2:#718198;
+  --pn-border-cdd3dc:#718198;
+  --pn-border-d7d7d7:#718198;
+  --pn-border-d7dce5:#718198;
+  --pn-border-dbe0e7:#718198;
+  --pn-border-ddd:#718198;
+  --pn-border-e3e6ea:#718198;
+  --pn-border-e3e9f0:#718198;
+  --pn-border-e8231a:#ffb4a9;
+  --pn-border-fff:#718198;
+  --pn-text-000:#ffffff;
+  --pn-text-10243e:#9fc5ff;
+  --pn-text-111:#ffffff;
+  --pn-text-1254a3:#9fc5ff;
+  --pn-text-1644a8:#9fc5ff;
+  --pn-text-172033:#ffffff;
+  --pn-text-174f91:#9fc5ff;
+  --pn-text-176b2c:#9fc5ff;
+  --pn-text-1d4ed8:#9fc5ff;
+  --pn-text-238636:#9fc5ff;
+  --pn-text-333:#ffffff;
+  --pn-text-334155:#ffffff;
+  --pn-text-555:#ffffff;
+  --pn-text-8a2c00:#ffb4a9;
+  --pn-text-a61b16:#ffb4a9;
+  --pn-text-b3261e:#ffb4a9;
+  --pn-text-b42318:#ffb4a9;
+  --pn-text-c1121f:#ffb4a9;
+  --pn-text-fff:#ffffff;
+}
+.theme-switch { display:inline-flex; align-items:center; gap:3px; margin-right:7px; white-space:nowrap; }
+.theme-switch button { appearance:none; width:24px; min-height:28px; padding:2px; margin:0; background:transparent; color:#000; border:0; border-bottom:2px solid transparent; font:700 12px Arial,Helvetica,sans-serif; cursor:pointer; }
+.theme-switch button[aria-pressed="true"] { color:#1d4ed8; border-bottom-color:#1d4ed8; }
+.theme-switch button:focus-visible { outline:2px solid #1d4ed8; outline-offset:2px; }
+html[data-theme="dark"] .theme-switch button { color:#fff; }
+html[data-theme="dark"] .theme-switch button[aria-pressed="true"] { color:#9fc5ff; border-bottom-color:#9fc5ff; }
+html[data-theme="dark"] :is(.zukor-corner-logo, img[alt="Zukor AI"], .brandrow .brand, .install-logo) { background-color:#fff; border-radius:6px; }
+html[data-theme="dark"] :is(input,textarea,select) { color:#fff; background-color:#111827; }
+html[data-theme="dark"] ::placeholder { color:#fff; opacity:1; }
+html[data-theme="dark"] a { color:#9fc5ff; }
+html[data-theme="dark"] :is(.btn,.button) { color:#fff; }
+html[data-theme="dark"] :is(.language-switch button,.language-switch) { color:#fff; }
+html[data-theme="dark"] .language-switch button.active { color:#9fc5ff; border-color:#9fc5ff; }
+@media(max-width:400px) { .theme-switch { gap:1px; margin-right:3px; } .theme-switch button { width:20px; } .header-controls { gap:5px; } }
+
+
+html[data-theme="dark"] :is(.leaflet-popup-content-wrapper,.leaflet-popup-tip,.leaflet-bar a,.leaflet-control-layers) { background:#172235; color:#fff; }
+@media print { html[data-theme="dark"] { color-scheme:light; --pn-bg-000:initial;--pn-bg-111:initial;--pn-bg-1254a3:initial;--pn-bg-173fae:initial;--pn-bg-1b7a3d:initial;--pn-bg-444444:initial;--pn-bg-785800:initial;--pn-bg-b3261e:initial;--pn-bg-cfd4dc:initial;--pn-bg-d9dde4:initial;--pn-bg-e8edf6:initial;--pn-bg-e9f0ff:initial;--pn-bg-eaf1ff:initial;--pn-bg-eaf2ff:initial;--pn-bg-eee:initial;--pn-bg-eef4ff:initial;--pn-bg-eef5ff:initial;--pn-bg-effaf1:initial;--pn-bg-f0f5ff:initial;--pn-bg-f1f1f1:initial;--pn-bg-f1f3f5:initial;--pn-bg-f2f2f2:initial;--pn-bg-f4f7ff:initial;--pn-bg-f4f8ff:initial;--pn-bg-f8f8f8:initial;--pn-bg-f8fafc:initial;--pn-bg-f8faff:initial;--pn-bg-ffc400:initial;--pn-bg-ffde36:initial;--pn-bg-ffdf38:initial;--pn-bg-ffdf40:initial;--pn-bg-fff:initial;--pn-bg-fff1ef:initial;--pn-bg-fff2af:initial;--pn-bg-fff3f2:initial;--pn-bg-fff4a3:initial;--pn-bg-fff6bd:initial;--pn-bg-fff8c4:initial;--pn-bg-fff8eb:initial;--pn-bg-fff8f7:initial;--pn-border-000:initial;--pn-border-111:initial;--pn-border-1254a3:initial;--pn-border-17324f:initial;--pn-border-174dcc:initial;--pn-border-1b7a3d:initial;--pn-border-1d4ed8:initial;--pn-border-238636:initial;--pn-border-2455d9:initial;--pn-border-2f76c6:initial;--pn-border-64748b:initial;--pn-border-7d8796:initial;--pn-border-888:initial;--pn-border-8aa9d6:initial;--pn-border-8fa6c2:initial;--pn-border-9c7400:initial;--pn-border-9db0c7:initial;--pn-border-9db0ca:initial;--pn-border-a8afb9:initial;--pn-border-aaa:initial;--pn-border-aab3bf:initial;--pn-border-aabbd0:initial;--pn-border-aeb7c5:initial;--pn-border-aebed2:initial;--pn-border-b3261e:initial;--pn-border-b42318:initial;--pn-border-b45309:initial;--pn-border-b4c5da:initial;--pn-border-b7c2d1:initial;--pn-border-b9c9e1:initial;--pn-border-c5cbd4:initial;--pn-border-c6d2e1:initial;--pn-border-ccd5e2:initial;--pn-border-cdd3dc:initial;--pn-border-d7d7d7:initial;--pn-border-d7dce5:initial;--pn-border-dbe0e7:initial;--pn-border-ddd:initial;--pn-border-e3e6ea:initial;--pn-border-e3e9f0:initial;--pn-border-e8231a:initial;--pn-border-fff:initial;--pn-text-000:initial;--pn-text-10243e:initial;--pn-text-111:initial;--pn-text-1254a3:initial;--pn-text-1644a8:initial;--pn-text-172033:initial;--pn-text-174f91:initial;--pn-text-176b2c:initial;--pn-text-1d4ed8:initial;--pn-text-238636:initial;--pn-text-333:initial;--pn-text-334155:initial;--pn-text-555:initial;--pn-text-8a2c00:initial;--pn-text-a61b16:initial;--pn-text-b3261e:initial;--pn-text-b42318:initial;--pn-text-c1121f:initial;--pn-text-fff:initial; } .theme-switch { display:none; } }
+
+html[data-theme="dark"] .tab.on { background:#1d4ed8; color:#fff; border-color:#9fc5ff; }

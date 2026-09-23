@@ -1,6 +1,7 @@
 (function () {
   const STORAGE_KEY = 'photo-notes-language';
   const ES = {
+    'Light mode':'Modo claro', 'Dark mode':'Modo oscuro', 'Appearance':'Apariencia',
     "Delete Selected": "Eliminar selección", "Line": "Línea",
     "What were you trying to do?": "¿Qué intentaba hacer?",
     "What did you expect to happen?": "¿Qué esperaba que sucediera?",

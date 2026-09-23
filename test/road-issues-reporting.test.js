@@ -29,14 +29,14 @@ test('road reporter is one camera-only form with the requested issue choices',()
 
 test('road reporter header shows the complete supplied Road Issue Reporter logo',()=>{
   assert.match(app,/isRoadIssuesClient\(\)\?'Road Issue Reporter'/);
-  const styles=fs.readFileSync(path.join(root,'public/styles.css'),'utf8');
+  const styles=require('./helpers/light-palette')(fs.readFileSync(path.join(root,'public/styles.css'),'utf8'));
   assert.match(styles,/\.brandrow \.brand\.road-issues-brand[^}]*photo-notes-ai-road-issue-reporter-animated\.svg\?v=118/);
 });
 
 test('road reporter uses the shorter red-outlined issue button',()=>{
   assert.match(app,/function issueFabLabel\(\)\{return 'Report Issue';\}/);
   assert.match(app,/issue-fab \$\{isRoadIssuesClient\(\)\?'road-issue-fab':''\}/);
-  const styles=fs.readFileSync(path.join(root,'public/styles.css'),'utf8');
+  const styles=require('./helpers/light-palette')(fs.readFileSync(path.join(root,'public/styles.css'),'utf8'));
   assert.match(styles,/\.issue-fab\.road-issue-fab \{ border-color:#e8231a; \}/);
 });
 

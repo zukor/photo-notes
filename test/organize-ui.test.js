@@ -5,7 +5,7 @@ const path = require('node:path');
 
 const root = path.join(__dirname, '..');
 const app = fs.readFileSync(path.join(root, 'public', 'app.js'), 'utf8');
-const css = fs.readFileSync(path.join(root, 'public', 'styles.css'), 'utf8');
+const css = require('./helpers/light-palette')(fs.readFileSync(path.join(root, 'public', 'styles.css'), 'utf8'));
 
 test('Organize presents its controls as a clear task sequence before the library', () => {
   for (const heading of ['Choose a job', 'Find Photo Notes', 'Work with selected Photo Notes', 'Current Photo Notes']) {
