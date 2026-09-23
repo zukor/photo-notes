@@ -29,7 +29,7 @@ function harness({ios=true,pending=false}={}){
     setTimeout:fn=>{timers.push(fn);return timers.length;},clearTimeout(){},
     api:async(url,options)=>{requests.push(options.body);return {ok:true,json:async()=>({id:1})};}
   });
-  vm.runInContext(source.slice(source.indexOf('let issueScreenshotBlob'),source.indexOf('function issueReporterMarkup()')),context);
+  vm.runInContext(source.slice(source.indexOf('let activeIssueCapture'),source.indexOf('function issueReporterMarkup()')),context);
   return {run:code=>vm.runInContext(code,context),elements,recorders,sessions,requests,timers,resolve:()=>resolvePermission(stream),stopped:()=>stopped};
 }
 test('sending during recording waits for the final audio blob, then includes it',async()=>{

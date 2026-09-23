@@ -1,4 +1,5 @@
 let issueTestingContext=null;
+let activeIssueCapture=null;
 // ================= Shared issue reporter =================
 let issueScreenshotBlob = null, issueVoiceBlob = null, issuePageName = '', issueRecognizer = null, issueMediaRecorder = null, issueMediaStream = null;
 let issueScreenshotURL = null, issueMarkupEditor=null;
@@ -43,15 +44,22 @@ async function captureIssueScreenshot(quality=.78){
   if(!window.html2canvas)throw Error('Screenshot capture is unavailable');
   const width=window.innerWidth,height=window.innerHeight;
   const scale=Math.min(window.devicePixelRatio||1,1.5,Math.sqrt(4000000/(width*height)));
-  let timer;
+  activeIssueCapture?.cancel();
+  let timer,observer,cancelReject,cancelled=false;
+  const frames=new Set();
+  const cancelledPromise=new Promise((_,reject)=>{cancelReject=reject;});
+  const operation={cancel(){cancelled=true;cancelReject(Error('Screenshot capture cancelled'));}};
+  activeIssueCapture=operation;
+  if(window.MutationObserver){observer=new MutationObserver(records=>{for(const record of records)for(const node of record.addedNodes)if(node.nodeType===1&&node.matches('iframe.html2canvas-container'))frames.add(node);});observer.observe(document.body,{childList:true});}
   const capture=(async()=>{
     const onclone=await issueScreenshotBranding();
+    if(cancelled)throw Error('Screenshot capture cancelled');
     const canvas=await window.html2canvas(document.documentElement,{useCORS:true,allowTaint:false,backgroundColor:'#ffffff',width,height,x:window.scrollX,y:window.scrollY,scrollX:window.scrollX,scrollY:window.scrollY,scale,logging:false,imageTimeout:5000,ignoreElements:ignoreIssueCaptureElement,onclone});
     try{const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',quality));if(!blob)throw Error('Screenshot could not be encoded');return blob;}
     finally{canvas.width=0;canvas.height=0;}
   })();
-  try{return await Promise.race([capture,new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('Screenshot capture timed out')),8000);})]);}
-  finally{clearTimeout(timer);}
+  try{return await Promise.race([capture,cancelledPromise,new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('Screenshot capture timed out')),8000);})]);}
+  finally{clearTimeout(timer);cancelled=true;observer?.disconnect();for(const frame of frames)frame.remove();if(activeIssueCapture===operation)activeIssueCapture=null;}
 }
 function updateIssueDescriptionLabel(){
   const labels={bug_problem:'Describe the bug or problem',ui_improvement:'Describe the suggested UI improvement',feature_improvement:'Describe the suggested feature improvement idea',new_feature:'Describe the new feature idea'};
@@ -85,7 +93,12 @@ async function openIssueReporter(testingContext=null) {
   if(window.requestAnimationFrame)await new Promise(resolve=>setTimeout(resolve,150));
   if(generation!==issueGeneration)return;
   try {
-    const shot=await captureIssueScreenshot();if(generation!==issueGeneration)return;issueScreenshotBlob=shot;
+    let shot;
+    for(let attempt=0;attempt<2;attempt++){
+      try{shot=await captureIssueScreenshot();break;}
+      catch(error){if(generation!==issueGeneration||attempt===1)throw error;}
+    }
+    if(generation!==issueGeneration)return;issueScreenshotBlob=shot;
   } catch(e){if(generation!==issueGeneration)return;issueScreenshotBlob=null;}
   if(preview){preview.hidden=!issueScreenshotBlob;if(issueScreenshotBlob){issueScreenshotURL=URL.createObjectURL(issueScreenshotBlob);preview.src=issueScreenshotURL;}}
   document.getElementById('issueShotStatus').textContent=issueScreenshotBlob?'':uiPushText('Screenshot unavailable; your description will still be saved');
@@ -99,7 +112,7 @@ async function retakeIssueScreenshot(){
  finally{if(generation===issueGeneration){modal.hidden=false;button.disabled=false;}}
 }
 function stopIssueMediaStream(){if(issueMediaStream){issueMediaStream.getTracks().forEach(track=>track.stop());issueMediaStream=null;}issueMediaRecorder=null;}
-function closeIssueReporter(){issueTestingContext=null;if(issueMarkupEditor){issueMarkupEditor.destroy();issueMarkupEditor=null;}const markup=document.getElementById('issueMarkup');if(markup)markup.hidden=true;if(issueScreenshotURL){URL.revokeObjectURL(issueScreenshotURL);issueScreenshotURL=null;}const preview=document.getElementById("issueScreenshot");if(preview){preview.removeAttribute("src");preview.hidden=true;}issueGeneration++;issueMicPending=false;issueDictationActive=false;if(issueDictationRestartTimer)clearTimeout(issueDictationRestartTimer);if(issueDictationWatchdog)clearTimeout(issueDictationWatchdog);issueDictationRestartTimer=null;issueDictationWatchdog=null;if(issueRecognizer){try{issueRecognizer.stop();}catch(e){}}if(issueMediaRecorder&&issueMediaRecorder.state==='recording'){try{issueMediaRecorder.stop();}catch(e){}}stopIssueMediaStream();const m=document.getElementById('issueModal');if(m)m.hidden=true;issueScreenshotBlob=null;issueVoiceBlob=null;issueRecognizer=null;}
+function closeIssueReporter(){activeIssueCapture?.cancel();issueTestingContext=null;if(issueMarkupEditor){issueMarkupEditor.destroy();issueMarkupEditor=null;}const markup=document.getElementById('issueMarkup');if(markup)markup.hidden=true;if(issueScreenshotURL){URL.revokeObjectURL(issueScreenshotURL);issueScreenshotURL=null;}const preview=document.getElementById("issueScreenshot");if(preview){preview.removeAttribute("src");preview.hidden=true;}issueGeneration++;issueMicPending=false;issueDictationActive=false;if(issueDictationRestartTimer)clearTimeout(issueDictationRestartTimer);if(issueDictationWatchdog)clearTimeout(issueDictationWatchdog);issueDictationRestartTimer=null;issueDictationWatchdog=null;if(issueRecognizer){try{issueRecognizer.stop();}catch(e){}}if(issueMediaRecorder&&issueMediaRecorder.state==='recording'){try{issueMediaRecorder.stop();}catch(e){}}stopIssueMediaStream();const m=document.getElementById('issueModal');if(m)m.hidden=true;issueScreenshotBlob=null;issueVoiceBlob=null;issueRecognizer=null;}
 function cleanSpeechTranscript(value){
   let words=String(value||'').trim().split(/\s+/).filter(Boolean);
   // Android speech services occasionally return the same short fragment three
@@ -207,7 +220,7 @@ async function submitIssueReport(){
   const description=[whatHappened&&`What happened: ${whatHappened}`,frequency&&`Frequency: ${frequency}`].filter(Boolean).join('\n');
   if(!whatHappened&&!issueVoiceBlob){st.textContent='Please type what went wrong or attach a voice recording before sending.';ta.focus();return;}
   btn.disabled=true;btn.textContent='Sending...';st.textContent='Saving your report...';
-  try{const screenshot=issueMarkupEditor?await issueMarkupEditor.exportBlob():issueScreenshotBlob;if(generation!==issueGeneration)return;const fd=new FormData();fd.append('description',description||'Voice recording attached for review.');if(issueTestingContext){fd.append('testing_assignment_id',issueTestingContext.assignmentId);fd.append('testing_step_id',issueTestingContext.stepId);}fd.append('issue_type',document.getElementById('issueType')?.value||'bug_problem');fd.append('page_name',issuePageName);fd.append('page_url',location.href);fd.append('viewport',`${window.innerWidth} × ${window.innerHeight}`);fd.append('app_version','237');fd.append('user_agent',navigator.userAgent+' | Photo Notes web 237 | '+((window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches)||navigator.standalone?'installed web app':'browser'));if(screenshot)fd.append('screenshot',screenshot,'issue-screen.jpg');if(issueVoiceBlob)fd.append('voice',issueVoiceBlob,issueVoiceBlob.type.includes('webm')?'issue-voice.webm':'issue-voice.m4a');const r=await api('/api/issues',{method:'POST',body:fd});const d=await r.json().catch(()=>({}));if(generation!==issueGeneration)return;if(!r.ok)throw new Error();st.textContent=d.email_status==='sent'?`Issue #${d.id} sent. Thank you.`:`Issue #${d.id} saved. Thank you.`;btn.textContent='Sent';setTimeout(()=>{if(generation===issueGeneration)closeIssueReporter();},1800);}catch(e){if(generation!==issueGeneration)return;st.textContent='The report could not be sent. Check your connection and try again.';btn.disabled=false;btn.textContent='Send Issue Report';}
+  try{const screenshot=issueMarkupEditor?await issueMarkupEditor.exportBlob():issueScreenshotBlob;if(generation!==issueGeneration)return;const fd=new FormData();fd.append('description',description||'Voice recording attached for review.');if(issueTestingContext){fd.append('testing_assignment_id',issueTestingContext.assignmentId);fd.append('testing_step_id',issueTestingContext.stepId);}fd.append('issue_type',document.getElementById('issueType')?.value||'bug_problem');fd.append('page_name',issuePageName);fd.append('page_url',location.href);fd.append('viewport',`${window.innerWidth} × ${window.innerHeight}`);fd.append('app_version','238');fd.append('user_agent',navigator.userAgent+' | Photo Notes web 238 | '+((window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches)||navigator.standalone?'installed web app':'browser'));if(screenshot)fd.append('screenshot',screenshot,'issue-screen.jpg');if(issueVoiceBlob)fd.append('voice',issueVoiceBlob,issueVoiceBlob.type.includes('webm')?'issue-voice.webm':'issue-voice.m4a');const r=await api('/api/issues',{method:'POST',body:fd});const d=await r.json().catch(()=>({}));if(generation!==issueGeneration)return;if(!r.ok)throw new Error();st.textContent=d.email_status==='sent'?`Issue #${d.id} sent. Thank you.`:`Issue #${d.id} saved. Thank you.`;btn.textContent='Sent';setTimeout(()=>{if(generation===issueGeneration)closeIssueReporter();},1800);}catch(e){if(generation!==issueGeneration)return;st.textContent='The report could not be sent. Check your connection and try again.';btn.disabled=false;btn.textContent='Send Issue Report';}
 }
 
 function issueReporterMarkup(){return `<a id="issueUpdates" class="issue-updates" href="/?issues=1" hidden data-html2canvas-ignore="true"></a>    <div class="issue-modal" id="issueModal" hidden data-html2canvas-ignore="true">
