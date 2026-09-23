@@ -1,6 +1,20 @@
 (function () {
   const STORAGE_KEY = 'photo-notes-language';
   const ES = {
+    "Address or Geographic Area": "Dirección o zona geográfica",
+    "Retake Photo": "Volver a tomar la foto",
+    "Cancel Photo": "Cancelar foto",
+    "Photo cancelled": "Foto cancelada",
+    "Photo uploaded": "Foto cargada",
+    "Saved on this device. Upload will be confirmed separately.": "Guardado en este dispositivo. La carga se confirmará por separado.",
+    "All queued captures uploaded": "Todas las fotos pendientes se han cargado",
+    "Older pending captures need recovery": "Las fotos pendientes anteriores necesitan recuperación",
+    "Please wait for the current photo to save.": "Espere a que se guarde la foto actual.",
+    "Photo kept for retaking": "La foto se conservó para volver a tomarla",
+    "Connection unavailable. Reconnect and sign in to resume pending uploads. Saved captures remain in this browser.": "Conexión no disponible. Vuelva a conectarse e inicie sesión para continuar las cargas pendientes. Las fotos guardadas permanecen en este navegador.",
+    "Before and after comparison": "Comparación de antes y después",
+    "Using available imagery at a lower resolution. The map stays at your selected zoom.": "Se muestran imágenes disponibles de menor resolución. Se mantiene el nivel de acercamiento seleccionado.",
+
     "Retry location": "Reintentar ubicación",
     "Correct address": "Corregir dirección",
     "Photo saved on this device": "Foto guardada en este dispositivo",
