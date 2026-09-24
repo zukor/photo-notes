@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Photo Notes — Admin</title>
   <meta name="theme-color" content="#1d4ed8" />
-  <link rel="stylesheet" href="/styles.css?v=247" />
+  <link rel="stylesheet" href="/styles.css?v=248" />
   <script src="/vendor/html2canvas.min.js?v=59"></script>
-  <script src="/issue-markup.js?v=247"></script>
-  <script src="/issue-reporter.js?v=247"></script>
+  <script src="/issue-markup.js?v=248"></script>
+  <script src="/issue-reporter.js?v=248"></script>
   <style>
     .stat { display:inline-block; min-width:84px; margin:4px 14px 4px 0; vertical-align:top; }
     .stat .n { font-size:19px; font-weight:bold; color:var(--pn-text-000,#000); }
@@ -150,11 +150,12 @@
     .delete-user-panel h3 { margin-top:0; }
     .delete-user-panel .btn { margin:10px 8px 0 0; }
   </style>
-  <link rel="stylesheet" href="/testing-hub.css?v=247">
-  <script src="/testing-hub.js?v=247"></script>
-<link rel="stylesheet" href="/theme.css?v=247"><script src="/theme.js?v=247"></script></head>
+  <link rel="stylesheet" href="/testing-hub.css?v=248">
+  <script src="/testing-hub.js?v=248"></script>
+<link rel="stylesheet" href="/theme.css?v=248"><script src="/theme.js?v=248"></script></head>
 <body>
   <div id="app"></div>
+  <script src="/account-menu.js?v=248"></script>
   <script>
     const el = document.getElementById('app');
     const regularAdminView=new URLSearchParams(location.search).get('view')==='admin';
@@ -502,8 +503,7 @@
         <button class="issue-fab" id="issueFab" type="button" data-html2canvas-ignore="true">Report Issue</button>
         ${issueReporterMarkup()}`;
       if(!currentUser?.is_super_admin)document.querySelectorAll('[data-admin-tool="issues"],[data-admin-tool="system-status"],[data-admin-tool="health"],[data-admin-tool="billing"],[data-admin-tool="activity"],.issue-diagnostics,#issueSystemNotice,#addUser,#createUserPanel,#userTotals').forEach(section=>section.remove());
-      const menu=document.getElementById('profileMenu'),signout=document.getElementById('signout');
-      [...menu.children].filter(item=>item.matches('a,button')&&item!==signout).sort((a,b)=>a.textContent.trim().localeCompare(b.textContent.trim(),'en')).forEach(item=>menu.insertBefore(item,signout));
+      window.PhotoNotesAccountMenu.sort();
       const tools=[...document.querySelectorAll('[data-admin-tool]')];
       tools.sort((a,b)=>a.querySelector('summary').textContent.trim().localeCompare(b.querySelector('summary').textContent.trim(),'en',{sensitivity:'base'}));
       tools.forEach(tool=>tool.parentElement.appendChild(tool));
