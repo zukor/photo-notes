@@ -1,3 +1,4 @@
+const {eligibleIssueSql}=require('./issue-ui-review');
 const {isSuperAdmin}=require('./super-admin');
 const crypto=require('crypto'),path=require('path');
 const digest=value=>crypto.createHash('sha256').update(String(value||'')).digest('hex');
@@ -15,7 +16,7 @@ function validateRepairUpdate(body){
 function registerIssueRepair(app,{pool,requireAuth,requireAdmin,requireTestingQueueToken,uploadDir}){
   app.get('/api/automation/testing-queue',requireTestingQueueToken,async(req,res)=>{try{
     await pool.query("INSERT INTO issue_worker_state(id,last_checked) VALUES(1,now()) ON CONFLICT(id) DO UPDATE SET last_checked=now()");
-    const {rows:issues}=await pool.query(`SELECT id,issue_type,description,page_name,page_url,reported_edition,app_version,viewport,user_agent,management_status,priority,fix_summary,release_reference,retest_instructions,verification,blocked_reason,reporter_details,tester_result,tester_notes,created_at,updated_at,repair_lease_until,(screenshot_path IS NOT NULL) AS has_screenshot,(voice_path IS NOT NULL) AS has_voice FROM issue_reports WHERE issue_type='bug_problem' AND management_status NOT IN ('resolved','wont_fix','tester_confirmed') ORDER BY CASE priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 ELSE 2 END,created_at`);
+    const {rows:issues}=await pool.query(`SELECT id,issue_type,review_decision,implementation_instructions,reviewed_by,description,page_name,page_url,reported_edition,app_version,viewport,user_agent,management_status,priority,fix_summary,release_reference,retest_instructions,verification,blocked_reason,reporter_details,tester_result,tester_notes,created_at,updated_at,repair_lease_until,(screenshot_path IS NOT NULL) AS has_screenshot,(voice_path IS NOT NULL) AS has_voice FROM issue_reports WHERE ${eligibleIssueSql()} AND management_status NOT IN ('resolved','wont_fix','tester_confirmed') ORDER BY CASE priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 ELSE 2 END,created_at`);
     const history=issues.length?(await pool.query('SELECT issue_id,event,detail,created_at FROM issue_repair_events WHERE issue_id=ANY($1::int[]) ORDER BY created_at DESC LIMIT 500',[issues.map(i=>i.id)])).rows:[];
     res.json({issues,history});
   }catch(e){res.status(500).json({error:'queue unavailable'});}});
@@ -29,7 +30,7 @@ function registerIssueRepair(app,{pool,requireAuth,requireAdmin,requireTestingQu
     const id=Number(req.params.id);if(!Number.isInteger(id)||id<1)return res.status(400).json({error:'Invalid issue'});
     const token=crypto.randomBytes(32).toString('hex');let client;
     try{client=await pool.connect();await client.query('BEGIN');
-      const {rows}=await client.query(`UPDATE issue_reports SET repair_claim_hash=$1,repair_lease_until=now()+interval '45 minutes',management_status=CASE WHEN management_status='new' THEN 'reviewing' ELSE management_status END,updated_at=now() WHERE id=$2 AND issue_type='bug_problem' AND management_status IN ('new','reviewing','fixing','testing') AND (repair_lease_until IS NULL OR repair_lease_until<now() OR repair_claim_hash=$3) RETURNING id,repair_lease_until`,[digest(token),id,req.body?.claim_token?digest(req.body.claim_token):'']);
+      const {rows}=await client.query(`UPDATE issue_reports SET repair_claim_hash=$1,repair_lease_until=now()+interval '45 minutes',management_status=CASE WHEN management_status='new' THEN 'reviewing' ELSE management_status END,updated_at=now() WHERE id=$2 AND ${eligibleIssueSql()} AND management_status IN ('new','reviewing','fixing','testing') AND (repair_lease_until IS NULL OR repair_lease_until<now() OR repair_claim_hash=$3) RETURNING id,repair_lease_until`,[digest(token),id,req.body?.claim_token?digest(req.body.claim_token):'']);
       if(!rows.length){await client.query('ROLLBACK');return res.status(409).json({error:'Issue is already claimed or is not actionable'});}
       await client.query("INSERT INTO issue_repair_events(issue_id,event,detail) VALUES($1,'claimed','Worker claimed or renewed the repair lease')",[id]);await client.query('COMMIT');res.json({...rows[0],claim_token:token});
     }catch(e){if(client)await client.query('ROLLBACK');res.status(500).json({error:'Claim failed'});}finally{client?.release();}
@@ -44,7 +45,7 @@ function registerIssueRepair(app,{pool,requireAuth,requireAdmin,requireTestingQu
       if(req.body.management_status==='ready_to_test')sets.push("tester_notification_status='in_app'",'tester_notified_at=now()','tester_notification_error=NULL','blocked_reason=NULL');
       if(['blocked','ready_to_test'].includes(req.body.management_status))sets.push('repair_claim_hash=NULL','repair_lease_until=NULL');
       vals.push(id,digest(req.body.claim_token));
-      const {rows}=await client.query(`UPDATE issue_reports SET ${sets.join(',')} WHERE id=$${vals.length-1} AND issue_type='bug_problem' AND repair_claim_hash=$${vals.length} AND repair_lease_until>now() AND management_status IN ('reviewing','fixing','testing') RETURNING id,management_status,release_reference`,vals);
+      const {rows}=await client.query(`UPDATE issue_reports SET ${sets.join(',')} WHERE id=$${vals.length-1} AND ${eligibleIssueSql()} AND repair_claim_hash=$${vals.length} AND repair_lease_until>now() AND management_status IN ('reviewing','fixing','testing') RETURNING id,management_status,release_reference`,vals);
       if(!rows.length){await client.query('ROLLBACK');return res.status(409).json({error:'Claim expired or issue changed; reload the queue'});}
       const detail=JSON.stringify({status:req.body.management_status,...fields});
       await client.query("INSERT INTO issue_repair_events(issue_id,event,detail) VALUES($1,$2,$3)",[id,req.body.management_status,detail]);await client.query('COMMIT');res.json({ok:true,...rows[0]});
@@ -66,7 +67,7 @@ function registerIssueRepair(app,{pool,requireAuth,requireAdmin,requireTestingQu
     const {rows}=await pool.query('SELECT event,detail,created_at FROM issue_repair_events WHERE issue_id=$1 ORDER BY created_at',[req.params.id]);res.json(isSuperAdmin(req.user)?rows:rows.map(r=>({event:r.event,created_at:r.created_at})));
   }catch(e){res.status(500).json({error:'History unavailable'});}});
   app.post('/api/issues/:id/details',requireAuth,async(req,res)=>{const detail=String(req.body?.details||'').trim();if(!detail||detail.length>5000)return res.status(400).json({error:'Enter 1–5,000 characters'});let client;
-    try{client=await pool.connect();await client.query('BEGIN');const {rows}=await client.query("UPDATE issue_reports SET reporter_details=$1,management_status='new',blocked_reason=NULL,repair_claim_hash=NULL,repair_lease_until=NULL,updated_at=now() WHERE id=$2 AND user_id=$3 AND management_status='blocked' RETURNING id",[detail,req.params.id,req.user.id]);if(!rows.length){await client.query('ROLLBACK');return res.status(404).json({error:'Issue is not waiting for details'});}
+    try{client=await pool.connect();await client.query('BEGIN');const {rows}=await client.query("UPDATE issue_reports SET reporter_details=$1,review_decision=CASE WHEN issue_type='ui_improvement' THEN NULL ELSE review_decision END,reviewed_by=CASE WHEN issue_type='ui_improvement' THEN NULL ELSE reviewed_by END,management_status='new',blocked_reason=NULL,repair_claim_hash=NULL,repair_lease_until=NULL,updated_at=now() WHERE id=$2 AND user_id=$3 AND management_status='blocked' RETURNING id",[detail,req.params.id,req.user.id]);if(!rows.length){await client.query('ROLLBACK');return res.status(404).json({error:'Issue is not waiting for details'});}
       await client.query("INSERT INTO issue_repair_events(issue_id,event,detail) VALUES($1,'reporter_details',$2)",[req.params.id,detail]);await client.query('COMMIT');res.json({ok:true});
     }catch(e){if(client)await client.query('ROLLBACK');res.status(500).json({error:'Details could not be saved'});}finally{client?.release();}
   });

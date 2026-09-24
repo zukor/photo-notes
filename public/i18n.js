@@ -1,6 +1,7 @@
 (function () {
   const STORAGE_KEY = 'photo-notes-language';
   const ES = {
+    "Question From Sam": "Pregunta de Sam", "Clarification Requested": "Aclaración solicitada", "Closed - No Change": "Cerrado - Sin cambios", "Reason For No Change": "Motivo para no hacer cambios", "Approved For Implementation": "Aprobado para implementación", "Awaiting Sam Review": "Pendiente de revisión de Sam",
     "Address or Geographic Area": "Dirección o zona geográfica",
     "Retake Photo": "Volver a tomar la foto",
     "Cancel Photo": "Cancelar foto",

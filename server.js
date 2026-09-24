@@ -1444,7 +1444,7 @@ registerCloud(app,{pool,requireAuth,requireAdmin,requireTestingQueueToken});
 
 app.get('/api/issues/mine', requireAuth, async (req,res)=>{
   try{
-    const rows=(await pool.query(`SELECT id,issue_type,description,page_name,screenshot_path,reported_edition,app_version,blocked_reason,reporter_details,management_status,fix_summary,release_reference,retest_instructions,tester_notification_status,tester_notified_at,tester_result,tester_notes,tester_retested_at,created_at,updated_at,verification,(SELECT max(created_at) FROM issue_repair_events WHERE issue_id=issue_reports.id AND event='ready_to_test') AS deployed_at FROM issue_reports WHERE user_id=$1 ORDER BY created_at DESC`,[req.user.id])).rows;
+    const rows=(await pool.query(`SELECT id,issue_type,review_decision,review_note,description,page_name,screenshot_path,reported_edition,app_version,blocked_reason,reporter_details,management_status,fix_summary,release_reference,retest_instructions,tester_notification_status,tester_notified_at,tester_result,tester_notes,tester_retested_at,created_at,updated_at,verification,(SELECT max(created_at) FROM issue_repair_events WHERE issue_id=issue_reports.id AND event='ready_to_test') AS deployed_at FROM issue_reports WHERE user_id=$1 ORDER BY created_at DESC`,[req.user.id])).rows;
     res.json(rows);
   }catch(e){console.error('[issues.mine]',e);res.status(500).json({error:'failed'});}
 });
@@ -1462,6 +1462,8 @@ app.post('/api/issues/:id/retest',requireAuth,async(req,res)=>{
     await pool.query("INSERT INTO issue_repair_events(issue_id,event,detail) VALUES($1,'retest',$2)",[id,JSON.stringify({result,notes})]);logEvent(req.user.id,'issue_retest',{issue_id:id,result});res.json({ok:true,status:nextStatus});
   }catch(e){console.error('[issues.retest]',e);res.status(500).json({error:'retest failed'});}
 });
+
+require('./issue-ui-review').registerUiReview(app,{pool,requireAuth});
 
 const ISSUE_MANAGEMENT_STATUSES = ['new', 'reviewing', 'fixing', 'testing', 'blocked', 'ready_to_test', 'tester_confirmed', 'resolved', 'wont_fix'];
 const ISSUE_PRIORITIES = ['low', 'normal', 'high', 'urgent'];

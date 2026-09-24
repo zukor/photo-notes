@@ -7,7 +7,7 @@ test('durable notification worker respects ownership, retries, and idempotence',
   const url=process.env.PN_CLOUD_TEST_DB;if(!url.startsWith('postgres://postgres@127.0.0.1:55473/'))throw new Error('Disposable database required');
   const {Pool}=require('pg'),pool=new Pool({connectionString:url});
   try{
-    await pool.query(`CREATE TABLE users(id integer PRIMARY KEY,role text);CREATE TABLE issue_reports(id integer PRIMARY KEY,user_id integer,issue_type text DEFAULT 'bug_problem',management_status text,repair_lease_until timestamptz,created_at timestamptz DEFAULT now(),updated_at timestamptz DEFAULT now());INSERT INTO users VALUES(1,'admin'),(2,'user'),(3,'user');`);
+    await pool.query(`CREATE TABLE users(id integer PRIMARY KEY,role text);CREATE TABLE issue_reports(id integer PRIMARY KEY,user_id integer,issue_type text DEFAULT 'bug_problem',review_decision text,reviewed_by integer,implementation_instructions text,management_status text,repair_lease_until timestamptz,created_at timestamptz DEFAULT now(),updated_at timestamptz DEFAULT now());INSERT INTO users VALUES(1,'admin'),(2,'user'),(3,'user');`);
     await pool.query("INSERT INTO issue_reports(id,user_id,issue_type,management_status,created_at) VALUES(20,2,'ui_improvement','new',now()-interval '1 day'),(21,2,'feature_improvement','new',now()-interval '1 day'),(22,2,'new_feature','new',now()-interval '1 day')");
     const keys=await initCloud(pool);assert.ok(keys.private_key);
     for(const id of [1,2,3])await pool.query('INSERT INTO issue_push_subscriptions(user_id,endpoint,subscription) VALUES($1,$2,$3)',[id,sub.endpoint+id,JSON.stringify({...sub,endpoint:sub.endpoint+id})]);
