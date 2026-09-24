@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Photo Notes — Admin</title>
   <meta name="theme-color" content="#1d4ed8" />
-  <link rel="stylesheet" href="/styles.css?v=251" />
+  <link rel="stylesheet" href="/styles.css?v=252" />
   <script src="/vendor/html2canvas.min.js?v=59"></script>
-  <script src="/issue-markup.js?v=251"></script>
-  <script src="/issue-reporter.js?v=251"></script>
+  <script src="/issue-markup.js?v=252"></script>
+  <script src="/issue-reporter.js?v=252"></script>
   <style>
     .stat { display:inline-block; min-width:84px; margin:4px 14px 4px 0; vertical-align:top; }
     .stat .n { font-size:19px; font-weight:bold; color:var(--pn-text-000,#000); }
@@ -153,12 +153,12 @@
     .delete-user-panel h3 { margin-top:0; }
     .delete-user-panel .btn { margin:10px 8px 0 0; }
   </style>
-  <link rel="stylesheet" href="/testing-hub.css?v=251">
-  <script src="/testing-hub.js?v=251"></script>
-<link rel="stylesheet" href="/theme.css?v=251"><script src="/theme.js?v=251"></script></head>
+  <link rel="stylesheet" href="/testing-hub.css?v=252">
+  <script src="/testing-hub.js?v=252"></script>
+<link rel="stylesheet" href="/theme.css?v=252"><script src="/theme.js?v=252"></script></head>
 <body>
   <div id="app"></div>
-  <script src="/account-menu.js?v=251"></script>
+  <script src="/account-menu.js?v=252"></script>
   <script>
     const el = document.getElementById('app');
     const regularAdminView=new URLSearchParams(location.search).get('view')==='admin';
@@ -551,8 +551,8 @@
 
     const issueTypeLabels={bug_problem:'Bug/Problem',ui_improvement:'UI Improvement',feature_improvement:'Feature Improvement Idea',new_feature:'New Feature Idea'};
     const issueStatusOrder=['new','reviewing','blocked','fixing','testing','ready_to_test','resolved','wont_fix'];
-    const issueStatusLabels={new:'New',reviewing:'Under Review',blocked:'Needs Sam Review',fixing:'Fix In Progress',testing:'Fix Verification',ready_to_test:'Fix Deployed - Awaiting Retest',tester_confirmed:'Resolved',resolved:'Resolved',wont_fix:'Won’t Fix'};
-    const issueStatusDescriptions={new:'Reported and waiting for review. No fix is verified yet.',reviewing:'The report is being investigated to understand the problem and decide what change is needed.',blocked:'Progress needs Sam’s decision or technical review. The reason is shown in the issue. This hold can occur at any stage; another automatic repair is not scheduled while it remains here.',fixing:'A repair is being prepared. This does not mean the problem is fixed or that a worker is active at this exact moment.',testing:'The proposed repair is being checked before it is offered for tester retesting. This is not confirmation from the reporting tester.',ready_to_test:'A fix has been released for the reporting tester to try. The tester still needs to confirm whether the problem is gone.',resolved:'Closed as fixed, either confirmed by the reporting tester after retesting or marked resolved by an administrator. The retest result and history retain that distinction.',wont_fix:'Closed without a fix, for example because no product change is appropriate. The reason should be recorded in the issue.'};
+    const issueStatusLabels={new:'New',reviewing:'Automatic Repair Review',blocked:'Needs Sam Review',fixing:'Fix In Progress',testing:'Fix Verification',ready_to_test:'Fix Deployed - Awaiting Retest',tester_confirmed:'Resolved',resolved:'Resolved',wont_fix:'Won’t Fix'};
+    const issueStatusDescriptions={new:'Reported and waiting for review. No fix is verified yet.',reviewing:'The automatic repair system has taken this report for investigation to identify the problem and a possible fix. This is an automated step, not a review by another person or a request for Sam to act. The status alone does not confirm that a repair job is running right now.',blocked:'Progress needs Sam’s decision or technical review. The reason is shown in the issue. This hold can occur at any stage; another automatic repair is not scheduled while it remains here.',fixing:'A repair is being prepared. This does not mean the problem is fixed or that a worker is active at this exact moment.',testing:'The proposed repair is being checked before it is offered for tester retesting. This is not confirmation from the reporting tester.',ready_to_test:'A fix has been released for the reporting tester to try. The tester still needs to confirm whether the problem is gone.',resolved:'Closed as fixed, either confirmed by the reporting tester after retesting or marked resolved by an administrator. The retest result and history retain that distinction.',wont_fix:'Closed without a fix, for example because no product change is appropriate. The reason should be recorded in the issue.'};
     const issuePriorityLabels={low:'Low',normal:'Normal',high:'High',urgent:'Urgent'};
     function issueDevice(i){const ua=String(i.user_agent||'').toLowerCase(),vp=String(i.viewport||'');if(/android/.test(ua))return {key:'android',label:'Android'};if(/iphone|ipad|ipod/.test(ua))return {key:'ios',label:/ipad/.test(ua)?'iPad':'iPhone'};if(/windows|macintosh|cros|linux/.test(ua))return {key:'desktop',label:'Desktop'};if(/^\d+\s*[×x]\s*\d+$/.test(vp)&&Number(vp.split(/[×x]/)[0].trim())<=900)return {key:'unknown',label:'Mobile / unknown'};return {key:'unknown',label:'Unknown device'};}
     function testerFilterPeople(users,issues){
@@ -636,7 +636,7 @@
       if(i.management_status==='wont_fix')return 'No Change';
       if(i.management_status==='ready_to_test')return 'Change Deployed - Awaiting Retest';
       if(i.review_decision==='clarify')return 'Awaiting Tester Clarification';
-      if(i.review_decision==='implement')return i.management_status==='blocked'?'Implementation Needs Review':({reviewing:'Under Review',fixing:'Implementation In Progress',testing:'Change Verification'}[i.management_status]||'Approved For Implementation');
+      if(i.review_decision==='implement')return i.management_status==='blocked'?'Implementation Needs Review':({reviewing:'Automatic Repair Review',fixing:'Implementation In Progress',testing:'Change Verification'}[i.management_status]||'Approved For Implementation');
       return 'Needs Sam Review';
     }
     function decisionPanel(id){const bug=allIssues.find(i=>Number(i.id)===Number(id))?.issue_type==='bug_problem';return `<section class="admin-panel"><h3>Your Decision</h3><label for="ui-decision-${id}">Choose An Action</label><select id="ui-decision-${id}" data-ui-decision="${id}"><option value="">Choose an action</option><option value="implement">${bug?'Retry Repair':'Implement Change'}</option><option value="clarify">Request Clarification</option><option value="no_change">${bug?'Close Without A Fix':'Make No Change'}</option></select><div id="ui-entry-${id}" hidden><label id="ui-label-${id}" for="ui-instructions-${id}"></label><textarea class="issue-notes" id="ui-instructions-${id}" maxlength="5000"></textarea><p id="ui-help-${id}"></p><div class="issue-actions"><button class="btn" type="button" data-ui-submit="${id}">Submit Decision</button></div></div><p id="ui-result-${id}" role="status"></p></section>`;}
