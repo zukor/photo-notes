@@ -31,7 +31,7 @@ test('UI review: owner decisions, tester clarification, approval-only queue and 
   const sent=[];await require('../issue-cloud').tickCloud(pool,(await pool.query('SELECT * FROM issue_push_config WHERE id=1')).rows[0],{env:{},send:async(sub,payload)=>{if(sub.endpoint===subscription.endpoint)sent.push(JSON.parse(payload));}});
   assert.ok(sent.some(p=>p.body.includes('Please test your reported issue again')&&!p.body.includes('deployed')));
   assert.equal(current.management_status,'retest_requested');assert.equal(current.fix_summary,null);assert.equal(current.verification,null);assert.equal(current.release_reference,null);
-  assert.match(current.retest_instructions,/Please test this again/);
+  assert.match(current.retest_instructions,/Please test this again/);assert.match(current.retest_instructions,/Recommended checks:/);
   assert.equal((await worker(`/api/automation/issues/${id}/claim`,{})).status,409);
   assert.equal((await(await req('/api/issues/attention',null,users[2])).json()).ready_count,1);
   assert.equal((await req(`/api/issues/${id}/retest`,{result:'fixed'},users[3])).status,404);
@@ -52,21 +52,22 @@ test('UI review: owner decisions, tester clarification, approval-only queue and 
  assert.equal((await req(route,{decision:'implement',instructions:'stale',expected_updated_at:report.updated_at})).status,409);
  if(type==='bug_problem'){await pool.query("UPDATE issue_reports SET review_decision='implement',blocked_reason='The automatic repair did not pass review, testing, or deployment verification.' WHERE id=$1",[id]);}
  // Use the real admin page and real server to save the next clarification.
- browser=await require('playwright').chromium.launch();const page=await browser.newPage({viewport:{width:1280,height:1000}});await page.context().addCookies([{name:'pn_token',value:cookie(users[0]).split('=')[1],url:base}]);await page.goto(base+'/admin?view=super',{waitUntil:'domcontentloaded'});await page.locator('[data-admin-tool="issues"] > summary').click();await page.waitForFunction(()=>typeof allIssues!=='undefined'&&allIssues.length>0);await page.evaluate(type=>{document.getElementById('issueTypeFilter').value=type;document.getElementById('issueStatusFilter').value='all';renderIssues();},type);const card=page.locator(`[data-issue-card="${id}"]`);await page.evaluate(()=>{document.querySelectorAll('details').forEach(e=>e.open=true)});
+ browser=await require('playwright').chromium.launch();const page=await browser.newPage({viewport:{width:1280,height:1000}});await page.context().addCookies([{name:'pn_token',value:cookie(users[0]).split('=')[1],url:base}]);await page.goto(base+'/admin?view=super',{waitUntil:'domcontentloaded'});await page.locator('[data-admin-tool="issues"] > summary').click();await page.waitForFunction(()=>typeof allIssues!=='undefined'&&allIssues.length>0);await page.evaluate(type=>{document.getElementById('issueTypeFilter').value=type;document.getElementById('issueStatusFilter').value='all';renderIssues();},type);const card=page.locator(`[data-issue-card="${id}"]`);await card.evaluate(el=>el.open=true);
  if(type==='bug_problem'){assert.ok(await card.getByRole('heading',{name:'Why This Needs Your Review'}).isVisible());assert.ok((await card.textContent()).includes('saved result does not identify'));assert.equal(await card.locator('textarea').count(),1);assert.equal(await card.getByRole('heading',{name:'What Was Fixed',exact:true}).count(),0);assert.equal(await card.locator('summary').filter({hasText:'Technical Details And History'}).count(),1);}
  assert.equal(await card.locator('label').filter({hasText:'What Was Fixed'}).count(),0);assert.equal(await card.locator('.issue-description strong').filter({hasText:'Recommended improvement'}).count(),1);assert.ok((await card.locator('.issue-description').filter({hasText:'Original suggestion'}).first().textContent()).includes('\n\nFrequency:'));
  if(type==='bug_problem')await card.screenshot({path:'/tmp/pn-bug-needs-review.png'});
+ await card.evaluate(el=>{el.open=true;el.closest('[data-admin-tool]').open=true;});
  await page.selectOption(`#ui-decision-${id}`,'clarify');await page.fill(`#ui-instructions-${id}`,'Which row should change?');await page.click(`[data-ui-submit="${id}"]`);await page.waitForFunction(id=>document.querySelector(`[data-issue-card="${id}"]`)?.textContent.includes('Which row should change?'),id);
  const record=(await pool.query('SELECT * FROM issue_reports WHERE id=$1',[id])).rows[0];assert.equal(record.review_note,'Which row should change?');assert.equal(record.description,report.description);
  await card.screenshot({path:'/tmp/pn-ui-review-desktop.png'});await page.setViewportSize({width:390,height:844});await card.screenshot({path:'/tmp/pn-ui-review-mobile.png'});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
 
  if(type==='bug_problem'){
-  await page.selectOption(`#ui-decision-${id}`,'retest');await page.fill(`#ui-instructions-${id}`,'');await page.click(`[data-ui-submit="${id}"]`);
+  await page.selectOption(`#ui-decision-${id}`,'retest');const draft=await page.locator(`#ui-instructions-${id}`).inputValue();assert.match(draft,/Recommended checks:/);await page.fill(`#ui-instructions-${id}`,draft+'\n\nAlso check the date after reopening.');await page.selectOption(`#ui-decision-${id}`,'clarify');await page.selectOption(`#ui-decision-${id}`,'retest');assert.match(await page.locator(`#ui-instructions-${id}`).inputValue(),/Also check the date/);await page.click(`[data-ui-submit="${id}"]`);
   await page.waitForFunction(id=>allIssues.find(i=>i.id===id)?.management_status==='retest_requested',id);
   await card.screenshot({path:'/tmp/pn-retest-request-admin.png'});
   const testerPage=await browser.newPage();await testerPage.context().addCookies([{name:'pn_token',value:cookie(users[2]).split('=')[1],url:base}]);await testerPage.goto(base+'/?issues=1');
   const reportCard=testerPage.locator('.tester-issue-card').filter({has:testerPage.locator(`[data-retest-fixed="${id}"]`)});
-  await reportCard.getByRole('button',{name:'No Longer Happening'}).waitFor();assert.match(await reportCard.textContent(),/No fix is being claimed/);assert.doesNotMatch(await reportCard.textContent(),/Deployed:|What changed/);
+  await reportCard.getByRole('button',{name:'No Longer Happening'}).waitFor();assert.match(await reportCard.textContent(),/No fix is being claimed/);assert.match(await reportCard.textContent(),/Also check the date after reopening/);assert.doesNotMatch(await reportCard.textContent(),/Deployed:|What changed/);
   await reportCard.screenshot({path:'/tmp/pn-retest-request-tester.png'});
   await testerPage.locator(`#retestNotes-${id}`).fill('Still happening after retry');await testerPage.locator(`[data-retest-broken="${id}"]`).click();
   await testerPage.waitForFunction(()=>!document.querySelector('[data-retest-broken]'));await testerPage.close();
