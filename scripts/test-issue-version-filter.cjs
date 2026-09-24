@@ -61,9 +61,14 @@ const express=require('express');
  await page.selectOption('#issueStatusFilter','all');
  await page.locator('.issue-secondary > summary').click();
  await page.selectOption('#issueTesterFilter','all');await page.selectOption('#issueDeviceFilter','all');
+ await page.evaluate(()=>{const issue=allIssues.find(i=>i.id===5);issue.management_status='blocked';issue.blocked_reason='Exact accuracy depends on the device GPS location provider; the original inaccurate reading cannot be reproduced here.';renderIssues();});
  for(const id of [5,20,21,22]){
  const card=page.locator(`[data-issue-card="${id}"]`);await card.locator(':scope > summary').click();
  assert(await card.evaluate(card=>{const body=card.querySelector('.issue-detail-body'),original=body.querySelector('.issue-original-report'),footer=body.querySelector('.issue-review-footer');return original===body.children[1]&&footer===body.lastElementChild&&!!footer.querySelector('[data-ui-decision]');}));
+ assert.equal(await card.getByRole('heading',{name:'Recommended Course of Action'}).count(),1);
+ assert(await card.evaluate(card=>{const footer=card.querySelector('.issue-review-footer');const headings=[...footer.querySelectorAll('h3')].map(h=>h.textContent);return headings.join('|')==='Why This Needs Your Review|Recommended Course of Action|Your Decision';}));
+ if(id===5){await page.selectOption('#ui-decision-5','retest');await page.fill('#ui-instructions-5','Keep this draft');await page.evaluate(()=>loadUsers());assert.equal(await page.locator('#ui-instructions-5').inputValue(),'Keep this draft');await page.selectOption('#ui-decision-5','');}
+ if(id===5)await card.screenshot({path:`/tmp/pn-review-guidance-${engine.name()}-${width}.png`});
  if(id>=20)assert.equal(await card.locator('.issue-original-report audio').count(),1);
  }
  assert.deepEqual(errors,[]);await page.close();console.log(engine.name(),width,'version and secondary filters PASS');
