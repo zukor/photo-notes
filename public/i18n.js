@@ -1,6 +1,8 @@
 (function () {
   const STORAGE_KEY = 'photo-notes-language';
   const ES = {
+    "Send to Ramo Optimizer": "Enviar a Ramo Optimizer",
+    "Ramo Submission History": "Historial de envíos a Ramo",
     "Photo Notes Version": "Versión de Photo Notes",
     "Switch Photo Notes version": "Cambiar versión de Photo Notes",
     "This report is waiting for Sam’s review. No additional details are requested from you right now.": "Este informe está pendiente de revisión de Sam. Por ahora no se le solicitan detalles adicionales.",
