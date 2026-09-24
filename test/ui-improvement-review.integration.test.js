@@ -31,7 +31,7 @@ test('UI review: owner decisions, tester clarification, approval-only queue and 
   const sent=[];await require('../issue-cloud').tickCloud(pool,(await pool.query('SELECT * FROM issue_push_config WHERE id=1')).rows[0],{env:{},send:async(sub,payload)=>{if(sub.endpoint===subscription.endpoint)sent.push(JSON.parse(payload));}});
   assert.ok(sent.some(p=>p.body.includes('Please test your reported issue again')&&!p.body.includes('deployed')));
   assert.equal(current.management_status,'retest_requested');assert.equal(current.fix_summary,null);assert.equal(current.verification,null);assert.equal(current.release_reference,null);
-  assert.match(current.retest_instructions,/Please test this again/);assert.match(current.retest_instructions,/Recommended checks:/);
+  assert.match(current.retest_instructions,/Please test this again/);assert.match(current.retest_instructions,/Steps for Retest:/);
   assert.equal((await worker(`/api/automation/issues/${id}/claim`,{})).status,409);
   assert.equal((await(await req('/api/issues/attention',null,users[2])).json()).ready_count,1);
   assert.equal((await req(`/api/issues/${id}/retest`,{result:'fixed'},users[3])).status,404);
@@ -62,7 +62,7 @@ test('UI review: owner decisions, tester clarification, approval-only queue and 
  await card.screenshot({path:'/tmp/pn-ui-review-desktop.png'});await page.setViewportSize({width:390,height:844});await card.screenshot({path:'/tmp/pn-ui-review-mobile.png'});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
 
  if(type==='bug_problem'){
-  await page.selectOption(`#ui-decision-${id}`,'retest');const draft=await page.locator(`#ui-instructions-${id}`).inputValue();assert.match(draft,/Recommended checks:/);await page.fill(`#ui-instructions-${id}`,draft+'\n\nAlso check the date after reopening.');await page.selectOption(`#ui-decision-${id}`,'clarify');await page.selectOption(`#ui-decision-${id}`,'retest');assert.match(await page.locator(`#ui-instructions-${id}`).inputValue(),/Also check the date/);await page.click(`[data-ui-submit="${id}"]`);
+  await page.selectOption(`#ui-decision-${id}`,'retest');const draft=await page.locator(`#ui-instructions-${id}`).inputValue();assert.match(draft,/Steps for Retest:/);await page.fill(`#ui-instructions-${id}`,draft+'\n\nAlso check the date after reopening.');await page.selectOption(`#ui-decision-${id}`,'clarify');await page.selectOption(`#ui-decision-${id}`,'retest');assert.match(await page.locator(`#ui-instructions-${id}`).inputValue(),/Also check the date/);await page.click(`[data-ui-submit="${id}"]`);
   await page.waitForFunction(id=>allIssues.find(i=>i.id===id)?.management_status==='retest_requested',id);
   await card.screenshot({path:'/tmp/pn-retest-request-admin.png'});
   const testerPage=await browser.newPage();await testerPage.context().addCookies([{name:'pn_token',value:cookie(users[2]).split('=')[1],url:base}]);await testerPage.goto(base+'/?issues=1');
