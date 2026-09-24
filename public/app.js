@@ -391,7 +391,7 @@ function renderApp() {
   window.PhotoNotesHelp.mount({ edition: selectedEdition(), page: state.view, name: productName(), reportIssue: openIssueReporter });
 }
 
-const MY_ISSUE_STATUS={blocked:'Needs attention',new:'Received',reviewing:'Working',fixing:'Working',testing:'Testing',ready_to_test:'Deployed - awaiting your confirmation',tester_confirmed:'Closed - you confirmed',resolved:'Resolved',wont_fix:'Closed'};
+const MY_ISSUE_STATUS={blocked:'Needs attention',new:'Received',reviewing:'Automatic Repair Review',fixing:'Working',testing:'Testing',ready_to_test:'Deployed - awaiting your confirmation',tester_confirmed:'Closed - you confirmed',resolved:'Resolved',wont_fix:'Closed'};
 async function renderTestingManagement(){
   const body=document.getElementById('body');body.innerHTML='<button class="backlink" id="testingManagementBack">'+uiT('Back')+'</button><h1>'+uiT('Manage Testing')+'</h1><div id="testingManagement"></div>';
   document.getElementById('testingManagementBack').onclick=()=>{state.view='my-assignment';renderApp();};
