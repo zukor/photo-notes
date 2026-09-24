@@ -110,6 +110,17 @@ const express=require('express');
  await page.evaluate(()=>{allIssues.find(i=>i.id===21).management_status='blocked';renderIssues();});
  assert.deepEqual(await cardIds(),[21]);
  assert.match(await page.locator('[data-issue-card="21"]').textContent(),/Implementation Stopped/);
+ await page.selectOption('#issueStatusFilter','all');
+ const updated=await page.evaluate(()=>({...allIssues.find(i=>i.id===21),management_status:'blocked',review_decision:'clarify',review_note:'Please explain the layout.',blocked_reason:'Please explain the layout.'}));
+ let submissions=0;
+ await page.route('**/api/admin/issues/21/ui-review',route=>{submissions++;return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(updated)});});
+ await page.locator('[data-issue-card="21"] > summary').click();
+ await page.selectOption('#ui-decision-21','clarify');await page.fill('#ui-instructions-21','Please explain the layout.');
+ await page.locator('[data-ui-submit="21"]').click();
+ await page.waitForFunction(()=>document.getElementById('issueStatusFilter').value==='blocked');
+ assert.deepEqual(await cardIds(),[]);assert.equal(submissions,1);
+ await page.selectOption('#issueStatusFilter','all');assert.deepEqual(await cardIds(),[21]);
+ assert.match(await page.locator('[data-issue-card="21"]').textContent(),/Awaiting Tester Clarification/);
  assert.deepEqual(errors,[]);await page.close();console.log(engine.name(),width,'version and secondary filters PASS');
  }}finally{await browser.close();}}}finally{server.close();}
 })().catch(e=>{console.error(e);process.exit(1);});
