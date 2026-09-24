@@ -83,6 +83,21 @@ const express=require('express');
  await page.evaluate(()=>loadUsers());
  assert.equal(await page.locator('#ui-instructions-5').inputValue(),draft+'\nMy added question.');
  await page.screenshot({path:`/tmp/pn-clarification-${engine.name()}-${width}.png`});
+ await page.evaluate(()=>{
+  const reasons=['The original blurred image is needed.','Exact accuracy depends on GPS.','The automatic repair did not pass review testing.','API key is missing.','Waiting for a reply'];
+  for(let n=0;n<5;n++){const i=allIssues.find(i=>i.id===n+1);i.management_status='blocked';i.blocked_reason=reasons[n];i.review_decision=n===4?'clarify':null;}
+  renderIssues();
+ });
+ await page.selectOption('#issueTypeFilter','bug_problem');await page.selectOption('#issueStatusFilter','blocked');
+ assert(await page.locator('#issueRecommendedAction').isVisible());
+ for(const [action,ids] of [['clarify',[1]],['retest',[2]],['implement',[3]],['setup',[4]],['wait',[5]],['no_change',[]]]){
+  await page.selectOption('#issueRecommendedAction',action);assert.deepEqual(await cardIds(),ids);
+ }
+ await page.selectOption('#issueRecommendedAction','all');assert.deepEqual(await cardIds(),[1,2,3,4,5]);
+ await page.selectOption('#issueRecommendedAction','clarify');await page.selectOption('#issueVersionFilter','pro');assert.deepEqual(await cardIds(),[]);
+ await page.selectOption('#issueVersionFilter','all');assert.deepEqual(await cardIds(),[1]);
+ await page.selectOption('#issueStatusFilter','open');assert.equal(await page.locator('#issueRecommendedAction').isVisible(),false);assert.equal(await page.locator('#issueRecommendedAction').inputValue(),'all');
+ await page.selectOption('#issueStatusFilter','blocked');await page.selectOption('#issueTypeFilter','ui_improvement');assert.equal(await page.locator('#issueRecommendedAction').isVisible(),false);assert.deepEqual(await cardIds(),[20]);
  assert.deepEqual(errors,[]);await page.close();console.log(engine.name(),width,'version and secondary filters PASS');
  }}finally{await browser.close();}}}finally{server.close();}
 })().catch(e=>{console.error(e);process.exit(1);});
