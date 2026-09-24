@@ -487,17 +487,9 @@ input.dimfield.suggested {
 @media (max-width: 899px) {
 }
 
-/* On phones, tablets, and compact browser windows the issue button belongs in
-   document flow. A fixed button can cover Capture, Save, or export controls as
-   browser chrome changes the usable viewport height. */
-@media (max-width: 1100px) {
-  .wrap { padding-bottom:24px; }
-  .issue-fab {
-    position:static;
-    display:block;
-    margin:0 max(14px,env(safe-area-inset-right)) max(14px,env(safe-area-inset-bottom)) auto;
-  }
-}
+/* Keep Report Issue attached to the viewport at every screen size. Leave room
+   after the final controls so they can scroll clear of the floating button. */
+body:has(.issue-fab) { padding-bottom:calc(80px + env(safe-area-inset-bottom)); }
 
 @media (max-width: 700px) {
   #body, .workflow-organize, .workflow-edit, .workflow-create, .workflow-send { max-width:640px !important; }
