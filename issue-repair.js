@@ -55,8 +55,8 @@ function registerIssueRepair(app,{pool,requireAuth,requireAdmin,requireTestingQu
   app.get('/api/issues/attention',requireAuth,async(req,res)=>{
     try{
       const {rows}=await pool.query(`SELECT u.is_tester,
-        count(i.id) FILTER (WHERE i.management_status IN ('ready_to_test','blocked'))::int AS count,
-        count(i.id) FILTER (WHERE u.is_tester AND i.management_status='ready_to_test' AND i.verification IS NOT NULL AND COALESCE(i.release_reference,'')<>'')::int AS ready_count
+        count(i.id) FILTER (WHERE i.management_status IN ('ready_to_test','blocked','retest_requested'))::int AS count,
+        count(i.id) FILTER (WHERE (i.management_status='retest_requested' OR (u.is_tester AND i.management_status='ready_to_test' AND i.verification IS NOT NULL AND COALESCE(i.release_reference,'')<>'')))::int AS ready_count
         FROM users u LEFT JOIN issue_reports i ON i.user_id=u.id WHERE u.id=$1 GROUP BY u.id`,[req.user.id]);
       res.json(rows[0]||{is_tester:false,count:0,ready_count:0});
     }catch(e){res.status(500).json({error:'Issue count unavailable'});}
