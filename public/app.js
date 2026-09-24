@@ -276,14 +276,6 @@ async function doLogin() {
   finally{button.disabled=false;}
 }
 
-function sortAccountMenu(){
-  const menu=document.getElementById('profileMenu'),signout=document.getElementById('signout');
-  if(!menu||!signout)return;
-  const items=Array.from(menu.children).filter(item=>item.matches('button,a')&&item!==signout);
-  items.sort((a,b)=>uiT(a.textContent.trim()).localeCompare(uiT(b.textContent.trim()),uiLocale(),{sensitivity:'base'}));
-  items.forEach(item=>menu.insertBefore(item,signout));
-}
-document.addEventListener('photo-notes-languagechange',sortAccountMenu);
 
 function renderApp() {
   document.getElementById('captureShareDialog')?.remove();
@@ -327,7 +319,7 @@ function renderApp() {
     </div>
     <button class="issue-fab ${isRoadIssuesClient()?'road-issue-fab':''}" id="issueFab" type="button" data-html2canvas-ignore="true" aria-label="Report Issue">${issueFabLabel()}</button>
     ${issueReporterMarkup()}`;
-  sortAccountMenu();
+  window.PhotoNotesAccountMenu.sort();
   const profileButton = document.getElementById('profileButton');
   const profileMenu = document.getElementById('profileMenu');
   profileButton.onclick = (e) => {
