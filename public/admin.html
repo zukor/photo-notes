@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Photo Notes — Admin</title>
   <meta name="theme-color" content="#1d4ed8" />
-  <link rel="stylesheet" href="/styles.css?v=260" />
+  <link rel="stylesheet" href="/styles.css?v=261" />
   <script src="/vendor/html2canvas.min.js?v=59"></script>
-  <script src="/issue-markup.js?v=260"></script>
-  <script src="/issue-reporter.js?v=260"></script>
+  <script src="/issue-markup.js?v=261"></script>
+  <script src="/issue-reporter.js?v=261"></script>
   <style>
     .stat { display:inline-block; min-width:84px; margin:4px 14px 4px 0; vertical-align:top; }
     .stat .n { font-size:19px; font-weight:bold; color:var(--pn-text-000,#000); }
@@ -153,14 +153,14 @@
     .delete-user-panel h3 { margin-top:0; }
     .delete-user-panel .btn { margin:10px 8px 0 0; }
   </style>
-  <link rel="stylesheet" href="/testing-hub.css?v=260">
-  <script src="/testing-hub.js?v=260"></script>
-<link rel="stylesheet" href="/theme.css?v=260"><script src="/theme.js?v=260"></script></head>
+  <link rel="stylesheet" href="/testing-hub.css?v=261">
+  <script src="/testing-hub.js?v=261"></script>
+<link rel="stylesheet" href="/theme.css?v=261"><script src="/theme.js?v=261"></script></head>
 <body>
   <div id="app"></div>
-  <script src="/account-menu.js?v=260"></script>
-  <script src="/issue-retest-guidance.js?v=260"></script>
-  <script src="/issue-review-guidance.js?v=260"></script>
+  <script src="/account-menu.js?v=261"></script>
+  <script src="/issue-retest-guidance.js?v=261"></script>
+  <script src="/issue-review-guidance.js?v=261"></script>
   <script>
     const el = document.getElementById('app');
     const regularAdminView=new URLSearchParams(location.search).get('view')==='admin';
@@ -535,7 +535,12 @@
       }
       if(currentUser?.is_super_admin){
       document.getElementById('issueVersionFilter').onchange = renderIssues;
-      document.getElementById('issueTypeFilter').onchange = renderIssues;
+      document.getElementById('issueTypeFilter').onchange = ()=>{
+        const type=document.getElementById('issueTypeFilter').value;
+        const status=document.getElementById('issueStatusFilter');
+        if(['ui_improvement','feature_improvement','new_feature'].includes(type)&&status.value==='open')status.value='blocked';
+        renderIssues();
+      };
       document.getElementById('issueStatusFilter').onchange = renderIssues;
       document.getElementById('issuePriorityFilter').onchange = renderIssues;
       document.getElementById('issueTesterFilter').onchange = renderIssues;
@@ -598,7 +603,7 @@
       const df=(document.getElementById('issueDeviceFilter')||{}).value||'all';
       const closed=new Set(['resolved','wont_fix','tester_confirmed']);
       const scope=allIssues.filter(i=>(recommendedAction==='all'||window.PhotoNotesReviewGuidance.explain(i).action===recommendedAction)&&(version==='all'||(Object.hasOwn(editionLabels,i.reported_edition)?i.reported_edition:'unknown')===version)&&matchesIssueType(i,category)&&(pf==='all'||(i.priority||'normal')===pf)&&(tf==='all'||String(i.user_id)===tf)&&(df==='all'||issueDevice(i).key===df));
-      const rows=scope.filter(i=>sf==='all'||(sf==='open'&&!closed.has(i.management_status||'new'))||(sf==='closed'&&closed.has(i.management_status||'new'))||(sf==='resolved'&&i.management_status==='tester_confirmed')||i.management_status===sf);
+      const rows=scope.filter(i=>sf==='all'||(sf==='open'&&!closed.has(i.management_status||'new'))||(sf==='closed'&&closed.has(i.management_status||'new'))||(sf==='resolved'&&i.management_status==='tester_confirmed')||(sf==='blocked'&&['ui_improvement','feature_improvement','new_feature'].includes(i.issue_type)&&i.management_status==='new'&&!i.review_decision)||(i.management_status===sf&&!(sf==='blocked'&&['ui_improvement','feature_improvement','new_feature'].includes(i.issue_type)&&i.review_decision==='clarify')));
       const direction=document.getElementById('issueDateSort').value==='oldest'?1:-1;
       rows.sort((a,b)=>{
         const ad=Date.parse(a.created_at),bd=Date.parse(b.created_at);
@@ -649,7 +654,7 @@
       if(i.management_status==='wont_fix')return 'No Change';
       if(i.management_status==='ready_to_test')return 'Change Deployed - Awaiting Retest';
       if(i.review_decision==='clarify')return 'Awaiting Tester Clarification';
-      if(i.review_decision==='implement')return i.management_status==='blocked'?'Implementation Needs Review':({reviewing:'Automatic Repair Review',fixing:'Implementation In Progress',testing:'Change Verification'}[i.management_status]||'Approved For Implementation');
+      if(i.review_decision==='implement')return i.management_status==='blocked'?'Implementation Stopped - Needs Sam Review':({reviewing:'Automatic Repair Review',fixing:'Implementation In Progress',testing:'Change Verification'}[i.management_status]||'Approved For Implementation');
       return 'Needs Sam Review';
     }
     function decisionPanel(id){const bug=allIssues.find(i=>Number(i.id)===Number(id))?.issue_type==='bug_problem';return `<section class="admin-panel"><h3>Your Decision</h3><label for="ui-decision-${id}">Choose An Action</label><select id="ui-decision-${id}" data-ui-decision="${id}"><option value="">Choose an action</option><option value="implement">${bug?'Retry Repair':'Implement Change'}</option><option value="clarify">Request Clarification</option>${bug?'<option value="retest">Retest</option>':''}<option value="no_change">${bug?'Close Without Fix':'Make No Change'}</option></select><div id="ui-entry-${id}" hidden><label id="ui-label-${id}" for="ui-instructions-${id}"></label><textarea class="issue-notes" id="ui-instructions-${id}" maxlength="5000"></textarea><p id="ui-help-${id}"></p><div class="issue-actions"><button class="btn" type="button" data-ui-submit="${id}">Submit Decision</button></div></div><p id="ui-result-${id}" role="status"></p></section>`;}
@@ -670,7 +675,7 @@
       const issue=allIssues.find(i=>Number(i.id)===id),result=document.getElementById(`ui-result-${id}`),instructions=document.getElementById(`ui-instructions-${id}`).value.trim(),decision=document.getElementById(`ui-decision-${id}`).value;
       const bug=issue.issue_type==='bug_problem';
       if(!instructions&&!(bug&&['implement','retest'].includes(decision))){result.textContent='Enter your instructions, question, or reason before submitting.';return;}
-      button.disabled=true;try{const r=await api(`/api/admin/issues/${id}/${bug?'bug-review':'ui-review'}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({decision,instructions,expected_updated_at:issue.updated_at})});const d=await r.json();if(!r.ok)throw Error(d.error||'Decision could not be saved');Object.assign(issue,d);toast(decision==='retest'?'Retest requested in the tester’s app':decision==='implement'?(bug?'Repair queued':'Change approved and queued'):decision==='clarify'?'Clarification requested in the tester’s app':(bug?'Report closed without a fix':'Suggestion closed with no change'));renderIssues();const card=document.querySelector(`[data-issue-card="${id}"]`);if(card)card.open=true;}catch(e){result.textContent=e.message;button.disabled=false;}
+      button.disabled=true;try{const r=await api(`/api/admin/issues/${id}/${bug?'bug-review':'ui-review'}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({decision,instructions,expected_updated_at:issue.updated_at})});const d=await r.json();if(!r.ok)throw Error(d.error||'Decision could not be saved');Object.assign(issue,d);toast(decision==='retest'?'Retest requested in the tester’s app':decision==='implement'?(bug?'Repair queued':'Change approved and queued. It has left your review list; track it under Open Issues or All Issues.'):decision==='clarify'?'Clarification requested in the tester’s app':(bug?'Report closed without a fix':'Suggestion closed with no change'));renderIssues();const card=document.querySelector(`[data-issue-card="${id}"]`);if(card)card.open=true;}catch(e){result.textContent=e.message;button.disabled=false;}
     }
 
     function issueHistoryDetail(detail){

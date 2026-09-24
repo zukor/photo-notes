@@ -98,6 +98,18 @@ const express=require('express');
  await page.selectOption('#issueVersionFilter','all');assert.deepEqual(await cardIds(),[1]);
  await page.selectOption('#issueStatusFilter','open');assert.equal(await page.locator('#issueRecommendedAction').isVisible(),false);assert.equal(await page.locator('#issueRecommendedAction').inputValue(),'all');
  await page.selectOption('#issueStatusFilter','blocked');await page.selectOption('#issueTypeFilter','ui_improvement');assert.equal(await page.locator('#issueRecommendedAction').isVisible(),false);assert.deepEqual(await cardIds(),[20]);
+ await page.selectOption('#issueStatusFilter','open');
+ await page.selectOption('#issueTypeFilter','feature_improvement');
+ assert.equal(await page.locator('#issueStatusFilter').inputValue(),'blocked');
+ await page.evaluate(()=>{const i=allIssues.find(i=>i.id===21);i.management_status='new';i.review_decision=null;renderIssues();});
+ assert.deepEqual(await cardIds(),[21]);
+ await page.evaluate(()=>{const i=allIssues.find(i=>i.id===21);i.review_decision='implement';renderIssues();});
+ assert.deepEqual(await cardIds(),[]);
+ await page.selectOption('#issueStatusFilter','open');assert.deepEqual(await cardIds(),[21]);
+ await page.selectOption('#issueStatusFilter','blocked');
+ await page.evaluate(()=>{allIssues.find(i=>i.id===21).management_status='blocked';renderIssues();});
+ assert.deepEqual(await cardIds(),[21]);
+ assert.match(await page.locator('[data-issue-card="21"]').textContent(),/Implementation Stopped/);
  assert.deepEqual(errors,[]);await page.close();console.log(engine.name(),width,'version and secondary filters PASS');
  }}finally{await browser.close();}}}finally{server.close();}
 })().catch(e=>{console.error(e);process.exit(1);});
