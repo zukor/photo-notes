@@ -287,6 +287,7 @@ textarea { min-height: 96px; resize: vertical; }
 .organize-job-builder { margin-top:0; border-color:var(--pn-border-8fa6c2,#8fa6c2); }
 .organize-search-grid { display:grid; grid-template-columns:minmax(190px,.65fr) minmax(0,1.6fr); gap:14px; align-items:end; }
 .workflow-organize .row > *, .organize-search-grid > *, .organize-panel { min-width:0; }
+#concreteAreaScreen .row:has(> #areaTrace) > .btn { flex:1 1 140px; width:auto; }
 .workflow-organize input[type=search], .workflow-organize input[type=date] { width:100%; min-width:0; padding:8px 10px; font:inherit; border:1px solid var(--pn-border-000,#000); border-radius:8px; background:var(--pn-bg-fff,#fff); color:var(--pn-text-000,#000); }
 .organize-search-box .row { display:grid; grid-template-columns:minmax(0,1fr) auto auto; }
 .organize-search-grid label { margin-top:0; }
