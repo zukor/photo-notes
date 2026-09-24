@@ -2,7 +2,7 @@ const {isSuperAdmin}=require('./super-admin');
 // Only a recorded owner approval admits an improvement idea to the implementation worker.
 function eligibleIssueSql(alias=''){
  const p=alias?alias+'.':'';
- return `(${p}issue_type='bug_problem' OR (${p}issue_type IN ('ui_improvement','feature_improvement') AND ${p}review_decision='implement' AND ${p}reviewed_by IS NOT NULL AND length(trim(COALESCE(${p}implementation_instructions,'')))>0))`;
+ return `(${p}issue_type='bug_problem' OR (${p}issue_type IN ('ui_improvement','feature_improvement','new_feature') AND ${p}review_decision='implement' AND ${p}reviewed_by IS NOT NULL AND length(trim(COALESCE(${p}implementation_instructions,'')))>0))`;
 }
 function registerUiReview(app,{pool,requireAuth}){
  app.post('/api/admin/issues/:id/ui-review',requireAuth,async(req,res)=>{
@@ -11,7 +11,7 @@ function registerUiReview(app,{pool,requireAuth}){
   if(!Number.isInteger(id)||id<1||!['implement','clarify','no_change'].includes(decision)||!text||text.length>5000||!req.body.expected_updated_at)return res.status(400).json({error:'Choose an action and enter 1-5,000 characters explaining it.'});
   const c=await pool.connect();try{
    await c.query('BEGIN');const row=(await c.query('SELECT * FROM issue_reports WHERE id=$1 FOR UPDATE',[id])).rows[0];
-   if(!row||!['ui_improvement','feature_improvement'].includes(row.issue_type)){await c.query('ROLLBACK');return res.status(404).json({error:'Improvement idea not found'});}
+   if(!row||!['ui_improvement','feature_improvement','new_feature'].includes(row.issue_type)){await c.query('ROLLBACK');return res.status(404).json({error:'Improvement idea not found'});}
    if(new Date(row.updated_at).getTime()!==new Date(req.body.expected_updated_at).getTime()){await c.query('ROLLBACK');return res.status(409).json({error:'This report changed. Reload it before submitting your decision.'});}
    if(row.repair_lease_until&&new Date(row.repair_lease_until)>new Date()){await c.query('ROLLBACK');return res.status(409).json({error:'Implementation is currently running. Wait for its result before changing this decision.'});}
    const status=decision==='implement'?'new':decision==='clarify'?'blocked':'wont_fix';
