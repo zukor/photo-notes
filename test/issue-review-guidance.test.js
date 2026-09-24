@@ -25,3 +25,12 @@ test('specific setup cases retain distinct explanations',()=>{
  assert.match(explain({blocked_reason:'Older comparisons never stored that setting, so it cannot be reconstructed.'}).why,/never saved/);
  assert.match(explain({blocked_reason:'The map provider may not have sufficiently detailed imagery.'}).recommendation,/blank map/);
 });
+test('clarification draft requests relevant evidence without exposing private diagnosis',()=>{
+ const {clarificationDraft}=require('../public/issue-review-guidance');
+ const issue={issue_type:'bug_problem',management_status:'blocked',blocked_reason:'The original blurred image is needed to evaluate this failure. Private run https://example.invalid/SECRET'};
+ const draft=clarificationDraft(issue);
+ assert.match(draft,/original photo or file/);assert.match(draft,/exact steps/);assert.match(draft,/fields the app filled in/);
+ assert.doesNotMatch(draft,/SECRET|https|Choose Request|both scan results/);
+ assert.match(clarificationDraft({...issue,blocked_reason:'The original plate image and both readings are needed.'}),/both scan results/);
+ for(const changes of [{management_status:'resolved'},{issue_type:'ui_improvement'},{review_decision:'clarify'},{blocked_reason:'API key is missing.'}])assert.equal(clarificationDraft({...issue,...changes}),'');
+});

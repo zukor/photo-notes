@@ -71,6 +71,18 @@ const express=require('express');
  if(id===5)await card.screenshot({path:`/tmp/pn-review-guidance-${engine.name()}-${width}.png`});
  if(id>=20)assert.equal(await card.locator('.issue-original-report audio').count(),1);
  }
+ await page.evaluate(()=>{const issue=allIssues.find(i=>i.id===5);issue.blocked_reason='The original blurred image is needed to evaluate this failure.';renderIssues();});
+ await page.locator('[data-issue-card="5"] > summary').click();
+ await page.selectOption('#ui-decision-5','clarify');
+ assert.equal(await page.locator('#ui-label-5').textContent(),'Directions or Questions for the Tester');
+ const draft=await page.locator('#ui-instructions-5').inputValue();
+ assert.match(draft,/original photo or file/);assert.match(draft,/fields the app filled in/);
+ await page.fill('#ui-instructions-5',draft+'\nMy added question.');
+ await page.selectOption('#ui-decision-5','retest');await page.selectOption('#ui-decision-5','clarify');
+ assert.equal(await page.locator('#ui-instructions-5').inputValue(),draft+'\nMy added question.');
+ await page.evaluate(()=>loadUsers());
+ assert.equal(await page.locator('#ui-instructions-5').inputValue(),draft+'\nMy added question.');
+ await page.screenshot({path:`/tmp/pn-clarification-${engine.name()}-${width}.png`});
  assert.deepEqual(errors,[]);await page.close();console.log(engine.name(),width,'version and secondary filters PASS');
  }}finally{await browser.close();}}}finally{server.close();}
 })().catch(e=>{console.error(e);process.exit(1);});
