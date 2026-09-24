@@ -36,3 +36,9 @@ The worker can repair reproducible software defects and deploy tested changes. I
 ## Bug reports needing owner review
 
 The bug review panel explains the hold before presenting repair results. Retry Repair accepts optional owner instructions and resets the dispatch delay. Request Clarification shows only the owner question to the tester; a reply remains blocked for owner review until Retry Repair is chosen. Close Without A Fix records a required reason visible to the tester. Empty result fields are hidden; attempt notes and verification share one collapsed Technical Details And History section. Technical failure notes alone are not tester questions. Original reports and decision history are preserved.
+
+## Owner-requested retest without a fix claim
+
+For Bug/Problem reports, the owner can choose Retest with an optional message. This uses `retest_requested`, stays open, and pauses automatic repair claims. The default message asks the reporting tester to try again without claiming any fix. The request appears in My Issue Reports and triggers the existing in-app attention and subscribed-device notification paths. Earlier repair evidence is retained in the decision history.
+
+Only the original reporting account can submit the result. No Longer Happening closes the report as tester-confirmed; Still Happening returns it to Needs Sam Review with the tester's notes, without automatically queuing a repair. Verified deployed-fix retests retain their existing verification requirements and behavior.

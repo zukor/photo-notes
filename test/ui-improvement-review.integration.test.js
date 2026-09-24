@@ -22,6 +22,26 @@ test('UI review: owner decisions, tester clarification, approval-only queue and 
  current=(await pool.query('SELECT * FROM issue_reports WHERE id=$1',[id])).rows[0];assert.equal(current.review_decision,null);assert.equal((await worker(`/api/automation/issues/${id}/claim`,{})).status,409);
  assert.equal((await decide('no_change','The existing controls are needed.')).status,200);assert.equal(current.management_status,'wont_fix');mine=await(await req('/api/issues/mine',null,users[2])).json();assert.equal(mine.find(i=>i.id===id).review_note,'The existing controls are needed.');
  assert.equal((await worker(`/api/automation/issues/${id}/claim`,{})).status,409);
+
+ if(type==='bug_problem'){
+  assert.equal((await decide('retest','',users[1])).status,403);
+  assert.equal((await decide('retest','')).status,200);
+  const subscription={endpoint:'https://fcm.googleapis.com/fcm/send/retest-'+id,keys:{p256dh:'a'.repeat(87),auth:'b'.repeat(22)}};
+  await pool.query("INSERT INTO issue_push_subscriptions(user_id,endpoint,subscription,created_at) VALUES($1,$2,$3,now()-interval '1 hour')",[users[2],subscription.endpoint,JSON.stringify(subscription)]);
+  const sent=[];await require('../issue-cloud').tickCloud(pool,(await pool.query('SELECT * FROM issue_push_config WHERE id=1')).rows[0],{env:{},send:async(sub,payload)=>{if(sub.endpoint===subscription.endpoint)sent.push(JSON.parse(payload));}});
+  assert.ok(sent.some(p=>p.body.includes('Please test your reported issue again')&&!p.body.includes('deployed')));
+  assert.equal(current.management_status,'retest_requested');assert.equal(current.fix_summary,null);assert.equal(current.verification,null);assert.equal(current.release_reference,null);
+  assert.match(current.retest_instructions,/Please test this again/);
+  assert.equal((await worker(`/api/automation/issues/${id}/claim`,{})).status,409);
+  assert.equal((await(await req('/api/issues/attention',null,users[2])).json()).ready_count,1);
+  assert.equal((await req(`/api/issues/${id}/retest`,{result:'fixed'},users[3])).status,404);
+  assert.equal((await req(`/api/issues/${id}/retest`,{result:'still_happening',notes:'Still broken'},users[2])).status,200);
+  current=(await pool.query('SELECT * FROM issue_reports WHERE id=$1',[id])).rows[0];assert.equal(current.management_status,'blocked');assert.match(current.blocked_reason,/tester checked again/);
+  assert.equal((await worker(`/api/automation/issues/${id}/claim`,{})).status,409);
+  assert.equal((await decide('retest','Please repeat the original steps.')).status,200);
+  assert.equal((await req(`/api/issues/${id}/retest`,{result:'fixed'},users[2])).status,200);
+  current=(await pool.query('SELECT * FROM issue_reports WHERE id=$1',[id])).rows[0];assert.equal(current.management_status,'tester_confirmed');assert.equal(current.verification,null);
+ }else assert.equal((await decide('retest','Try again')).status,400);
  assert.equal((await decide('implement','Use compact controls; retain all actions.')).status,200);
  const queue=await(await worker('/api/automation/testing-queue')).json();assert.equal(queue.issues.find(i=>i.id===id).implementation_instructions,'Use compact controls; retain all actions.');assert.equal(current.issue_type,type);
  const claimed=await(await worker(`/api/automation/issues/${id}/claim`,{})).json();assert.ok(claimed.claim_token);
@@ -39,6 +59,19 @@ test('UI review: owner decisions, tester clarification, approval-only queue and 
  await page.selectOption(`#ui-decision-${id}`,'clarify');await page.fill(`#ui-instructions-${id}`,'Which row should change?');await page.click(`[data-ui-submit="${id}"]`);await page.waitForFunction(id=>document.querySelector(`[data-issue-card="${id}"]`)?.textContent.includes('Which row should change?'),id);
  const record=(await pool.query('SELECT * FROM issue_reports WHERE id=$1',[id])).rows[0];assert.equal(record.review_note,'Which row should change?');assert.equal(record.description,report.description);
  await card.screenshot({path:'/tmp/pn-ui-review-desktop.png'});await page.setViewportSize({width:390,height:844});await card.screenshot({path:'/tmp/pn-ui-review-mobile.png'});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+
+ if(type==='bug_problem'){
+  await page.selectOption(`#ui-decision-${id}`,'retest');await page.fill(`#ui-instructions-${id}`,'');await page.click(`[data-ui-submit="${id}"]`);
+  await page.waitForFunction(id=>allIssues.find(i=>i.id===id)?.management_status==='retest_requested',id);
+  await card.screenshot({path:'/tmp/pn-retest-request-admin.png'});
+  const testerPage=await browser.newPage();await testerPage.context().addCookies([{name:'pn_token',value:cookie(users[2]).split('=')[1],url:base}]);await testerPage.goto(base+'/?issues=1');
+  const reportCard=testerPage.locator('.tester-issue-card').filter({has:testerPage.locator(`[data-retest-fixed="${id}"]`)});
+  await reportCard.getByRole('button',{name:'No Longer Happening'}).waitFor();assert.match(await reportCard.textContent(),/No fix is being claimed/);assert.doesNotMatch(await reportCard.textContent(),/Deployed:|What changed/);
+  await reportCard.screenshot({path:'/tmp/pn-retest-request-tester.png'});
+  await testerPage.locator(`#retestNotes-${id}`).fill('Still happening after retry');await testerPage.locator(`[data-retest-broken="${id}"]`).click();
+  await testerPage.waitForFunction(()=>!document.querySelector('[data-retest-broken]'));await testerPage.close();
+  await page.reload();await page.locator('[data-admin-tool="issues"] > summary').click();await page.waitForFunction(()=>typeof allIssues!=='undefined'&&allIssues.length>0);await page.evaluate(id=>{document.getElementById('issueStatusFilter').value='all';renderIssues();document.querySelector(`[data-issue-card="${id}"]`).open=true;},id);
+ }
  if(type==='bug_problem'){await page.selectOption(`#ui-decision-${id}`,'implement');await page.fill(`#ui-instructions-${id}`,'');await page.click(`[data-ui-submit="${id}"]`);await page.waitForFunction(id=>allIssues.find(i=>i.id===id)?.management_status==='new',id);const retried=(await pool.query('SELECT * FROM issue_reports WHERE id=$1',[id])).rows[0];assert.ok(retried.implementation_instructions.startsWith('Retry the repair'));}
  }finally{if(browser)await browser.close();await new Promise(r=>server.close(r));await pool.end();}
 });

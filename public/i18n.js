@@ -331,7 +331,7 @@
     'Email': 'Correo electrónico', 'Password': 'Contraseña', 'Sign In': 'Iniciar sesión',
     'Wrong email or password. Try again.': 'El correo electrónico o la contraseña no son correctos. Inténtelo de nuevo.',
     'Account menu': 'Menú de la cuenta', 'Photo Notes User': 'Usuario de Photo Notes',
-    'Paving Pro': 'Pavimentación Pro', 'HOA Maintenance Pro': 'Mantenimiento HOA Pro', 'Concrete Pro': 'Concreto Pro', 'Basic': 'Básico', 'Automatic Repair Review': 'Revisión de reparación automática', 'Admin Dashboard': 'Panel de administración', 'Super Admin Dashboard': 'Panel de superadministración', 'Sign Out': 'Cerrar sesión',
+    'Paving Pro': 'Pavimentación Pro', 'HOA Maintenance Pro': 'Mantenimiento HOA Pro', 'Concrete Pro': 'Concreto Pro', 'Basic': 'Básico', 'Retest Requested': 'Nueva prueba solicitada', 'Please Retest': 'Vuelva a probar', 'No Longer Happening': 'Ya no ocurre', 'Please test this again and see if it is still happening. No fix is being claimed.': 'Vuelva a probar esto y compruebe si sigue ocurriendo. No se afirma que haya una solución.', 'Account menu: issue ready to retest': 'Menú de cuenta: reporte listo para volver a probar', 'Automatic Repair Review': 'Revisión de reparación automática', 'Admin Dashboard': 'Panel de administración', 'Super Admin Dashboard': 'Panel de superadministración', 'Sign Out': 'Cerrar sesión',
     'Photo Notes workflow': 'Flujo de trabajo de Photo Notes', 'Capture': 'Capturar', 'Organize': 'Organizar', 'Edit': 'Editar', 'Create': 'Crear', 'Send': 'Enviar',
     'Report Issue': 'Reportar un problema', 'Close': 'Cerrar',
     'Tell us what happened, what you expected, and what you were doing when it happened.': 'Cuéntenos qué ocurrió, qué esperaba y qué estaba haciendo cuando ocurrió.',
