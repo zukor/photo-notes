@@ -41,7 +41,7 @@
     ];
     steps.push(...checks);
     steps.push('Choose No Longer Happening or Still Happening below. If it still happens, add the exact steps, what you see, and any error message in the retest note.');
-    return 'Please test this again and see if it is still happening. No fix is being claimed.\n\nRecommended checks:\n'+steps.map((step,index)=>(index+1)+'. '+step).join('\n\n');
+    return 'Please test this again and see if it is still happening. No fix is being claimed.\n\nSteps for Retest:\n'+steps.map((step,index)=>(index+1)+'. '+step).join('\n\n');
   }
   return {build,checksFor};
 });

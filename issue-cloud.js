@@ -8,6 +8,7 @@ function validSubscription(s) {
   } catch { return false; }
 }
 async function initCloud(pool) {
+  await pool.query('ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS auto_retest_requested_at timestamptz');
   await pool.query(`CREATE TABLE IF NOT EXISTS issue_push_config(id integer PRIMARY KEY, public_key text NOT NULL, private_key text NOT NULL);
     CREATE TABLE IF NOT EXISTS issue_push_subscriptions(id serial PRIMARY KEY,user_id integer NOT NULL REFERENCES users(id) ON DELETE CASCADE,endpoint text UNIQUE NOT NULL,subscription jsonb NOT NULL,created_at timestamptz NOT NULL DEFAULT now());
     CREATE TABLE IF NOT EXISTS issue_cloud_events(id bigserial PRIMARY KEY,issue_id integer NOT NULL REFERENCES issue_reports(id) ON DELETE CASCADE,status text NOT NULL,created_at timestamptz NOT NULL DEFAULT now());
@@ -117,7 +118,7 @@ async function notifyWorkerIncidents(client,keys,send){
 }
 async function startCloud(pool) {
   const keys=await initCloud(pool);let running=false;
-  const tick=async()=>{if(running)return;running=true;try{await tickCloud(pool,keys);}catch{await pool.query("INSERT INTO issue_cloud_state(id,last_tick,last_error) VALUES(1,now(),'Worker cycle failed') ON CONFLICT(id) DO UPDATE SET last_error='Worker cycle failed'").catch(()=>{});}finally{running=false;}};
+  const tick=async()=>{if(running)return;running=true;try{const retests=await require('./issue-auto-retest').requestFirstRetests(pool);if(retests.length)console.info('[issues] Automatic first retests requested:',retests.join(','));await tickCloud(pool,keys);}catch{await pool.query("INSERT INTO issue_cloud_state(id,last_tick,last_error) VALUES(1,now(),'Worker cycle failed') ON CONFLICT(id) DO UPDATE SET last_error='Worker cycle failed'").catch(()=>{});}finally{running=false;}};
   await tick();const timer=setInterval(tick,2000);timer.unref();return()=>clearInterval(timer);
 }
 module.exports={validSubscription,initCloud,registerCloud,tickCloud,startCloud,dispatchRepairs};
