@@ -34,3 +34,7 @@ test('clarification draft requests relevant evidence without exposing private di
  assert.match(clarificationDraft({...issue,blocked_reason:'The original plate image and both readings are needed.'}),/both scan results/);
  for(const changes of [{management_status:'resolved'},{issue_type:'ui_improvement'},{review_decision:'clarify'},{blocked_reason:'API key is missing.'}])assert.equal(clarificationDraft({...issue,...changes}),'');
 });
+test('approved storage changes explain why they returned for review',()=>{
+ const guide=explain({issue_type:'feature_improvement',management_status:'blocked',review_decision:'implement',blocked_reason:'The requested popup would change storage behavior, under the storage restriction.'});
+ assert.match(guide.why,/instructions were saved and sent/);assert.match(guide.why,/not been implemented/);assert.match(guide.recommendation,/developer/);
+});
