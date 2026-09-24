@@ -3,7 +3,7 @@
   else root.PhotoNotesRetestGuidance=factory();
 })(typeof window!=='undefined'?window:globalThis,function(){
   const versions={basic:'Photo Notes Basic',pro:'Photo Notes Pro',paving:'Paving Pro',concrete:'Concrete Pro',contractor:'General Contractor Pro',hoa:'HOA Maintenance Pro',roofer:'Roofer Pro',roads:'Road Issue Reporter'};
-  function build(issue={}){
+  function checksFor(issue={}){
     // Use report context to select user-side checks. Never forward private run
     // logs, credentials, or speculative repair diagnoses into the message.
     const report=[issue.description,issue.reporter_details,issue.page_name].filter(Boolean).join(' ').toLowerCase();
@@ -22,6 +22,18 @@
     if(/camera.*permission|permission.*camera|camera access|permiso.*cámara/.test(context))checks.push('Check that this browser is allowed to use the camera, then try taking a test photo.');
     if(/offline|internet|connection|network|conexión|sin conexión/.test(context))checks.push('Check whether the device is online. Repeat once with a stable connection and note whether the issue only happens offline.');
     if(/broken.{0,15}image|photo.{0,25}(missing|not load)|image.{0,25}not load/.test(context))checks.push('Save a new test photo, open Organize, and check its thumbnail and full-size view. Note whether it appears immediately or only after refreshing.');
+    if(/gps|location|geolocation|ubicaci/.test(context))checks.push('Check that location is allowed both on the device and for this website in the browser. Use Retry for a fresh reading and compare the displayed location with the actual place. Report how far off it is.');
+    if(/slow|delay|minute|performance/.test(context))checks.push('Repeat with the same photo library. Time how long it takes from saving to seeing the result, and record the approximate number of photos in the library.');
+    if(/classif|pavement|pavimento/.test(context))checks.push('Use the original photos that failed. Record the result for each photo, including any error, instead of checking only whether a different photo works.');
+    if(/gauge|fahrenheit|celsius|dual.dial/.test(context))checks.push('Use the original gauge photo. Compare each displayed reading and its unit with the corresponding dial in the photo.');
+    if(/blur|unreadable|ticket.*field/.test(context))checks.push('Compare each extracted field with the source photo. Identify any value that the app supplied even though it cannot be read in the photo.');
+    if(/plate.*(second|reading|scan)|second.*plate/.test(context))checks.push('Keep the original plate photo and compare both scan results with it. Identify the exact field that differs and which value is visible in the photo.');
+    if(/older.*(overlay|alignment|comparison)|alignment.*saved again/.test(context))checks.push('For an older comparison, set and save its alignment again, then reopen and export it. Compare the saved view with the export.');
+    if(/satellite|map provider|map.*zoom|imagery/.test(context))checks.push('Open the same property and zoom level. Note whether the map is blank or merely lacks detail, and record the location and zoom level.');
+    return checks;
+  }
+  function build(issue={}){
+    const checks=checksFor(issue);
     const version=versions[issue.reported_edition];
     const steps=[
       'Save any unfinished work, then refresh Photo Notes. Use the same device and browser as the original report.',
@@ -31,5 +43,5 @@
     steps.push('Choose No Longer Happening or Still Happening below. If it still happens, add the exact steps, what you see, and any error message in the retest note.');
     return 'Please test this again and see if it is still happening. No fix is being claimed.\n\nRecommended checks:\n'+steps.map((step,index)=>(index+1)+'. '+step).join('\n\n');
   }
-  return {build};
+  return {build,checksFor};
 });
