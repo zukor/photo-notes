@@ -1840,7 +1840,8 @@ async function renderList() {
         <strong>Selection</strong>
         <div class="organize-action-row"><button class="btn secondary" id="selall">Select All</button><button class="btn secondary" id="selnone">Clear Selection</button><button class="btn secondary" id="compareSelected">Compare 2 Photos</button>${featureOn('measurements') ? `<button class="btn secondary" id="classifybatch">Classify Selected (AI)</button>` : ''}</div>
       </div>
-      ${beforeAfterOn() ? `<div class="status" id="classifyprog"></div><details class="pair-builder"><summary><span>Before &amp; After Photos</span><span class="pair-expand">Create a comparison</span></summary><p>When work is complete, select one photo from before the job and one photo from after the job. The older photo will be marked Before by default.</p><button class="btn secondary slim" id="pairbtn">Create Pair From 2 Selected Photos</button></details>` : ''}
+      ${isConcreteClient()&&state.me.ramo_intake_access?`<div class="organize-action-row"><button class="btn secondary" id="ramoIntakeSend">Send to Ramo Optimizer</button><button class="btn secondary" id="ramoIntakeHistory">Ramo Submission History</button></div>`:''}
+    ${beforeAfterOn() ? `<div class="status" id="classifyprog"></div><details class="pair-builder"><summary><span>Before &amp; After Photos</span><span class="pair-expand">Create a comparison</span></summary><p>When work is complete, select one photo from before the job and one photo from after the job. The older photo will be marked Before by default.</p><button class="btn secondary slim" id="pairbtn">Create Pair From 2 Selected Photos</button></details>` : ''}
 
     <div class="organize-form-grid organize-batch-grid">
       <section class="organize-panel">
@@ -1887,6 +1888,8 @@ async function renderList() {
   document.getElementById('photoSearchClear').onclick=()=>{document.getElementById('photoSearch').value='';document.getElementById('filter').value='';document.getElementById('jobFilter').value='';document.getElementById('searchFrom').value='';document.getElementById('searchTo').value='';document.getElementById('searchMissingAddress').checked=false;runSmartSearch();};
   document.getElementById('selall').onclick = () => document.querySelectorAll('.capchk').forEach(c => { c.checked = true; state.selectedIds.add(String(c.value)); });
   document.getElementById('selnone').onclick = () => { state.selectedIds.clear(); document.querySelectorAll('.capchk').forEach(c => c.checked = false); };
+  const ramoSend=document.getElementById('ramoIntakeSend');if(ramoSend)ramoSend.onclick=()=>openRamoIntake();
+  const ramoHistory=document.getElementById('ramoIntakeHistory');if(ramoHistory)ramoHistory.onclick=()=>openRamoIntake(true);
   document.getElementById('applytopic').onclick = applyTopicToSelected;
   document.getElementById('replacetopic').onclick = replaceTopicsOnSelected;
   document.getElementById('createtopic').onclick = createOrganizeTopic;

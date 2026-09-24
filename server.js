@@ -75,6 +75,7 @@ app.use((req, res, next) => {
 // Stripe signature verification must receive the exact raw request bytes, so
 // this route is registered before the global JSON parser.
 registerStripeWebhook(app, { pool });
+app.use('/api/ramo-intake',express.json({limit:'2mb'}));
 app.use(express.json());
 app.use(cookieParser());
 
@@ -588,7 +589,7 @@ app.get('/api/me', requireAuth, async (req, res) => {
   res.setHeader('X-Photo-Notes-Upload-Receipts','1');
   const row = (await pool.query(`SELECT name,email,role,plan,pro_type,feature_access,edition_access,is_tester,is_testing_manager FROM users WHERE id=$1 AND active=true`, [req.user.id])).rows[0];
   if (!row) return res.status(401).json({ error:'not authenticated' });
-  res.json({ authed:true, is_super_admin:isSuperAdmin(req.user), is_tester:row.is_tester, is_testing_manager:row.is_testing_manager, edition_access:editionAccess(row), name:row.name, role:row.role, email:row.email, plan:row.plan === 'pro' ? 'pro' : 'free', pro_type:normalizeProType(row.pro_type), feature_access:await currentFeatureAccess(req.user.id) });
+  res.json({ authed:true, ramo_intake_access:require('./ramo-intake').allowed(req.user), is_super_admin:isSuperAdmin(req.user), is_tester:row.is_tester, is_testing_manager:row.is_testing_manager, edition_access:editionAccess(row), name:row.name, role:row.role, email:row.email, plan:row.plan === 'pro' ? 'pro' : 'free', pro_type:normalizeProType(row.pro_type), feature_access:await currentFeatureAccess(req.user.id) });
 });
 
 async function hoaCompanyForUser(userId,create=false,db=pool){let row=(await db.query(`SELECT c.*,m.company_role FROM hoa_management_companies c JOIN hoa_company_members m ON m.company_id=c.id WHERE m.user_id=$1 ORDER BY c.id LIMIT 1`,[userId])).rows[0];if(!row&&create){const u=(await pool.query(`SELECT name FROM users WHERE id=$1`,[userId])).rows[0];const client=await pool.connect();try{await client.query('BEGIN');row=(await client.query(`INSERT INTO hoa_management_companies(name) VALUES($1) RETURNING *`,[`${u&&u.name||'HOA'} Management`])).rows[0];await client.query(`INSERT INTO hoa_company_members(company_id,user_id,company_role) VALUES($1,$2,'administrator')`,[row.id,userId]);await client.query('COMMIT');}catch(e){await client.query('ROLLBACK');throw e;}finally{client.release();}}return row||null;}
@@ -900,6 +901,7 @@ function concreteEvidenceChecklist(rows,links){const stages=new Set(rows.map(r=>
   {key:'defect_closure',label:'Defects have repair and verification evidence',complete:!hasDefect||(stages.has('repair')&&stages.has('verification')),warning:'Document repair and verification for the photographed defect.'}
 ]);}
 
+const ramoIntake=require('./ramo-intake').registerRamoIntake(app,{pool,requireAuth,requireConcrete,uploadDir:UPLOAD_DIR});
 registerConcreteFootprints(app,{pool,requireAuth,requireConcrete,computeZone});
 
 app.get('/api/concrete/report',requireAuth,requireConcrete,async(req,res)=>{try{
@@ -3399,6 +3401,7 @@ async function backfillPhotoDims() {
 if(require.main===module)init()
   .then(() => {
     app.listen(PORT, () => console.log(`[efc] listening on ${PORT}`));
+    ramoIntake.start();
     const bootCloud=()=>startCloud(pool).catch(()=>{console.error('[issue-cloud] initialization failed; retrying');setTimeout(bootCloud,30000).unref();});
     bootCloud();
     backfillPhotoDims();

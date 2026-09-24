@@ -349,6 +349,25 @@ CREATE TABLE IF NOT EXISTS capture_upload_receipts (
   PRIMARY KEY(user_id,request_id)
 );
 
+CREATE TABLE IF NOT EXISTS ramo_intake_submissions (
+  id UUID PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  request_id UUID NOT NULL,
+  request_hash TEXT NOT NULL,
+  manifest JSONB NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('sending','received','failed')),
+  receipt JSONB,
+  last_error TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(user_id,request_id)
+);
+CREATE TABLE IF NOT EXISTS ramo_intake_files (
+  submission_id UUID NOT NULL REFERENCES ramo_intake_submissions(id) ON DELETE CASCADE,
+  attachment_id UUID NOT NULL,
+  bytes BYTEA NOT NULL,
+  PRIMARY KEY(submission_id,attachment_id)
+);
+
 CREATE TABLE IF NOT EXISTS capture_history (
   id         SERIAL PRIMARY KEY,
   capture_id INTEGER NOT NULL REFERENCES captures(id) ON DELETE CASCADE,
