@@ -7,13 +7,14 @@ const express=require('express');
  const editions=['basic','pro','contractor','roads','paving','hoa','concrete','roofer',null];
  const reports=editions.map((edition,index)=>({id:index+1,reported_edition:edition,user_id:index%2+1,user_name:index%2?'Tester Two':'Tester One',issue_type:'bug_problem',management_status:'new',priority:'normal',description:'Test report',page_name:'Capture',created_at:`2026-09-${String(index+1).padStart(2,'0')}T12:00:00Z`,user_agent:index%2?'Android':'Macintosh'}));
  reports.push({...reports[4],id:10,user_id:2,user_name:'Tester Two',user_agent:'Android',created_at:'2026-09-10T12:00:00Z'});
+ const ideas=['ui_improvement','feature_improvement','new_feature'].map((type,index)=>({...reports[4],id:20+index,issue_type:type,management_status:'blocked',description:'Read this original report first.',blocked_reason:'Owner decision needed',voice_path:'/fixture-voice.webm'}));
  const extraStatuses=['resolved','wont_fix','tester_confirmed','ready_to_test'];
  const extraReports=extraStatuses.map((status,index)=>({...reports[4],id:11+index,management_status:status,verification:'Deployment verified',release_reference:'test-release'}));
  try{for(const engine of [chromium,webkit]){const browser=await engine.launch();try{for(const width of [1440,390]){
  const page=await browser.newPage({viewport:{width,height:1100},serviceWorkers:'block'});const errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.route('**/api/**',route=>{const path=new URL(route.request().url()).pathname;let data=[];
  if(path==='/api/me')data={id:1,name:'Owner',role:'admin',is_super_admin:true,plan:'pro'};
- if(path==='/api/admin/issues')data=[...reports,...extraReports];
+ if(path==='/api/admin/issues')data=[...reports,...extraReports,...ideas];
  if(path==='/api/issues/attention')data={count:0};
  return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(data)});});
  await page.goto(`http://127.0.0.1:${server.address().port}/admin.html`);
@@ -56,6 +57,15 @@ const express=require('express');
  if(width===1440){const tops=await page.locator('.issue-primary select').evaluateAll(nodes=>nodes.map(n=>n.getBoundingClientRect().top));assert(tops.every(t=>Math.abs(t-tops[0])<2));}
  assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
  await page.screenshot({path:`/tmp/pn-issue-version-${engine.name()}-${width}.png`});
+ await page.selectOption('#issueTypeFilter','all');
+ await page.selectOption('#issueStatusFilter','all');
+ await page.locator('.issue-secondary > summary').click();
+ await page.selectOption('#issueTesterFilter','all');await page.selectOption('#issueDeviceFilter','all');
+ for(const id of [5,20,21,22]){
+ const card=page.locator(`[data-issue-card="${id}"]`);await card.locator(':scope > summary').click();
+ assert(await card.evaluate(card=>{const body=card.querySelector('.issue-detail-body'),original=body.querySelector('.issue-original-report'),footer=body.querySelector('.issue-review-footer');return original===body.children[1]&&footer===body.lastElementChild&&!!footer.querySelector('[data-ui-decision]');}));
+ if(id>=20)assert.equal(await card.locator('.issue-original-report audio').count(),1);
+ }
  assert.deepEqual(errors,[]);await page.close();console.log(engine.name(),width,'version and secondary filters PASS');
  }}finally{await browser.close();}}}finally{server.close();}
 })().catch(e=>{console.error(e);process.exit(1);});
