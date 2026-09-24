@@ -18,5 +18,18 @@
     if(['ui_improvement','feature_improvement','new_feature'].includes(issue.issue_type))return result('This is a suggested product change. It needs your decision about what should change before implementation can proceed. The suggestion itself is not approval to build it.','decision','Review the original suggestion. If you want the change, choose Implement Change and describe the result you want. If you cannot tell what the tester means, choose Request Clarification before approving work.');
     return result('Work on this report stopped, but the saved explanation does not clearly identify why. We do not know from this record whether the problem still happens or what caused it. You need a clear test result before deciding what to do next.','retest','Choose Retest to establish whether the problem still happens in the current app. Review the result, then choose Retry Repair if it still fails. If the original report does not explain what to test, choose Request Clarification instead.',true);
   }
-  return {explain};
+  function clarificationDraft(issue={}){
+    if(issue.issue_type!=='bug_problem'||issue.management_status!=='blocked'||explain(issue).action!=='clarify')return '';
+    const context=[issue.blocked_reason,issue.description,issue.reporter_details].filter(Boolean).join(' ').toLowerCase();
+    const directions=[
+      'Please provide the original photo or file you used, so we can check the same example.',
+      'List the exact steps you took in Photo Notes, including the version, page, device, and browser you used.',
+      'Show the result produced by the app, preferably with a screenshot.',
+      'Point out exactly what is wrong in that result and what you expected to see.'
+    ];
+    if(/blur|unreadable|illegible/.test(context))directions.push('Identify any fields the app filled in even though the original photo was too blurry or unreadable. Include the value shown for each incorrect field.');
+    if(/both readings|two.{0,30}(scan|reading|result)|second.{0,30}scan/.test(context))directions.push('Provide both scan results from the same original photo and identify which values changed between the first and second scan.');
+    return 'Please help us understand this issue by providing the following:\n\n'+directions.map((text,index)=>(index+1)+'. '+text).join('\n\n');
+  }
+  return {explain,clarificationDraft};
 });
