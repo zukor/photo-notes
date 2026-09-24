@@ -282,7 +282,6 @@ function renderApp() {
   el.innerHTML = `
     <div class="wrap">
       <div class="app-header">
-        ${state.me&&Array.isArray(state.me.edition_access)&&state.me.edition_access.length>1?`<label class="edition-switcher" for="editionSwitcher"><select id="editionSwitcher" aria-label="Switch Photo Notes version">${editionSwitcherOptions()}</select></label>`:''}
         <img class="zukor-corner-logo" src="/zukor-logo.svg" alt="Zukor AI" />
         <div class="brandrow">
           <div class="brand ${isProClient() ? 'pro-edition-brand' : ''} ${isGeneralProClient()?'general-pro-brand':''} ${isGeneralContractorClient()?'contractor-pro-brand':''} ${isRoadIssuesClient()?'road-issues-brand':''} ${isPavingClient()?'paving-pro-brand':''} ${isConcreteClient()?'concrete-pro-brand':''} ${isHoaClient()?'hoa-pro-brand':''} ${isRooferClient()?'roofer-pro-brand':''}" aria-label="${esc(isProClient()||isRoadIssuesClient()?productName():'Photo Notes AI Basic')}">${isProClient()||isRoadIssuesClient()?'':'<span class="product-suite-name">Photo Notes</span>'}</div>
@@ -295,6 +294,7 @@ function renderApp() {
               <div class="profile-name">${esc((state.me && state.me.name) || 'Photo Notes User')}</div>
               <div class="profile-email">${esc((state.me && state.me.email) || '')}</div>
               <div class="profile-plan">${isRoadIssuesClient()?'Road Issue Reporter':isGeneralProClient()?'Photo Notes Pro':isProClient()?esc(productName()):'Photo Notes Basic'}</div>
+              ${state.me&&Array.isArray(state.me.edition_access)&&state.me.edition_access.length>1?`<label class="profile-version" for="editionSwitcher"><span>Photo Notes Version</span><select id="editionSwitcher" aria-label="Switch Photo Notes version">${editionSwitcherOptions()}</select></label>`:''}
               <button type="button" id="manageTesting" ${state.me?.is_testing_manager||state.me?.role==='admin'?'':'hidden'}>${uiT('Manage Testing')}</button>
               <button type="button" id="myAssignment" ${state.me?.is_tester||state.me?.is_testing_manager||state.me?.role==='admin'?'':'hidden'}>Testing Hub</button>
               <button type="button" id="installHelp">Install Photo Notes</button>

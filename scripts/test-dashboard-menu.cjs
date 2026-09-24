@@ -18,6 +18,8 @@ const express=require('express');
  for(const language of ['en','es']){
  await page.locator(`[data-language="${language}"]`).click();
  for(const next of editions){
+ await page.locator('#profileButton').click();
+ assert.equal(await page.locator('#profileMenu #editionSwitcher').count(),1);
  await page.locator('#editionSwitcher').selectOption(next);
  await page.waitForFunction(value=>document.querySelector('#editionSwitcher')?.value===value&&!document.querySelector('#editionSwitcher')?.disabled,next);
  await page.locator('#profileButton').click();

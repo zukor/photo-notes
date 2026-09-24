@@ -178,16 +178,11 @@ textarea { min-height: 96px; resize: vertical; }
 .app-header .header-controls { grid-column:2 / 4; grid-row:1; justify-self:end; display:flex; align-items:center; gap:10px; }
 .workflow-road-report { width:min(620px,100%); margin:0 auto; }
 .workflow-road-report .road-send { margin-top:22px; }
-.wrap:has(.edition-switcher) { padding-top:4px; }
-.app-header:has(.edition-switcher) { grid-template-rows:30px auto auto; margin-top:0; }
-.app-header:has(.edition-switcher) .zukor-corner-logo,
-.app-header:has(.edition-switcher) .header-controls { grid-row:2; }
-.app-header:has(.edition-switcher) .zukor-corner-logo { align-self:start; }
-.app-header:has(.edition-switcher) .header-controls { grid-column:3; }
-.app-header:has(.edition-switcher) .brandrow { grid-row:3; }
-.edition-switcher { grid-column:2; grid-row:2; align-self:start; justify-self:center; display:block; min-width:0; max-width:100%; margin:0; line-height:1; }
-.edition-switcher select { width:auto; max-width:100%; min-width:0; padding:5px 24px 5px 8px; border:1px solid var(--pn-border-9db0ca,#9db0ca); border-radius:8px; background:var(--pn-bg-fff,#fff); color:var(--pn-text-000,#000); font:700 11px/1.2 Arial,Helvetica,sans-serif; cursor:pointer; }
-.edition-switcher select:focus-visible { outline:2px solid var(--pn-border-1d4ed8,#1d4ed8); outline-offset:2px; }
+.profile-version { display:block; margin:10px 0; font-weight:700; color:#000; }
+.profile-version span { display:block; margin-bottom:6px; }
+.profile-version select { width:100%; min-width:0; padding:10px 8px; border:1px solid #000; border-radius:8px; background:#fff; color:#000; font:16px Arial,Helvetica,sans-serif; }
+.profile-version select:focus-visible { outline:2px solid #1d4ed8; outline-offset:2px; }
+.profile-menu { max-width:calc(100vw - 32px); max-height:calc(100dvh - 100px); overflow-y:auto; }
 /* Wide browser header: the company mark is approximately one workflow-tab wide.
    Every product edition uses the HOA Maintenance Pro 750x90 reference box so
    switching editions never changes the header geometry. */
