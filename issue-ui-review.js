@@ -1,3 +1,4 @@
+const retestGuidance=require('./public/issue-retest-guidance');
 const {isSuperAdmin}=require('./super-admin');
 // Only a recorded owner approval admits an improvement idea to the implementation worker.
 function eligibleIssueSql(alias=''){
@@ -9,14 +10,14 @@ function registerUiReview(app,{pool,requireAuth}){
   if(!isSuperAdmin(req.user))return res.status(403).json({error:'Super Admin access required'});
   const bugReview=req.path.endsWith('/bug-review');
   const id=Number(req.params.id),decision=req.body?.decision;let text=typeof req.body?.instructions==='string'?req.body.instructions.trim():'';
-  if(bugReview&&decision==='retest'&&!text)text='Please test this again and see if it is still happening. No fix is being claimed.';
   if(bugReview&&decision==='implement'&&!text)text='Retry the repair of the reported bug. Use the original report and any tester clarification.';
-  if(!Number.isInteger(id)||id<1||!['implement','clarify','no_change',...(bugReview?['retest']:[])].includes(decision)||!text||text.length>5000||!req.body.expected_updated_at)return res.status(400).json({error:'Choose an action and enter 1-5,000 characters explaining it.'});
+  if(!Number.isInteger(id)||id<1||!['implement','clarify','no_change',...(bugReview?['retest']:[])].includes(decision)||(!text&&!(bugReview&&decision==='retest'))||text.length>5000||!req.body.expected_updated_at)return res.status(400).json({error:'Choose an action and enter 1-5,000 characters explaining it.'});
   const c=await pool.connect();try{
    await c.query('BEGIN');const row=(await c.query('SELECT * FROM issue_reports WHERE id=$1 FOR UPDATE',[id])).rows[0];
    if(!row||(bugReview?row.issue_type!=='bug_problem':!['ui_improvement','feature_improvement','new_feature'].includes(row.issue_type))){await c.query('ROLLBACK');return res.status(404).json({error:'Improvement idea not found'});}
    if(new Date(row.updated_at).getTime()!==new Date(req.body.expected_updated_at).getTime()){await c.query('ROLLBACK');return res.status(409).json({error:'This report changed. Reload it before submitting your decision.'});}
    if(row.repair_lease_until&&new Date(row.repair_lease_until)>new Date()){await c.query('ROLLBACK');return res.status(409).json({error:'Implementation is currently running. Wait for its result before changing this decision.'});}
+   if(decision==='retest'&&!text)text=retestGuidance.build(row);
    const status=decision==='implement'?'new':decision==='clarify'?'blocked':decision==='retest'?'retest_requested':'wont_fix';
    const updated=(await c.query(`UPDATE issue_reports SET review_decision=$2,implementation_instructions=$3,review_note=$4,reviewed_by=$5,reviewed_at=now(),management_status=$6,blocked_reason=$7,repair_claim_hash=NULL,repair_lease_until=NULL,updated_at=now(),resolved_at=CASE WHEN $2='no_change' THEN now() ELSE NULL END,fix_summary=NULL,verification=NULL,fix_commit=NULL,release_reference=NULL,retest_instructions=CASE WHEN $2='retest' THEN $4 ELSE NULL END,tester_result=NULL,tester_notes=NULL,tester_retested_at=NULL,tester_notification_status='in_app',tester_notified_at=now() WHERE id=$1 RETURNING *`,[id,decision,decision==='implement'?text:null,decision==='implement'?null:text,req.user.id,status,decision==='clarify'?text:null])).rows[0];
    await c.query("INSERT INTO issue_repair_events(issue_id,event,detail) VALUES($1,$2,$3)",[id,(bugReview?'bug_review_':'ui_review_')+decision,JSON.stringify({decision,instructions:text,reviewed_by:req.user.id,previous_status:row.management_status,previous_decision:row.review_decision,previous_instructions:row.implementation_instructions,previous_note:row.review_note,previous_fix_summary:row.fix_summary,previous_verification:row.verification,previous_release:row.release_reference,previous_retest_instructions:row.retest_instructions,previous_tester_result:row.tester_result,previous_tester_notes:row.tester_notes})]);

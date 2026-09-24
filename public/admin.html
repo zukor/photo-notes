@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Photo Notes — Admin</title>
   <meta name="theme-color" content="#1d4ed8" />
-  <link rel="stylesheet" href="/styles.css?v=254" />
+  <link rel="stylesheet" href="/styles.css?v=255" />
   <script src="/vendor/html2canvas.min.js?v=59"></script>
-  <script src="/issue-markup.js?v=254"></script>
-  <script src="/issue-reporter.js?v=254"></script>
+  <script src="/issue-markup.js?v=255"></script>
+  <script src="/issue-reporter.js?v=255"></script>
   <style>
     .stat { display:inline-block; min-width:84px; margin:4px 14px 4px 0; vertical-align:top; }
     .stat .n { font-size:19px; font-weight:bold; color:var(--pn-text-000,#000); }
@@ -153,12 +153,13 @@
     .delete-user-panel h3 { margin-top:0; }
     .delete-user-panel .btn { margin:10px 8px 0 0; }
   </style>
-  <link rel="stylesheet" href="/testing-hub.css?v=254">
-  <script src="/testing-hub.js?v=254"></script>
-<link rel="stylesheet" href="/theme.css?v=254"><script src="/theme.js?v=254"></script></head>
+  <link rel="stylesheet" href="/testing-hub.css?v=255">
+  <script src="/testing-hub.js?v=255"></script>
+<link rel="stylesheet" href="/theme.css?v=255"><script src="/theme.js?v=255"></script></head>
 <body>
   <div id="app"></div>
-  <script src="/account-menu.js?v=254"></script>
+  <script src="/account-menu.js?v=255"></script>
+  <script src="/issue-retest-guidance.js?v=255"></script>
   <script>
     const el = document.getElementById('app');
     const regularAdminView=new URLSearchParams(location.search).get('view')==='admin';
@@ -648,10 +649,10 @@
       const action=document.getElementById(`ui-decision-${id}`).value;
       document.getElementById(`ui-entry-${id}`).hidden=!action;if(!action)return;
       const bug=allIssues.find(i=>Number(i.id)===id)?.issue_type==='bug_problem';
-      const labels={retest:['Message To Tester (Optional)','Send Retest Request','Ask the tester to try the issue again. This does not claim a fix or queue a repair. Leave blank to send the standard request.'],implement:['Implementation Instructions','Approve And Queue Change','Describe exactly what should change. Your instructions will guide implementation. The original report remains available as background.'],clarify:['Question For The Tester','Send Clarification Request','Your question will appear in the tester’s My Issue Reports. Their reply returns here for your review; it does not automatically approve implementation.'],no_change:['Reason For No Change','Close With No Change','Explain why no change will be made. This closes the suggestion and shows your reason to the tester.']};
+      const labels={retest:['Retest Recommendations','Send Retest Request','These suggested checks use the report and relevant user-side details from the review explanation. Review or edit them before sending. No fix is being claimed.'],implement:['Implementation Instructions','Approve And Queue Change','Describe exactly what should change. Your instructions will guide implementation. The original report remains available as background.'],clarify:['Question For The Tester','Send Clarification Request','Your question will appear in the tester’s My Issue Reports. Their reply returns here for your review; it does not automatically approve implementation.'],no_change:['Reason For No Change','Close With No Change','Explain why no change will be made. This closes the suggestion and shows your reason to the tester.']};
       if(bug){labels.implement=['Repair Instructions (Optional)','Queue Repair','Request another repair attempt. Add any corrections, priorities, or instructions you want followed.'];labels.no_change=['Reason For Closing','Close Without Fix','Explain why no repair should be made. The reason will appear in the tester’s issue report.'];}
       const [label,button,help]=labels[action];document.getElementById(`ui-label-${id}`).textContent=label;document.querySelector(`[data-ui-submit="${id}"]`).textContent=button;document.getElementById(`ui-help-${id}`).textContent=help;
-      const field=document.getElementById(`ui-instructions-${id}`);const previous=field.dataset.action;if(previous)field.dataset[previous]=field.value;field.value=field.dataset[action]??(action==='implement'?allIssues.find(i=>Number(i.id)===id)?.implementation_instructions||'':'');field.dataset.action=action;
+      const field=document.getElementById(`ui-instructions-${id}`);const previous=field.dataset.action;if(previous)field.dataset[previous]=field.value;field.value=field.dataset[action]??(action==='retest'?window.PhotoNotesRetestGuidance.build(allIssues.find(i=>Number(i.id)===id)):action==='implement'?allIssues.find(i=>Number(i.id)===id)?.implementation_instructions||'':'');field.dataset.action=action;field.rows=action==='retest'?12:3;
     }
     async function submitUiDecision(id,button){
       const issue=allIssues.find(i=>Number(i.id)===id),result=document.getElementById(`ui-result-${id}`),instructions=document.getElementById(`ui-instructions-${id}`).value.trim(),decision=document.getElementById(`ui-decision-${id}`).value;
