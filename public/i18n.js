@@ -1,6 +1,8 @@
 (function () {
   const STORAGE_KEY = 'photo-notes-language';
   const ES = {
+    "Photo Notes Version": "Versión de Photo Notes",
+    "Switch Photo Notes version": "Cambiar versión de Photo Notes",
     "This report is waiting for Sam’s review. No additional details are requested from you right now.": "Este informe está pendiente de revisión de Sam. Por ahora no se le solicitan detalles adicionales.",
     "Question From Sam": "Pregunta de Sam", "Clarification Requested": "Aclaración solicitada", "Closed - No Change": "Cerrado - Sin cambios", "Reason For No Change": "Motivo para no hacer cambios", "Approved For Implementation": "Aprobado para implementación", "Awaiting Sam Review": "Pendiente de revisión de Sam",
     "Address or Geographic Area": "Dirección o zona geográfica",
