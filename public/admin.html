@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Photo Notes — Admin</title>
   <meta name="theme-color" content="#1d4ed8" />
-  <link rel="stylesheet" href="/styles.css?v=258" />
+  <link rel="stylesheet" href="/styles.css?v=259" />
   <script src="/vendor/html2canvas.min.js?v=59"></script>
-  <script src="/issue-markup.js?v=258"></script>
-  <script src="/issue-reporter.js?v=258"></script>
+  <script src="/issue-markup.js?v=259"></script>
+  <script src="/issue-reporter.js?v=259"></script>
   <style>
     .stat { display:inline-block; min-width:84px; margin:4px 14px 4px 0; vertical-align:top; }
     .stat .n { font-size:19px; font-weight:bold; color:var(--pn-text-000,#000); }
@@ -153,14 +153,14 @@
     .delete-user-panel h3 { margin-top:0; }
     .delete-user-panel .btn { margin:10px 8px 0 0; }
   </style>
-  <link rel="stylesheet" href="/testing-hub.css?v=258">
-  <script src="/testing-hub.js?v=258"></script>
-<link rel="stylesheet" href="/theme.css?v=258"><script src="/theme.js?v=258"></script></head>
+  <link rel="stylesheet" href="/testing-hub.css?v=259">
+  <script src="/testing-hub.js?v=259"></script>
+<link rel="stylesheet" href="/theme.css?v=259"><script src="/theme.js?v=259"></script></head>
 <body>
   <div id="app"></div>
-  <script src="/account-menu.js?v=258"></script>
-  <script src="/issue-retest-guidance.js?v=258"></script>
-  <script src="/issue-review-guidance.js?v=258"></script>
+  <script src="/account-menu.js?v=259"></script>
+  <script src="/issue-retest-guidance.js?v=259"></script>
+  <script src="/issue-review-guidance.js?v=259"></script>
   <script>
     const el = document.getElementById('app');
     const regularAdminView=new URLSearchParams(location.search).get('view')==='admin';
@@ -475,6 +475,11 @@
             <label>Priority<select id="issuePriorityFilter"><option value="all">All Priorities</option><option value="urgent">Urgent</option><option value="high">High</option><option value="normal">Normal</option><option value="low">Low</option></select></label>
             <label for="issueDateSort"><span>Date Reported</span><select id="issueDateSort" aria-label="Date Reported"><option value="newest">Newest first</option><option value="oldest">Oldest first</option></select></label>
           </div>
+          <div id="issueRecommendedActionRow" hidden>
+            <label for="issueRecommendedAction">Recommended Action</label>
+            <select id="issueRecommendedAction"><option value="all">All Recommended Actions</option><option value="clarify">Request Clarification</option><option value="retest">Retest</option><option value="implement">Retry Repair</option><option value="no_change">Close Without Fix</option><option value="setup">Check Service Access First</option><option value="wait">Wait For Tester Reply</option></select>
+            <p>Shows issues by the recommended next step, not a decision you have already submitted.</p>
+          </div>
           <details class="issue-secondary"><summary>Secondary</summary><div class="issue-toolbar">
             <label>Tester<select id="issueTesterFilter"><option value="all">All Testers</option></select></label>
             <label>Device<select id="issueDeviceFilter"><option value="all">All Devices</option><option value="android">Android</option><option value="ios">iPhone / iPad</option><option value="desktop">Desktop</option><option value="unknown">Unknown</option></select></label>
@@ -536,6 +541,7 @@
       document.getElementById('issueTesterFilter').onchange = renderIssues;
       document.getElementById('issueDeviceFilter').onchange = renderIssues;
       document.getElementById('issueDateSort').onchange = renderIssues;
+      document.getElementById('issueRecommendedAction').onchange = renderIssues;
       }
       document.getElementById('refreshAssignments').onclick = loadAssignments;
       const toolLoaders={'system-status':loadIssueSystemStatus,health:loadHealth,billing:loadStripeBilling,activity:loadActivity,issues:loadIssues,testing:loadAssignments};
@@ -582,11 +588,16 @@
       const version=(document.getElementById('issueVersionFilter')||{}).value||'all';
       const category=(document.getElementById('issueTypeFilter')||{}).value||'all';
       const sf=(document.getElementById('issueStatusFilter')||{}).value||'open';
+      const actionSelect=document.getElementById('issueRecommendedAction');
+      const actionApplicable=category==='bug_problem'&&sf==='blocked';
+      document.getElementById('issueRecommendedActionRow').hidden=!actionApplicable;
+      if(!actionApplicable)actionSelect.value='all';
+      const recommendedAction=actionSelect.value;
       const pf=(document.getElementById('issuePriorityFilter')||{}).value||'all';
       const tf=(document.getElementById('issueTesterFilter')||{}).value||'all';
       const df=(document.getElementById('issueDeviceFilter')||{}).value||'all';
       const closed=new Set(['resolved','wont_fix','tester_confirmed']);
-      const scope=allIssues.filter(i=>(version==='all'||(Object.hasOwn(editionLabels,i.reported_edition)?i.reported_edition:'unknown')===version)&&matchesIssueType(i,category)&&(pf==='all'||(i.priority||'normal')===pf)&&(tf==='all'||String(i.user_id)===tf)&&(df==='all'||issueDevice(i).key===df));
+      const scope=allIssues.filter(i=>(recommendedAction==='all'||window.PhotoNotesReviewGuidance.explain(i).action===recommendedAction)&&(version==='all'||(Object.hasOwn(editionLabels,i.reported_edition)?i.reported_edition:'unknown')===version)&&matchesIssueType(i,category)&&(pf==='all'||(i.priority||'normal')===pf)&&(tf==='all'||String(i.user_id)===tf)&&(df==='all'||issueDevice(i).key===df));
       const rows=scope.filter(i=>sf==='all'||(sf==='open'&&!closed.has(i.management_status||'new'))||(sf==='closed'&&closed.has(i.management_status||'new'))||(sf==='resolved'&&i.management_status==='tester_confirmed')||i.management_status===sf);
       const direction=document.getElementById('issueDateSort').value==='oldest'?1:-1;
       rows.sort((a,b)=>{
