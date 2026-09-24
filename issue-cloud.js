@@ -1,3 +1,4 @@
+const {eligibleIssueSql}=require('./issue-ui-review');
 const webpush = require('web-push');
 function validSubscription(s) {
   try {
@@ -89,7 +90,7 @@ async function dispatchRepairs(client,{fetcher=fetch,env=process.env}={}) {
     if(active){if(Date.now()-Date.parse(active.created_at)>60*60*1000)error='A cloud run has not completed for over an hour. Review the private Actions run.';}
     else {
       const pending=(await client.query(`SELECT i.id FROM issue_reports i LEFT JOIN issue_cloud_dispatch d ON d.issue_id=i.id
-        WHERE i.issue_type='bug_problem' AND i.management_status IN ('new','reviewing','fixing','testing') AND (i.repair_lease_until IS NULL OR i.repair_lease_until<now())
+        WHERE ${eligibleIssueSql('i')} AND i.management_status IN ('new','reviewing','fixing','testing') AND (i.repair_lease_until IS NULL OR i.repair_lease_until<now())
         AND (d.next_try IS NULL OR d.next_try<=now()) ORDER BY i.created_at LIMIT 1`)).rows;
       for(const i of pending){
         const r=await fetcher(base+'/dispatches',{method:'POST',redirect:'error',signal:AbortSignal.timeout(15000),headers,body:JSON.stringify({ref:'main',inputs:{issue_id:String(i.id),mode:'repair'}})});
