@@ -754,3 +754,6 @@ body:has(.issue-fab) { padding-bottom:calc(80px + env(safe-area-inset-bottom)); 
 .concrete-purpose-menu [aria-selected="true"] { font-weight:700; background:#e6f0ff; }
 .concrete-purpose-menu [role="option"]:focus-visible { outline:2px solid #0066cc; outline-offset:-2px; }
 #concretePurpose[hidden] { display:none; }
+
+/* The Ramo action applies to the whole selected group. */
+#sendToRamo { grid-column:1 / -1; width:100%; }

@@ -1,6 +1,7 @@
 (function () {
   const STORAGE_KEY = 'photo-notes-language';
   const ES = {
+    "Tap Share to choose where to send it. Closing sharing keeps your photo and notes here.": "Toque Compartir para elegir dónde enviarla. Al cerrar, su foto y sus notas permanecen aquí.",
     "Send to Ramo Optimizer": "Enviar a Ramo Optimizer",
     "Ramo Submission History": "Historial de envíos a Ramo",
     "Photo Notes Version": "Versión de Photo Notes",

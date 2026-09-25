@@ -348,7 +348,7 @@ function renderApp() {
       const r=await api('/api/switch-edition',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({edition})});
       if(!r.ok)throw new Error();
       stopCaptureDictation();
-      state.view=edition==='roads'?'road-report':edition==='basic'?'capture':(IS_HANDHELD?'capture':'organize');state.photoFile=null;state._note='';state._concreteCapture=null;state._pavingReason=null;
+      state.view=edition==='roads'?'road-report':edition==='basic'?'capture':(IS_HANDHELD?'capture':'organize');state._captureShareSave=null;state.photoFile=null;state._note='';state._concreteCapture=null;state._pavingReason=null;
       await boot();toast('Version switched');
     }catch(e){toast('Version could not be switched. Please try again.');}
     finally{editionSwitcher.disabled=false;editionSwitcher.value=selectedEdition();}
@@ -577,7 +577,7 @@ function bindPavingPhotoReason(){
     if(pavingHasUnsavedPhoto()&&!confirm(uiT('Changing the photo reason will discard this unsaved photo and notes. Continue?'))){select.value=previous;return;}
     stopCaptureDictation();captureLocationGeneration++;
     if(state._previewUrl)URL.revokeObjectURL(state._previewUrl);
-    state._previewUrl=null;state.photoFile=null;state._note='';state.location=null;state.address=null;state._locationPromise=null;state._qualityPromise=null;state._qualityResult=null;
+    state._previewUrl=null;state._captureShareSave=null;state.photoFile=null;state._note='';state.location=null;state.address=null;state._locationPromise=null;state._qualityPromise=null;state._qualityResult=null;
     cameraReaderFile=null;cameraReaderDraft=null;ticketPhotoFile=null;ticketDraft=null;alignmentAfterFile=null;alignmentBefore=null;
     state._pavingReason=next;renderCapture();
   };
@@ -944,6 +944,7 @@ async function loadTodayTickets() {
 }
 
 function onPhotoChosen(file) {
+  state._captureShareSave=null;
   if(captureSavePending){toast('Please wait for the current photo to save.');return;}
   const replacing=!!state.photoFile;stopCaptureDictation();
   captureLocationGeneration++;
@@ -975,6 +976,7 @@ function retakeCapturePhoto(){
   if(!input)return;input.value='';input.click();
 }
 function cancelCapturePhoto(){
+  state._captureShareSave=null;
   if(captureSavePending){toast('Please wait for the current photo to save.');return;}
   stopCaptureDictation();
   captureLocationGeneration++;
@@ -1717,12 +1719,21 @@ async function saveCaptureDurably(options = {}) {
   const hadCoords = !!state.location;
   if (state.location) { payload.latitude=state.location.lat;payload.longitude=state.location.lng; }
   if (state.address) payload.address=state.address;
-  // Every Save waits for the local storage transaction to commit.
-  {
+  // Send/Share keeps the draft visible. Reuse its durable save when the user
+  // cancels sharing and taps Save again without changing the capture.
+  const signature=JSON.stringify({...payload,photo:null,latitude:undefined,longitude:undefined,address:undefined});
+  const previous=state._captureShareSave;
+  const alreadySaved=previous&&previous.photo===payload.photo&&previous.signature===signature&&previous.account===state.me?.email&&previous.edition===selectedEdition();
+  if(!alreadySaved){
     try{await enqueueUpload(payload,hadCoords,{requireDurable:true});}
     catch(e){toast('Could not save this photo. Your draft is still here.');return false;}
   }
-  // Clear the saved draft and hand upload to the background.
+  if(options.preserveDraft){
+    state._captureShareSave={photo:payload.photo,signature,account:state.me?.email,edition:selectedEdition()};
+    return true;
+  }
+  state._captureShareSave=null;
+  // Only an explicit Save clears the saved draft and hands upload to the background.
   captureLocationGeneration++;
   state.photoFile = null; state._note = ''; state.location = null; state.address = null; state._locationPromise = null;
   state._dims = freshDims(); state._measure = null;
@@ -3180,6 +3191,7 @@ async function renderSend() {
       <select id="sendformat" aria-label="Download format"><option value="pdf">PDF</option><option value="docx">Word</option><option value="bundle">Markdown + Photos</option></select>
       <button class="btn secondary" id="senddocument">Download</button>
     </div>
+    ${isConcreteClient()&&state.me.ramo_intake_access?'<div class="delivery-actions"><button class="btn secondary" id="sendToRamo" type="button">Send to Ramo Optimizer</button></div>':''}
     <div class="share-action-status" id="shareActionStatus" role="status" aria-live="polite"></div>
     <div id="sendCaptures" class="send-capture-list"></div>
     <section class="send-feature-panel" aria-labelledby="customerApprovalHeading">
@@ -3197,6 +3209,7 @@ async function renderSend() {
   document.getElementById('senddocument').onclick = () => deliverExport(document.getElementById('sendformat').value, null, 'download');
   document.getElementById('selectAllSendCaptures').onclick = selectAllSendCaptures;
   document.getElementById('clearSendSelection').onclick = clearSendSelection;
+  const sendToRamo=document.getElementById('sendToRamo');if(sendToRamo)sendToRamo.onclick=()=>openRamoIntake();
   document.getElementById('createApproval').onclick=createApprovalPackage;
   loadSendCenter();
   loadApprovalPackages();
