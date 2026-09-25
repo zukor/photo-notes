@@ -96,10 +96,16 @@
     finally{sending=false;if(q('send'))q('send').disabled=false;if(q('save'))q('save').disabled=false;}
   }
   function injectButtons() {
-    var save = q('save');
-    if (!save || q('send')) return;
-    var button=document.createElement('button');button.id='send';button.className='btn secondary';button.type='button';button.textContent=tr('Send/Share');
-    button.addEventListener('click',onSend);save.insertAdjacentElement('afterend',button);
+    var save = q('save'), button = q('send');
+    if (!save && !button) return;
+    if (!button) {
+      button=document.createElement('button');button.id='send';button.className='btn secondary';button.type='button';button.textContent=tr('Send/Share');
+      save.insertAdjacentElement('afterend',button);
+    }
+    if (!button.dataset.captureShareBound) {
+      button.dataset.captureShareBound='true';
+      button.addEventListener('click',onSend);
+    }
   }
 
   function fixLogo() {
