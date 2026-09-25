@@ -348,7 +348,7 @@ function renderApp() {
       const r=await api('/api/switch-edition',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({edition})});
       if(!r.ok)throw new Error();
       stopCaptureDictation();
-      state.view=edition==='roads'?'road-report':edition==='basic'?'capture':(IS_HANDHELD?'capture':'organize');state.photoFile=null;state._note='';state._concreteCapture=null;state._pavingReason=null;
+      state.view=edition==='roads'?'road-report':edition==='basic'?'capture':(IS_HANDHELD?'capture':'organize');state._captureShareSave=null;state.photoFile=null;state._note='';state._concreteCapture=null;state._pavingReason=null;
       await boot();toast('Version switched');
     }catch(e){toast('Version could not be switched. Please try again.');}
     finally{editionSwitcher.disabled=false;editionSwitcher.value=selectedEdition();}
@@ -519,7 +519,10 @@ function refreshConcreteCapturePurpose(){
   const d=concreteCaptureDraft(),phase=ConcreteCapture.phase(d.phase),select=document.getElementById('concretePurpose');
   if(!ConcreteCapture.purpose(d.phase,d.purpose))d.purpose='';
   select.disabled=!phase;
-  select.innerHTML=`<option value="">${phase?'Choose a photo purpose (optional)':'Choose a phase first'}</option>`+(phase?phase.purposes.map(p=>`<option value="${p[0]}" ${d.purpose===p[0]?'selected':''}>${esc(p[1])}</option>`).join(''):'');
+  const translate=text=>window.photoNotesI18n?.t(text)||text;
+  const purposes=(phase?.purposes||[]).map(p=>({id:p[0],label:translate(p[1])})).sort((a,b)=>a.label.localeCompare(b.label,uiLocale()));
+  select.innerHTML=`<option value="">${esc(translate(phase?'Choose a photo purpose (optional)':'Choose a phase first'))}</option>`+purposes.map(p=>`<option value="${p.id}" ${d.purpose===p.id?'selected':''}>${esc(p.label)}</option>`).join('');
+  window.ConcretePurposeMenu.mount(select);
   refreshConcreteCaptureGuide();
 }
 function refreshConcreteCaptureGuide(){
@@ -574,7 +577,7 @@ function bindPavingPhotoReason(){
     if(pavingHasUnsavedPhoto()&&!confirm(uiT('Changing the photo reason will discard this unsaved photo and notes. Continue?'))){select.value=previous;return;}
     stopCaptureDictation();captureLocationGeneration++;
     if(state._previewUrl)URL.revokeObjectURL(state._previewUrl);
-    state._previewUrl=null;state.photoFile=null;state._note='';state.location=null;state.address=null;state._locationPromise=null;state._qualityPromise=null;state._qualityResult=null;
+    state._previewUrl=null;state._captureShareSave=null;state.photoFile=null;state._note='';state.location=null;state.address=null;state._locationPromise=null;state._qualityPromise=null;state._qualityResult=null;
     cameraReaderFile=null;cameraReaderDraft=null;ticketPhotoFile=null;ticketDraft=null;alignmentAfterFile=null;alignmentBefore=null;
     state._pavingReason=next;renderCapture();
   };
@@ -630,7 +633,7 @@ function renderCapture() {
       <button class="btn ${isBasicClient()?'':'secondary'}" id="addarea">Add</button>
     </div>`}
 
-    <button class="btn" id="save">Save</button>
+    ${isBasicClient()?'<button class="btn" id="send" type="button">Send/Share</button>':'<button class="btn" id="save">Save</button>'}
   `;
 
   if(isConcreteClient())bindConcreteCapture();
@@ -645,7 +648,7 @@ function renderCapture() {
   document.getElementById('photoLib').onchange = (e) => { if (e.target.files[0]) onPhotoChosen(e.target.files[0]); };
   document.getElementById('retakePhoto').onclick = retakeCapturePhoto;
   document.getElementById('cancelPhoto').onclick = cancelCapturePhoto;
-  document.getElementById('save').onclick = saveCapture;
+  const captureSave=document.getElementById('save');if(captureSave)captureSave.onclick=saveCapture;
   document.getElementById('retryLocation').onclick = () => acquireLocation(true);
   document.getElementById('correctAddress').onclick = correctCaptureAddress;
   if(isHoaClient()){document.getElementById('hoaCommunity').onchange=e=>state.communityId=e.target.value;document.getElementById('hoaType').onchange=e=>document.getElementById('hoaDirectedWrap').style.display=e.target.value==='information'?'block':'none';}else{
@@ -941,6 +944,7 @@ async function loadTodayTickets() {
 }
 
 function onPhotoChosen(file) {
+  state._captureShareSave=null;
   if(captureSavePending){toast('Please wait for the current photo to save.');return;}
   const replacing=!!state.photoFile;stopCaptureDictation();
   captureLocationGeneration++;
@@ -972,6 +976,7 @@ function retakeCapturePhoto(){
   if(!input)return;input.value='';input.click();
 }
 function cancelCapturePhoto(){
+  state._captureShareSave=null;
   if(captureSavePending){toast('Please wait for the current photo to save.');return;}
   stopCaptureDictation();
   captureLocationGeneration++;
@@ -1714,12 +1719,21 @@ async function saveCaptureDurably(options = {}) {
   const hadCoords = !!state.location;
   if (state.location) { payload.latitude=state.location.lat;payload.longitude=state.location.lng; }
   if (state.address) payload.address=state.address;
-  // Every Save waits for the local storage transaction to commit.
-  {
+  // Send/Share keeps the draft visible. Reuse its durable save when the user
+  // cancels sharing and taps Save again without changing the capture.
+  const signature=JSON.stringify({...payload,photo:null,latitude:undefined,longitude:undefined,address:undefined});
+  const previous=state._captureShareSave;
+  const alreadySaved=previous&&previous.photo===payload.photo&&previous.signature===signature&&previous.account===state.me?.email&&previous.edition===selectedEdition();
+  if(!alreadySaved){
     try{await enqueueUpload(payload,hadCoords,{requireDurable:true});}
     catch(e){toast('Could not save this photo. Your draft is still here.');return false;}
   }
-  // Clear the saved draft and hand upload to the background.
+  if(options.preserveDraft){
+    state._captureShareSave={photo:payload.photo,signature,account:state.me?.email,edition:selectedEdition()};
+    return true;
+  }
+  state._captureShareSave=null;
+  // Only an explicit Save clears the saved draft and hands upload to the background.
   captureLocationGeneration++;
   state.photoFile = null; state._note = ''; state.location = null; state.address = null; state._locationPromise = null;
   state._dims = freshDims(); state._measure = null;
@@ -1840,7 +1854,8 @@ async function renderList() {
         <strong>Selection</strong>
         <div class="organize-action-row"><button class="btn secondary" id="selall">Select All</button><button class="btn secondary" id="selnone">Clear Selection</button><button class="btn secondary" id="compareSelected">Compare 2 Photos</button>${featureOn('measurements') ? `<button class="btn secondary" id="classifybatch">Classify Selected (AI)</button>` : ''}</div>
       </div>
-      ${beforeAfterOn() ? `<div class="status" id="classifyprog"></div><details class="pair-builder"><summary><span>Before &amp; After Photos</span><span class="pair-expand">Create a comparison</span></summary><p>When work is complete, select one photo from before the job and one photo from after the job. The older photo will be marked Before by default.</p><button class="btn secondary slim" id="pairbtn">Create Pair From 2 Selected Photos</button></details>` : ''}
+      ${isConcreteClient()&&state.me.ramo_intake_access?`<div class="organize-action-row"><button class="btn secondary" id="ramoIntakeSend">Send to Ramo Optimizer</button><button class="btn secondary" id="ramoIntakeHistory">Ramo Submission History</button></div>`:''}
+    ${beforeAfterOn() ? `<div class="status" id="classifyprog"></div><details class="pair-builder"><summary><span>Before &amp; After Photos</span><span class="pair-expand">Create a comparison</span></summary><p>When work is complete, select one photo from before the job and one photo from after the job. The older photo will be marked Before by default.</p><button class="btn secondary slim" id="pairbtn">Create Pair From 2 Selected Photos</button></details>` : ''}
 
     <div class="organize-form-grid organize-batch-grid">
       <section class="organize-panel">
@@ -1887,6 +1902,8 @@ async function renderList() {
   document.getElementById('photoSearchClear').onclick=()=>{document.getElementById('photoSearch').value='';document.getElementById('filter').value='';document.getElementById('jobFilter').value='';document.getElementById('searchFrom').value='';document.getElementById('searchTo').value='';document.getElementById('searchMissingAddress').checked=false;runSmartSearch();};
   document.getElementById('selall').onclick = () => document.querySelectorAll('.capchk').forEach(c => { c.checked = true; state.selectedIds.add(String(c.value)); });
   document.getElementById('selnone').onclick = () => { state.selectedIds.clear(); document.querySelectorAll('.capchk').forEach(c => c.checked = false); };
+  const ramoSend=document.getElementById('ramoIntakeSend');if(ramoSend)ramoSend.onclick=()=>openRamoIntake();
+  const ramoHistory=document.getElementById('ramoIntakeHistory');if(ramoHistory)ramoHistory.onclick=()=>openRamoIntake(true);
   document.getElementById('applytopic').onclick = applyTopicToSelected;
   document.getElementById('replacetopic').onclick = replaceTopicsOnSelected;
   document.getElementById('createtopic').onclick = createOrganizeTopic;
@@ -2289,6 +2306,7 @@ function captureCardHtml(c) {
     ${concreteRow}
     ${isConcreteClient()&&c.photo_path?`<button class="btn secondary slim concrete-area-button" data-id="${c.id}">Measure Patio / Foundation Area</button>`:''}
     ${(c.footprints||[]).map(f=>`<div class="concrete-evidence"><strong>${esc(f.name)}</strong><p>${esc(concreteAreaText(f))}</p>${f.notes?`<p>${esc(f.notes)}</p>`:''}</div>`).join('')}
+    ${state.view === 'organize' && measurementOn() && c.defect_type ? `<div class="meta saved-classification"><strong>Classification:</strong> ${esc(defectLabelClient(c.defect_type))}${c.defect_type !== 'none' && c.defect_severity ? ' - ' + esc(c.defect_severity) : ''}</div>` : ''}
     ${classifyRow}
     ${dims ? `<div class="meta"><strong>Dimensions:</strong> ${esc(dims)}</div>` : ''}
     ${measureRow}
@@ -3173,6 +3191,7 @@ async function renderSend() {
       <select id="sendformat" aria-label="Download format"><option value="pdf">PDF</option><option value="docx">Word</option><option value="bundle">Markdown + Photos</option></select>
       <button class="btn secondary" id="senddocument">Download</button>
     </div>
+    ${isConcreteClient()&&state.me.ramo_intake_access?'<div class="delivery-actions"><button class="btn secondary" id="sendToRamo" type="button">Send to Ramo Optimizer</button></div>':''}
     <div class="share-action-status" id="shareActionStatus" role="status" aria-live="polite"></div>
     <div id="sendCaptures" class="send-capture-list"></div>
     <section class="send-feature-panel" aria-labelledby="customerApprovalHeading">
@@ -3190,6 +3209,7 @@ async function renderSend() {
   document.getElementById('senddocument').onclick = () => deliverExport(document.getElementById('sendformat').value, null, 'download');
   document.getElementById('selectAllSendCaptures').onclick = selectAllSendCaptures;
   document.getElementById('clearSendSelection').onclick = clearSendSelection;
+  const sendToRamo=document.getElementById('sendToRamo');if(sendToRamo)sendToRamo.onclick=()=>openRamoIntake();
   document.getElementById('createApproval').onclick=createApprovalPackage;
   loadSendCenter();
   loadApprovalPackages();
@@ -4184,3 +4204,5 @@ if ('serviceWorker' in navigator) {
   });
 }
 boot();
+
+document.addEventListener('photo-notes-languagechange',()=>{if(document.getElementById('concretePurpose'))refreshConcreteCapturePurpose();});

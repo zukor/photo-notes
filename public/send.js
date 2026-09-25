@@ -74,7 +74,7 @@
   function showSavedShare(file, text) {
     document.getElementById('captureShareDialog')?.remove();
     var modal = document.createElement('div');modal.id='captureShareDialog';modal.className='export-share-modal';
-    modal.innerHTML='<section class="export-share-dialog" role="dialog" aria-modal="true" aria-labelledby="captureShareTitle"><h2 id="captureShareTitle">'+tr('Photo saved on this device')+'</h2><p>'+tr('Tap Share to choose where to send it.')+'</p><button class="btn" data-share>'+tr('Share')+'</button><button class="btn secondary" data-close>'+tr('Close')+'</button></section>';
+    modal.innerHTML='<section class="export-share-dialog" role="dialog" aria-modal="true" aria-labelledby="captureShareTitle"><h2 id="captureShareTitle">'+tr('Photo saved on this device')+'</h2><p>'+tr('Tap Share to choose where to send it. Closing sharing keeps your photo and notes here.')+'</p><button class="btn" data-share>'+tr('Share')+'</button><button class="btn secondary" data-close>'+tr('Close')+'</button></section>';
     var close=function(){modal.remove();q('send')?.focus();};
     modal.querySelector('[data-close]').onclick=close;
     modal.querySelector('[data-share]').onclick=async function(){this.disabled=true;try{await share(file,text);}finally{this.disabled=false;}};
@@ -87,9 +87,8 @@
     if (!f && !noteVal()) { toast('Take a photo or add a note first'); return; }
     sending=true;var button=q('send'),save=q('save');if(button)button.disabled=true;if(save)save.disabled=true;
     try {
-      var saved=await saveCapture({requireDurable:true});
+      var saved=await saveCapture({requireDurable:true,preserveDraft:true});
       if(!saved)return;
-      lastFile=null;
       if(f&&window.PhotoNotesShareImage){try{f=await window.PhotoNotesShareImage.withDetails(f,t);}catch(e){toast(e.message);}}
       if(typeof state!=='undefined'&&state.view&&state.view!=='capture')return;
       showSavedShare(f,t);
@@ -97,10 +96,16 @@
     finally{sending=false;if(q('send'))q('send').disabled=false;if(q('save'))q('save').disabled=false;}
   }
   function injectButtons() {
-    var save = q('save');
-    if (!save || q('send')) return;
-    var button=document.createElement('button');button.id='send';button.className='btn secondary';button.type='button';button.textContent=tr('Send/Share');
-    button.addEventListener('click',onSend);save.insertAdjacentElement('afterend',button);
+    var save = q('save'), button = q('send');
+    if (!save && !button) return;
+    if (!button) {
+      button=document.createElement('button');button.id='send';button.className='btn secondary';button.type='button';button.textContent=tr('Send/Share');
+      save.insertAdjacentElement('afterend',button);
+    }
+    if (!button.dataset.captureShareBound) {
+      button.dataset.captureShareBound='true';
+      button.addEventListener('click',onSend);
+    }
   }
 
   function fixLogo() {

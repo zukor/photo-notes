@@ -743,3 +743,17 @@ body:has(.issue-fab) { padding-bottom:calc(80px + env(safe-area-inset-bottom)); 
 .export-share-dialog .btn {margin:6px 0;}
 
 .word-template-preview {display:block;width:100%;height:850px;border:1px solid #000;background:white;}
+
+/* Photo-purpose choices use the available screen width, including on iPhone. */
+.concrete-purpose-button { width:100%; min-height:44px; padding:10px 30px 10px 8px; border:1px solid #000; border-radius:8px; background:#fff; color:#000; text-align:left; font:16px Arial,Helvetica,sans-serif; position:relative; white-space:nowrap; overflow:auto; }
+.concrete-purpose-button::after { content:'▾'; position:absolute; right:10px; color:#000; }
+.concrete-purpose-button:disabled { color:#000; opacity:1; cursor:default; }
+.concrete-purpose-button:focus-visible { outline:3px solid #0066cc; outline-offset:2px; }
+.concrete-purpose-menu { position:fixed; z-index:10000; box-sizing:border-box; overflow:auto; overscroll-behavior:contain; border:1px solid #000; border-radius:10px; padding:4px; background:#fff; color:#000; box-shadow:0 4px 16px #0003; text-align:left; }
+.concrete-purpose-menu [role="option"] { display:block; width:100%; min-width:max-content; min-height:44px; padding:10px 8px; border:0; border-radius:5px; background:#fff; color:#000; font:16px Arial,Helvetica,sans-serif; text-align:left; white-space:nowrap; }
+.concrete-purpose-menu [aria-selected="true"] { font-weight:700; background:#e6f0ff; }
+.concrete-purpose-menu [role="option"]:focus-visible { outline:2px solid #0066cc; outline-offset:-2px; }
+#concretePurpose[hidden] { display:none; }
+
+/* The Ramo action applies to the whole selected group. */
+#sendToRamo { grid-column:1 / -1; width:100%; }
