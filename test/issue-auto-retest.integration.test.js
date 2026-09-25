@@ -32,6 +32,13 @@ test('first retests are automatic, durable, and return failed results to owner r
    const response=await fetch('http://127.0.0.1:'+server.address().port+'/api/issues/'+id+'/retest',{method:'POST',headers:{'Content-Type':'application/json',Cookie:'pn_token='+token},body:JSON.stringify({result,notes:'Checked the original photo again.'})});
    assert.equal(response.status,200);assert.equal((await response.json()).status,status);
   }
+  await pool.query("UPDATE issue_reports SET management_status='ready_to_test',verification='Verified',release_reference='test-release' WHERE id=$1",[positive]);
+  const unable=await fetch('http://127.0.0.1:'+server.address().port+'/api/issues/'+positive+'/retest',{method:'POST',headers:{'Content-Type':'application/json',Cookie:'pn_token='+token},body:JSON.stringify({result:'unable_to_test',notes:'Original test device unavailable.'})});
+  assert.equal(unable.status,200);assert.equal((await unable.json()).status,'blocked');
+  const unableRow=(await pool.query('SELECT * FROM issue_reports WHERE id=$1',[positive])).rows[0];assert.equal(unableRow.tester_result,'unable_to_test');assert.match(unableRow.blocked_reason,/could not complete/);
+  await pool.query("UPDATE issue_reports SET management_status='ready_to_test',verification='Verified',release_reference='test-release' WHERE id=$1",[positive]);
+  const failedDeployed=await fetch('http://127.0.0.1:'+server.address().port+'/api/issues/'+positive+'/retest',{method:'POST',headers:{'Content-Type':'application/json',Cookie:'pn_token='+token},body:JSON.stringify({result:'still_happening',notes:'Deployed change still fails.'})});
+  assert.equal(failedDeployed.status,200);assert.equal((await failedDeployed.json()).status,'blocked');
   await requestFirstRetests(pool);
   const failed=(await pool.query('SELECT * FROM issue_reports WHERE id=$1',[negative])).rows[0];
   assert.equal(failed.management_status,'blocked');assert.match(failed.blocked_reason,/tester checked again/);assert.equal(failed.tester_notes,'Checked the original photo again.');

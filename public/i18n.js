@@ -1,6 +1,7 @@
 (function () {
   const STORAGE_KEY = 'photo-notes-language';
   const ES = {
+    "Retest Succeeded":"La repetición de la prueba fue satisfactoria", "Retest Failed":"La repetición de la prueba falló", "Unable to Retest":"No se pudo repetir la prueba", "Comments After Retesting":"Comentarios después de repetir la prueba",
     "This capture is already saved in Photo Notes.": "Esta captura ya está guardada en Photo Notes.",
     "Save to Photo Notes": "Guardar en Photo Notes",
     "Saved to Photo Notes.": "Guardado en Photo Notes.",

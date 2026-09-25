@@ -1437,9 +1437,9 @@ app.get('/api/admin/issues', requireAdmin, async (req, res) => {
   try {
     const rows = (await pool.query(
       `SELECT i.*,u.name AS user_name,u.email AS user_email FROM issue_reports i JOIN users u ON u.id=i.user_id ORDER BY i.created_at DESC`)).rows;
-    const events=rows.length?(await pool.query("SELECT issue_id,detail,created_at FROM issue_repair_events WHERE event='retest' AND issue_id=ANY($1::int[]) ORDER BY created_at",[rows.map(i=>i.id)])).rows:[];
+    const events=rows.length?(await pool.query("SELECT issue_id,event,detail,created_at FROM issue_repair_events WHERE issue_id=ANY($1::int[]) AND event IN ('retest','ready_to_test','bug_review_retest','ui_review_retest','automatic_retest_requested','bug_review_implement','ui_review_implement','bug_review_clarify','ui_review_clarify','bug_review_no_change','ui_review_no_change') ORDER BY created_at,id",[rows.map(i=>i.id)])).rows:[];
     const byId=new Map(rows.map(i=>[i.id,i]));
-    for(const event of events){try{const detail=JSON.parse(event.detail);const issue=byId.get(event.issue_id);(issue.retest_comments||=[]).push({notes:detail.notes,result:detail.result,created_at:event.created_at});}catch{}}
+    for(const event of events){try{const detail=JSON.parse(event.detail);const issue=byId.get(event.issue_id);(issue.progress_events||=[]).push({event:event.event,created_at:event.created_at,detail:{fix_summary:detail.fix_summary,retest_instructions:detail.retest_instructions,instructions:detail.instructions,decision:detail.decision,notes:detail.notes,result:detail.result}});if(event.event==='retest')(issue.retest_comments||=[]).push({notes:detail.notes,result:detail.result,created_at:event.created_at});}catch{}}
     res.json(rows);
   } catch (err) { console.error('[issues.admin-list]', err); res.status(500).json({ error:'failed' }); }
 });
@@ -1459,10 +1459,10 @@ require('./testing-hub').registerTestingHub(app,{pool,requireAuth,requireAdmin})
 app.post('/api/issues/:id/retest',requireAuth,async(req,res)=>{
   try{
     const id=parseInt(req.params.id,10),result=req.body&&req.body.result;
-    if(!Number.isInteger(id)||!['fixed','still_happening'].includes(result))return res.status(400).json({error:'bad retest result'});
+    if(!Number.isInteger(id)||!['fixed','still_happening','unable_to_test'].includes(result))return res.status(400).json({error:'bad retest result'});
     const notes=ticketText(req.body&&req.body.notes,2000);
-    const nextStatus=result==='fixed'?'tester_confirmed':'new';
-    const row=(await pool.query(`UPDATE issue_reports SET tester_result=$1,tester_notes=$2,tester_retested_at=now(),management_status=CASE WHEN management_status='retest_requested' AND $1='still_happening' THEN 'blocked' ELSE $3 END,blocked_reason=CASE WHEN management_status='retest_requested' AND $1='still_happening' THEN 'The tester checked again and confirmed the issue is still happening. Review their notes and choose Retry Repair or another action.' ELSE blocked_reason END,review_decision=CASE WHEN management_status='retest_requested' THEN NULL ELSE review_decision END,review_note=CASE WHEN management_status='retest_requested' THEN NULL ELSE review_note END,repair_claim_hash=NULL,repair_lease_until=NULL,updated_at=now(),resolved_at=CASE WHEN $1='fixed' THEN now() ELSE NULL END WHERE id=$4 AND user_id=$5 AND (management_status='retest_requested' OR (management_status='ready_to_test' AND verification IS NOT NULL AND COALESCE(release_reference,'')<>'')) RETURNING *`,[result,notes,nextStatus,id,req.user.id])).rows[0];
+    const nextStatus=result==='fixed'?'tester_confirmed':'blocked';
+    const row=(await pool.query(`UPDATE issue_reports SET tester_result=$1,tester_notes=$2,tester_retested_at=now(),management_status=$3,blocked_reason=CASE WHEN $1='still_happening' THEN 'The tester checked again and confirmed the issue is still happening. Review their notes and choose Retry Repair or another action.' WHEN $1='unable_to_test' THEN 'The tester could not complete the retest. Review their comments, clarify what is needed, or send revised retest instructions.' ELSE NULL END,review_decision=NULL,review_note=NULL,repair_claim_hash=NULL,repair_lease_until=NULL,updated_at=now(),resolved_at=CASE WHEN $1='fixed' THEN now() ELSE NULL END WHERE id=$4 AND user_id=$5 AND (management_status='retest_requested' OR (management_status='ready_to_test' AND verification IS NOT NULL AND COALESCE(release_reference,'')<>'')) RETURNING *`,[result,notes,nextStatus,id,req.user.id])).rows[0];
     if(!row)return res.status(404).json({error:'issue is not ready for retesting'});
     await pool.query("INSERT INTO issue_repair_events(issue_id,event,detail) VALUES($1,'retest',$2)",[id,JSON.stringify({result,notes})]);logEvent(req.user.id,'issue_retest',{issue_id:id,result});res.json({ok:true,status:row.management_status});
   }catch(e){console.error('[issues.retest]',e);res.status(500).json({error:'retest failed'});}
