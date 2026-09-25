@@ -11,7 +11,7 @@ function registerUiReview(app,{pool,requireAuth}){
   const bugReview=req.path.endsWith('/bug-review');
   const id=Number(req.params.id),decision=req.body?.decision;let text=typeof req.body?.instructions==='string'?req.body.instructions.trim():'';
   if(bugReview&&decision==='implement'&&!text)text='Retry the repair of the reported bug. Use the original report and any tester clarification.';
-  if(!Number.isInteger(id)||id<1||!['implement','clarify','no_change',...(bugReview?['retest']:[])].includes(decision)||(!text&&!(bugReview&&decision==='retest'))||text.length>5000||!req.body.expected_updated_at)return res.status(400).json({error:'Choose an action and enter 1-5,000 characters explaining it.'});
+  if(!Number.isInteger(id)||id<1||!['implement','clarify','no_change','retest'].includes(decision)||(!text&&!(decision==='retest'))||text.length>5000||!req.body.expected_updated_at)return res.status(400).json({error:'Choose an action and enter 1-5,000 characters explaining it.'});
   const c=await pool.connect();try{
    await c.query('BEGIN');const row=(await c.query('SELECT * FROM issue_reports WHERE id=$1 FOR UPDATE',[id])).rows[0];
    if(!row||(bugReview?row.issue_type!=='bug_problem':!['ui_improvement','feature_improvement','new_feature'].includes(row.issue_type))){await c.query('ROLLBACK');return res.status(404).json({error:'Improvement idea not found'});}

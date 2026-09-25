@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Photo Notes — Admin</title>
   <meta name="theme-color" content="#1d4ed8" />
-  <link rel="stylesheet" href="/styles.css?v=276" />
+  <link rel="stylesheet" href="/styles.css?v=277" />
   <script src="/vendor/html2canvas.min.js?v=59"></script>
-  <script src="/issue-markup.js?v=276"></script>
-  <script src="/issue-reporter.js?v=276"></script>
+  <script src="/issue-markup.js?v=277"></script>
+  <script src="/issue-reporter.js?v=277"></script>
   <style>
     .stat { display:inline-block; min-width:84px; margin:4px 14px 4px 0; vertical-align:top; }
     .stat .n { font-size:19px; font-weight:bold; color:var(--pn-text-000,#000); }
@@ -43,7 +43,7 @@
     .issue-admin-card { display:block; }
     .issue-admin-card > summary { cursor:pointer; color:var(--pn-text-000,#000); text-align:left; }
     .issue-admin-card > summary .user-title-row { display:inline-flex; max-width:calc(100% - 24px); vertical-align:top; }
-    .issue-card-metadata { display:block; margin:8px 0 0 20px; font-size:15px; font-weight:normal; color:#000; }
+    .issue-card-metadata { display:flex; flex-wrap:wrap; gap:6px 18px; margin:8px 0 0 20px; font-size:15px; font-weight:normal; color:#000; }
     .issue-reporter-meta { font-weight:normal; font-size:15px; color:#000; }
     .issue-retest-comment + .issue-retest-comment { margin-top:18px; }
     .issue-headline { display:block; margin:8px 0 0 20px; font-size:15px; line-height:1.4; font-weight:normal; overflow-wrap:anywhere; color:var(--pn-text-000,#000); }
@@ -156,14 +156,15 @@
     .delete-user-panel h3 { margin-top:0; }
     .delete-user-panel .btn { margin:10px 8px 0 0; }
   </style>
-  <link rel="stylesheet" href="/testing-hub.css?v=276">
-  <script src="/testing-hub.js?v=276"></script>
-<link rel="stylesheet" href="/theme.css?v=276"><script src="/theme.js?v=276"></script></head>
+  <link rel="stylesheet" href="/testing-hub.css?v=277">
+  <script src="/testing-hub.js?v=277"></script>
+<link rel="stylesheet" href="/theme.css?v=277"><script src="/theme.js?v=277"></script></head>
 <body>
   <div id="app"></div>
-  <script src="/account-menu.js?v=276"></script>
-  <script src="/issue-retest-guidance.js?v=276"></script>
-  <script src="/issue-review-guidance.js?v=276"></script>
+  <script src="/account-menu.js?v=277"></script>
+  <script src="/issue-retest-guidance.js?v=277"></script>
+  <script src="/issue-review-guidance.js?v=277"></script>
+  <script src="/issue-presentation.js?v=277"></script>
   <script>
     const el = document.getElementById('app');
     const regularAdminView=new URLSearchParams(location.search).get('view')==='admin';
@@ -468,7 +469,7 @@
           <section class="issue-help"><h3>How issue reports are handled</h3>
             <ul><li><strong>Bug/Problem:</strong> enters the automatic repair queue. Unclear fixes need Sam’s review.</li><li><strong>Ideas:</strong> UI improvements, feature improvement ideas, and new feature ideas require Sam’s approval before implementation.</li><li><strong>Tester updates:</strong> ready-to-test fixes and requests for details appear in the reporter’s app.</li></ul>
           </section>
-          <details class="issue-help" id="issueStatusDescriptions"><summary>Status Descriptions</summary><p>Open Issues is the default and includes everything except Resolved and Won’t Fix. Closed Issues includes Resolved and Won’t Fix. All Issues includes both open and closed reports. These views respect the other selected criteria. Reports normally move from New through review, repair, verification, and retesting to Resolved. Needs Sam Review is a hold; Won’t Fix is an alternative ending. A failed retest returns the issue to New.</p>${issueStatusOrder.map(status=>`<p><strong>${esc(issueStatusLabels[status])}:</strong> ${esc(issueStatusDescriptions[status])}</p>`).join('')}</details>
+          <details class="issue-help" id="issueStatusDescriptions"><summary>Status Descriptions</summary><p>Open Issues is the default and includes everything except Resolved and Won’t Fix. Closed Issues includes Resolved and Won’t Fix. All Issues includes both open and closed reports. These views respect the other selected criteria. Reports normally move from New through review, repair, verification, and retesting to Resolved. Needs Sam Review is a hold; Won’t Fix is an alternative ending. A failed or incomplete retest returns the issue to Needs Sam Review.</p>${issueStatusOrder.map(status=>`<p><strong>${esc(issueStatusLabels[status])}:</strong> ${esc(issueStatusDescriptions[status])}</p>`).join('')}</details>
           <div id="issueSummary" class="issue-summary"></div>
           <h3>Primary</h3>
           <div class="issue-toolbar issue-primary">
@@ -620,7 +621,7 @@
         const save=box.querySelector(`[data-issue-save="${issue.id}"]`)||box.querySelector(`[data-ui-submit="${issue.id}"]`);if(!save)continue;
         const player=document.createElement('div');player.className='admin-panel';player.innerHTML=`<b>Voice description</b><audio controls preload="metadata" src="${esc(issue.voice_path)}" style="display:block;width:100%;margin-top:6px"></audio>`;save.closest('.issue-admin-card').querySelector('.issue-original-report').appendChild(player);
       }
-      for(const i of rows){const card=box.querySelector(`[data-issue-card="${i.id}"]`);if(!card)continue;const section=document.createElement('details');section.innerHTML=`<summary>${['ui_improvement','feature_improvement','new_feature'].includes(i.issue_type)?'Review History':'Technical Details And History'}</summary><p>Version: ${esc(i.reported_edition||'Legacy / unknown')} · App build: ${esc(i.app_version||'unknown')}</p>${i.blocked_reason?`<h4>Original Review Explanation</h4><p class="issue-description">${esc(i.blocked_reason)}</p>`:''}${i.admin_notes?`<h4>Repair Attempt Notes</h4><p class="issue-description">${esc(i.admin_notes)}</p>`:''}${i.verification?`<pre style="white-space:pre-wrap;overflow-wrap:anywhere">${esc(i.verification)}</pre>`:''}<div data-history>Open to load repair history.</div>`;section.ontoggle=async()=>{if(!section.open||section.dataset.loaded)return;const r=await api(`/api/issues/${i.id}/history`);if(r.ok){const history=await r.json();section.querySelector('[data-history]').innerHTML=history.length?history.map(h=>`<p><strong>${esc(h.event.replaceAll('_',' '))}</strong> · ${esc(fdatetime(h.created_at))}</p>${issueHistoryDetail(h.detail)}`).join(''):'No automated repair history yet.';section.dataset.loaded='true';}};card.querySelector('.issue-review-footer').before(section);}
+      for(const i of rows){const card=box.querySelector(`[data-issue-card="${i.id}"]`);if(!card)continue;const section=document.createElement('details');section.innerHTML=`<summary>${['ui_improvement','feature_improvement','new_feature'].includes(i.issue_type)?'Review History':'Technical Details And History'}</summary><p>Version: ${esc(i.reported_edition||'Legacy / unknown')} · App build: ${esc(i.app_version||'unknown')}</p>${i.blocked_reason?`<h4>Original Review Explanation</h4><p class="issue-description">${esc(i.blocked_reason)}</p>`:''}${i.admin_notes?`<h4>Repair Attempt Notes</h4><p class="issue-description">${esc(i.admin_notes)}</p>`:''}${i.verification?`<pre style="white-space:pre-wrap;overflow-wrap:anywhere">${esc(i.verification)}</pre>`:''}<div data-history>Open to load repair history.</div>`;section.ontoggle=async()=>{if(!section.open||section.dataset.loaded)return;const r=await api(`/api/issues/${i.id}/history`);if(r.ok){const history=await r.json();section.querySelector('[data-history]').innerHTML=history.length?history.map(h=>`<p><strong>${esc(h.event.replaceAll('_',' '))}</strong> · ${esc(fdatetime(h.created_at))}</p>${issueHistoryDetail(h.detail)}`).join(''):'No automated repair history yet.';section.dataset.loaded='true';}};section.className='issue-technical-history';section.querySelector('summary').textContent='Technical Details And History';card.querySelector('.issue-detail-body').append(section);}
       box.querySelectorAll('[data-ui-decision]').forEach(e=>e.onchange=()=>updateUiDecision(Number(e.dataset.uiDecision)));
       box.querySelectorAll('[data-ui-submit]').forEach(e=>e.onclick=()=>submitUiDecision(Number(e.dataset.uiSubmit),e));
       box.querySelectorAll('[data-issue-save]').forEach(b=>b.onclick=()=>saveIssue(Number(b.dataset.issueSave),b));
@@ -660,24 +661,28 @@
       if(i.review_decision==='implement')return i.management_status==='blocked'?'Implementation Stopped - Needs Sam Review':({reviewing:'Automatic Repair Review',fixing:'Implementation In Progress',testing:'Change Verification'}[i.management_status]||'Approved For Implementation');
       return 'Needs Sam Review';
     }
-    function decisionPanel(id){const bug=allIssues.find(i=>Number(i.id)===Number(id))?.issue_type==='bug_problem';return `<section class="admin-panel"><h3>Your Decision</h3><label for="ui-decision-${id}">Choose An Action</label><select id="ui-decision-${id}" data-ui-decision="${id}"><option value="">Choose an action</option><option value="implement">${bug?'Retry Repair':'Implement Change'}</option><option value="clarify">Request Clarification</option>${bug?'<option value="retest">Retest</option>':''}<option value="no_change">${bug?'Close Without Fix':'Make No Change'}</option></select><div id="ui-entry-${id}" hidden><label id="ui-label-${id}" for="ui-instructions-${id}"></label><textarea class="issue-notes" id="ui-instructions-${id}" maxlength="5000"></textarea><p id="ui-help-${id}"></p><div class="issue-actions"><button class="btn" type="button" data-ui-submit="${id}">Submit Decision</button></div></div><p id="ui-result-${id}" role="status"></p></section>`;}
+    function decisionPanel(id){
+      const i=allIssues.find(i=>Number(i.id)===Number(id)),bug=i.issue_type==='bug_problem',success=['resolved','tester_confirmed'].includes(i.management_status),failed=i.tester_result==='still_happening',unable=i.tester_result==='unable_to_test';
+      const message=success?(i.tester_result==='fixed'?'Retest succeeded. This issue is closed; no action is required. You can request another retest or reopen it if needed.':'This issue is closed as resolved. No action is required; you can request another retest or reopen it if needed.'):failed?'Retest failed. Review the tester’s comments and choose the next action.':unable?'The tester could not complete the retest. Clarify the missing details or send revised instructions.':['ready_to_test','retest_requested'].includes(i.management_status)?'Waiting for the tester’s result. You can revise the instructions if needed.':'';
+      const actions=success?[['retest','Request Another Retest'],['implement',bug?'Reopen And Repair':'Reopen And Implement'],['clarify','Request Clarification']]:unable?[['clarify','Request Clarification'],['retest','Send Revised Retest Instructions'],['implement',bug?'Retry Repair':'Implement Change'],['no_change',bug?'Close Without Fix':'Make No Change']]:[['implement',bug?'Retry Repair':'Implement Change'],['clarify','Request Clarification'],['retest',failed?'Request Another Retest':'Retest'],['no_change',bug?'Close Without Fix':'Make No Change']];
+      return `<section class="admin-panel"><h3>Your Decision</h3>${message?'<p>'+esc(message)+'</p>':''}${i.management_status==='blocked'?'<details><summary>Review Guidance</summary>'+reviewGuidancePanels(i)+'</details>':''}<label for="ui-decision-${id}">Choose An Action</label><select id="ui-decision-${id}" data-ui-decision="${id}"><option value="">Choose an action</option>${actions.map(([value,label])=>'<option value="'+value+'">'+label+'</option>').join('')}</select><div id="ui-entry-${id}" hidden><label id="ui-label-${id}" for="ui-instructions-${id}"></label><textarea class="issue-notes" id="ui-instructions-${id}" maxlength="5000"></textarea><p id="ui-help-${id}"></p><div class="issue-actions"><button class="btn" type="button" data-ui-submit="${id}">Submit Decision</button></div></div><p id="ui-result-${id}" role="status"></p></section>`;
+    }
     function isRetestFollowup(i){
       return /^(?:What happened:\s*)?(?:I|We)\s+(?:retested|re-tested|tested (?:this|it|the .+?) again)\b/i.test(String(i.description||'').trim());
     }
     function issueCardSummary(i,status){
-      const headline=isRetestFollowup(i)?'Retest follow-up, see tester comments below.':issueHeadline(i);
-      return `<summary><span class="user-title-row"><span class="userhead">Issue #${i.id}: ${esc(i.page_name||'Photo Notes')}</span><span class="issue-reporter-meta">${esc(i.user_name||i.user_email||'')} · ${fdatetime(i.created_at)} · ${esc(issueDevice(i).label)}</span></span><span class="issue-card-metadata">${esc(issueTypeLabels[i.issue_type]||'Bug/Problem')} · ${esc(status)} · ${esc(issuePriorityLabels[i.priority]||'Normal')} Priority</span><span class="issue-headline">${esc(headline)}</span></summary>`;
+      const specs=[['Reported',fdatetime(i.created_at)],['Version',editionLabels[i.reported_edition]||'Unknown Version'],['Issue Type',issueTypeLabels[i.issue_type]||'Bug/Problem'],['Status',status],['Priority',issuePriorityLabels[i.priority]||'Normal'],['Tester',i.user_name||i.user_email||'Unknown'],['Platform',issueDevice(i).label],['Page',i.page_name||'Photo Notes']];
+      return `<summary><span class="user-title-row"><span class="userhead">Issue #${i.id}: ${esc(PhotoNotesIssuePresentation.title(i))}</span></span><span class="issue-card-metadata">${specs.map(([label,value])=>'<span><strong>'+label+':</strong> '+esc(value)+'</span>').join('')}</span></summary>`;
     }
-    function testerRetestComments(i){
-      const replies=Array.isArray(i.retest_comments)?[...i.retest_comments]:[];
-      if(!replies.length&&(i.tester_notes||i.tester_result))replies.push({notes:i.tester_notes,result:i.tester_result,created_at:i.tester_retested_at});
-      if(isRetestFollowup(i))replies.unshift({notes:i.description,created_at:i.created_at,submitted_as_report:true});
-      if(!replies.length)return '';
-      return `<section class="admin-panel issue-retest-comments"><h3>Tester's Comments After Retesting</h3>${replies.map(reply=>`<div class="issue-retest-comment"><p><strong>Posted:</strong> ${reply.created_at?fdatetime(reply.created_at):'Date not recorded'}${reply.submitted_as_report?' · Submitted as a new report':''}</p>${reply.result?`<p><strong>Result:</strong> ${reply.result==='fixed'?'No Longer Happening':'Still Happening'}</p>`:''}<div class="issue-description">${issueDescriptionHtml(reply.notes||'No written comments provided.')}</div></div>`).join('')}</section>`;
+    function issueProgress(i){
+      const rounds=PhotoNotesIssuePresentation.rounds(i);
+      if(isRetestFollowup(i)){if(!rounds.length)rounds.push({comments:[],decisions:[]});rounds[0].comments.unshift({notes:i.description,date:i.created_at,submitted_as_report:true});}
+      const panel=(title,text)=>text?'<section class="admin-panel"><h3>'+title+'</h3><div class="issue-description">'+issueDescriptionHtml(text)+'</div></section>':'';
+      return rounds.map((r,n)=>`<div class="issue-retest-round">${rounds.length>1?'<h3>Retest Round '+(n+1)+'</h3>':''}${panel(r.verified?(i.issue_type==='bug_problem'?'What Was Fixed':'What Was Changed'):'Proposed Change',r.fix)}${panel('Retest Instructions',r.instructions)}${r.comments.length?`<section class="admin-panel issue-retest-comments"><h3>Tester's Retest Comments</h3>${r.comments.map(c=>`<div class="issue-retest-comment"><p><strong>${c.result?esc(PhotoNotesIssuePresentation.resultLabel(c.result)):'Retest Follow-up'}</strong> · ${c.date?fdatetime(c.date):'Date not recorded'}${c.submitted_as_report?' · Submitted as a new report':''}</p><div class="issue-description">${issueDescriptionHtml(c.notes||'No written comments provided.')}</div></div>`).join('')}</section>`:''}${r.decisions.map(d=>panel('Your Previous Decision',({implement:'Retry / Implement Change',clarify:'Request Clarification',no_change:'Close Without Change'}[d.action]||d.action)+' · '+fdatetime(d.date)+'\n'+d.notes)).join('')}</div>`).join('');
     }
-    function uiImprovementCard(i){
-      const id=i.id;
-      return `<details class="card issue-admin-card" data-issue-card="${id}">${issueCardSummary(i, uiReviewLabel(i))}<div class="issue-detail-body"><div class="issue-original-report">${isRetestFollowup(i)?'':'<h3>Original Report</h3><div class="issue-description">'+issueDescriptionHtml(i.description)+'</div>'}${i.screenshot_path?`<details class="issue-screenshot"><summary><span class="show-screenshot">Show Screenshot</span><span class="hide-screenshot">Hide Screenshot</span></summary><a href="${esc(i.screenshot_path)}" target="_blank" rel="noopener"><img loading="lazy" src="${esc(i.screenshot_path)}" alt="Issue ${id} screenshot"></a></details>`:''}</div>${i.reporter_details?`<section class="admin-panel"><h3>Tester’s Clarification</h3><p class="issue-description">${esc(i.reporter_details)}</p></section>`:''}${i.implementation_instructions?`<p class="issue-description"><strong>Implementation Instructions:</strong> ${esc(i.implementation_instructions)}</p>`:''}${i.review_note?`<p class="issue-description"><strong>${i.review_decision==='no_change'?'Reason For No Change':'Clarification Requested'}:</strong> ${esc(i.review_note)}</p>`:''}${i.fix_summary?`<p class="issue-description"><strong>What Was Changed:</strong> ${esc(i.fix_summary)}</p>`:''}${i.retest_instructions?`<p class="issue-description"><strong>Retest Instructions:</strong> ${esc(i.retest_instructions)}</p>`:''}${testerRetestComments(i)}<div class="issue-review-footer">${!['resolved','tester_confirmed','wont_fix','ready_to_test'].includes(i.management_status)&&(i.management_status==='blocked'||!i.review_decision)?reviewGuidancePanels(i):''}${decisionPanel(id)}</div></div></details>`;
+    function progressIssueCard(i){
+      const status=i.issue_type==='bug_problem'?(i.review_decision==='clarify'?'Awaiting Tester Clarification':issueStatusLabels[i.management_status]||'New'):uiReviewLabel(i);
+      return `<details class="card issue-admin-card" data-issue-card="${i.id}">${issueCardSummary(i,status)}<div class="issue-detail-body"><div class="issue-original-report"><h3>Original Report</h3>${isRetestFollowup(i)?'<p>This issue was submitted as a retest follow-up. The complete text is shown under Tester’s Retest Comments.</p>':'<div class="issue-description">'+issueDescriptionHtml(i.description)+'</div>'}${i.screenshot_path?`<details class="issue-screenshot"><summary>Show Screenshot</summary><a href="${esc(i.screenshot_path)}" target="_blank" rel="noopener"><img loading="lazy" src="${esc(i.screenshot_path)}" alt="Issue ${i.id} screenshot"></a></details>`:''}${i.reporter_details?'<h4>Tester’s Clarification</h4><p class="issue-description">'+esc(i.reporter_details)+'</p>':''}</div>${issueProgress(i)}<div class="issue-review-footer">${i.implementation_instructions?'<p class="issue-description"><strong>Your Implementation Instructions:</strong> '+esc(i.implementation_instructions)+'</p>':''}${i.review_note&&i.review_decision!=='retest'?'<p class="issue-description"><strong>Last Decision Notes:</strong> '+esc(i.review_note)+'</p>':''}${decisionPanel(i.id)}</div></div></details>`;
     }
     function updateUiDecision(id){
       const action=document.getElementById(`ui-decision-${id}`).value;
@@ -691,8 +696,8 @@
     async function submitUiDecision(id,button){
       const issue=allIssues.find(i=>Number(i.id)===id),result=document.getElementById(`ui-result-${id}`),instructions=document.getElementById(`ui-instructions-${id}`).value.trim(),decision=document.getElementById(`ui-decision-${id}`).value;
       const bug=issue.issue_type==='bug_problem';
-      if(!instructions&&!(bug&&['implement','retest'].includes(decision))){result.textContent='Enter your instructions, question, or reason before submitting.';return;}
-      button.disabled=true;try{const r=await api(`/api/admin/issues/${id}/${bug?'bug-review':'ui-review'}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({decision,instructions,expected_updated_at:issue.updated_at})});const d=await r.json();if(!r.ok)throw Error(d.error||'Decision could not be saved');Object.assign(issue,d);if(!bug)document.getElementById('issueStatusFilter').value='blocked';toast(decision==='retest'?'Retest requested in the tester’s app':decision==='implement'?(bug?'Repair queued':'Change approved and queued. It has left your review list; track it under Open Issues or All Issues.'):decision==='clarify'?'Clarification sent. Waiting for the tester’s reply.':(bug?'Report closed without a fix':'Suggestion closed with no change'));renderIssues();const card=document.querySelector(`[data-issue-card="${id}"]`);if(card)card.open=true;}catch(e){result.textContent=e.message;button.disabled=false;}
+      if(!instructions&&!(decision==='retest'||(bug&&decision==='implement'))){result.textContent='Enter your instructions, question, or reason before submitting.';return;}
+      button.disabled=true;try{const r=await api(`/api/admin/issues/${id}/${bug?'bug-review':'ui-review'}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({decision,instructions,expected_updated_at:issue.updated_at})});const d=await r.json();if(!r.ok)throw Error(d.error||'Decision could not be saved');if(Array.isArray(issue.progress_events))issue.progress_events.push({event:(bug?'bug_review_':'ui_review_')+decision,created_at:d.updated_at,detail:{decision,instructions:d.review_note||d.implementation_instructions}});Object.assign(issue,d);if(!bug)document.getElementById('issueStatusFilter').value='blocked';toast(decision==='retest'?'Retest requested in the tester’s app':decision==='implement'?(bug?'Repair queued':'Change approved and queued. It has left your review list; track it under Open Issues or All Issues.'):decision==='clarify'?'Clarification sent. Waiting for the tester’s reply.':(bug?'Report closed without a fix':'Suggestion closed with no change'));renderIssues();const card=document.querySelector(`[data-issue-card="${id}"]`);if(card)card.open=true;}catch(e){result.textContent=e.message;button.disabled=false;}
     }
 
     function issueHistoryDetail(detail){
@@ -708,13 +713,7 @@
       const checks=guide.showChecks?window.PhotoNotesRetestGuidance.checksFor(i):[];
       return `<section class="admin-panel"><h3>${i.review_decision==='clarify'?'Waiting For Tester Clarification':'Why This Needs Your Review'}</h3><p class="issue-description">${esc(guide.why)}</p></section><section class="admin-panel"><h3>Recommended Course of Action</h3><p class="issue-description">${esc(guide.recommendation)}</p>${checks.length?`<p><strong>Checks To Include:</strong></p><ul>${checks.map(check=>`<li>${esc(check)}</li>`).join('')}</ul>`:''}</section>`;
     }
-    function bugCard(i){
-      const id=i.id,status=i.management_status||'new',hasFix=issueHasDeployedFix(i)||['resolved','tester_confirmed'].includes(status);
-      const label=status==='blocked'&&i.review_decision==='clarify'?'Awaiting Tester Clarification':issueStatusLabels[status]||status;
-      return `<details class="card issue-admin-card" data-issue-card="${id}">${issueCardSummary(i, label)}<div class="issue-detail-body"><div class="issue-original-report">${isRetestFollowup(i)?'':'<h3>Original Report</h3><div class="issue-description">'+issueDescriptionHtml(i.description)+'</div>'}${i.screenshot_path?`<details class="issue-screenshot"><summary><span class="show-screenshot">Show Screenshot</span><span class="hide-screenshot">Hide Screenshot</span></summary><a href="${esc(i.screenshot_path)}" target="_blank" rel="noopener"><img loading="lazy" src="${esc(i.screenshot_path)}" alt="Issue ${id} screenshot"></a></details>`:''}</div>${!['no_change','retest'].includes(i.review_decision)&&i.review_note?`<section class="admin-panel"><h3>Question Sent To Tester</h3><p class="issue-description">${esc(i.review_note)}</p></section>`:''}${i.reporter_details?`<section class="admin-panel"><h3>Tester’s Latest Reply</h3><p class="issue-description">${esc(i.reporter_details)}</p></section>`:''}${i.review_decision==='no_change'&&i.review_note?`<section class="admin-panel"><h3>Reason For Closing Without A Fix</h3><p class="issue-description">${esc(i.review_note)}</p></section>`:''}${i.implementation_instructions?`<p class="issue-description"><strong>Your Repair Instructions:</strong> ${esc(i.implementation_instructions)}</p>`:''}${i.fix_summary?`<section class="admin-panel"><h3>${hasFix?'What Was Fixed':'Proposed Repair'}</h3><p class="issue-description">${esc(i.fix_summary)}</p></section>`:''}${i.retest_instructions?`<section class="admin-panel"><h3>Retest Instructions</h3><p class="issue-description">${esc(i.retest_instructions)}</p></section>`:''}${testerRetestComments(i)}<div class="issue-review-footer">${status==='blocked'?reviewGuidancePanels(i):''}${decisionPanel(id)}</div></div></details>`;
-    }
-
-    function issueCard(i){return ['ui_improvement','feature_improvement','new_feature'].includes(i.issue_type)?uiImprovementCard(i):bugCard(i);}
+    function issueCard(i){return progressIssueCard(i);}
     function statusRows(rows){
       return '<dl class="issue-status-grid">'+rows.map(([label,value])=>`<dt>${esc(label)}</dt><dd>${esc(value)}</dd>`).join('')+'</dl>';
     }

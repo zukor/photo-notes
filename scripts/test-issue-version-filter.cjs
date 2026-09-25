@@ -64,9 +64,10 @@ const express=require('express');
  await page.evaluate(()=>{const issue=allIssues.find(i=>i.id===5);issue.management_status='blocked';issue.blocked_reason='Exact accuracy depends on the device GPS location provider; the original inaccurate reading cannot be reproduced here.';renderIssues();});
  for(const id of [5,20,21,22]){
  const card=page.locator(`[data-issue-card="${id}"]`);await card.locator(':scope > summary').click();
- assert(await card.evaluate(card=>{const body=card.querySelector('.issue-detail-body'),original=body.querySelector('.issue-original-report'),footer=body.querySelector('.issue-review-footer');return original===body.children[0]&&footer===body.lastElementChild&&!!footer.querySelector('[data-ui-decision]');}));
+ assert(await card.evaluate(card=>{const body=card.querySelector('.issue-detail-body'),original=body.querySelector('.issue-original-report'),footer=body.querySelector('.issue-review-footer');return original===body.children[0]&&footer.nextElementSibling===body.lastElementChild&&body.lastElementChild.classList.contains('issue-technical-history')&&!!footer.querySelector('[data-ui-decision]');}));
+ await card.getByText('Review Guidance',{exact:true}).click();
  assert.equal(await card.getByRole('heading',{name:'Recommended Course of Action'}).count(),1);
- assert(await card.evaluate(card=>{const footer=card.querySelector('.issue-review-footer');const headings=[...footer.querySelectorAll('h3')].map(h=>h.textContent);return headings.join('|')==='Why This Needs Your Review|Recommended Course of Action|Your Decision';}));
+ assert(await card.evaluate(card=>{const footer=card.querySelector('.issue-review-footer');const headings=[...footer.querySelectorAll('h3')].map(h=>h.textContent);return headings.join('|')==='Your Decision|Why This Needs Your Review|Recommended Course of Action';}));
  if(id===5){await page.selectOption('#ui-decision-5','retest');await page.fill('#ui-instructions-5','Keep this draft');await page.evaluate(()=>loadUsers());assert.equal(await page.locator('#ui-instructions-5').inputValue(),'Keep this draft');await page.selectOption('#ui-decision-5','');}
  if(id===5)await card.screenshot({path:`/tmp/pn-review-guidance-${engine.name()}-${width}.png`});
  if(id>=20)assert.equal(await card.locator('.issue-original-report audio').count(),1);
@@ -125,12 +126,18 @@ const express=require('express');
  await page.evaluate(()=>{const i=allIssues.find(i=>i.id===5);Object.assign(i,{description:'What happened: I retested the classification. The result is still missing.',retest_instructions:'Open the original photo.',retest_comments:[{notes:'Second retest: confirmed fixed.',result:'fixed',created_at:'2026-09-25T12:30:00Z'}]});renderIssues();});
  const layoutCard=page.locator('[data-issue-card="5"]');await layoutCard.locator(':scope > summary').click();
  assert.equal(await layoutCard.locator('summary .pill').count(),0);
- assert.match(await layoutCard.locator('summary .issue-reporter-meta').textContent(),/Tester One/);
- assert.doesNotMatch(await layoutCard.locator(':scope > summary').textContent(),/The result is still missing/);
+ assert.match(await layoutCard.locator('summary .issue-card-metadata').textContent(),/Tester One/);
+ assert.equal(await layoutCard.locator('.issue-headline').count(),0);
  assert.equal(await layoutCard.locator('.issue-retest-comment').count(),2);
- assert.match(await layoutCard.locator('.issue-retest-comments').textContent(),/Posted:.*Submitted as a new report/s);
+ assert.match(await layoutCard.locator('.issue-retest-comments').textContent(),/Submitted as a new report/);
  assert(await layoutCard.locator('.issue-retest-comments').evaluate(el=>el.previousElementSibling.textContent.includes('Retest Instructions')));
  await layoutCard.screenshot({path:`/tmp/pn-issue-card-layout-${engine.name()}-${width}.png`});
+ for(const [result,status,first] of [['fixed','tester_confirmed','Request Another Retest'],['still_happening','blocked','Retry Repair'],['unable_to_test','blocked','Request Clarification']]){
+  await page.evaluate(({result,status})=>{Object.assign(allIssues.find(i=>i.id===5),{tester_result:result,management_status:status,review_decision:null});renderIssues();},{result,status});
+  await page.locator('[data-issue-card="5"] > summary').click();
+  assert.equal(await page.locator('#ui-decision-5 option').nth(1).textContent(),first);
+  assert.equal(await page.locator('[data-issue-card="5"] .issue-detail-body > :last-child > summary').textContent(),'Technical Details And History');
+ }
  assert.deepEqual(errors,[]);await page.close();console.log(engine.name(),width,'version and secondary filters PASS');
  }}finally{await browser.close();}}}finally{server.close();}
 })().catch(e=>{console.error(e);process.exit(1);});
