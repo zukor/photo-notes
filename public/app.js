@@ -634,7 +634,7 @@ function renderCapture() {
       <button class="btn ${isBasicClient()?'':'secondary'}" id="addarea">Add</button>
     </div>`}
 
-    ${isBasicClient()?'<button class="btn" id="send" type="button">Send/Share</button>':'<button class="btn" id="save">Save</button>'}
+    ${isBasicClient()?'<button class="btn" id="send" type="button">Send/Share</button>':'<button class="btn" id="save">Save to Photo Notes</button>'}
   `;
 
   if(isConcreteClient())bindConcreteCapture();
@@ -1683,7 +1683,7 @@ async function drainQueue() {
         await queueDelete(item.id);
         if(queueAccount!==account||selectedEdition()!==edition)break;
         bgQueue=bgQueue.filter(row=>row.id!==item.id);
-        toast('Photo uploaded');
+        toast(edition==='basic'?'Saved to Photo Notes.':'Saved to Photo Notes. Find it in Organize.');
         if(state.view==='organize'||state.view==='edit'){const f=document.getElementById('filter');void loadCards(f?f.value||'':'');}
       }catch(error){
         if(queueAccount!==account||selectedEdition()!==edition)break;
@@ -1740,7 +1740,7 @@ async function saveCaptureDurably(options = {}) {
   state._dims = freshDims(); state._measure = null;
   if(isConcreteClient()){const d=concreteCaptureDraft();state._concreteCapture={phase:d.phase,purpose:d.purpose,element:d.element,jobId:d.jobId};}
   renderCapture();
-  toast('Saved on this device. Upload will be confirmed separately.');
+  toast(alreadySaved?'This capture is already saved in Photo Notes.':'Saved on this device. Waiting to upload to Photo Notes.');
   return true;
 }
 
