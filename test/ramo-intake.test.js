@@ -45,3 +45,8 @@ test('incomplete, mismatched and fabricated receipts never mean received',async(
  await assert.rejects(deliver(manifest,async()=>Buffer.from('bad'),async()=>({intakeId,submissionId:manifest.submissionId,missingAttachmentIds:[manifest.attachments[0].id]})),/saved_photo_integrity_error/);
 });
 test('ordinary Concrete users cannot submit to Ramo by default',()=>assert.equal(allowed({id:999999,role:'user'}),false));
+
+test('blank titles return a specific error even when photo notes exist',()=>{
+ for(const title of ['', '   '])assert.throws(()=>normalize({...base(),title,description:''}),e=>e.message==='title_required'&&e.status===422);
+ assert.equal(normalize({...base(),description:''}).photos[0].caption,'Current wall');
+});

@@ -10,6 +10,7 @@ function text(value,max,required=false) { if(typeof value!=='string'||value.leng
 function allowed(user) { return isSuperAdmin(user)||String(process.env.RAMO_INTAKE_ALLOWED_USER_IDS||'').split(',').map(s=>s.trim()).includes(String(user.id)); }
 function normalize(input) {
   if(!UUID.test(input.requestId||''))fail('invalid_submission_id');
+  if(typeof input.title!=='string'||!input.title.trim())fail('title_required');
   const title=text(input.title,240,true),description=text(input.description||'',50000);
   if(!Array.isArray(input.photos)||input.photos.length<1||input.photos.length>20)fail('select_1_to_20_photos');
   const photos=input.photos.map(p=>{if(!Number.isSafeInteger(p.captureId)||p.captureId<1)fail('invalid_photo');return {captureId:p.captureId,caption:text(p.caption||'',20000)};});
