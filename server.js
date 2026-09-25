@@ -1437,6 +1437,9 @@ app.get('/api/admin/issues', requireAdmin, async (req, res) => {
   try {
     const rows = (await pool.query(
       `SELECT i.*,u.name AS user_name,u.email AS user_email FROM issue_reports i JOIN users u ON u.id=i.user_id ORDER BY i.created_at DESC`)).rows;
+    const events=rows.length?(await pool.query("SELECT issue_id,detail,created_at FROM issue_repair_events WHERE event='retest' AND issue_id=ANY($1::int[]) ORDER BY created_at",[rows.map(i=>i.id)])).rows:[];
+    const byId=new Map(rows.map(i=>[i.id,i]));
+    for(const event of events){try{const detail=JSON.parse(event.detail);const issue=byId.get(event.issue_id);(issue.retest_comments||=[]).push({notes:detail.notes,result:detail.result,created_at:event.created_at});}catch{}}
     res.json(rows);
   } catch (err) { console.error('[issues.admin-list]', err); res.status(500).json({ error:'failed' }); }
 });

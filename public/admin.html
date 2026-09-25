@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Photo Notes — Admin</title>
   <meta name="theme-color" content="#1d4ed8" />
-  <link rel="stylesheet" href="/styles.css?v=273" />
+  <link rel="stylesheet" href="/styles.css?v=276" />
   <script src="/vendor/html2canvas.min.js?v=59"></script>
-  <script src="/issue-markup.js?v=273"></script>
-  <script src="/issue-reporter.js?v=273"></script>
+  <script src="/issue-markup.js?v=276"></script>
+  <script src="/issue-reporter.js?v=276"></script>
   <style>
     .stat { display:inline-block; min-width:84px; margin:4px 14px 4px 0; vertical-align:top; }
     .stat .n { font-size:19px; font-weight:bold; color:var(--pn-text-000,#000); }
@@ -43,6 +43,9 @@
     .issue-admin-card { display:block; }
     .issue-admin-card > summary { cursor:pointer; color:var(--pn-text-000,#000); text-align:left; }
     .issue-admin-card > summary .user-title-row { display:inline-flex; max-width:calc(100% - 24px); vertical-align:top; }
+    .issue-card-metadata { display:block; margin:8px 0 0 20px; font-size:15px; font-weight:normal; color:#000; }
+    .issue-reporter-meta { font-weight:normal; font-size:15px; color:#000; }
+    .issue-retest-comment + .issue-retest-comment { margin-top:18px; }
     .issue-headline { display:block; margin:8px 0 0 20px; font-size:15px; line-height:1.4; font-weight:normal; overflow-wrap:anywhere; color:var(--pn-text-000,#000); }
     .issue-admin-card > summary .pill { color:var(--pn-text-000,#000); background:var(--pn-bg-fff,#fff); border:1px solid var(--pn-border-000,#000); }
     .issue-detail-body { margin-top:14px; padding-top:14px; border-top:1px solid var(--pn-border-b7c2d1,#b7c2d1); }
@@ -153,14 +156,14 @@
     .delete-user-panel h3 { margin-top:0; }
     .delete-user-panel .btn { margin:10px 8px 0 0; }
   </style>
-  <link rel="stylesheet" href="/testing-hub.css?v=273">
-  <script src="/testing-hub.js?v=273"></script>
-<link rel="stylesheet" href="/theme.css?v=273"><script src="/theme.js?v=273"></script></head>
+  <link rel="stylesheet" href="/testing-hub.css?v=276">
+  <script src="/testing-hub.js?v=276"></script>
+<link rel="stylesheet" href="/theme.css?v=276"><script src="/theme.js?v=276"></script></head>
 <body>
   <div id="app"></div>
-  <script src="/account-menu.js?v=273"></script>
-  <script src="/issue-retest-guidance.js?v=273"></script>
-  <script src="/issue-review-guidance.js?v=273"></script>
+  <script src="/account-menu.js?v=276"></script>
+  <script src="/issue-retest-guidance.js?v=276"></script>
+  <script src="/issue-review-guidance.js?v=276"></script>
   <script>
     const el = document.getElementById('app');
     const regularAdminView=new URLSearchParams(location.search).get('view')==='admin';
@@ -658,9 +661,23 @@
       return 'Needs Sam Review';
     }
     function decisionPanel(id){const bug=allIssues.find(i=>Number(i.id)===Number(id))?.issue_type==='bug_problem';return `<section class="admin-panel"><h3>Your Decision</h3><label for="ui-decision-${id}">Choose An Action</label><select id="ui-decision-${id}" data-ui-decision="${id}"><option value="">Choose an action</option><option value="implement">${bug?'Retry Repair':'Implement Change'}</option><option value="clarify">Request Clarification</option>${bug?'<option value="retest">Retest</option>':''}<option value="no_change">${bug?'Close Without Fix':'Make No Change'}</option></select><div id="ui-entry-${id}" hidden><label id="ui-label-${id}" for="ui-instructions-${id}"></label><textarea class="issue-notes" id="ui-instructions-${id}" maxlength="5000"></textarea><p id="ui-help-${id}"></p><div class="issue-actions"><button class="btn" type="button" data-ui-submit="${id}">Submit Decision</button></div></div><p id="ui-result-${id}" role="status"></p></section>`;}
+    function isRetestFollowup(i){
+      return /^(?:What happened:\s*)?(?:I|We)\s+(?:retested|re-tested|tested (?:this|it|the .+?) again)\b/i.test(String(i.description||'').trim());
+    }
+    function issueCardSummary(i,status){
+      const headline=isRetestFollowup(i)?'Retest follow-up, see tester comments below.':issueHeadline(i);
+      return `<summary><span class="user-title-row"><span class="userhead">Issue #${i.id}: ${esc(i.page_name||'Photo Notes')}</span><span class="issue-reporter-meta">${esc(i.user_name||i.user_email||'')} · ${fdatetime(i.created_at)} · ${esc(issueDevice(i).label)}</span></span><span class="issue-card-metadata">${esc(issueTypeLabels[i.issue_type]||'Bug/Problem')} · ${esc(status)} · ${esc(issuePriorityLabels[i.priority]||'Normal')} Priority</span><span class="issue-headline">${esc(headline)}</span></summary>`;
+    }
+    function testerRetestComments(i){
+      const replies=Array.isArray(i.retest_comments)?[...i.retest_comments]:[];
+      if(!replies.length&&(i.tester_notes||i.tester_result))replies.push({notes:i.tester_notes,result:i.tester_result,created_at:i.tester_retested_at});
+      if(isRetestFollowup(i))replies.unshift({notes:i.description,created_at:i.created_at,submitted_as_report:true});
+      if(!replies.length)return '';
+      return `<section class="admin-panel issue-retest-comments"><h3>Tester's Comments After Retesting</h3>${replies.map(reply=>`<div class="issue-retest-comment"><p><strong>Posted:</strong> ${reply.created_at?fdatetime(reply.created_at):'Date not recorded'}${reply.submitted_as_report?' · Submitted as a new report':''}</p>${reply.result?`<p><strong>Result:</strong> ${reply.result==='fixed'?'No Longer Happening':'Still Happening'}</p>`:''}<div class="issue-description">${issueDescriptionHtml(reply.notes||'No written comments provided.')}</div></div>`).join('')}</section>`;
+    }
     function uiImprovementCard(i){
       const id=i.id;
-      return `<details class="card issue-admin-card" data-issue-card="${id}"><summary><span class="user-title-row"><span class="userhead">Issue #${id}: ${esc(i.page_name||'Photo Notes')}</span><span class="pill basic">${esc(issueTypeLabels[i.issue_type])}</span><span class="pill basic">${esc(uiReviewLabel(i))}</span><span class="pill basic">${esc(issuePriorityLabels[i.priority]||'Normal')} Priority</span></span><span class="issue-headline">${esc(issueHeadline(i))}</span></summary><div class="issue-detail-body"><p>${esc(i.user_name||i.user_email)} · ${fdatetime(i.created_at)} · ${esc(issueDevice(i).label)}</p><div class="issue-original-report"><h3>Original Report</h3><div class="issue-description">${issueDescriptionHtml(i.description)}</div>${i.screenshot_path?`<details class="issue-screenshot"><summary><span class="show-screenshot">Show Screenshot</span><span class="hide-screenshot">Hide Screenshot</span></summary><a href="${esc(i.screenshot_path)}" target="_blank" rel="noopener"><img loading="lazy" src="${esc(i.screenshot_path)}" alt="Issue ${id} screenshot"></a></details>`:''}</div>${i.reporter_details?`<section class="admin-panel"><h3>Tester’s Clarification</h3><p class="issue-description">${esc(i.reporter_details)}</p></section>`:''}${i.implementation_instructions?`<p class="issue-description"><strong>Implementation Instructions:</strong> ${esc(i.implementation_instructions)}</p>`:''}${i.review_note?`<p class="issue-description"><strong>${i.review_decision==='no_change'?'Reason For No Change':'Clarification Requested'}:</strong> ${esc(i.review_note)}</p>`:''}${i.fix_summary?`<p class="issue-description"><strong>What Was Changed:</strong> ${esc(i.fix_summary)}</p>`:''}${i.retest_instructions?`<p class="issue-description"><strong>Retest Instructions:</strong> ${esc(i.retest_instructions)}</p>`:''}<div class="issue-review-footer">${!['resolved','tester_confirmed','wont_fix','ready_to_test'].includes(i.management_status)&&(i.management_status==='blocked'||!i.review_decision)?reviewGuidancePanels(i):''}${decisionPanel(id)}</div></div></details>`;
+      return `<details class="card issue-admin-card" data-issue-card="${id}">${issueCardSummary(i, uiReviewLabel(i))}<div class="issue-detail-body"><div class="issue-original-report">${isRetestFollowup(i)?'':'<h3>Original Report</h3><div class="issue-description">'+issueDescriptionHtml(i.description)+'</div>'}${i.screenshot_path?`<details class="issue-screenshot"><summary><span class="show-screenshot">Show Screenshot</span><span class="hide-screenshot">Hide Screenshot</span></summary><a href="${esc(i.screenshot_path)}" target="_blank" rel="noopener"><img loading="lazy" src="${esc(i.screenshot_path)}" alt="Issue ${id} screenshot"></a></details>`:''}</div>${i.reporter_details?`<section class="admin-panel"><h3>Tester’s Clarification</h3><p class="issue-description">${esc(i.reporter_details)}</p></section>`:''}${i.implementation_instructions?`<p class="issue-description"><strong>Implementation Instructions:</strong> ${esc(i.implementation_instructions)}</p>`:''}${i.review_note?`<p class="issue-description"><strong>${i.review_decision==='no_change'?'Reason For No Change':'Clarification Requested'}:</strong> ${esc(i.review_note)}</p>`:''}${i.fix_summary?`<p class="issue-description"><strong>What Was Changed:</strong> ${esc(i.fix_summary)}</p>`:''}${i.retest_instructions?`<p class="issue-description"><strong>Retest Instructions:</strong> ${esc(i.retest_instructions)}</p>`:''}${testerRetestComments(i)}<div class="issue-review-footer">${!['resolved','tester_confirmed','wont_fix','ready_to_test'].includes(i.management_status)&&(i.management_status==='blocked'||!i.review_decision)?reviewGuidancePanels(i):''}${decisionPanel(id)}</div></div></details>`;
     }
     function updateUiDecision(id){
       const action=document.getElementById(`ui-decision-${id}`).value;
@@ -694,7 +711,7 @@
     function bugCard(i){
       const id=i.id,status=i.management_status||'new',hasFix=issueHasDeployedFix(i)||['resolved','tester_confirmed'].includes(status);
       const label=status==='blocked'&&i.review_decision==='clarify'?'Awaiting Tester Clarification':issueStatusLabels[status]||status;
-      return `<details class="card issue-admin-card" data-issue-card="${id}"><summary><span class="user-title-row"><span class="userhead">Issue #${id}: ${esc(i.page_name||'Photo Notes')}</span><span class="pill basic">Bug/Problem</span><span class="pill issue-outcome">${esc(issueOutcome(i))}</span><span class="pill basic">${esc(label)}</span><span class="pill basic">${esc(issuePriorityLabels[i.priority]||'Normal')} Priority</span></span><span class="issue-headline">${esc(issueHeadline(i))}</span></summary><div class="issue-detail-body"><p>${esc(i.user_name||i.user_email)} · ${fdatetime(i.created_at)} · ${esc(issueDevice(i).label)}</p><div class="issue-original-report"><h3>Original Report</h3><div class="issue-description">${issueDescriptionHtml(i.description)}</div>${i.screenshot_path?`<details class="issue-screenshot"><summary><span class="show-screenshot">Show Screenshot</span><span class="hide-screenshot">Hide Screenshot</span></summary><a href="${esc(i.screenshot_path)}" target="_blank" rel="noopener"><img loading="lazy" src="${esc(i.screenshot_path)}" alt="Issue ${id} screenshot"></a></details>`:''}</div>${!['no_change','retest'].includes(i.review_decision)&&i.review_note?`<section class="admin-panel"><h3>Question Sent To Tester</h3><p class="issue-description">${esc(i.review_note)}</p></section>`:''}${i.reporter_details?`<section class="admin-panel"><h3>Tester’s Latest Reply</h3><p class="issue-description">${esc(i.reporter_details)}</p></section>`:''}${i.review_decision==='no_change'&&i.review_note?`<section class="admin-panel"><h3>Reason For Closing Without A Fix</h3><p class="issue-description">${esc(i.review_note)}</p></section>`:''}${status==='retest_requested'?`<section class="admin-panel"><h3>Retest Request Sent To Tester</h3><p class="issue-description">${esc(i.retest_instructions||i.review_note)}</p></section>`:''}${i.implementation_instructions?`<p class="issue-description"><strong>Your Repair Instructions:</strong> ${esc(i.implementation_instructions)}</p>`:''}${i.fix_summary?`<section class="admin-panel"><h3>${hasFix?'What Was Fixed':'Proposed Repair'}</h3><p class="issue-description">${esc(i.fix_summary)}</p></section>`:''}${i.retest_instructions&&hasFix?`<section class="admin-panel"><h3>Retest Instructions</h3><p class="issue-description">${esc(i.retest_instructions)}</p></section>`:''}${i.tester_result?`<p><strong>Tester Result:</strong> ${i.tester_result==='fixed'?'Fixed':'Still Happening'}${i.tester_notes?'<br>'+esc(i.tester_notes):''}</p>`:''}<div class="issue-review-footer">${status==='blocked'?reviewGuidancePanels(i):''}${decisionPanel(id)}</div></div></details>`;
+      return `<details class="card issue-admin-card" data-issue-card="${id}">${issueCardSummary(i, label)}<div class="issue-detail-body"><div class="issue-original-report">${isRetestFollowup(i)?'':'<h3>Original Report</h3><div class="issue-description">'+issueDescriptionHtml(i.description)+'</div>'}${i.screenshot_path?`<details class="issue-screenshot"><summary><span class="show-screenshot">Show Screenshot</span><span class="hide-screenshot">Hide Screenshot</span></summary><a href="${esc(i.screenshot_path)}" target="_blank" rel="noopener"><img loading="lazy" src="${esc(i.screenshot_path)}" alt="Issue ${id} screenshot"></a></details>`:''}</div>${!['no_change','retest'].includes(i.review_decision)&&i.review_note?`<section class="admin-panel"><h3>Question Sent To Tester</h3><p class="issue-description">${esc(i.review_note)}</p></section>`:''}${i.reporter_details?`<section class="admin-panel"><h3>Tester’s Latest Reply</h3><p class="issue-description">${esc(i.reporter_details)}</p></section>`:''}${i.review_decision==='no_change'&&i.review_note?`<section class="admin-panel"><h3>Reason For Closing Without A Fix</h3><p class="issue-description">${esc(i.review_note)}</p></section>`:''}${i.implementation_instructions?`<p class="issue-description"><strong>Your Repair Instructions:</strong> ${esc(i.implementation_instructions)}</p>`:''}${i.fix_summary?`<section class="admin-panel"><h3>${hasFix?'What Was Fixed':'Proposed Repair'}</h3><p class="issue-description">${esc(i.fix_summary)}</p></section>`:''}${i.retest_instructions?`<section class="admin-panel"><h3>Retest Instructions</h3><p class="issue-description">${esc(i.retest_instructions)}</p></section>`:''}${testerRetestComments(i)}<div class="issue-review-footer">${status==='blocked'?reviewGuidancePanels(i):''}${decisionPanel(id)}</div></div></details>`;
     }
 
     function issueCard(i){return ['ui_improvement','feature_improvement','new_feature'].includes(i.issue_type)?uiImprovementCard(i):bugCard(i);}
