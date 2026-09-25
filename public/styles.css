@@ -3,6 +3,8 @@
 html, body { max-width: 100%; overflow-x: hidden; }
 body {
   margin: 0;
+  /* Installed iPhone apps draw behind the status bar with viewport-fit=cover. */
+  padding-top: env(safe-area-inset-top, 0px);
   font-family: Arial, Helvetica, sans-serif;
   color: var(--pn-text-000,#000);
   background: var(--pn-bg-fff,#fff);
