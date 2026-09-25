@@ -11,14 +11,16 @@ async function openRamoIntake(historyOnly=false) {
   body.innerHTML=`<section id="ramoScreen" style="color:#000;text-align:left;font-family:Arial,Helvetica,sans-serif"><button class="backlink" id="ramoBack">${state.view==='send'?t('Back to Send','Volver a Enviar'):t('Back to Organize','Volver a Organizar')}</button><h2>${t('Send to Ramo Optimizer','Enviar a Ramo Optimizer')}</h2><p>${t('One group, one change order. Assign the job and change order in Ramo after receipt.','Un grupo, una orden de cambio. Asigne el trabajo y la orden de cambio en Ramo después de recibirlo.')}</p><div id="ramoReview"></div><p id="ramoMessage" role="status" aria-live="polite"></p><h3>${t('Submission history','Historial de envíos')}</h3><p>${t('Received by Ramo means every photo and note was stored. Review and assignment happen separately in Ramo.','Recibido por Ramo significa que se guardaron todas las fotos y notas. La revisión y asignación se realizan por separado en Ramo.')}</p><div id="ramoHistory"></div></section>`;
   const root=document.getElementById('ramoScreen'),q=id=>root.querySelector('#'+id);
   q('ramoBack').onclick=()=>renderApp();
+  const awaitingConfirmation=new Set();
   let pending=null;
   try{pending=JSON.parse(localStorage.getItem(draftKey)||'null');}catch{}
   async function refresh(){
     if(!root.isConnected)return;
     try{
       const data=await call('/api/ramo-intake');if(!root.isConnected)return;
+      for(const submission of data.submissions){if(awaitingConfirmation.has(submission.id)&&submission.status==='received'){awaitingConfirmation.delete(submission.id);toast(t('Sent','Enviado'),1000);q('ramoMessage').textContent=t('Sent. Received by Ramo.','Enviado. Recibido por Ramo.');}}
       q('ramoHistory').innerHTML=data.submissions.length?data.submissions.map(s=>`<article style="border:1px solid #0066cc;border-radius:8px;padding:12px;margin:12px 0;overflow-wrap:anywhere"><strong>${esc(s.title)}</strong><p>${s.attachmentCount} ${t('photos','fotos')} · ${new Date(s.createdAt).toLocaleString(uiLocale())}</p><p><strong>${s.status==='received'?t('Received by Ramo','Recibido por Ramo'):s.status==='failed'?t('Failed, Retry','Falló, Reintentar'):t('Sending','Enviando')}</strong>${s.receivedAt?' · '+new Date(s.receivedAt).toLocaleString(uiLocale()):''}</p>${s.description?`<p style="white-space:pre-wrap">${esc(s.description)}</p>`:''}${s.status==='failed'?`<button class="btn secondary" data-retry="${s.id}">${t('Retry','Reintentar')}</button>`:''}</article>`).join(''):`<p>${t('No submissions yet.','Aún no hay envíos.')}</p>`;
-      q('ramoHistory').querySelectorAll('[data-retry]').forEach(b=>b.onclick=async()=>{b.disabled=true;try{await post(`/api/ramo-intake/submissions/${b.dataset.retry}/retry`,{});await refresh();}catch(e){q('ramoMessage').textContent=errorText(e.message);b.disabled=false;}});
+      q('ramoHistory').querySelectorAll('[data-retry]').forEach(b=>b.onclick=async()=>{b.disabled=true;try{const result=await post(`/api/ramo-intake/submissions/${b.dataset.retry}/retry`,{});awaitingConfirmation.add(result.id);toast(t('Sending…','Enviando…'),1000);await refresh();}catch(e){q('ramoMessage').textContent=errorText(e.message);b.disabled=false;}});
       if(!data.configured)q('ramoMessage').textContent=errorText('ramo_not_configured');
       if(data.submissions.some(s=>s.status==='sending'))setTimeout(refresh,3000);
     }catch(e){if(root.isConnected)q('ramoMessage').textContent=errorText(e.message);}
@@ -29,9 +31,11 @@ async function openRamoIntake(historyOnly=false) {
     try{
       // Persist the exact request before sending, including its idempotency key.
       localStorage.setItem(draftKey,JSON.stringify(payload));pending=payload;
-      await post('/api/ramo-intake/submissions',payload);
+      const result=await post('/api/ramo-intake/submissions',payload);
+      awaitingConfirmation.add(result.id);
       localStorage.removeItem(draftKey);pending=null;
       if(!root.isConnected)return;
+      toast(t('Sending…','Enviando…'),1000);
       q('ramoReview').innerHTML='';q('ramoMessage').textContent=t('Submission saved. Sending continues even if you close this page.','Envío guardado. El envío continúa aunque cierre esta página.');await refresh();
     }catch(e){
       if(!root.isConnected)return;
