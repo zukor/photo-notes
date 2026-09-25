@@ -157,11 +157,12 @@ function qualityBlock(idres, idfmt) {
     </details>`;
 }
 
-function toast(msg) {
+function toast(msg, duration=2200) {
   let t = document.querySelector('.toast');
   if (!t) { t = document.createElement('div'); t.className = 'toast'; document.body.appendChild(t); }
   t.textContent = msg; t.style.display = 'block';
-  setTimeout(() => { t.style.display = 'none'; }, 2200);
+  clearTimeout(t._hideTimer);
+  t._hideTimer=setTimeout(() => { t.style.display = 'none'; }, duration);
 }
 
 async function api(path, opts = {}) {
