@@ -3191,7 +3191,7 @@ async function renderSend() {
       <select id="sendformat" aria-label="Download format"><option value="pdf">PDF</option><option value="docx">Word</option><option value="bundle">Markdown + Photos</option></select>
       <button class="btn secondary" id="senddocument">Download</button>
     </div>
-    ${isConcreteClient()&&state.me.ramo_intake_access?'<div class="delivery-actions"><button class="btn secondary" id="sendToRamo" type="button">Send to Ramo Optimizer</button></div>':''}
+    ${isConcreteClient()&&state.me.ramo_intake_access?'<div class="ramo-send-action"><button class="btn secondary" id="sendToRamo" type="button">Send to Ramo Optimizer</button></div>':''}
     <div class="share-action-status" id="shareActionStatus" role="status" aria-live="polite"></div>
     <div id="sendCaptures" class="send-capture-list"></div>
     <section class="send-feature-panel" aria-labelledby="customerApprovalHeading">
