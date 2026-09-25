@@ -207,7 +207,7 @@ textarea { min-height: 96px; resize: vertical; }
 }
 .profile-button:hover, .profile-button:focus-visible { background:var(--pn-bg-173fae,#173fae); outline:2px solid var(--pn-border-000,#000); outline-offset:2px; }
 .profile-menu {
-  position:absolute; top:46px; right:0; width:230px; padding:12px;
+  position:absolute; top:46px; right:0; width:340px; padding:12px;
   background:var(--pn-bg-fff,#fff); color:var(--pn-text-000,#000); border:1px solid var(--pn-border-000,#000); border-radius:10px;
   box-shadow:0 8px 24px rgba(0,0,0,.16); font-family:Arial, Helvetica, sans-serif;
 }
