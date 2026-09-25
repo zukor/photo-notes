@@ -633,7 +633,7 @@ function renderCapture() {
       <button class="btn ${isBasicClient()?'':'secondary'}" id="addarea">Add</button>
     </div>`}
 
-    <button class="btn" id="save">Save</button>
+    ${isBasicClient()?'<button class="btn" id="send" type="button">Send/Share</button>':'<button class="btn" id="save">Save</button>'}
   `;
 
   if(isConcreteClient())bindConcreteCapture();
@@ -648,7 +648,7 @@ function renderCapture() {
   document.getElementById('photoLib').onchange = (e) => { if (e.target.files[0]) onPhotoChosen(e.target.files[0]); };
   document.getElementById('retakePhoto').onclick = retakeCapturePhoto;
   document.getElementById('cancelPhoto').onclick = cancelCapturePhoto;
-  document.getElementById('save').onclick = saveCapture;
+  const captureSave=document.getElementById('save');if(captureSave)captureSave.onclick=saveCapture;
   document.getElementById('retryLocation').onclick = () => acquireLocation(true);
   document.getElementById('correctAddress').onclick = correctCaptureAddress;
   if(isHoaClient()){document.getElementById('hoaCommunity').onchange=e=>state.communityId=e.target.value;document.getElementById('hoaType').onchange=e=>document.getElementById('hoaDirectedWrap').style.display=e.target.value==='information'?'block':'none';}else{
