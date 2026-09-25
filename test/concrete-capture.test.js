@@ -22,7 +22,7 @@ test('queued uploads retain every Concrete field and the project link',()=>{
 test('changing phase clears an incompatible purpose without resetting photo or notes',()=>{
   const elements={},state={photoFile:{name:'site.png'},_note:'Customer wants a patio',_concreteCapture:{phase:'work',purpose:'work_problem',condition:'repair_needed',severity:'severe',location:'Backyard'}};
   const element=id=>elements[id]||(elements[id]={value:'',hidden:false,addEventListener(){}});
-  const context={state,ConcreteCapture,esc:x=>String(x),document:{getElementById:element,querySelector:()=>element('details')}};vm.createContext(context);
+  const context={state,ConcreteCapture,window:{ConcretePurposeMenu:{mount(){}}},uiLocale:()=>undefined,esc:x=>String(x),document:{getElementById:element,querySelector:()=>element('details')}};vm.createContext(context);
   vm.runInContext(app.slice(app.indexOf('function concreteCaptureDraft()'),app.indexOf('function renderCapture()')),context);
   context.bindConcreteCapture();element('concretePhase').onchange({target:{value:'proposal'}});
   assert.equal(state._concreteCapture.purpose,'');assert.equal(state._concreteCapture.severity,'none');

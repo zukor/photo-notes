@@ -519,7 +519,10 @@ function refreshConcreteCapturePurpose(){
   const d=concreteCaptureDraft(),phase=ConcreteCapture.phase(d.phase),select=document.getElementById('concretePurpose');
   if(!ConcreteCapture.purpose(d.phase,d.purpose))d.purpose='';
   select.disabled=!phase;
-  select.innerHTML=`<option value="">${phase?'Choose a photo purpose (optional)':'Choose a phase first'}</option>`+(phase?phase.purposes.map(p=>`<option value="${p[0]}" ${d.purpose===p[0]?'selected':''}>${esc(p[1])}</option>`).join(''):'');
+  const translate=text=>window.photoNotesI18n?.t(text)||text;
+  const purposes=(phase?.purposes||[]).map(p=>({id:p[0],label:translate(p[1])})).sort((a,b)=>a.label.localeCompare(b.label,uiLocale()));
+  select.innerHTML=`<option value="">${esc(translate(phase?'Choose a photo purpose (optional)':'Choose a phase first'))}</option>`+purposes.map(p=>`<option value="${p.id}" ${d.purpose===p.id?'selected':''}>${esc(p.label)}</option>`).join('');
+  window.ConcretePurposeMenu.mount(select);
   refreshConcreteCaptureGuide();
 }
 function refreshConcreteCaptureGuide(){
@@ -4188,3 +4191,5 @@ if ('serviceWorker' in navigator) {
   });
 }
 boot();
+
+document.addEventListener('photo-notes-languagechange',()=>{if(document.getElementById('concretePurpose'))refreshConcreteCapturePurpose();});
