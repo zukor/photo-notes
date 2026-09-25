@@ -1,6 +1,11 @@
 (function () {
   const STORAGE_KEY = 'photo-notes-language';
   const ES = {
+    "This capture is already saved in Photo Notes.": "Esta captura ya está guardada en Photo Notes.",
+    "Save to Photo Notes": "Guardar en Photo Notes",
+    "Saved to Photo Notes.": "Guardado en Photo Notes.",
+    "Saved to Photo Notes. Find it in Organize.": "Guardado en Photo Notes. Encuéntrelo en Organizar.",
+    "Saved on this device. Waiting to upload to Photo Notes.": "Guardado en este dispositivo. Pendiente de subir a Photo Notes.",
     "Tap Share to choose where to send it. Closing sharing keeps your photo and notes here.": "Toque Compartir para elegir dónde enviarla. Al cerrar, su foto y sus notas permanecen aquí.",
     "Send to Ramo Optimizer": "Enviar a Ramo Optimizer",
     "Ramo Submission History": "Historial de envíos a Ramo",
