@@ -756,7 +756,7 @@ body:has(.issue-fab) { padding-bottom:calc(80px + env(safe-area-inset-bottom)); 
 #concretePurpose[hidden] { display:none; }
 
 /* The Ramo action applies to the whole selected group. */
-#sendToRamo { grid-column:1 / -1; width:100%; }
+#sendToRamo { width:auto; }
 
 .ramo-send-action { margin-top:12px; text-align:left; }
 .ramo-send-action .btn { display:inline-flex; width:auto; max-width:100%; min-width:0; margin:0; padding:10px 14px; font-size:15px; }
