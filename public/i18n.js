@@ -416,6 +416,8 @@
     '...or type a new document title': '...o escriba el título de un documento nuevo', 'Open Job Site Map': 'Abrir mapa del sitio', 'Select': 'Seleccionar',
     'No captures yet. Go grab one.': 'Todavía no hay capturas. Tome una ahora.', 'Nothing has been captured yet.': 'Todavía no se ha capturado nada.',
     'Edit your material': 'Edite su material', 'Measure or mark up photos, correct notes, or remove unwanted captures.': 'Mida o marque fotos, corrija notas o elimine capturas no deseadas.',
+    'Filter': 'Filtrar', 'Clear Selected': 'Deseleccionar', 'Delete All': 'Eliminar todo', 'No captures to delete': 'No hay capturas para eliminar', 'Captures to delete:': 'Capturas para eliminar:',
+    'Delete ALL saved captures in your account, across all topics, including captures hidden by the current filter? This permanently deletes their photos and notes and cannot be undone.': '¿Eliminar TODAS las capturas guardadas en su cuenta, de todos los temas, incluidas las ocultas por el filtro actual? Esto elimina permanentemente sus fotos y notas y no se puede deshacer.',
     'Fix Addresses': 'Corregir direcciones', 'Delete Selected': 'Eliminar selección', 'Edit Address': 'Editar dirección', 'Classify (AI)': 'Clasificar (IA)',
     'Measurements': 'Mediciones', 'Mark Up Photo': 'Marcar foto', 'Crop Photo': 'Recortar foto', 'Edit Note': 'Editar nota',
     'Back to Edit': 'Volver a Editar', 'Measure this photo': 'Medir esta foto', 'Use AI with a visible reference object, or enter the dimensions yourself.': 'Use IA con un objeto de referencia visible o ingrese las dimensiones manualmente.',
