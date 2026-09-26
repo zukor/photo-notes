@@ -295,7 +295,7 @@ function renderApp() {
               <div class="profile-name">${esc((state.me && state.me.name) || 'Photo Notes User')}</div>
               <div class="profile-email">${esc((state.me && state.me.email) || '')}</div>
               <div class="profile-plan">${isRoadIssuesClient()?'Road Issue Reporter':isGeneralProClient()?'Photo Notes Pro':isProClient()?esc(productName()):'Photo Notes Basic'}</div>
-              ${state.me&&Array.isArray(state.me.edition_access)&&state.me.edition_access.length>1?`<label class="profile-version" for="editionSwitcher"><span>Photo Notes Version</span><select id="editionSwitcher" aria-label="Switch Photo Notes version">${editionSwitcherOptions()}</select></label>`:''}
+              ${state.me&&Array.isArray(state.me.edition_access)&&state.me.edition_access.length>1?`<div class="profile-version"><span>Photo Notes Version</span><select id="editionSwitcher" aria-label="Switch Photo Notes version">${editionSwitcherOptions()}</select></div>`:''}
               <button type="button" id="manageTesting" ${state.me?.is_testing_manager||state.me?.role==='admin'?'':'hidden'}>${uiT('Manage Testing')}</button>
               <button type="button" id="myAssignment" ${state.me?.is_tester||state.me?.is_testing_manager||state.me?.role==='admin'?'':'hidden'}>Testing Hub</button>
               <button type="button" id="installHelp">Install Photo Notes</button>
@@ -354,6 +354,30 @@ function renderApp() {
     }catch(e){toast('Version could not be switched. Please try again.');}
     finally{editionSwitcher.disabled=false;editionSwitcher.value=selectedEdition();}
   };
+  // iOS controls native select popup width independently of the field width.
+  // Use an app-sized disclosure with ordinary keyboard-accessible choices.
+  if(editionSwitcher){
+    const picker=document.createElement('details');picker.className='version-picker';
+    const heading=document.createElement('summary');heading.textContent=editionNames[selectedEdition()]||selectedEdition();heading.setAttribute('aria-label','Switch Photo Notes version');picker.appendChild(heading);
+    const choices=document.createElement('div');choices.className='version-choices';picker.appendChild(choices);
+    [...editionSwitcher.children].forEach(option=>{
+      if(option.tagName==='HR'){choices.appendChild(document.createElement('hr'));return;}
+      const button=document.createElement('button');button.type='button';button.textContent=option.textContent;button.dataset.edition=option.value;button.setAttribute('aria-pressed',String(option.selected));
+      button.onclick=async()=>{
+        if(editionSwitcher.disabled)return;
+        editionSwitcher.value=option.value;
+        choices.querySelectorAll('button').forEach(b=>b.disabled=true);
+        await editionSwitcher.onchange();
+        choices.querySelectorAll('button').forEach(b=>b.disabled=false);
+        heading.textContent=editionNames[selectedEdition()]||selectedEdition();
+        choices.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.edition===selectedEdition())));
+        picker.open=false;if(picker.isConnected)heading.focus();
+      };
+      choices.appendChild(button);
+    });
+    picker.addEventListener('keydown',event=>{if(event.key==='Escape'){event.preventDefault();event.stopPropagation();picker.open=false;heading.focus();}});
+    editionSwitcher.hidden=true;editionSwitcher.after(picker);
+  }
   refreshIssueAttention();
   const updates=document.getElementById('issueUpdates');if(updates)updates.onclick=e=>{e.preventDefault();state.view='my-issues';renderApp();};
   const issueFab = document.getElementById('issueFab'); if (issueFab) issueFab.onclick = openIssueReporter;

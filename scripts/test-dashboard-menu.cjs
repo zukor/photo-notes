@@ -20,7 +20,11 @@ const express=require('express');
  for(const next of editions){
  await page.locator('#profileButton').click();
  assert.equal(await page.locator('#profileMenu #editionSwitcher').count(),1);
- await page.locator('#editionSwitcher').selectOption(next);
+ await page.locator('.version-picker > summary').click();
+ const option=page.locator(`.version-choices button[data-edition="${next}"]`);
+ assert.equal(await option.evaluate(b=>getComputedStyle(b).whiteSpace),'nowrap');
+ assert(await option.evaluate(b=>b.scrollWidth<=b.clientWidth));
+ await option.click();
  await page.waitForFunction(value=>document.querySelector('#editionSwitcher')?.value===value&&!document.querySelector('#editionSwitcher')?.disabled,next);
  await page.locator('#profileButton').click();
  const labels=(await page.locator('#profileMenu > a:visible, #profileMenu > button:visible').allTextContents()).map(s=>s.trim());
