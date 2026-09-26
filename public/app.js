@@ -2018,17 +2018,16 @@ async function renderEdit() {
   const body = document.getElementById('body');
   body.className = 'workflow-edit';
   body.innerHTML = `
-    <div class="workflow-intro"><strong>Edit your material</strong><span>Measure or mark up photos, correct notes, or remove unwanted captures.</span></div>
-    <label>Filter by Topic</label>
+    <label for="filter">Filter</label>
     <select id="filter"><option value="">All Topics</option>${state.areas.map(a => `<option value="${esc(a)}">${esc(a)}</option>`).join('')}</select>
-    <div class="row" style="margin-top:10px"><button class="btn secondary" id="selall">Select All</button><button class="btn secondary" id="selnone">Clear</button></div>
-    <div class="row" style="margin-top:8px"><button class="btn secondary" id="fixaddr">Fix Addresses</button><button class="btn" id="delbtn" style="background:var(--pn-bg-b3261e,#b3261e)">Delete Selected</button></div>
+    <div class="row" style="margin-top:10px"><button class="btn secondary" id="selall">Select All</button><button class="btn secondary" id="selnone">Clear Selected</button></div>
+    <div class="row" style="margin-top:8px"><button class="btn" id="delbtn" style="background:var(--pn-bg-b3261e,#b3261e)">Delete Selected</button><button class="btn" id="delall" style="background:var(--pn-bg-b3261e,#b3261e)">Delete All</button></div>
     <div id="cards" style="margin-top:16px"></div>`;
   document.getElementById('filter').onchange = e => {state.editTopic=e.target.value;loadCards(e.target.value);};
   document.getElementById('selall').onclick = () => document.querySelectorAll('.capchk').forEach(c => { c.checked = true; state.selectedIds.add(String(c.value)); });
   document.getElementById('selnone').onclick = () => { state.selectedIds.clear(); document.querySelectorAll('.capchk').forEach(c => c.checked = false); };
-  document.getElementById('fixaddr').onclick = doFixAddresses;
-  document.getElementById('delbtn').onclick = doDeleteSelected;
+  document.getElementById('delbtn').onclick = () => doDeleteSelected();
+  document.getElementById('delall').onclick = () => doDeleteSelected(true);
   document.getElementById('filter').value=state.editTopic||'';
   loadCards(state.editTopic||'');
 }
@@ -2204,22 +2203,39 @@ async function doExportSelected() {
   toast('Exported');
 }
 
-async function doDeleteSelected() {
-  const ids = Array.from(document.querySelectorAll('.capchk:checked')).map(x => x.value);
-  if (!ids.length) { toast('Select at least one capture'); return; }
-  if (!confirm(uiT(`Delete ${ids.length} capture${ids.length > 1 ? 's' : ''}? This can't be undone.`))) return;
-  const btn = document.getElementById('delbtn');
-  btn.disabled = true; btn.textContent = 'Deleting...';
+async function doDeleteSelected(all = false) {
+  const buttons = ['delbtn','delall'].map(id=>document.getElementById(id)).filter(Boolean);
+  if(buttons.some(btn=>btn.disabled))return;
+  const btn = document.getElementById(all?'delall':'delbtn');
+  const filter = document.getElementById('filter');
+  const label = all?'Delete All':'Delete Selected';
+  buttons.forEach(b=>b.disabled=true);
   try {
+    let ids = Array.from(document.querySelectorAll('.capchk:checked')).map(x => x.value);
+    if(all){
+      btn.textContent=uiT('Loading...');
+      const response=await api('/api/captures');
+      if(!response.ok)throw new Error('load');
+      const rows=await response.json();
+      ids=rows.map(row=>String(row.id));
+      if(!btn.isConnected)return;
+    }
+    if(!ids.length){toast(all?'No captures to delete':'Select at least one capture');return;}
+    const warning=all
+      ? uiT('Delete ALL saved captures in your account, across all topics, including captures hidden by the current filter? This permanently deletes their photos and notes and cannot be undone.')+'\n\n'+uiT('Captures to delete:')+' '+ids.length
+      : uiT(`Delete ${ids.length} capture${ids.length > 1 ? 's' : ''}? This can't be undone.`);
+    if(!confirm(warning))return;
+    btn.textContent = uiT('Deleting...');
     const r = await api('/api/captures/delete', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ids }),
     });
-    if (!r.ok) throw new Error('bad');
+    if (!r.ok) throw new Error('delete');
+    ids.forEach(id=>state.selectedIds.delete(String(id)));
     toast('Deleted');
-    loadCards(document.getElementById('filter').value || '');
+    if(filter.isConnected)await loadCards(filter.value || '');
   } catch (e) { toast('Delete failed'); }
-  finally { btn.disabled = false; btn.textContent = 'Delete Selected'; }
+  finally { buttons.forEach(b=>b.disabled=false);btn.textContent=uiT(label); }
 }
 
 async function doFixAddresses() {
