@@ -10,6 +10,7 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const multer = require('multer');
 const PDFDocument = require('pdfkit');
+const PdfEvidence = require('./pdf-evidence');
 const archiver = require('archiver');
 const sharp = require('sharp');
 const PizZip = require('pizzip');
@@ -1226,16 +1227,18 @@ app.get('/api/paving/jobs/:id/report', requireAuth, async (req, res) => {
       const pdf = new PDFDocument({ size:'LETTER', margin:48 }); pdf.pipe(res);
       pdf.fontSize(20).fillColor('#000').text('Paving Pro - Job Photo Evidence', { align:'center' });
       pdf.fontSize(15).text(job.name, { align:'center' });
-      pdf.fontSize(10).text([job.job_number,job.customer,job.address].filter(Boolean).join(' | '), { align:'center' });
+      pdf.font(PdfEvidence.fontPath);await PdfEvidence.text(pdf,[job.job_number,job.customer,job.address].filter(Boolean).join(' | '),{size:11});
       pdf.moveDown(); pdf.fontSize(11).text(`${captures.length} job photos | ${tickets.length} delivery tickets | ${totalTons.toFixed(2)} documented tons | ${extraWork.length} extra-work records`, { align:'center' });
       pdf.moveDown().fontSize(11).text(`Evidence readiness: ${completeness.complete}/${completeness.total}`);for(const warning of completeness.warnings)pdf.fontSize(9).text(`Missing: ${warning}`);
+      pdf.font(PdfEvidence.fontPath);
       for (const unit of pairs) {
         pdf.addPage();
-        const entries = unit.pair ? [['BEFORE',unit.pair.before,48],['AFTER',unit.pair.after,310]] : [['PHOTO',unit.single,48]];
-        const top=pdf.y;
-        for (const [label,capture,x] of entries) { pdf.fontSize(11).text(label,x,top,{width:240}); const image=localPhoto(capture.photo_path); if(image){const rendered=await renderForEmbedStamped(image,'standard','jpeg',capture);if(rendered)try{pdf.image(rendered.buffer,x,top+16,{fit:[unit.pair?240:500,unit.pair?180:340]});}catch(e){}} }
-        pdf.y=top+(unit.pair?210:370);pdf.x=48;
-        for(const [label,capture] of entries) pdf.fontSize(10).text(`${label}: ${capture.note||'(no note)'}${capture.address?' | '+capture.address:''}`,{width:510});
+        const entries=[];
+        for(const [label,capture] of (unit.pair?[['Before',unit.pair.before],['After',unit.pair.after]]:[['Photo',unit.single]])){
+          const image=localPhoto(capture.photo_path),rendered=image?await renderForEmbedStamped(image,'standard','jpeg',capture):null;
+          entries.push({label,image:rendered?.buffer,details:[capture.photo_title,capture.note||'(no note)','Date: '+fmtWhen(capture.created_at),(capture.area_tags||[]).length?'Topic: '+capture.area_tags.join(', '):'',capture.address&&'Location: '+capture.address].filter(Boolean)});
+        }
+        await PdfEvidence.pair(pdf,entries);
       }
       for(const ticket of tickets){pdf.addPage();pdf.fontSize(15).text('Delivery Ticket Evidence');pdf.moveDown(.5).fontSize(10).text(`${ticket.ticket_date?String(ticket.ticket_date).slice(0,10):''} | Ticket ${ticket.ticket_number||'not entered'} | ${ticket.mix_description||ticket.mix_code||'Mix not entered'} | ${ticket.net_tons==null?'Tons not entered':Number(ticket.net_tons).toFixed(2)+' tons'}`);const image=localPhoto(ticket.photo_path);if(image){const rendered=await renderForEmbed(image,'standard','jpeg');if(rendered)pdf.image(rendered.buffer,48,pdf.y+12,{fit:[516,550]});}}
 
@@ -1327,7 +1330,7 @@ app.post('/api/camera-readings/:id/library',requireAuth,async(req,res)=>{
     const row=(await client.query("SELECT * FROM camera_readings WHERE id=$1 AND user_id=$2 AND status='saved' FOR UPDATE",[Number(req.params.id),req.user.id])).rows[0];
     if(!row){await client.query('ROLLBACK');return res.sendStatus(404);}
     let id=row.capture_id;
-    if(!id){const fields=row.fields||{},note=Object.entries(fields).filter(([,v])=>v).map(([k,v])=>k.replaceAll('_',' ')+': '+v).join('\n'),dims=await imageDims(localPhoto(row.photo_path));
+    if(!id){const fields=row.fields||{},note=Object.entries(fields).filter(([,v])=>v).sort(([a],[b])=>{const order=['instrument_type','equipment_name','reading','unit','observed_at'];return (order.includes(a)?order.indexOf(a):99)-(order.includes(b)?order.indexOf(b):99);}).map(([k,v])=>k.replaceAll('_',' ').replace(/\b[a-z]/g,c=>c.toUpperCase())+': '+v).join('\n'),dims=await imageDims(localPhoto(row.photo_path));
       id=(await client.query(`INSERT INTO captures(user_id,captured_by,photo_path,photo_width,photo_height,photo_title,note,address,area_tags,kind) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,'note') RETURNING id`,[req.user.id,req.user.name,row.photo_path,dims&&dims.w,dims&&dims.h,row.title,note,fields.site_address||fields.address||null,[row.reading_type.replaceAll('_',' ')]] )).rows[0].id;
       await client.query('UPDATE camera_readings SET capture_id=$1 WHERE id=$2',[id,row.id]);}
     await client.query('COMMIT');res.json({ok:true,capture_id:id});
@@ -2868,6 +2871,9 @@ async function resolveExport(req) {
     }
   }
   const rows = await getCaptures({ userId, area, ids, group: groupId });
+  for(const capture of rows){
+    if(/^(instrument type|instrument_type):/im.test(capture.note||'')){capture.note=capture.note.replace(/^(instrument[_ ]type|equipment[_ ]name|reading|unit|observed[_ ]at|notes):/gim,label=>label.replaceAll('_',' ').replace(/\b[a-z]/g,c=>c.toUpperCase()));capture.photo_title=(capture.photo_title||'Instrument Reading').replace(/\b[a-z]/g,c=>c.toUpperCase());}
+  }
   const scope = groupId ? 'group' : (ids ? 'selection' : (area ? 'area' : 'all'));
   if(!groupId){layout.cover_page=false;heading=heading||(rows.length===1?rows[0].photo_title||'Photo Note':'Photo Notes');}
   const u=(await pool.query(`SELECT document_branding,document_logo_path,word_template_path FROM users WHERE id=$1`,[userId])).rows[0]||{};
@@ -3023,7 +3029,7 @@ app.get('/api/export/pdf', requireAuth, async (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename="${fnameBase}.pdf"`);
     const doc = new PDFDocument({ size: 'LETTER', margin: 48 });
     doc.pipe(res);
-    const pdfFont=['Georgia','Times New Roman'].includes(layout.font)?'Times-Roman':'Helvetica';doc.font(pdfFont);
+    const pdfFont=['Georgia','Times New Roman'].includes(layout.font)?path.join(__dirname,'assets/annotation-fonts/LiberationSerif-Regular.ttf'):PdfEvidence.fontPath;doc.font(pdfFont);
     const logo=await documentLogoAsset(logoPath,220,90);let pageNumber=0;
     const drawChrome=()=>{pageNumber++;const oldY=doc.y,oldX=doc.x;if(layout.header&&branding.header_text){doc.font(pdfFont).fontSize(9).fillColor('#000').text(branding.header_text,48,24,{width:516,align:'center'});}if(layout.footer||layout.page_numbers){const bits=[];if(layout.footer&&branding.footer_text)bits.push(branding.footer_text);if(layout.page_numbers)bits.push(`Page ${pageNumber}`);doc.font(pdfFont).fontSize(8).fillColor('#000').text(bits.join('  |  '),48,730,{width:516,height:12,align:'center',lineBreak:false});}doc.y=oldY;doc.x=oldX;};
     if(layout.cover_page){
@@ -3043,21 +3049,13 @@ app.get('/api/export/pdf', requireAuth, async (req, res) => {
       else if(two&&i%2===1){if(doc.y>377)doc.addPage();else doc.y=397;doc.x=48;}
       if (u.pair) {
         const { before, after } = u.pair;
-        doc.fontSize(13).fillColor('#000').text(before.address || after.address || 'No location');
-        doc.moveDown(0.3);
-        const top = doc.y;
-        doc.fontSize(11).fillColor('#000').text('BEFORE', 48, top, { width: 240 });
-        doc.fontSize(11).fillColor('#000').text('AFTER', 310, top, { width: 240 });
-        const imgTop = top + 16;
-        const bImg = localPhoto(before.photo_path), aImg = localPhoto(after.photo_path);
-        if (bImg) { const r = await renderForEmbedStamped(bImg, imgRes, imgFmt, before); if (r) { try { doc.image(r.buffer, 48, imgTop, { fit: [240, 180] }); } catch (e) {} } }
-        if (aImg) { const r = await renderForEmbedStamped(aImg, imgRes, imgFmt, after); if (r) { try { doc.image(r.buffer, 310, imgTop, { fit: [240, 180] }); } catch (e) {} } }
-        doc.y = imgTop + 190; doc.x = 48;
-        for (const [lbl, c] of [['Before', before], ['After', after]]) {
-          doc.fontSize(9).fillColor('#000').text([c.photo_title,fmtWhen(c.created_at),(c.area_tags||[]).join(', '),c.address,c.latitude!=null&&c.longitude!=null?`GPS: ${Number(c.latitude).toFixed(5)}, ${Number(c.longitude).toFixed(5)}`:''].filter(Boolean).join(' | '));
-          const df = pro ? fmtDefect(c) : ''; const dm = pro ? exportDims(c) : '';
-          doc.fontSize(10).fillColor('#000').text(`${lbl}: ${(df ? df + '. ' : '')}${(dm ? dm + '. ' : '')}${c.note || '(no note)'}`, 48, doc.y, { width: 500 });
+        const entries=[];
+        for(const [label,c] of [['Before',before],['After',after]]){
+          const image=localPhoto(c.photo_path),rendered=image?await renderForEmbedStamped(image,imgRes,imgFmt,c):null;
+          const df=pro?fmtDefect(c):'',dm=pro?exportDims(c):'';
+          entries.push({label,image:rendered?.buffer,details:[c.photo_title,df&&'Defect: '+df,dm&&'Dimensions: '+dm,c.note||'(no note)','Date: '+fmtWhen(c.created_at),(c.area_tags||[]).length?'Topic: '+c.area_tags.join(', '):'',c.latitude!=null&&c.longitude!=null?`GPS: ${Number(c.latitude).toFixed(5)}, ${Number(c.longitude).toFixed(5)}`:'',c.address&&'Location: '+c.address].filter(Boolean)});
         }
+        await PdfEvidence.pair(doc,entries);
         continue;
       }
       const c = u.single;
@@ -3070,7 +3068,7 @@ app.get('/api/export/pdf', requireAuth, async (req, res) => {
           try {
             const meta = await sharp(r.buffer).metadata();
             const maxW = 516;
-            const maxH = Math.min(two ? 180 : (scope === 'selection' ? 520 : 455), Math.max(80, 640-doc.y));
+            const maxH = Math.min(two ? 180 : (/^Instrument Type:/im.test(c.note||'')?300:(scope === 'selection' ? 520 : 455)), Math.max(80, 640-doc.y));
             const scale = Math.min(maxW / meta.width, maxH / meta.height);
             const drawW = Math.round(meta.width * scale);
             const drawH = Math.round(meta.height * scale);
@@ -3082,14 +3080,14 @@ app.get('/api/export/pdf', requireAuth, async (req, res) => {
           } catch (e) {}
         }
       }
-      if(c.address)doc.fontSize(9).text(c.address,{width:516});
+      if(c.address)await PdfEvidence.text(doc,'Location: '+c.address,{size:11});
       if(c.latitude!=null&&c.longitude!=null)doc.fontSize(9).text(`GPS: ${Number(c.latitude).toFixed(5)}, ${Number(c.longitude).toFixed(5)}`);
       if (c.area_tags && c.area_tags.length) doc.fontSize(10).fillColor('#000').text('Topic: ' + c.area_tags.join(', '));
       if (pro) { const df = fmtDefect(c); if (df) doc.fontSize(10).fillColor('#000').text('Defect: ' + df); }
       if (pro) { const dm = exportDims(c); if (dm) doc.fontSize(10).fillColor('#000').text('Dimensions: ' + dm); }
       doc.fontSize(9).fillColor('#000').text(fmtWhen(c.created_at));
       doc.moveDown(0.4);
-      doc.fontSize(12).fillColor('#000').text(c.note || '(no note)');
+      await PdfEvidence.text(doc,c.note || '(no note)',{size:12});
     }
     if (!rows.length) doc.fontSize(12).fillColor('#000').text('No captures yet.');
     doc.end();
@@ -3112,13 +3110,17 @@ app.get('/api/export/docx', requireAuth, async (req, res) => {
     const arialCell = (runs) => new TableCell({ children: runs });
     const detailParagraphs=c=>[fmtWhen(c.created_at),(c.area_tags||[]).length?'Topic: '+c.area_tags.join(', '):'',c.latitude!=null&&c.longitude!=null?`GPS: ${Number(c.latitude).toFixed(5)}, ${Number(c.longitude).toFixed(5)}`:''].filter(Boolean).map(text=>new Paragraph({children:[new TextRun({text,font,color:'000000',size:18})]}));
     const imageSize=async(buffer,width,height)=>{const m=await sharp(buffer).metadata(),scale=Math.min(width/m.width,height/m.height);return {width:Math.round(m.width*scale),height:Math.round(m.height*scale)};};
+    const noteParagraphs=c=>String(c.note||'(no note)').split('\n').map(line=>{
+      const field=/^(Instrument Type|Equipment Name|Reading|Unit|Observed At|Notes):\s*(.*)$/.exec(line);
+      return new Paragraph({children:field?[new TextRun({text:field[1]+': ',bold:true,font,color:'000000'}),new TextRun({text:field[2],font,color:'000000'})]:[new TextRun({text:line,font,color:'000000'})]});
+    });
     const compactCell=async(c)=>{
       const kids=[new Paragraph({children:[new TextRun({text:c.photo_title||'Untitled Photo',bold:true,font,color:'000000'})]})];
       const img=localPhoto(c.photo_path);
       if(img){const r=await renderForEmbedStamped(img,imgRes,imgFmt,c);if(r)kids.push(new Paragraph({children:[new ImageRun({type:r.ext==='.png'?'png':'jpg',data:r.buffer,transformation:await imageSize(r.buffer,480,180)})]}));}
       if(c.address)kids.push(new Paragraph({children:[new TextRun({text:c.address,font,size:18,color:'000000'})]}));
       kids.push(...detailParagraphs(c));
-      kids.push(new Paragraph({children:[new TextRun({text:c.note||'(no note)',font,size:20,color:'000000'})]}));
+      kids.push(...noteParagraphs(c));
       return kids;
     };
 
@@ -3136,7 +3138,7 @@ app.get('/api/export/docx', requireAuth, async (req, res) => {
           const df = pro ? fmtDefect(c) : ''; const dm = pro ? exportDims(c) : '';
           if (df) kids.push(new Paragraph({ children: [new TextRun({ text: 'Defect: ' + df, color: '000000', font })] }));
           if (dm) kids.push(new Paragraph({ children: [new TextRun({ text: 'Dimensions: ' + dm, color: '000000', font })] }));
-          kids.push(new Paragraph({ children: [new TextRun({ text: c.note || '(no note)', color: '000000', font })] }));
+          kids.push(...noteParagraphs(c));
           kids.push(...detailParagraphs(c));
           if(c.address)kids.push(new Paragraph({children:[new TextRun({text:c.address,font,color:'000000'})]}));
           return arialCell(kids);
@@ -3157,7 +3159,7 @@ app.get('/api/export/docx', requireAuth, async (req, res) => {
       children.push(new Paragraph({ spacing: { before: 120 }, children: [new TextRun({ text: (c.address || 'No location') + (c.kind === 'task' ? '   [TASK]' : ''), bold: true, color: '000000', font })] }));
       if (pro) { const df = fmtDefect(c); if (df) children.push(new Paragraph({ children: [new TextRun({ text: 'Defect: ' + df, color: '000000', font })] })); }
       if (pro) { const dm = exportDims(c); if (dm) children.push(new Paragraph({ children: [new TextRun({ text: 'Dimensions: ' + dm, color: '000000', font })] })); }
-      children.push(new Paragraph({ children: [new TextRun({ text: c.note || '(no note)', color: '000000', font })] }));
+      children.push(...noteParagraphs(c));
       children.push(new Paragraph({ children: [new TextRun({ text: '' })] }));
     }
     if (!rows.length) children.push(new Paragraph({ children: [new TextRun({ text: 'No captures yet.', color: '000000', font })] }));
