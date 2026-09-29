@@ -1,0 +1,8 @@
+const assert=require('node:assert/strict'),{chromium,webkit}=require('playwright'),express=require('express');
+(async()=>{const app=express();app.use(express.static(require('node:path').join(__dirname,'../public')));const server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));try{for(const engine of [chromium,webkit]){const browser=await engine.launch();try{
+ const page=await browser.newPage({viewport:{width:390,height:900},serviceWorkers:'block'});let saved;
+ await page.route('**/api/**',route=>{const p=new URL(route.request().url()).pathname;let data=[];if(p==='/api/me')data={id:1,plan:'pro',pro_type:'paving',role:'user'};if(p==='/api/jobs')data=[{id:1,name:'First Job'},{id:2,name:'Second Job'}];if(p==='/api/ewr/7'){saved=route.request().postDataJSON();data={ok:true};}return route.fulfill({contentType:'application/json',body:JSON.stringify(data)});});
+ await page.goto(`http://127.0.0.1:${server.address().port}/`);await page.locator('#tabCapture').waitFor();
+ await page.evaluate(()=>renderEwrCreate(document.getElementById('body')));assert.equal(await page.locator('#ewrJob option').count(),3);
+ await page.evaluate(()=>renderEwrView(document.getElementById('body'),{record:{id:7,job_id:1,status:'documented',reason_category:'unforeseen_site_condition',created_at:new Date().toISOString()},photos:[]}));assert.equal(await page.locator('#ewrJob').inputValue(),'1');await page.selectOption('#ewrJob','2');await page.locator('#ewrSaveEdit').click();assert.equal(saved.job_id,'2');assert(!(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth)));await page.close();console.log(engine.name(),'PASS');
+ }finally{await browser.close();}}}finally{server.close();}})().catch(e=>{console.error(e);process.exit(1);});

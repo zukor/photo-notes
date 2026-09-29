@@ -12,5 +12,19 @@ test('real exports retain paired and instrument details with their photos',{skip
  const reading=(await pool.query("INSERT INTO camera_readings(user_id,reading_type,photo_path,title,fields,status) VALUES($1,'gauge','/uploads/photo0.jpg','pressure gauge',$2,'saved') RETURNING id",[owner.id,JSON.stringify({notes:'Dual scale instrument. '.repeat(50),reading:'8',unit:'kg/cm²',instrument_type:'pressure gauge',equipment_name:'Pump A'})])).rows[0];
  const capture=await(await req(`/api/camera-readings/${reading.id}/library`,{})).json();assert(capture.capture_id);
  for(const format of ['pdf','docx']){const r=await req('/api/export/'+format+'?ids='+capture.capture_id);assert.equal(r.status,200);const b=Buffer.from(await r.arrayBuffer());if(process.env.PN_EVIDENCE_OUTPUT)fs.writeFileSync(path.join(process.env.PN_EVIDENCE_OUTPUT,'instrument.'+format),b);if(format==='docx'){const xml=new Zip(b).file('word/document.xml').asText();const text=xml.replace(/<[^>]+>/g,'');assert(text.includes('Instrument Type: pressure gauge'));assert(text.includes('Equipment Name: Pump A'));assert(text.indexOf('Reading: 8')<text.indexOf('Notes: Dual'));assert(xml.includes('w:b'));}}
+
+ const jobA=await(await req('/api/jobs',{name:'Job A'})).json(),jobB=await(await req('/api/jobs',{name:'Job B'})).json();
+ await pool.query('UPDATE captures SET job_id=$1 WHERE id=$2',[jobA.id,ids[0]]);await pool.query('UPDATE captures SET job_id=$1 WHERE id=$2',[jobB.id,ids[1]]);
+ const mixed=await(await req('/api/groups',{title:'Mixed Document',ids})).json(),onlyA=await(await req('/api/groups',{title:'A Document',ids:[ids[0]]})).json();
+ const record=async(group,job,description)=>(await pool.query("INSERT INTO extra_work_records(user_id,group_id,job_id,description_text,reason_category) VALUES($1,$2,$3,$4,'unforeseen_site_condition') RETURNING id",[owner.id,group,job,description])).rows[0].id;
+ const explicit=await record(mixed.id,jobA.id,'CORRECT EXTRA WORK');await record(mixed.id,null,'AMBIGUOUS MUST NOT APPEAR');await record(onlyA.id,jobB.id,'OTHER JOB MUST NOT APPEAR');await record(onlyA.id,null,'LEGACY CORRECT');
+ fs.writeFileSync(path.join(process.env.UPLOAD_DIR,'extra.jpg'),await sharp({create:{width:700,height:500,channels:3,background:'red'}}).jpeg().toBuffer());
+ await pool.query("INSERT INTO ewr_photos(ewr_id,user_id,photo_path,caption) VALUES($1,$2,'/uploads/extra.jpg','CORRECT EXTRA PHOTO')",[explicit,owner.id]);
+ const created=await(await req('/api/ewr',{group_id:onlyA.id,reason_category:'unforeseen_site_condition',description_text:'NEW CORRECT'})).json();assert.equal(created.record.job_id,jobA.id);
+ assert.equal((await req('/api/ewr/'+explicit,{job_id:'nonsense'})).status,400);
+ for(const format of ['pdf','docx']){const r=await req(`/api/paving/jobs/${jobA.id}/report?doc=${format}`);assert.equal(r.status,200);const b=Buffer.from(await r.arrayBuffer());const file=path.join(process.env.PN_EVIDENCE_OUTPUT||os.tmpdir(),'job-evidence.'+format);fs.writeFileSync(file,b);
+  let text;if(format==='docx'){text=new Zip(b).file('word/document.xml').asText();assert(Object.keys(new Zip(b).files).filter(k=>k.startsWith('word/media/')&&!k.endsWith('/')).length>=2);}else{const cp=require('node:child_process');text=cp.execFileSync('pdftotext',[file,'-'],{encoding:'utf8'});const images=cp.execFileSync('pdfimages',['-list',file],{encoding:'utf8'});assert.match(images,/\n\s*1\s+0\s+image/,'photo evidence begins on page one');assert(images.split('\n').filter(l=>/image/.test(l)).length>=2);}
+  assert(text.includes('CORRECT EXTRA WORK'));assert(text.includes('CORRECT EXTRA PHOTO'));assert(text.includes('LEGACY CORRECT'));assert(!text.includes('AMBIGUOUS MUST NOT APPEAR'));assert(!text.includes('OTHER JOB MUST NOT APPEAR'));
+ }
  }finally{server.closeAllConnections();await new Promise(r=>server.close(r));await pool.end();}
 });
