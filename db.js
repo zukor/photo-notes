@@ -661,6 +661,8 @@ async function init() {
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS overlays JSONB`);
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS job_id INTEGER REFERENCES jobs(id) ON DELETE SET NULL`);
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS perceptual_hash TEXT`);
+  await pool.query(`ALTER TABLE extra_work_records ADD COLUMN IF NOT EXISTS job_id INTEGER REFERENCES jobs(id) ON DELETE SET NULL`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS ewr_job_idx ON extra_work_records (user_id,job_id)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS captures_job_idx ON captures (user_id, job_id, created_at DESC)`);
   // Non-destructive crop: when a photo is first cropped, the pre-crop image is
   // backed up here so the original can always be restored.

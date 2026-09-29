@@ -3803,12 +3803,14 @@ function methodSelectHtml(id, val) {
   return `<select id="${id}">${EWR_METHOD_OPTS.map(o => `<option value="${o[0]}"${(val || '') === o[0] ? ' selected' : ''}>${o[1]}</option>`).join('')}</select>`;
 }
 
+function ewrJobSelect(value){return `<label for="ewrJob">Job</label><select id="ewrJob"><option value="">Use Document's Job (If Unambiguous)</option>${state.jobs.map(j=>`<option value="${j.id}" ${String(j.id)===String(value)?'selected':''}>${esc(j.name)}</option>`).join('')}</select>`;}
 function renderEwrCreate(body) {
   window._ewrNewPhotos = window._ewrNewPhotos || [];
   body.innerHTML = `
     <button class="backlink" id="ewrBack">‹ Back to Job</button>
     <div class="brand" style="font-size:20px">Extra Work Record</div>
 
+    ${ewrJobSelect(null)}
     <label>Reason For Extra Work</label>
     ${reasonSelectHtml('ewrReason', 'unforeseen_site_condition')}
     <div id="ewrOtherWrap" style="display:none;margin-top:8px">
@@ -3869,6 +3871,7 @@ async function saveNewEwr() {
   const loc = await getLocationOnce();
   const bodyData = {
     group_id: state.groupId,
+    job_id: document.getElementById('ewrJob').value||null,
     reason_category: reason,
     reason_other_text: otherText || null,
     customer: document.getElementById('ewrCustomer').value.trim() || null,
@@ -3908,6 +3911,7 @@ function renderEwrView(body, data) {
     <select id="ewrStatus">${EWR_STATUS_OPTS.map(o => `<option value="${o[0]}"${e.status === o[0] ? ' selected' : ''}>${o[1]}</option>`).join('')}</select>
     <div class="status">Record approval status according to your company’s existing process. This does not replace required written approvals or contract procedures.</div>
 
+    ${ewrJobSelect(e.job_id)}
     <label>Reason For Extra Work</label>
     ${reasonSelectHtml('ewrReason', e.reason_category)}
     <div id="ewrOtherWrap" style="display:${e.reason_category === 'other' ? 'block' : 'none'};margin-top:8px">
@@ -3953,6 +3957,7 @@ function renderEwrView(body, data) {
   };
   document.getElementById('ewrSaveEdit').onclick = async () => {
     const b = {
+      job_id: document.getElementById('ewrJob').value||null,
       reason_category: reason.value,
       reason_other_text: document.getElementById('ewrOther') ? document.getElementById('ewrOther').value : '',
       customer: document.getElementById('ewrCustomer').value,

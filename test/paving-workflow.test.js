@@ -21,7 +21,7 @@ test('Paving job report remains photo-first and includes supporting ticket and e
   assert.match(server,/pavingEvidenceChecklist/);
   assert.match(server,/jobs\/:id\/completeness/);
   assert.match(server,/Delivery Ticket Evidence/);
-  assert.match(server,/Photo-Backed Extra Work/);
+  assert.match(server,/Extra Work Record #/);
   assert.match(app,/Job Evidence PDF/);
   assert.match(app,/Job Evidence Word/);
   assert.match(app,/Photo evidence readiness/);
