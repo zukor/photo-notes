@@ -234,7 +234,7 @@ textarea { min-height: 96px; resize: vertical; }
 .footer { text-align: center; color: var(--pn-text-000,#000); font-size: 13px; font-weight: bold; margin-top: 24px; }
 .concrete-evidence { margin:8px 0; padding:9px 11px; border-left:4px solid var(--pn-border-1d4ed8,#1d4ed8); background:var(--pn-bg-eef5ff,#eef5ff); color:var(--pn-text-000,#000); font-size:13px; text-transform:capitalize; }
 /* small rotate buttons that size to their content instead of stretching full width */
-.rotaterow { display: flex; gap: 8px; margin: 6px 0 10px; }
+.rotaterow { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 10px; }
 .iconbtn { flex: 0 0 auto; width: auto; display: inline-flex; align-items: center; gap: 5px; padding: 6px 12px; font-size: 15px; font-weight: bold; color: var(--pn-text-000,#000); background: var(--pn-bg-fff,#fff); border: 1px solid var(--pn-border-000,#000); border-radius: 8px; }
 /* shorter buttons (about half the default height) */
 .btn.slim { padding: 9px 18px; font-size: 15px; margin-top: 8px; }
