@@ -673,6 +673,8 @@ async function init() {
   await pool.query(`CREATE TABLE IF NOT EXISTS concrete_ticket_links (id SERIAL PRIMARY KEY,user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,placement_capture_id INTEGER NOT NULL REFERENCES captures(id) ON DELETE CASCADE,ticket_capture_id INTEGER NOT NULL REFERENCES captures(id) ON DELETE CASCADE,reference_type TEXT NOT NULL DEFAULT 'batch_ticket',created_at TIMESTAMPTZ NOT NULL DEFAULT now(),UNIQUE(placement_capture_id,ticket_capture_id))`);
   await pool.query(`CREATE INDEX IF NOT EXISTS concrete_ticket_links_user_idx ON concrete_ticket_links (user_id,placement_capture_id)`);
   await pool.query(`ALTER TABLE groups ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id)`);
+  await pool.query(`ALTER TABLE groups ADD COLUMN IF NOT EXISTS word_template_path TEXT`);
+  await pool.query(`ALTER TABLE groups ADD COLUMN IF NOT EXISTS word_template_name TEXT`);
   await pool.query(`ALTER TABLE groups ADD COLUMN IF NOT EXISTS layout JSONB NOT NULL DEFAULT '{}'::jsonb`);
   await pool.query(`UPDATE groups SET user_id = $1 WHERE user_id IS NULL`, [adminId]);
   // Tester issue triage. These ALTERs upgrade existing production databases
