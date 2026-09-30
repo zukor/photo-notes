@@ -2017,8 +2017,9 @@ function unlinkOwnedAsset(assetPath) { const local=localPhoto(assetPath); if(loc
 
 app.get('/api/document-settings', requireAuth, async (req,res) => {
   try {
-    const u=(await pool.query(`SELECT document_branding,document_logo_path,document_logo_name,word_template_path,word_template_name FROM users WHERE id=$1`,[req.user.id])).rows[0]||{};
-    res.json({ branding:cleanDocumentBranding(u.document_branding), logo_path:u.document_logo_path||null, logo_name:u.document_logo_name||null, template_name:u.word_template_name||null, template_ready:!!u.word_template_path });
+    const u=(await pool.query(`SELECT document_branding,document_logo_path,document_logo_name FROM users WHERE id=$1`,[req.user.id])).rows[0]||{};
+    const g=(await pool.query('SELECT word_template_path,word_template_name FROM groups WHERE id=$1 AND user_id=$2',[Number(req.query.group)||0,req.user.id])).rows[0]||{};
+    res.json({ branding:cleanDocumentBranding(u.document_branding), logo_path:u.document_logo_path||null, logo_name:u.document_logo_name||null, template_name:g.word_template_name||null, template_ready:!!g.word_template_path });
   } catch(e){console.error('[document.settings.get]',e);res.status(500).json({error:'settings failed'});}
 });
 app.post('/api/document-settings', requireAuth, async (req,res) => {
@@ -2038,19 +2039,21 @@ app.post('/api/document-settings/logo', requireAuth, upload.single('logo'), asyn
 });
 app.post('/api/document-settings/template', requireAuth, upload.single('template'), async (req,res) => {
   try {
+    const groupId=Number(req.body.group);
+    if(!groupId||!await ownsGroup(groupId,req.user.id)){if(req.file)unlinkOwnedAsset(`/uploads/${req.file.filename}`);return res.status(400).json({error:'Choose a document before importing a template'});}
     if(!req.file)return res.status(400).json({error:'Word template required'});
     if(path.extname(req.file.originalname).toLowerCase()!=='.docx'){try{fs.unlinkSync(req.file.path)}catch(e){};return res.status(400).json({error:'use a .docx Word file'});}
     let xml='';try{const zip=new PizZip(fs.readFileSync(req.file.path));xml=normalizePlaceholders(zip.file('word/document.xml').asText());}catch(e){try{fs.unlinkSync(req.file.path)}catch(x){};return res.status(400).json({error:'invalid Word file'});}
     if(!xml.includes('{{PHOTO_NOTES_CONTENT}}')){try{fs.unlinkSync(req.file.path)}catch(e){};return res.status(400).json({error:'template must contain {{PHOTO_NOTES_CONTENT}}'});}
-    const old=(await pool.query(`SELECT word_template_path FROM users WHERE id=$1`,[req.user.id])).rows[0];
-    const templatePath=`/uploads/${req.file.filename}`;await pool.query(`UPDATE users SET word_template_path=$1,word_template_name=$2 WHERE id=$3`,[templatePath,ticketText(req.file.originalname,255),req.user.id]);
+    const old=(await pool.query(`SELECT word_template_path FROM groups WHERE id=$1 AND user_id=$2`,[groupId,req.user.id])).rows[0];
+    const templatePath=`/uploads/${req.file.filename}`;await pool.query(`UPDATE groups SET word_template_path=$1,word_template_name=$2 WHERE id=$3 AND user_id=$4`,[templatePath,ticketText(req.file.originalname,255),groupId,req.user.id]);
     if(old&&old.word_template_path&&old.word_template_path!==templatePath)unlinkOwnedAsset(old.word_template_path);
     res.json({template_name:req.file.originalname,placeholders:['{{PHOTO_NOTES_CONTENT}}','{{TITLE}}','{{DESCRIPTION}}','{{COMPANY_NAME}}']});
   }catch(e){console.error('[document.template]',e);if(req.file)try{fs.unlinkSync(req.file.path)}catch(x){};res.status(500).json({error:'template upload failed'});}
 });
 app.get('/api/document-settings/template-starter',requireAuth,async(req,res)=>{try{const doc=new Document({sections:[{children:[new Paragraph({alignment:AlignmentType.CENTER,children:[new TextRun({text:'{{COMPANY_NAME}}',bold:true,font:'Arial'})]}),new Paragraph({heading:HeadingLevel.HEADING_1,alignment:AlignmentType.CENTER,children:[new TextRun({text:'{{TITLE}}',font:'Arial'})]}),new Paragraph({alignment:AlignmentType.CENTER,children:[new TextRun({text:'{{DESCRIPTION}}',font:'Arial'})]}),new Paragraph({children:[new PageBreak()]}),new Paragraph({children:[new TextRun({text:'{{PHOTO_NOTES_CONTENT}}',font:'Arial'})]})]}]});const buffer=await Packer.toBuffer(doc);res.setHeader('Content-Type','application/vnd.openxmlformats-officedocument.wordprocessingml.document');res.setHeader('Content-Disposition','attachment; filename="photo-notes-word-template.docx"');res.send(buffer);}catch(e){res.status(500).json({error:'starter template failed'});}});
 app.post('/api/document-settings/remove-asset', requireAuth, async(req,res)=>{
-  try{const kind=req.body&&req.body.kind;if(!['logo','template'].includes(kind))return res.status(400).json({error:'invalid asset'});const cols=kind==='logo'?['document_logo_path','document_logo_name']:['word_template_path','word_template_name'];const row=(await pool.query(`SELECT ${cols[0]} asset_path FROM users WHERE id=$1`,[req.user.id])).rows[0];await pool.query(`UPDATE users SET ${cols[0]}=NULL,${cols[1]}=NULL WHERE id=$1`,[req.user.id]);if(row&&row.asset_path)unlinkOwnedAsset(row.asset_path);res.json({ok:true});}catch(e){res.status(500).json({error:'remove failed'});}
+  try{const kind=req.body&&req.body.kind;if(!['logo','template'].includes(kind))return res.status(400).json({error:'invalid asset'});if(kind==='template'){const row=(await pool.query('UPDATE groups SET word_template_path=NULL,word_template_name=NULL WHERE id=$1 AND user_id=$2 RETURNING id',[Number(req.body.group)||0,req.user.id])).rows[0];return row?res.json({ok:true}):res.status(404).json({error:'Document not found'});}const cols=kind==='logo'?['document_logo_path','document_logo_name']:['word_template_path','word_template_name'];const row=(await pool.query(`SELECT ${cols[0]} asset_path FROM users WHERE id=$1`,[req.user.id])).rows[0];await pool.query(`UPDATE users SET ${cols[0]}=NULL,${cols[1]}=NULL WHERE id=$1`,[req.user.id]);if(row&&row.asset_path)unlinkOwnedAsset(row.asset_path);res.json({ok:true});}catch(e){res.status(500).json({error:'remove failed'});}
 });
 
 async function ownsGroup(groupId, userId) {
@@ -2826,9 +2829,8 @@ function exportDims(c) { if (c && c.dim_confirmed === false) return ''; return f
 
 // Group export rows into render units: a single capture, or a before/after pair
 // when both members are present in the row set. Order follows the row order.
-function pairRenderUnit(before,after,pair){
- if(pair.comparison_opacity==null)return {pair:{before,after}};
- return {single:{...before,photo_title:'Before and after comparison',overlays:[],note:[`BEFORE: ${before.note||''}`,fmtWhen(before.created_at),before.address,`AFTER: ${after.note||''}`,fmtWhen(after.created_at),after.address].filter(Boolean).join('\n'),_comparison:{before,after,opacity:Number(pair.comparison_opacity)}}};
+function pairRenderUnit(before,after){
+ return {pair:{before,after}};
 }
 async function renderPairComparison(pair){
  const b=await renderForEmbedStamped(localPhoto(pair.before.photo_path),'web','jpeg',pair.before),a=await renderForEmbedStamped(localPhoto(pair.after.photo_path),'web','png',pair.after);
@@ -2883,6 +2885,7 @@ async function resolveExport(req) {
   let desc = '';
   let fnameBase = area ? 'photo-documentation' + suffix(area) : 'photo-documentation';
   let layout = { ...DEFAULT_DOCUMENT_LAYOUT };
+  let templatePath=null;
   if (groupId) {
     const g = (await pool.query(`SELECT * FROM groups WHERE id = $1 AND user_id = $2`, [groupId, userId])).rows[0];
     if (g) {
@@ -2890,6 +2893,7 @@ async function resolveExport(req) {
       desc = g.description || '';
       fnameBase = slug(g.title) || 'document';
       layout = cleanDocumentLayout(g.layout);
+      templatePath=g.word_template_path||null;
     } else {
       groupId = null; // not the user's group -> export nothing
     }
@@ -2900,8 +2904,8 @@ async function resolveExport(req) {
   }
   const scope = groupId ? 'group' : (ids ? 'selection' : (area ? 'area' : 'all'));
   if(!groupId){layout.cover_page=false;heading=heading||(rows.length===1?rows[0].photo_title||'Photo Note':'Photo Notes');}
-  const u=(await pool.query(`SELECT document_branding,document_logo_path,word_template_path FROM users WHERE id=$1`,[userId])).rows[0]||{};
-  return { imgRes, imgFmt, heading, desc, fnameBase, rows, scope, layout, branding:cleanDocumentBranding(groupId?u.document_branding:{}), logoPath:groupId?u.document_logo_path||null:null, templatePath:groupId?u.word_template_path||null:null };
+  const u=(await pool.query(`SELECT document_branding,document_logo_path FROM users WHERE id=$1`,[userId])).rows[0]||{};
+  return { imgRes, imgFmt, heading, desc, fnameBase, rows, scope, layout, branding:cleanDocumentBranding(groupId?u.document_branding:{}), logoPath:groupId?u.document_logo_path||null:null, templatePath };
 }
 
 const RES_PRESETS = {
@@ -3046,7 +3050,9 @@ app.get('/api/captures/:id/share-photo', requireAuth, async (req, res) => {
 
 app.get('/api/export/pdf', requireAuth, async (req, res) => {
   try {
-    const { imgRes, imgFmt, heading, desc, fnameBase, rows, scope, layout, branding, logoPath } = await resolveExport(req);
+    const resolved=await resolveExport(req);
+    if(resolved.templatePath){const word=await buildDocumentWord(req,resolved);const pdf=await require('./word-pdf').convertWordToPdf(word);return res.type('pdf').attachment(`${resolved.fnameBase}.pdf`).send(pdf);}
+    const { imgRes, imgFmt, heading, desc, fnameBase, rows, scope, layout, branding, logoPath } = resolved;
     const pro = await currentPlan(req.user.id) === 'pro';
     logEvent(req.user.id, 'export', { format: 'pdf', scope, count: rows.length, res: imgRes, fmt: imgFmt });
     res.setHeader('Content-Type', 'application/pdf');
@@ -3118,11 +3124,9 @@ app.get('/api/export/pdf', requireAuth, async (req, res) => {
   } catch (err) { console.error('[export.pdf]', err); if (!res.headersSent) res.status(500).json({ error: 'pdf export failed' }); }
 });
 
-app.get('/api/export/docx', requireAuth, async (req, res) => {
-  try {
-    const { imgRes, imgFmt, heading, desc, fnameBase, rows, scope, layout, branding, logoPath, templatePath } = await resolveExport(req);
+async function buildDocumentWord(req,resolved){
+    const { imgRes, imgFmt, heading, desc, fnameBase, rows, scope, layout, branding, logoPath, templatePath } = resolved;
     const pro = await currentPlan(req.user.id) === 'pro';
-    logEvent(req.user.id, 'export', { format: 'docx', scope, count: rows.length, res: imgRes, fmt: imgFmt });
     const font=layout.font,children=[],logo=await documentLogoAsset(logoPath,220,90);
     if(!templatePath&&logo)children.push(new Paragraph({alignment:AlignmentType.CENTER,children:[new ImageRun({type:'png',data:logo.buffer,transformation:{width:logo.width,height:logo.height}})]}));
     if(!templatePath&&branding.company_name)children.push(new Paragraph({alignment:AlignmentType.CENTER,children:[new TextRun({text:branding.company_name,bold:true,color:layout.accent.replace('#',''),font})]}));
@@ -3193,10 +3197,12 @@ app.get('/api/export/docx', requireAuth, async (req, res) => {
     const doc = new Document({ styles:{default:{document:{run:{font,color:'000000',size:22},paragraph:{spacing:{after:80}}}}}, sections: [{ properties:{page:{size:{width:12240,height:15840},margin:{top:960,bottom:960,left:960,right:960}}},headers,footers,children }] });
     let buf = await Packer.toBuffer(doc);
     if(templatePath)buf=applyStructuredWordTemplate(buf,templatePath,{title:heading,description:desc,company_name:branding.company_name});
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
-    res.setHeader('Content-Disposition', `attachment; filename="${fnameBase}.docx"`);
-    res.send(buf);
-  } catch (err) { console.error('[export.docx]', err); if (!res.headersSent) res.status(500).json({ error: 'docx export failed' }); }
+    return buf;
+}
+app.get('/api/export/docx', requireAuth, async(req,res)=>{
+ try{const resolved=await resolveExport(req);const buf=await buildDocumentWord(req,resolved);
+ res.type('application/vnd.openxmlformats-officedocument.wordprocessingml.document').attachment(`${resolved.fnameBase}.docx`).send(buf);
+ }catch(err){console.error('[export.docx]',err);res.status(500).json({error:'docx export failed'});}
 });
 
 app.get('/api/export/bundle', requireAuth, async (req, res) => {
