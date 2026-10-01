@@ -74,7 +74,7 @@ test('late speech results cannot move from one pending photo to the next', () =>
   assert.match(app, /words may appear after you pause/);
   assert.match(app, /const replacing=!!state\.photoFile;stopCaptureDictation\(\)/);
   assert.match(app, /if\(replacing\)\{state\._note=''/);
-  assert.match(app, /async function saveCaptureDurably\(options = \{\}\) \{\s*stopCaptureDictation\(\)/);
+  assert.match(app, /async function saveCaptureDurably\(options = \{\}\) \{\s*await finishCaptureDictation\(\);\s*stopCaptureDictation\(\)/);
 });
 
 test('location failures expose a retry path without blocking photo save', () => {
