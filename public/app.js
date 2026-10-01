@@ -36,6 +36,7 @@ let dictationActive = false;
 let dictationRestartTimer = null;
 let dictationWatchdog = null;
 let dictationGeneration = 0;
+let dictationFinish = null;
 let captureLocationGeneration = 0;
 let dictationBase = '';
 let currentGroupItems = [];
@@ -1112,6 +1113,7 @@ function acquireLocation(force=false) {
 }
 
 function cleanupDictation() {
+  if(dictationFinish){clearTimeout(dictationFinish.timer);const done=dictationFinish.resolve;dictationFinish=null;done();}
   if (dictationRestartTimer) clearTimeout(dictationRestartTimer);
   if (dictationWatchdog) clearTimeout(dictationWatchdog);
   dictationRestartTimer = null;
@@ -1119,16 +1121,32 @@ function cleanupDictation() {
   dictationActive = false;
   recognizer = null;
   const btn = document.getElementById('dictate');
-  if (btn) { btn.textContent = 'Record Notes'; btn.classList.remove('on'); }
+  if (btn) { btn.disabled = false; btn.textContent = 'Record Notes'; btn.classList.remove('on'); }
 }
 
 function stopCaptureDictation(){
+  if(dictationFinish){clearTimeout(dictationFinish.timer);const done=dictationFinish.resolve;dictationFinish=null;done();}
   dictationGeneration++;
   if(dictationRestartTimer)clearTimeout(dictationRestartTimer);
   if(dictationWatchdog)clearTimeout(dictationWatchdog);
   dictationRestartTimer=null;dictationWatchdog=null;dictationActive=false;
   const current=recognizer;recognizer=null;if(current)try{current.stop();}catch(e){}
-  const btn=document.getElementById('dictate');if(btn){btn.textContent='Record Notes';btn.classList.remove('on');}
+  const btn=document.getElementById('dictate');if(btn){btn.disabled=false;btn.textContent='Record Notes';btn.classList.remove('on');}
+}
+
+// Stop listening, but keep this session valid until Safari delivers its final result.
+function finishCaptureDictation(){
+  if(dictationFinish)return dictationFinish.promise;
+  dictationActive=false;
+  if(dictationRestartTimer)clearTimeout(dictationRestartTimer);
+  if(dictationWatchdog)clearTimeout(dictationWatchdog);
+  dictationRestartTimer=null;dictationWatchdog=null;
+  if(!recognizer){cleanupDictation();return Promise.resolve();}
+  const btn=document.getElementById('dictate');if(btn){btn.disabled=true;btn.textContent='Finishing Notes...';}
+  let resolve;const promise=new Promise(done=>resolve=done);
+  dictationFinish={promise,resolve,timer:setTimeout(()=>{stopCaptureDictation();const status=document.getElementById('dictationStatus');if(status)status.textContent='Recording ended. Check your notes before saving.';},8000)};
+  try{recognizer.stop();}catch(e){cleanupDictation();}
+  return promise;
 }
 
 function isIOS() {
@@ -1147,8 +1165,8 @@ async function toggleDictation() {
     toast('Tap the microphone key on your keyboard, then talk');
     return;
   }
-  if (dictationActive) {
-    stopCaptureDictation();
+  if (dictationActive || dictationFinish) {
+    await finishCaptureDictation();
     return;
   }
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -1181,8 +1199,16 @@ function startDictationSession(SR) {
   session.lang = uiSpeechLanguage();
   session.continuous = !ios;
   session.interimResults = true;
-  let sessionText = '';
-  if(dictationWatchdog)clearTimeout(dictationWatchdog);dictationWatchdog=setTimeout(()=>{if(generation!==dictationGeneration||sessionText)return;dictationActive=false;try{session.stop();}catch(e){}const status=document.getElementById('dictationStatus');if(status)status.textContent='No speech was received. On iPhone, tap the note box and use the keyboard microphone, or try Record Notes again.';},10000);
+  let sessionText = '', sessionError = '';
+  const current=()=>generation===dictationGeneration&&document.getElementById('note')===noteEl&&state.photoFile===photoForSession;
+  const clearWatchdog=()=>{if(dictationWatchdog)clearTimeout(dictationWatchdog);dictationWatchdog=null;};
+  const waitForSpeech=(delay)=>{clearWatchdog();dictationWatchdog=setTimeout(()=>{if(!current()||sessionText)return;finishCaptureDictation();const status=document.getElementById('dictationStatus');if(status)status.textContent='No speech was received. On iPhone, tap the note box and use the keyboard microphone, or try Record Notes again.';},delay);};
+  // Permission prompts can outlast ten seconds. Once speech starts, do not
+  // interrupt a long phrase while Safari is preparing the transcript.
+  waitForSpeech(30000);
+  session.onaudiostart=()=>{if(current()&&dictationActive)waitForSpeech(15000);};
+  session.onspeechstart=()=>{if(current())clearWatchdog();};
+
   session.onresult = (ev) => {
     if(generation!==dictationGeneration||state.photoFile!==photoForSession||document.getElementById('note')!==noteEl)return;
     if(dictationWatchdog)clearTimeout(dictationWatchdog);dictationWatchdog=null;
@@ -1197,7 +1223,11 @@ function startDictationSession(SR) {
     if (isIndustryProClient()) applyExtraction(dictationBase+sessionText);
   };
   session.onerror = (e) => {
+    if(!current())return;
     const err = e && e.error;
+    sessionError=err||'unknown';
+    const errorStatus=document.getElementById('dictationStatus');
+    if(errorStatus)errorStatus.textContent=err==='not-allowed'||err==='service-not-allowed'?'Speech access was denied. Check microphone permission for this website. You can also dictate using the keyboard microphone.':err==='network'?'Speech recognition could not connect. Check your connection and try again.':err==='audio-capture'?'The microphone is unavailable. Close other apps using it, then try again.':'No words received. Tap Record Notes to try again.';
     if (err === 'not-allowed' || err === 'service-not-allowed') {
       toast('Allow microphone access for this site, then tap Record Notes again');
       dictationActive=false;
@@ -1226,11 +1256,11 @@ function startDictationSession(SR) {
       dictationBase=mergeSpeechTranscript(dictationBase,sessionText);
       if (dictationBase) dictationBase+=' ';
     }
-    if (dictationActive && document.getElementById('note')===noteEl && state.photoFile===photoForSession) {
+    if (dictationActive && !ios && document.getElementById('note')===noteEl && state.photoFile===photoForSession) {
       const btn=document.getElementById('dictate');
       if (btn) btn.textContent='Listening... tap to stop';
       dictationRestartTimer=setTimeout(()=>startDictationSession(SR),300);
-    } else cleanupDictation();
+    } else {cleanupDictation();const status=document.getElementById('dictationStatus');if(status&&sessionText)status.textContent='Notes recorded. Tap Record Notes to add more.';else if(status&&!sessionError)status.textContent='No words received. Tap Record Notes to try again, or use the keyboard microphone.';}
   };
   try { session.start(); }
   catch (e) { cleanupDictation(); toast('Recording could not start. Tap Record Notes to try again'); }
@@ -1739,6 +1769,7 @@ async function saveCapture(options = {}) {
   try{return await saveCaptureDurably(options);}finally{captureSavePending=false;controls.forEach(([el,disabled])=>el.disabled=disabled);}
 }
 async function saveCaptureDurably(options = {}) {
+  await finishCaptureDictation();
   stopCaptureDictation();
   const note = document.getElementById('note').value.trim();
   if (!state.photoFile && !note) { toast('Take a photo or add a note first'); return; }
