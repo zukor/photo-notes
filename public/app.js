@@ -3265,9 +3265,10 @@ async function renderSend() {
         <button class="btn secondary slim" id="clearSendSelection" type="button">Clear All</button>
       </div>
     </div>
-    <div class="delivery-actions">
-      <button class="btn" id="sharephotos">Share Photos</button>
+    <div class="delivery-actions delivery-actions-shortcuts">
       <select id="sendformat" aria-label="Download format"><option value="pdf">PDF</option><option value="docx">Word</option><option value="bundle">Markdown + Photos</option></select>
+      <button class="btn" id="sharephotos">Share</button>
+      <button class="btn secondary" id="sendshortcuts" type="button">Shortcuts</button>
       <button class="btn secondary" id="senddocument">Download</button>
     </div>
     ${isConcreteClient()&&state.me.ramo_intake_access?'<div class="ramo-send-action"><button class="btn secondary" id="sendToRamo" type="button">Send to Ramo Optimizer</button></div>':''}
@@ -3285,6 +3286,7 @@ async function renderSend() {
     <div id="billingOffers"></div>`;
   document.getElementById('sharedDocumentLinks').ontoggle = event => { if(event.target.open) window.PhotoNotesDocumentLinks?.manage(document.getElementById('sharedDocumentLinksList')); };
   document.getElementById('sharephotos').onclick = shareSelectedPhotos;
+  document.getElementById('sendshortcuts').onclick=()=>window.PhotoNotesShortcuts.open();
   document.getElementById('senddocument').onclick = () => deliverExport(document.getElementById('sendformat').value, null, 'download');
   document.getElementById('selectAllSendCaptures').onclick = selectAllSendCaptures;
   document.getElementById('clearSendSelection').onclick = clearSendSelection;
@@ -3539,7 +3541,7 @@ async function shareSelectedPhotos() {
       setStatus('Photos handed to the share menu.');
     } catch (e) {
       if (e && e.name === 'AbortError') setStatus('Sharing was canceled. Your photos remain selected.');
-      else setStatus('The share menu did not open. Tap Share Photos once more, or select fewer photos.', true);
+      else setStatus('The share menu did not open. Tap Share once more, or select fewer photos.', true);
     }
     return;
   }
@@ -3579,13 +3581,13 @@ async function shareSelectedPhotos() {
       setStatus('Photos handed to the share menu.');
     } catch (e) {
       if (e && e.name === 'AbortError') setStatus('Sharing was canceled. Your photos remain selected.');
-      else setStatus('Photos are ready. Tap Share Photos again to open the share menu.', true);
+      else setStatus('Photos are ready. Tap Share again to open the share menu.', true);
     }
   } catch (e) {
     setStatus(e && e.message ? e.message : 'The photos could not be prepared. Try a smaller selection.', true);
   } finally {
     button.disabled = false;
-    button.textContent = 'Share Photos';
+    button.textContent = 'Share';
   }
 }
 

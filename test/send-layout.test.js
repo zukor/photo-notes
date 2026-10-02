@@ -15,7 +15,7 @@ test('app shell and installed-app launch background use pure white',()=>{
 });
 
 test('Send actions distinguish original-photo sharing from document downloads',()=>{
-  assert.match(app,/id="sharephotos">Share Photos<\/button>/);
+  assert.match(app,/id="sharephotos">Share<\/button>/);
   assert.match(app,/id="sendformat"[^>]*><option value="pdf">PDF<\/option><option value="docx">Word<\/option><option value="bundle">Markdown \+ Photos<\/option>/);
   assert.match(app,/id="senddocument">Download<\/button>/);
   assert.doesNotMatch(app,/Send as PDF|Send as Word/);
@@ -74,7 +74,7 @@ test('photo sharing is sized, bounded, visible, and recoverable',()=>{
   assert.match(app,/photoRows\.length > 20/);
   assert.match(app,/Preparing \$\{complete\} of \$\{photoRows\.length\} share-sized photos/);
   assert.match(app,/preparedPhotoShare\.signature === signature/);
-  assert.match(app,/Tap Share Photos again to open the share menu/);
+  assert.match(app,/Tap Share again to open the share menu/);
   assert.match(app,/api\/captures\/\$\{c\.id\}\/share-photo/);
   assert.match(css,/\.share-action-status\.error/);
   assert.match(server,/app\.get\('\/api\/captures\/:id\/share-photo', requireAuth/);
