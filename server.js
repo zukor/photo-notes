@@ -133,6 +133,7 @@ function requireTestingQueueToken(req,res,next){
 app.use('/api/admin',requireAuth,adminAccessBoundary());
 registerStripeRoutes(app, { pool, requireAuth, requireAdmin });
 require('./document-links').registerDocumentLinks(app,{pool,requireAuth});
+require('./send-shortcuts').registerSendShortcuts(app,{pool,requireAuth});
 // Single source of truth for Pro gating. Pro features must not render or store
 // for free users.
 function isPro(user) { return !!(user && user.plan === 'pro'); }
