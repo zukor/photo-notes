@@ -789,5 +789,5 @@ body:has(.issue-fab) { padding-bottom:calc(80px + env(safe-area-inset-bottom)); 
 }
 .brand.photonotes-lockup::after { content:none; }
 .photonotes-lockup .photonotes-wordmark { display:block; width:100%; height:auto; max-height:60px; object-fit:contain; }
-.photonotes-tier { display:block; margin-top:-4px; font-family:Inter,Helvetica,Arial,sans-serif; font-weight:700; font-size:clamp(18px,5.3vw,27px); line-height:1.15; letter-spacing:.08em; text-transform:uppercase; text-align:center; color:#1d4ed8; }
+.photonotes-tier { display:block; margin-top:0; font-family:Inter,Helvetica,Arial,sans-serif; font-weight:700; font-size:var(--photonotes-tier-size,25.8px); line-height:1.15; letter-spacing:.08em; text-transform:uppercase; text-align:center; color:#1d4ed8; }
 .photonotes-login { max-width:400px!important; }
