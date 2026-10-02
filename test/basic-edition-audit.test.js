@@ -27,15 +27,9 @@ test('a single assigned version does not show an unnecessary switcher', () => {
   assert.match(app, /state.me.edition_access.length>1/);
 });
 
-test('Basic paints only the SVG wordmark, without duplicate live title text', () => {
-  assert.match(styles, /\.brand:not\(\.pro-edition-brand\) \.product-suite-name,[\s\S]*\.product-edition-name \{ display:none; \}/);
-  assert.match(styles, /background-image: url\('\/photo-notes-ai-basic-animated\.svg\?v=118'\)/);
-  assert.match(styles, /aspect-ratio: 940 \/ 214/);
-  assert.match(styles, /background-position: center top/);
-  assert.match(styles, /background-size: 100% auto/);
-  const suppliedLogo=fs.readFileSync(path.join(root,'public','photo-notes-ai-basic-animated.svg'),'utf8');
-  assert.match(suppliedLogo,/aria-label="Photo Notes AI Basic logo"/);
-  assert.match(suppliedLogo,/<rect x="818\.5" y="24" width="61" height="61" rx="10" fill="#e8231a"\/>/);
+test('Basic uses the final static header logo and a separate tier label',()=>{
+ assert.match(app,/photonotes-ai-logo-static\.svg/);assert.match(app,/photonotes-tier/);
+ assert.match(styles,/font-family:Inter,Helvetica,Arial,sans-serif/);
 });
 
 test('admin issue center can filter reports by tester and device', () => {
