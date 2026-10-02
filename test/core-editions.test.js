@@ -21,9 +21,7 @@ test('administrators can create, assign, and switch to general Pro',()=>{
   assert.match(server,/\['roads','general','contractor','paving','hoa','concrete','roofer'\]/);
   assert.doesNotMatch(db,/SET plan='pro',pro_type='general' FROM testing_assignments/);
 });
-test('supplied Pro branding replaces the temporary treatment',()=>{
-  assert.match(styles,/general-pro-brand/);
-  assert.match(styles,/photo-notes-ai-pro-animated\.svg\?v=127/);
-  assert.doesNotMatch(styles,/content:"PRO"/);
-  assert.match(app,/pro:'Photo Notes Pro'/);
+test('final Pro branding uses the shared lockup',()=>{
+ assert.match(app,/photonotes-ai-logo-static\.svg/);assert.match(styles,/photonotes-tier/);
+ assert.doesNotMatch(styles,/content:"PRO"/);
 });

@@ -27,10 +27,9 @@ test('road reporter is one camera-only form with the requested issue choices',()
   assert.match(app,/isRoadIssuesClient\(\)\|\|isBasicClient\(\)\?'':`<nav class="tabs workflow-tabs/);
 });
 
-test('road reporter header shows the complete supplied Road Issue Reporter logo',()=>{
-  assert.match(app,/isRoadIssuesClient\(\)\?'Road Issue Reporter'/);
-  const styles=require('./helpers/light-palette')(fs.readFileSync(path.join(root,'public/styles.css'),'utf8'));
-  assert.match(styles,/\.brandrow \.brand\.road-issues-brand[^}]*photo-notes-ai-road-issue-reporter-animated\.svg\?v=118/);
+test('road reporter uses the shared final logo and retains its tier',()=>{
+ assert.match(app,/isRoadIssuesClient\(\)\?'Road Issue Reporter'/);
+ assert.match(app,/class="photonotes-tier"/);
 });
 
 test('road reporter uses the shorter red-outlined issue button',()=>{
