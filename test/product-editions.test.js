@@ -32,7 +32,7 @@ test('Concrete keeps Create as the flexible document-building workflow',()=>{
 
 test('every edition uses the final outlined logo with separate tier text',()=>{
  const crypto=require('node:crypto');
- for(const [variant,hash] of [['static','b2dc498dd862b4136546f0ae40b915e7a7532af89390365874774bdb13813897'],['animated','5ea4e71f21182ea232426a7bbaecd4c657d5e78840103f06007d97f1ace60556']]){
+ for(const [variant,hash] of [['static','040b41dd67fb193b4cb37fadcc69bcfad19ad8b5ce05ed2be15b44d1253ec5d2'],['animated','7de36b971255649edf9447a13d4c91b39a23ed0b7bc57efdf763685c8bf2023c']]){
   const file=fs.readFileSync(path.join(root,'public',`photonotes-ai-logo-${variant}.svg`));assert.equal(crypto.createHash('sha256').update(file).digest('hex'),hash);assert.doesNotMatch(file.toString(),/<script|<text/);
  }
  assert.match(app,/class="brand photonotes-lockup"/);assert.match(app,/class="photonotes-tier"/);assert.match(app,/photonotes-ai-logo-static\.svg/);assert.match(app,/photonotes-ai-logo-animated\.svg/);

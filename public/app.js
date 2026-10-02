@@ -255,7 +255,7 @@ function renderLogin() {
   el.innerHTML = `
     <div class="wrap">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px"><img src="/zukor-logo.svg" alt="Zukor AI" style="height:22px;width:auto;display:block" /><div class="language-switch" aria-label="Language"><button type="button" data-language="en">EN</button><span> </span><button type="button" data-language="es">ES</button></div></div>
-      <div class="brand photonotes-lockup photonotes-login" style="margin-top:12px"><img class="photonotes-wordmark" src="/photonotes-ai-logo-animated.svg" alt="PhotoNotes AI"></div>
+      <div class="brand photonotes-lockup photonotes-login" style="margin-top:12px"><img class="photonotes-wordmark" src="/photonotes-ai-logo-animated.svg?v=290" alt="PhotoNotes AI"></div>
       <p class="sub">Photo documentation, by voice</p>
       <label for="email">Email</label>
       <input id="email" type="email" autocomplete="username" inputmode="email" />
@@ -286,7 +286,7 @@ function renderApp() {
       <div class="app-header">
         <img class="zukor-corner-logo" src="/zukor-logo.svg" alt="Zukor AI" />
         <div class="brandrow">
-          <div class="brand photonotes-lockup" aria-label="PhotoNotes AI"><img class="photonotes-wordmark" src="/photonotes-ai-logo-static.svg" alt="PhotoNotes AI"><div class="photonotes-tier">${esc(productName().replace(/^Photo Notes(?: AI)?\s*/,'').replace(/^AI\s*/,''))}</div></div>
+          <div class="brand photonotes-lockup" aria-label="PhotoNotes AI"><img class="photonotes-wordmark" src="/photonotes-ai-logo-static.svg?v=290" alt="PhotoNotes AI"><div class="photonotes-tier">${esc(productName().replace(/^Photo Notes(?: AI)?\s*/,'').replace(/^AI\s*/,''))}</div></div>
         </div>
         <div class="header-controls">
           <div class="language-switch" aria-label="Language"><button type="button" data-language="en">EN</button><span> </span><button type="button" data-language="es">ES</button></div>
