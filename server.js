@@ -914,6 +914,7 @@ function concreteEvidenceChecklist(rows,links){const stages=new Set(rows.map(r=>
 ]);}
 
 const ramoIntake=require('./ramo-intake').registerRamoIntake(app,{pool,requireAuth,requireConcrete,uploadDir:UPLOAD_DIR});
+require('./related-photos').register(app,{pool,requireAuth,currentProduct});
 registerConcreteFootprints(app,{pool,requireAuth,requireConcrete,computeZone});
 
 app.get('/api/concrete/report',requireAuth,requireConcrete,async(req,res)=>{try{
