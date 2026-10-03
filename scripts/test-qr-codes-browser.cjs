@@ -20,7 +20,7 @@ const {chromium,webkit}=require('playwright');
   await page.goto(base);await page.waitForFunction(()=>state.me&&document.getElementById('body'));
   for(const edition of ['general','property','hoa','concrete','paving','contractor','roofer']){
    active=false;
-   await page.evaluate(edition=>{state.plan='pro';state.proType=edition;state.view='edit';document.getElementById('body').innerHTML=captureCardHtml({id:1,photo_title:'Gate 7',note:'Saved context',created_at:new Date().toISOString(),area_tags:[]});wireCards(document.getElementById('body'),[]);},edition);
+   await page.evaluate(edition=>{state.plan='pro';state.proType=edition;state.view='edit';document.getElementById('body').innerHTML=captureCardHtml({id:1,photo_title:'Gate 7',note:'Saved context',created_at:new Date().toISOString(),area_tags:[]});wireCards(document.getElementById('body'),[{id:1}]);},edition);
    await page.locator('[data-qr-target="note"]').click();await page.locator('#qrCreate').click();await page.locator('.pn-qr-dialog canvas').waitFor();
    await page.locator('#qrLabel').fill('Exterior Gate 7');await page.locator('#qrProperty').fill('');
    assert.equal(await page.locator('.pn-qr-dialog p').first().evaluate(n=>getComputedStyle(n).color),'rgb(0, 0, 0)');

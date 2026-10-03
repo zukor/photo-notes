@@ -3,12 +3,7 @@
 'use strict';
 const rules=[];
 const add=(keys,text,terms=[])=>rules.push({keys:keys.split('|'),text,terms});
-add('qrAssetPhoto','Take or choose a current photograph for this asset using the existing condition-photo form. Review Photo Purpose, Current Condition and Photo Note, then Add Photo to Asset History. Selecting a file does not save it; the saved photograph remains associated with this asset automatically.',['QR code']);
-add('data-qr-target|qrCreate','Create an optional QR code for this saved photographic record. Place its label at the physical subject. Scanning opens the existing record only after sign-in and a fresh authorization check. Asset Add Photo saves directly to existing asset history. This does not grant access or accept outside uploads.',['QR code']);
-add('qrLabel|qrProperty','Edit the human-readable printed label and optional property name. These edits affect only the downloaded or printed label, not the saved record. Anyone can read a printed label, so use non-sensitive text.',['QR label']);
-add('qrDownload|qrPrint','Download a PNG label or open a clean print window. The label includes Photo Notes, your chosen name, optional property and QR code. Print at a readable size and test scanning on the installed phone. A downloaded image is not proof of printing.',['QR label']);
-add('qrReissue|qrDisable','Reissue replaces the token and invalidates every old printed label. Disable stops this QR link without deleting the record or its photographs. Create after disabling issues a new token. Replace physical labels after reissuing.',['QR code']);
-add('qrClose','Close the QR code preview. Existing QR status and saved photographs remain unchanged.',['QR code']);
+add('data-comments-id|commentsClose|commentsText|commentsPost|commentsCancel|commentsMention|data-comment-reply|data-comment-edit|data-comment-delete','Comments opens Internal Discussion about this saved photograph. Read comments in date order. Post Comment saves text when connected. Reply links to one original comment. Edit changes only your own comment; Delete retains a deletion record and authorized company administrators may remove comments. Choose a team member to insert @Name; authorized HOA and Property team members receive dashboard notifications. Comments are excluded from all external outputs and customer responses. Offline or failed posts keep your draft in this window; copy unfinished text before leaving or reloading. Back to Photo returns to the photograph. Cancel Reply or Edit clears the current draft.',['Internal Discussion','Mention','Comment History']);
 add('data-photo-marker','Tap the star to mark or remove Favorite for long-term access. Tap the distinct flag to mark or remove Flagged for personal attention. The pressed state shows the saved designation. A connection is required. These internal markers do not change urgency, topics, maintenance status, priority, assignee or target date, create reminders, or appear on exported photos or customer documents. Toggling is not added to evidence history.',['Favorite','Flagged']);
 add('markerPhotoLibrary','Open the shared saved Photo Notes library to find, select, favorite and flag your photographs. Property visit controls remain available from Organize.',['Favorite','Flagged']);
 add('markerFavorites|markerFlagged','Show only Favorites or Flagged Photo Notes in Organize. Combine with topic, job, text, date and missing-address filters. Selecting both shows photos with both markers. Clear resets these filters.',['Favorite','Flagged']);
@@ -304,8 +299,6 @@ add('ctOptions|ctUse|ctManage|ctChoice|ctApply|ctLast','Choose an account-owned 
 add('ctSaveSetup|ctNew|ctEdit|ctDuplicate|ctName|ctDescription|ctTopic|ctUrgency|ct-concretePhase|ct-concretePurpose|ct-concreteElement|ct-hoaType|ct-hoaPriority|ct-hoaArea|ct-pavingPhotoReason|ctSave','Create, edit, rename or duplicate reusable defaults. Template Name is required; description and selections are optional. Leave unchanged does not overwrite the current capture value. Save as Template copies only safe current selections. No photo, narrative, GPS, address, time, job, property, condition or severity is copied. Save Template stores on this device and syncs to your account when connected. Cached templates remain usable during an already available offline Capture session.',['Capture Template','Local save']);
 add('ctDelete|ctClose','Delete the selected Capture Template, or close template management. Deleting never changes saved Photo Notes. Deletion syncs when connected. Templates belong to your account and edition; there is no team sharing.',['Capture Template']);
 const terms={
- 'QR code':'A scannable Photo Notes link that identifies a photographic context. Possession grants no access; sign-in and record authorization are required.',
- 'QR label':'A printed or downloaded QR code with a short human-readable name. Use non-sensitive text because anyone can read a physical label.',
  'Favorite':'A persistent internal star marker for easy access over time, until you remove it. Separate from topics and urgency.',
  'Flagged':'A persistent internal attention marker, until you remove it. Creates no task, reminder, due date, priority or assignment.',
  'Related Photos':'An explicit, bidirectional link between independently saved photographs. It preserves context without creating a Photo Set, Before/After pair or organizational record.',
@@ -359,6 +352,9 @@ const terms={
  'Condition':'The observed state of the photographed object, distinguished from scheduling priority.',
  'Defect':'A visible fault/classification suggested by AI or entered after human review.',
  'Severity':'How serious the observed issue is. It is separate from response urgency.',
+ 'Internal Discussion':'Private text discussion attached to a saved photograph, visible only through existing photo access.',
+ 'Mention':'An @Name reference to an authorized team member. HOA and Property use existing in-app notifications.',
+ 'Comment History':'Retained previous comment text and deletion metadata. Deleted text is hidden from the discussion.',
  'Urgency':'Standard or Urgent handling recorded with a capture. It is not a notification guarantee.',
  'Priority':'The property workflow’s follow-up importance, such as Routine, High, Emergency, or Monitor.',
  'Project phase':'The stage of work documented by a concrete photo, from proposal to follow-up.',
@@ -432,5 +428,13 @@ const textRules=[
  {match:'Approve Photos|Request Changes',text:'Review the photographs and message, enter your name and comments, then record your approval or requested changes. A response records the review decision; it does not certify facts outside the pictured evidence.',terms:['Approval','Evidence']},
  {match:'(?:Send|Submit) Completion Photos',text:'Upload clear photographs showing the completed work, include the requested name and note, and submit. The property manager will review the returned evidence before closing the maintenance item.',terms:['Completion link','Verification']}
 ];
+// Physical-context QR guidance stays modular during concurrent integration.
+add('qrAssetPhoto','Take or choose a current photograph for this asset using the existing condition-photo form. Review Photo Purpose, Current Condition and Photo Note, then Add Photo to Asset History. Selecting a file does not save it; the saved photograph remains associated with this asset automatically.',['QR code']);
+add('data-qr-target|qrCreate','Create an optional QR code for this saved photographic record. Place its label at the physical subject. Scanning opens the existing record only after sign-in and a fresh authorization check. Asset Add Photo saves directly to existing asset history. This does not grant access or accept outside uploads.',['QR code']);
+add('qrLabel|qrProperty','Edit the human-readable printed label and optional property name. These edits affect only the downloaded or printed label, not the saved record. Anyone can read a printed label, so use non-sensitive text.',['QR label']);
+add('qrDownload|qrPrint','Download a PNG label or open a clean print window. The label includes Photo Notes, your chosen name, optional property and QR code. Print at a readable size and test scanning on the installed phone. A downloaded image is not proof of printing.',['QR label']);
+add('qrReissue|qrDisable','Reissue replaces the token and invalidates every old printed label. Disable stops this QR link without deleting the record or its photographs. Create after disabling issues a new token. Replace physical labels after reissuing.',['QR code']);
+add('qrClose','Close the QR code preview. Existing QR status and saved photographs remain unchanged.',['QR code']);
+Object.assign(terms,{'QR code':'A scannable Photo Notes link that identifies a photographic context. Possession grants no access; sign-in and record authorization are required.','QR label':'A printed or downloaded QR code with a short human-readable name. Use non-sensitive text because anyone can read a physical label.'});
 window.PhotoNotesHelpCatalog={rules,terms,textRules};
 })();

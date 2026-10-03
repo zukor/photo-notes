@@ -7,6 +7,16 @@ window.PhotoNotesQR={
  enabled:edition=>editions.has(edition),
  button(type,id,edition){return editions.has(edition)?`<button type="button" class="btn secondary slim" data-qr-target="${type}" data-qr-id="${Number(id)}">Create / Manage QR Code</button>`:'';},
  wire(root,opts){root.querySelectorAll('[data-qr-target]').forEach(b=>b.onclick=()=>this.manage(b.dataset.qrTarget,b.dataset.qrId,opts));},
+ wireSavedCards(root,rows,edition,opts){
+  if(!editions.has(edition))return;
+  for(const row of rows){const card=root.querySelector(`.capchk[value="${Number(row.id)}"]`)?.closest('.card');if(card&&!card.querySelector(`[data-qr-id="${Number(row.id)}"]`))card.querySelector('.photo-title')?.insertAdjacentHTML('afterend',this.button('note',row.id,edition));}
+  this.wire(root,opts);
+ },
+ mountAsset({id,edition,...opts}){
+  const body=document.getElementById('body'),photo=body?.querySelector('#hapPhoto');if(!photo||!editions.has(edition)||body.querySelector('#qrAssetPhoto'))return;
+  body.querySelector('.workflow-intro')?.insertAdjacentHTML('afterend','<button type="button" class="btn secondary" id="qrAssetPhoto">Add Photo</button>'+this.button('asset',id,edition));
+  const add=body.querySelector('#qrAssetPhoto');if(add)add.onclick=()=>{photo.scrollIntoView({block:'center'});photo.click();};this.wire(body,opts);
+ },
  async resume({api,state,renderApp,toast}){
   const t=new URLSearchParams(location.search).get('qr');if(!t||!state.me||resolving)return;
   resolving=true;
