@@ -920,10 +920,11 @@ function chooseAlignmentBefore(id){if(alignmentSavedAfter)return toast('Retry pa
 function showAlignmentComparison(){document.getElementById('alignBeforeImage').src=photoSrc(alignmentBefore.photo_path);if(alignmentPreviewUrl)URL.revokeObjectURL(alignmentPreviewUrl);alignmentPreviewUrl=URL.createObjectURL(alignmentAfterFile);document.getElementById('alignAfterImage').src=alignmentPreviewUrl;document.getElementById('alignCompareStep').hidden=false;const range=document.getElementById('alignOpacity'),after=document.getElementById('alignAfterImage');range.oninput=()=>after.style.opacity=String(Number(range.value)/100);after.style.opacity=String(Number(range.value)/100);document.getElementById('alignRetake').onclick=()=>document.getElementById('alignCam').click();document.getElementById('alignSave').onclick=saveAlignedPair;document.getElementById('alignCompareStep').scrollIntoView({behavior:'smooth'});}
 async function saveAlignedPair(){
   if(!alignmentBefore||!alignmentAfterFile)return;
-  const before=alignmentBefore,file=alignmentAfterFile,embedded=pavingToolEmbedded(),btn=document.getElementById('alignSave'),status=document.getElementById('alignSaveStatus');
+  const before=alignmentBefore,file=alignmentAfterFile,embedded=pavingToolEmbedded(),btn=document.getElementById('alignSave'),status=document.getElementById('alignSaveStatus'),opacity=Number(document.getElementById('alignOpacity').value)/100,edition=selectedEdition(),email=state.me.email;
+  let savedAfter=alignmentSavedAfter;const requestId=alignmentUploadId||crypto.randomUUID();alignmentUploadId=requestId;
   const busy=['alignTake','alignChoose','alignRetake','alignMatchCamera','alignPhase','alignPurpose'];setPavingToolBusy(busy,true);document.querySelectorAll('.alignment-choice').forEach(b=>b.disabled=true);btn.disabled=true;btn.textContent='Saving...';
   try{
-    if(!alignmentSavedAfter){
+    if(!savedAfter){
       let fd=alignmentUploadForm;if(!fd){fd=new FormData();fd.append('photo',file);fd.append('note',document.getElementById('alignNote').value.trim());fd.append('kind','note');fd.append('area_tags',JSON.stringify(before.area_tags||[]));if(before.job_id)fd.append('job_id',String(before.job_id));
       if(isConcreteClient()){
         const context=ConcreteCapture.normalize({concrete_phase:document.getElementById('alignPhase').value,concrete_purpose:document.getElementById('alignPurpose').value});
@@ -932,15 +933,14 @@ async function saveAlignedPair(){
         fd.append('concrete_condition','not_assessed');fd.append('concrete_severity','none');
       }
       const loc=await getLocationOnce();if(loc){fd.append('latitude',loc.lat);fd.append('longitude',loc.lng);}
-      alignmentUploadForm=fd;}
-      alignmentUploadId ||= crypto.randomUUID();
-      const headers=PhotoNotesQueue.headers({requestId:alignmentUploadId,edition:selectedEdition(),account:await PhotoNotesQueue.accountKey(state.me.email)});
-      const cr=await api('/api/captures',{method:'POST',headers,body:fd});if(!cr.ok)throw Error('Photo could not be saved. Try again.');alignmentSavedAfter=await cr.json();
+      if(document.getElementById('alignSave')===btn)alignmentUploadForm=fd;}
+      const headers=PhotoNotesQueue.headers({requestId,edition,account:await PhotoNotesQueue.accountKey(email)});
+      const cr=await api('/api/captures',{method:'POST',headers,body:fd});if(!cr.ok)throw Error('Photo could not be saved. Try again.');savedAfter=await cr.json();if(document.getElementById('alignSave')===btn)alignmentSavedAfter=savedAfter;
     }
-    const after=alignmentSavedAfter,opacity=Number(document.getElementById('alignOpacity').value)/100;
+    const after=savedAfter;
     const pr=await api('/api/pairs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({before_id:before.id,after_id:after.id,comparison_opacity:opacity})});
     if(!pr.ok){const pairsResponse=await api('/api/pairs');const pairs=pairsResponse.ok?await pairsResponse.json():[];if(!pairs.some(p=>Number(p.before_id)===before.id&&Number(p.after_id)===after.id))throw Error('Pairing failed');}
-    toast('Before and after pair saved');setPavingToolBusy([],false);if(embedded)renderAlignmentTool();else{state.view=isHoaClient()?'photo-library':'organize';renderApp();}
+    toast('Before and after pair saved');if(document.getElementById('alignSave')!==btn)return;setPavingToolBusy([],false);if(embedded)renderAlignmentTool();else{state.view=isHoaClient()?'photo-library':'organize';renderApp();}
   }catch(e){
     if(document.getElementById('alignSave')!==btn)return;
     const message=alignmentSavedAfter?'Photo saved, but Before/After pairing could not be completed. Retry Pairing uses the saved photo. You can also find both photos in the Photo Library.':e.message;
