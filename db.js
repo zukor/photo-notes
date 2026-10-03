@@ -801,6 +801,7 @@ async function init() {
   const adminAreas = await pool.query(`SELECT 1 FROM user_areas WHERE user_id = $1 LIMIT 1`, [adminId]);
   if (adminAreas.rows.length === 0) await seedUserAreas(adminId);
 
+  await pool.query(require('./related-photos').SCHEMA);
   await require('./testing-hub').initTestingHub(pool);
   console.log('[db] schema ready');
 }
