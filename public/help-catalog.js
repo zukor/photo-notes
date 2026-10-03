@@ -3,6 +3,12 @@
 'use strict';
 const rules=[];
 const add=(keys,text,terms=[])=>rules.push({keys:keys.split('|'),text,terms});
+add('qrAssetPhoto','Take or choose a current photograph for this asset using the existing condition-photo form. Review Photo Purpose, Current Condition and Photo Note, then Add Photo to Asset History. Selecting a file does not save it; the saved photograph remains associated with this asset automatically.',['QR code']);
+add('data-qr-target|qrCreate','Create an optional QR code for this saved photographic record. Place its label at the physical subject. Scanning opens the existing record only after sign-in and a fresh authorization check. Asset Add Photo saves directly to existing asset history. This does not grant access or accept outside uploads.',['QR code']);
+add('qrLabel|qrProperty','Edit the human-readable printed label and optional property name. These edits affect only the downloaded or printed label, not the saved record. Anyone can read a printed label, so use non-sensitive text.',['QR label']);
+add('qrDownload|qrPrint','Download a PNG label or open a clean print window. The label includes Photo Notes, your chosen name, optional property and QR code. Print at a readable size and test scanning on the installed phone. A downloaded image is not proof of printing.',['QR label']);
+add('qrReissue|qrDisable','Reissue replaces the token and invalidates every old printed label. Disable stops this QR link without deleting the record or its photographs. Create after disabling issues a new token. Replace physical labels after reissuing.',['QR code']);
+add('qrClose','Close the QR code preview. Existing QR status and saved photographs remain unchanged.',['QR code']);
 add('takephoto|photoCam|readerTake|readerCam|ticketTake|ticketCam|ewrTake|ewrCam','Open the camera and photograph the subject clearly. Keep the important evidence in frame, check the preview, and retake if blurred or incomplete. Camera permission is required. Taking a photo does not by itself save or send it.',['Capture','Permission']);
 add('choosephoto|photoLib|readerChoose|readerLib|ticketChoose|ticketLib|alignChoose|alignLib|ewrChoose|ewrLib','Choose an image from this device. Review the imported image before continuing. Imported photos may not contain usable GPS information, so check the displayed location. This selects a photo; use the relevant Save or Send action to complete the task.',['GPS','Capture']);
 add('retakePhoto|alignRetake','Replace the current draft photo with another camera shot. Check the replacement preview and location. Retaking does not delete photographs already saved in your library.',['Draft']);
@@ -285,6 +291,8 @@ add('data-testing-manager','Give this user access to create and publish testing 
 add('data-close','Close this panel or editor. Review unfinished work and use its Save or Submit action before closing if you want to retain changes. Closing a sharing panel does not deliver a file, and closing an assignment editor does not publish it.',['Draft']);
 add('data-share','Open the device sharing choices for the prepared photo or file. Check the destination, recipients, and attachments, then complete the sharing action. Closing or canceling the sheet does not deliver anything. Keep the local capture until its upload status is confirmed.',['Share sheet','Local save']);
 const terms={
+ 'QR code':'A scannable Photo Notes link that identifies a photographic context. Possession grants no access; sign-in and record authorization are required.',
+ 'QR label':'A printed or downloaded QR code with a short human-readable name. Use non-sensitive text because anyone can read a physical label.',
 'Before/after':'Two linked photographs showing an earlier condition and a later condition. Compare matching viewpoints and confirm their dates before drawing conclusions.',
  'Capture':'A photograph and its supporting note, location, and other details recorded in PhotoNotes.',
  'Photo note':'The words attached to a photo explaining what it shows and why it matters.',

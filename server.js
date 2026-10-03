@@ -909,6 +909,7 @@ function concreteEvidenceChecklist(rows,links){const stages=new Set(rows.map(r=>
 
 const ramoIntake=require('./ramo-intake').registerRamoIntake(app,{pool,requireAuth,requireConcrete,uploadDir:UPLOAD_DIR});
 registerConcreteFootprints(app,{pool,requireAuth,requireConcrete,computeZone});
+require('./qr-codes').registerQrCodes(app,{pool,requireAuth,currentProduct});
 
 app.get('/api/concrete/report',requireAuth,requireConcrete,async(req,res)=>{try{
   const vals=[req.user.id],where=['c.user_id=$1','c.photo_path IS NOT NULL'];
