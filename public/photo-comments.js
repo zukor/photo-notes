@@ -1,0 +1,38 @@
+/* Internal discussion is loaded only through authenticated photo endpoints. */
+(()=>{'use strict';
+const editions=new Set(['general','paving','concrete','property','hoa','contractor','roofer']);
+let modal,origin,photoId,replyTo=null,editId=null,busy=false;
+const drafts=new Map();
+function enabled(){return typeof state!=='undefined'&&state.plan==='pro'&&editions.has(state.proType);}
+async function request(url,options={}){const r=await fetch(url,{credentials:'same-origin',headers:{'Content-Type':'application/json'},...options});const d=await r.json();if(!r.ok)throw Error(d.error||'Comments unavailable');return d;}
+function close(){if(busy)return;remember();modal?.remove();modal=null;origin?.focus();}
+function remember(){const input=modal?.querySelector('#commentsText');if(input)drafts.set(String(state.me?.id||'')+':'+photoId,{text:input.value,replyTo,editId});}
+function status(message){const s=modal?.querySelector('#commentsStatus');if(s)s.textContent=message;}
+function setMode(c,edit){remember();editId=edit?c.id:null;replyTo=edit?null:(c.reply_to||c.id);modal.querySelector('#commentsMode').textContent=edit?'Editing your comment':`Reply to ${c.author_name}`;modal.querySelector('#commentsText').value=edit?c.text:'';modal.querySelector('#commentsPost').textContent=edit?'Save Edit':'Post Comment';modal.querySelector('#commentsText').focus();}
+async function open(id){
+ if(!enabled()||busy)return;remember();if(modal)modal.remove();else origin=document.activeElement;
+ photoId=id;const draft=drafts.get(String(state.me?.id||'')+':'+id)||{text:'',replyTo:null,editId:null};replyTo=draft.replyTo;editId=draft.editId;
+ modal=document.createElement('div');modal.className='comments-overlay';modal.dataset.html2canvasIgnore='true';modal.setAttribute('role','dialog');modal.setAttribute('aria-modal','true');modal.setAttribute('aria-label','Internal Discussion');
+ modal.innerHTML='<section class="comments-panel"><button id="commentsClose" type="button">Back to Photo</button><h2>Internal Discussion</h2><p id="commentsStatus" role="status">Loading comments...</p><div id="commentsContent"></div><label for="commentsText">Comment</label><textarea id="commentsText" maxlength="4000" rows="4"></textarea><p id="commentsMode"></p><button id="commentsPost" type="button">Post Comment</button><button id="commentsCancel" type="button">Cancel Reply or Edit</button><p>Internal only. Comments stay out of reports, shared photos, public links, and customer review packages. A connection is required. Failed posts keep your draft here.</p></section>';
+ document.body.append(modal);modal.querySelector('#commentsText').value=draft.text;modal.querySelector('#commentsClose').onclick=close;
+ modal.querySelector('#commentsText').oninput=remember;
+ modal.querySelector('#commentsCancel').onclick=()=>{if(busy)return;editId=null;replyTo=null;modal.querySelector('#commentsText').value='';modal.querySelector('#commentsMode').textContent='';modal.querySelector('#commentsPost').textContent='Post Comment';remember();};
+ modal.querySelector('#commentsPost').disabled=true;
+ modal.querySelector('#commentsClose').focus();
+ try{const d=await request(`/api/captures/${id}/comments`);if(!modal||photoId!==id)return;
+ const c=d.capture;modal.querySelector('#commentsContent').innerHTML=`<div class="comments-context"><img src="${esc(c.photo_path)}" alt="Photo under discussion"><div><strong>${esc(c.photo_title||'Photo Note '+c.id)}</strong><p>${esc(new Date(c.created_at).toLocaleString())}</p><p>${esc(d.context)}</p></div></div><div>${d.comments.length?d.comments.map(c=>`<article class="comment-entry" ${c.reply_to?`data-reply-to="${c.reply_to}"`:''}><strong>${esc(c.author_name)}</strong><p>${esc(new Date(c.created_at).toLocaleString())}${c.edited_at?' (edited)':''}${c.reply_to?' · Reply to comment #'+c.reply_to:''}</p><p class="comment-text">${esc(c.deleted_at?'Comment deleted':c.text)}</p>${!c.deleted_at?`<button data-comment-reply="${c.id}">Reply</button>`:''}${c.can_edit?`<button data-comment-edit="${c.id}">Edit</button>`:''}${c.can_delete?`<button data-comment-delete="${c.id}">Delete</button>`:''}</article>`).join(''):'<p>No comments yet.</p>'}</div>${d.members.length?`<label for="commentsMention">Mention a team member</label><select id="commentsMention"><option value="">Choose a name</option>${d.members.map(m=>`<option value="${esc(m.name)}">${esc(m.name)}</option>`).join('')}</select><p>@Name mentions notify authorized company members in their existing dashboard.</p>`:''}`;
+ status(navigator.onLine?'':'Offline. Keep your draft here and post when connected.');
+ const mention=modal.querySelector('#commentsMention');if(mention)mention.onchange=()=>{if(!mention.value)return;const input=modal.querySelector('#commentsText');input.value+=(input.value?' ':'')+'@'+mention.value+' ';mention.value='';remember();input.focus();};
+ if(editId)modal.querySelector('#commentsPost').textContent='Save Edit';modal.querySelector('#commentsMode').textContent=editId?'Editing your comment':replyTo?'Reply to comment #'+replyTo:'';
+ async function save(method,cid,body){if(busy)return;if(!navigator.onLine){status('Offline. Your draft is kept here. Retry when connected.');return;}busy=true;modal.querySelectorAll('button,textarea,select').forEach(n=>n.disabled=true);try{await request(`/api/captures/${id}/comments${cid?'/'+cid:''}`,{method,body:body?JSON.stringify(body):undefined});if(method!=='DELETE'){drafts.delete(String(state.me?.id||'')+':'+id);modal.querySelector('#commentsText').value='';replyTo=null;editId=null;}remember();busy=false;await open(id);}catch(e){status(e.message);busy=false;modal?.querySelectorAll('button,textarea,select').forEach(n=>n.disabled=false);}}
+ modal.querySelector('#commentsPost').disabled=false;modal.querySelector('#commentsPost').onclick=()=>{const text=modal.querySelector('#commentsText').value;if(!text.trim())return status('Enter a comment.');remember();save(editId?'PATCH':'POST',editId,{text,reply_to:replyTo});};
+ for(const c of d.comments){const find=k=>modal.querySelector(`[data-comment-${k}="${c.id}"]`);if(find('reply'))find('reply').onclick=()=>setMode(c,false);if(find('edit'))find('edit').onclick=()=>setMode(c,true);if(find('delete'))find('delete').onclick=()=>{if(confirm('Delete this comment? A deletion record will be retained.'))save('DELETE',c.id);};}
+ }catch(e){status(e.message);}
+}
+function paint(){if(!enabled())return;document.querySelectorAll('.card').forEach(card=>{if(card.querySelector('[data-comments-id]'))return;const anchor=card.querySelector('.notewrap[data-id],.phototitlewrap[data-id]');if(anchor&&card.querySelector('img')&&Number(anchor.dataset.id)>0){const b=document.createElement('button');b.className='btn secondary slim';b.dataset.commentsId=anchor.dataset.id;b.dataset.html2canvasIgnore='true';b.textContent='Comments';card.append(b);}});}
+document.addEventListener('click',e=>{const b=e.target.closest('[data-comments-id]');if(b)open(Number(b.dataset.commentsId));});
+document.addEventListener('keydown',e=>{if(!modal||e.target.closest('#photoNotesHelp'))return;if(e.key==='Escape'){e.preventDefault();close();}if(e.key==='Tab'){const nodes=[...modal.querySelectorAll('button,textarea,select')].filter(n=>!n.disabled);const first=nodes[0],last=nodes.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}}});
+new MutationObserver(paint).observe(document.getElementById('app'),{childList:true,subtree:true});
+window.addEventListener('beforeunload',e=>{remember();if([...drafts.values()].some(d=>d.text.trim())){e.preventDefault();e.returnValue='';}});
+window.PhotoComments={open,enabled};
+})();
