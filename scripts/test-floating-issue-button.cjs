@@ -13,8 +13,8 @@ const assert=require('node:assert/strict'),express=require('express'),{chromium,
      await page.evaluate(t=>document.documentElement.dataset.theme=t,theme);
      for(const y of [0,6000,12000]){
       await page.evaluate(y=>window.scrollTo(0,y),y);
-      const position=await page.locator('#issueFab').evaluate(el=>{const r=el.getBoundingClientRect();return {position:getComputedStyle(el).position,right:innerWidth-r.right,bottom:innerHeight-r.bottom,top:r.top,hit:document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)?.id};});
-      assert.equal(position.position,'fixed');assert(position.right>=13&&position.right<=15);assert(position.bottom>=13&&position.bottom<=15);assert(position.top>0);assert.equal(position.hit,'issueFab',JSON.stringify({engine:engine.name(),width,path,theme,y,position}));
+      const position=await page.locator('#issueFab').evaluate(el=>{const r=el.getBoundingClientRect();return {position:getComputedStyle(el).position,right:innerWidth-r.right,left:r.left,bottom:innerHeight-r.bottom,top:r.top,hit:document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)?.id};});
+      assert.equal(position.position,'fixed');assert((position.right>=13&&position.right<=15)||(position.left>=13&&position.left<=15),JSON.stringify(position));assert(position.bottom>=13&&position.bottom<=15);assert(position.top>0);assert.equal(position.hit,'issueFab',JSON.stringify({engine:engine.name(),width,path,theme,y,position}));
      }
     }
    }

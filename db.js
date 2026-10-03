@@ -690,6 +690,7 @@ async function init() {
   await pool.query(`ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS tester_notification_error TEXT`);
   await pool.query(`ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS tester_notified_at TIMESTAMPTZ`);
   await pool.query(`ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS tester_result TEXT`);
+  await pool.query(`ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS blocked_kind TEXT`);
   await pool.query(`ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS tester_notes TEXT`);
   await pool.query(`ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS tester_retested_at TIMESTAMPTZ`);
   await pool.query(`ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS voice_path TEXT`);

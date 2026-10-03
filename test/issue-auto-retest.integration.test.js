@@ -1,5 +1,5 @@
 const test=require('node:test'),assert=require('node:assert/strict');
-test('first retests are automatic, durable, and return failed results to owner review',{skip:process.env.PN_AUTO_RETEST_TEST!=='1',timeout:60000},async()=>{
+test('first retests are automatic, durable, and return first failed bug results to repair',{skip:process.env.PN_AUTO_RETEST_TEST!=='1',timeout:60000},async()=>{
  process.env.DATABASE_URL='postgresql://127.0.0.1:55489/pn_pro_retest';process.env.PGSSL='disable';process.env.SESSION_SECRET='auto-retest-local';process.env.ISSUE_CLOUD_RUNNER_ENABLED='false';
  const {pool,init}=require('../db');
  assert.equal((await pool.query('SHOW data_directory')).rows[0].data_directory,'/tmp/pn-pro-retest/db');await init();
@@ -28,20 +28,20 @@ test('first retests are automatic, durable, and return failed results to owner r
   for(const id of [clarify,repair,idea,owner,previous,leased,alreadyFailed])assert.equal((await pool.query('SELECT management_status FROM issue_reports WHERE id=$1',[id])).rows[0].management_status,'blocked');
   const {app}=require('../server');server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));
   const token=require('jsonwebtoken').sign({id:user},process.env.SESSION_SECRET);
-  for(const [id,result,status] of [[negative,'still_happening','blocked'],[positive,'fixed','tester_confirmed']]){
+  for(const [id,result,status] of [[negative,'still_happening','new'],[positive,'fixed','tester_confirmed']]){
    const response=await fetch('http://127.0.0.1:'+server.address().port+'/api/issues/'+id+'/retest',{method:'POST',headers:{'Content-Type':'application/json',Cookie:'pn_token='+token},body:JSON.stringify({result,notes:'Checked the original photo again.'})});
    assert.equal(response.status,200);assert.equal((await response.json()).status,status);
   }
   await pool.query("UPDATE issue_reports SET management_status='ready_to_test',verification='Verified',release_reference='test-release' WHERE id=$1",[positive]);
   const unable=await fetch('http://127.0.0.1:'+server.address().port+'/api/issues/'+positive+'/retest',{method:'POST',headers:{'Content-Type':'application/json',Cookie:'pn_token='+token},body:JSON.stringify({result:'unable_to_test',notes:'Original test device unavailable.'})});
   assert.equal(unable.status,200);assert.equal((await unable.json()).status,'blocked');
-  const unableRow=(await pool.query('SELECT * FROM issue_reports WHERE id=$1',[positive])).rows[0];assert.equal(unableRow.tester_result,'unable_to_test');assert.match(unableRow.blocked_reason,/could not complete/);
+  const unableRow=(await pool.query('SELECT * FROM issue_reports WHERE id=$1',[positive])).rows[0];assert.equal(unableRow.tester_result,'unable_to_test');assert.match(unableRow.blocked_reason,/prevented the retest/);
   await pool.query("UPDATE issue_reports SET management_status='ready_to_test',verification='Verified',release_reference='test-release' WHERE id=$1",[positive]);
   const failedDeployed=await fetch('http://127.0.0.1:'+server.address().port+'/api/issues/'+positive+'/retest',{method:'POST',headers:{'Content-Type':'application/json',Cookie:'pn_token='+token},body:JSON.stringify({result:'still_happening',notes:'Deployed change still fails.'})});
-  assert.equal(failedDeployed.status,200);assert.equal((await failedDeployed.json()).status,'blocked');
+  assert.equal(failedDeployed.status,200);assert.equal((await failedDeployed.json()).status,'new');
   await requestFirstRetests(pool);
   const failed=(await pool.query('SELECT * FROM issue_reports WHERE id=$1',[negative])).rows[0];
-  assert.equal(failed.management_status,'blocked');assert.match(failed.blocked_reason,/tester checked again/);assert.equal(failed.tester_notes,'Checked the original photo again.');
+  assert.equal(failed.management_status,'new');assert.equal(failed.blocked_reason,null);assert.equal(failed.tester_notes,'Checked the original photo again.');
   assert.equal((await pool.query("SELECT count(*)::int n FROM issue_repair_events WHERE issue_id=$1 AND event='automatic_retest_requested'",[negative])).rows[0].n,1);
  }finally{
   if(server)await new Promise(r=>server.close(r));

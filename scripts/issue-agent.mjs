@@ -14,15 +14,15 @@ function git(args){return execFileSync('git',args,{encoding:'utf8',maxBuffer:10*
 async function main(){
  if(command==='queue'){console.log(JSON.stringify(await(await request('/api/automation/testing-queue')).json(),null,2));return;}
  if(!Number.isInteger(id)||id<1)throw new Error('Provide a positive issue ID');
- if(command==='claim'||command==='renew'){
-   const d=await(await request(`/api/automation/issues/${id}/claim`,command==='renew'?{claim_token:claim()}:{})).json();
+ if(command==='claim'||command==='renew'||command==='resume'){
+   const d=await(await request(`/api/automation/issues/${id}/claim`,command==='renew'?{claim_token:claim()}:command==='resume'?{resume:true,expected_updated_at:opt('updated')}:{})).json();
    fs.mkdirSync(dir,{recursive:true,mode:0o700});fs.writeFileSync(claimPath(),JSON.stringify(d),{mode:0o600});console.log(JSON.stringify({issue_id:id,claimed:true,expires:d.repair_lease_until}));return;
  }
  if(command==='attachment'){
    const kind=opt('kind');if(!['screenshot','voice'].includes(kind))throw new Error('Choose --kind screenshot or voice');
    const out=opt('out');if(!out)throw new Error('Choose --out local-path');const r=await request(`/api/automation/issues/${id}/attachment/${kind}`);fs.writeFileSync(out,Buffer.from(await r.arrayBuffer()),{mode:0o600});console.log('Attachment saved to '+out);return;
  }
- if(!['update','ready'].includes(command))throw new Error('Use queue, claim, renew, attachment, update, or ready');
+ if(!['update','ready'].includes(command))throw new Error('Use queue, claim, resume, renew, attachment, update, or ready');
  const file=opt('file');if(!file)throw new Error('Provide --file with the JSON repair details');const body=JSON.parse(fs.readFileSync(file,'utf8'));body.claim_token=claim();
  if(command==='ready'){
    if(!/^[a-f0-9]{40}$/.test(body.fix_commit||'')||!body.verification?.trim())throw new Error('Provide full fix_commit and test verification');

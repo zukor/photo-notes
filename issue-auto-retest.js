@@ -9,6 +9,7 @@ async function requestFirstRetests(pool){
   await client.query('BEGIN');
   const rows=(await client.query(`SELECT i.* FROM issue_reports i
    WHERE i.issue_type='bug_problem' AND i.management_status='blocked'
+   AND COALESCE(i.blocked_kind,'') NOT IN ('decision','developer')
    AND i.auto_retest_requested_at IS NULL AND i.review_decision IS NULL
    AND i.tester_result IS NULL AND i.tester_retested_at IS NULL
    AND (i.repair_lease_until IS NULL OR i.repair_lease_until<now())

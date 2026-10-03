@@ -579,7 +579,9 @@ const MANAGED_FEATURES = ['ticket_scanner', 'camera_readers', 'before_after', 'm
 async function currentFeatureAccess(userId) {
   try {
     const row = (await pool.query(`SELECT plan,pro_type,feature_access FROM users WHERE id=$1`, [userId])).rows[0];
-    if (!row || row.plan !== 'pro' || normalizeProType(row.pro_type)!=='paving') return {};
+    if (!row || row.plan !== 'pro') return {};
+    if(row.pro_type==='concrete')return {before_after:true,measurements:true};
+    if(normalizeProType(row.pro_type)!=='paving')return {};
     const saved = row.feature_access && typeof row.feature_access === 'object' ? row.feature_access : {};
     return Object.fromEntries(MANAGED_FEATURES.map(k => [k, saved[k] !== false]));
   } catch { return {}; }
@@ -933,8 +935,12 @@ app.get('/api/captures/search', requireAuth, async (req,res)=>{
     const vals=[req.user.id],where=['c.user_id=$1'];
     if(q){vals.push(`%${q}%`);const n=vals.length;where.push(`(COALESCE(c.photo_title,'') ILIKE $${n} OR COALESCE(c.note,'') ILIKE $${n} OR COALESCE(c.address,'') ILIKE $${n} OR COALESCE(c.captured_by,'') ILIKE $${n} OR COALESCE(array_to_string(c.area_tags,' '),'') ILIKE $${n} OR COALESCE(c.defect_type,'') ILIKE $${n} OR COALESCE(j.name,'') ILIKE $${n} OR COALESCE(j.job_number,'') ILIKE $${n} OR COALESCE(j.customer,'') ILIKE $${n} OR to_char(c.created_at,'MM/DD/YYYY HH12:MI AM') ILIKE $${n})`);}
     if(Number.isInteger(Number(req.query.job_id))){vals.push(Number(req.query.job_id));where.push(`c.job_id=$${vals.length}`);}
-    if(req.query.from){vals.push(String(req.query.from));where.push(`c.created_at >= $${vals.length}::date`);}
-    if(req.query.to){vals.push(String(req.query.to));where.push(`c.created_at < ($${vals.length}::date + interval '1 day')`);}
+    const timestamp=value=>typeof value==='string'&&/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)&&Number.isFinite(Date.parse(value));
+    if((req.query.from_at&&!timestamp(req.query.from_at))||(req.query.to_before&&!timestamp(req.query.to_before)))return res.status(400).json({error:'invalid date range'});
+    if(req.query.from_at){vals.push(req.query.from_at);where.push(`c.created_at >= $${vals.length}::timestamptz`);}
+    else if(req.query.from){vals.push(String(req.query.from));where.push(`c.created_at >= $${vals.length}::date`);}
+    if(req.query.to_before){vals.push(req.query.to_before);where.push(`c.created_at < $${vals.length}::timestamptz`);}
+    else if(req.query.to){vals.push(String(req.query.to));where.push(`c.created_at < ($${vals.length}::date + interval '1 day')`);}
     if(req.query.missing_address==='1')where.push(`COALESCE(c.address,'')=''`);
     if(req.query.has_photo==='1')where.push(`c.photo_path IS NOT NULL`);
     const rows=(await pool.query(`SELECT c.*,j.name job_name,j.job_number FROM captures c LEFT JOIN jobs j ON j.id=c.job_id WHERE ${where.join(' AND ')} ORDER BY c.created_at DESC LIMIT 500`,vals)).rows;
@@ -1461,10 +1467,11 @@ app.post('/api/issues', requireAuth, upload.fields([{name:'screenshot',maxCount:
 app.get('/api/admin/issues', requireAdmin, async (req, res) => {
   try {
     const rows = (await pool.query(
-      `SELECT i.*,u.name AS user_name,u.email AS user_email FROM issue_reports i JOIN users u ON u.id=i.user_id ORDER BY i.created_at DESC`)).rows;
-    const events=rows.length?(await pool.query("SELECT issue_id,event,detail,created_at FROM issue_repair_events WHERE issue_id=ANY($1::int[]) AND event IN ('retest','ready_to_test','bug_review_retest','ui_review_retest','automatic_retest_requested','bug_review_implement','ui_review_implement','bug_review_clarify','ui_review_clarify','bug_review_no_change','ui_review_no_change') ORDER BY created_at,id",[rows.map(i=>i.id)])).rows:[];
+      `SELECT i.*,(SELECT count(*)::int FROM issue_repair_events e WHERE e.issue_id=i.id AND (e.event='blocked' OR (e.event='retest' AND e.detail::text LIKE '%still_happening%'))) AS failed_attempts,u.name AS user_name,u.email AS user_email FROM issue_reports i JOIN users u ON u.id=i.user_id ORDER BY i.created_at DESC`)).rows;
+    const events=rows.length?(await pool.query("SELECT issue_id,event,detail,created_at FROM issue_repair_events WHERE issue_id=ANY($1::int[]) AND event IN ('reviewing','fixing','testing','blocked','reporter_details','automatic_followup','automatic_clarification','retest','ready_to_test','bug_review_retest','ui_review_retest','automatic_retest_requested','bug_review_implement','ui_review_implement','bug_review_clarify','ui_review_clarify','bug_review_no_change','ui_review_no_change') ORDER BY created_at,id",[rows.map(i=>i.id)])).rows:[];
     const byId=new Map(rows.map(i=>[i.id,i]));
-    for(const event of events){try{const detail=JSON.parse(event.detail);const issue=byId.get(event.issue_id);(issue.progress_events||=[]).push({event:event.event,created_at:event.created_at,detail:{fix_summary:detail.fix_summary,retest_instructions:detail.retest_instructions,instructions:detail.instructions,decision:detail.decision,notes:detail.notes,result:detail.result}});if(event.event==='retest')(issue.retest_comments||=[]).push({notes:detail.notes,result:detail.result,created_at:event.created_at});}catch{}}
+    for(const event of events){try{const detail=event.event==='reporter_details'?{notes:event.detail}:JSON.parse(event.detail);const issue=byId.get(event.issue_id);(issue.progress_events||=[]).push({event:event.event,created_at:event.created_at,detail:{fix_summary:detail.fix_summary,retest_instructions:detail.retest_instructions,instructions:detail.instructions,decision:detail.decision,notes:detail.notes,result:detail.result,blocked_reason:detail.blocked_reason}});if(event.event==='retest')(issue.retest_comments||=[]).push({notes:detail.notes,result:detail.result,created_at:event.created_at});}catch{}}
+    const groups=new Map();for(const i of rows){const key=require('./public/issue-presentation').title(i).toLowerCase();if(!groups.has(key))groups.set(key,new Set());groups.get(key).add(i.user_id);}for(const i of rows)i.affected_testers=groups.get(require('./public/issue-presentation').title(i).toLowerCase()).size;
     res.json(rows);
   } catch (err) { console.error('[issues.admin-list]', err); res.status(500).json({ error:'failed' }); }
 });
@@ -1481,17 +1488,7 @@ app.get('/api/issues/mine', requireAuth, async (req,res)=>{
 
 require('./testing-hub').registerTestingHub(app,{pool,requireAuth,requireAdmin});
 
-app.post('/api/issues/:id/retest',requireAuth,async(req,res)=>{
-  try{
-    const id=parseInt(req.params.id,10),result=req.body&&req.body.result;
-    if(!Number.isInteger(id)||!['fixed','still_happening','unable_to_test'].includes(result))return res.status(400).json({error:'bad retest result'});
-    const notes=ticketText(req.body&&req.body.notes,2000);
-    const nextStatus=result==='fixed'?'tester_confirmed':'blocked';
-    const row=(await pool.query(`UPDATE issue_reports SET tester_result=$1,tester_notes=$2,tester_retested_at=now(),management_status=$3,blocked_reason=CASE WHEN $1='still_happening' THEN 'The tester checked again and confirmed the issue is still happening. Review their notes and choose Retry Repair or another action.' WHEN $1='unable_to_test' THEN 'The tester could not complete the retest. Review their comments, clarify what is needed, or send revised retest instructions.' ELSE NULL END,review_decision=NULL,review_note=NULL,repair_claim_hash=NULL,repair_lease_until=NULL,updated_at=now(),resolved_at=CASE WHEN $1='fixed' THEN now() ELSE NULL END WHERE id=$4 AND user_id=$5 AND (management_status='retest_requested' OR (management_status='ready_to_test' AND verification IS NOT NULL AND COALESCE(release_reference,'')<>'')) RETURNING *`,[result,notes,nextStatus,id,req.user.id])).rows[0];
-    if(!row)return res.status(404).json({error:'issue is not ready for retesting'});
-    await pool.query("INSERT INTO issue_repair_events(issue_id,event,detail) VALUES($1,'retest',$2)",[id,JSON.stringify({result,notes})]);logEvent(req.user.id,'issue_retest',{issue_id:id,result});res.json({ok:true,status:row.management_status});
-  }catch(e){console.error('[issues.retest]',e);res.status(500).json({error:'retest failed'});}
-});
+require('./issue-retest').registerRetest(app,{pool,requireAuth,ticketText,logEvent});
 
 require('./issue-ui-review').registerUiReview(app,{pool,requireAuth});
 
@@ -2216,26 +2213,22 @@ app.get('/api/pairs', requireAuth, async (req, res) => {
 });
 
 app.post('/api/pairs', requireAuth, async (req, res) => {
+  let client;
   try {
     if (!(await featureAllowed(req.user.id, 'before_after'))) return res.status(403).json({ error: 'feature unavailable' });
-    const b = req.body || {};
-    const beforeId = parseInt(b.before_id, 10), afterId = parseInt(b.after_id, 10);
-    if (!Number.isInteger(beforeId) || !Number.isInteger(afterId) || beforeId === afterId) return res.status(400).json({ error: 'two distinct captures required' });
-    if (!(await ownsCaptures(req.user.id, [beforeId, afterId]))) return res.status(403).json({ error: 'not your captures' });
-    // reject if either is already in a pair
-    const existing = (await pool.query(
-      `SELECT 1 FROM capture_pairs WHERE user_id=$1 AND (before_id IN ($2,$3) OR after_id IN ($2,$3)) LIMIT 1`,
-      [req.user.id, beforeId, afterId])).rows;
-    if (existing.length) return res.status(409).json({ error: 'one of these is already paired' });
-    const row = (await pool.query(
-      `INSERT INTO capture_pairs (user_id, before_id, after_id,comparison_opacity) VALUES ($1,$2,$3,$4) RETURNING *`,
-      [req.user.id, beforeId, afterId, b.comparison_opacity==null?null:Math.max(0,Math.min(1,Number(b.comparison_opacity)||0))])).rows[0];
-    logEvent(req.user.id, 'pair_create', {});
-    res.json({ ok: true, pair: row });
-  } catch (err) {
-    if (err && err.code === '23505') return res.status(409).json({ error: 'already paired' });
-    console.error('[pairs.create]', err); res.status(500).json({ error: 'pair failed' });
-  }
+    const b = req.body || {}, beforeId=Number(b.before_id), afterId=Number(b.after_id);
+    if (!Number.isInteger(beforeId)||!Number.isInteger(afterId)||beforeId===afterId) return res.status(400).json({error:'two distinct captures required'});
+    client=await pool.connect();await client.query('BEGIN');
+    const photos=(await client.query('SELECT id,job_id FROM captures WHERE user_id=$1 AND id=ANY($2::int[]) ORDER BY id FOR UPDATE',[req.user.id,[beforeId,afterId]])).rows;
+    if(photos.length!==2){await client.query('ROLLBACK');return res.status(403).json({error:'not your captures'});}
+    const existing=(await client.query('SELECT 1 FROM capture_pairs WHERE user_id=$1 AND (before_id IN ($2,$3) OR after_id IN ($2,$3)) LIMIT 1',[req.user.id,beforeId,afterId])).rows;
+    if(existing.length){await client.query('ROLLBACK');return res.status(409).json({error:'one of these is already paired'});}
+    const row=(await client.query(`INSERT INTO capture_pairs (user_id,before_id,after_id,comparison_opacity) VALUES($1,$2,$3,$4) RETURNING *`,[req.user.id,beforeId,afterId,b.comparison_opacity==null?null:Math.max(0,Math.min(1,Number(b.comparison_opacity)||0))])).rows[0];
+    // Inherit an existing job only for the unassigned photo. Never move assigned evidence between jobs.
+    const assigned=photos.find(p=>p.job_id!=null),unassigned=photos.find(p=>p.job_id==null);
+    if(assigned&&unassigned)await client.query('UPDATE captures SET job_id=$1 WHERE id=$2 AND user_id=$3 AND job_id IS NULL',[assigned.job_id,unassigned.id,req.user.id]);
+    await client.query('COMMIT');logEvent(req.user.id,'pair_create',{});res.json({ok:true,pair:row});
+  }catch(err){if(client)await client.query('ROLLBACK');if(err?.code==='23505')return res.status(409).json({error:'already paired'});console.error('[pairs.create]',err.message);res.status(500).json({error:'pair failed'});}finally{client?.release();}
 });
 
 app.post('/api/pairs/unpair', requireAuth, async (req, res) => {
