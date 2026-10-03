@@ -390,6 +390,7 @@ function renderApp() {
     picker.addEventListener('keydown',event=>{if(event.key==='Escape'){event.preventDefault();event.stopPropagation();picker.open=false;heading.focus();}});
     editionSwitcher.hidden=true;editionSwitcher.after(picker);
   }
+  void window.PhotoNotesQR?.resume({api,state,renderApp,toast});
   refreshIssueAttention();
   const updates=document.getElementById('issueUpdates');if(updates)updates.onclick=e=>{e.preventDefault();state.view='my-issues';renderApp();};
   const issueFab = document.getElementById('issueFab'); if (issueFab) issueFab.onclick = openIssueReporter;
@@ -418,7 +419,7 @@ function renderApp() {
   else if (state.view === 'hoa-visits') renderHoaVisits();
   else if (state.view === 'hoa-visit') renderHoaVisit(state.hoaVisitId);
   else if (state.view === 'hoa-assets') renderHoaAssets();
-  else if (state.view === 'hoa-asset') renderHoaAsset(state.hoaAssetId);
+  else if (state.view === 'hoa-asset') {const id=state.hoaAssetId;renderHoaAsset(id).then(()=>{if(state.view==='hoa-asset'&&state.hoaAssetId===id)window.PhotoNotesQR?.mountAsset({id,edition:selectedEdition(),api,esc,toast});});}
   else if (state.view === 'hoa-inspections') renderHoaInspections();
   else if (state.view === 'hoa-communities') renderHoaCommunities();
   else if (state.view === 'hoa-dashboard') renderHoaDashboard();
@@ -2468,9 +2469,6 @@ function captureCardHtml(c) {
     ${isConcreteClient()&&c.photo_path?`<button class="btn secondary slim concrete-area-button" data-id="${c.id}">Measure Patio / Foundation Area</button>`:''}
     ${(c.footprints||[]).map(f=>`<div class="concrete-evidence"><strong>${esc(f.name)}</strong><p>${esc(concreteAreaText(f))}</p>${f.notes?`<p>${esc(f.notes)}</p>`:''}</div>`).join('')}
     ${state.view === 'organize' && measurementOn() && c.defect_type ? `<div class="meta saved-classification"><strong>Classification:</strong> ${esc(defectLabelClient(c.defect_type))}${c.defect_type !== 'none' && c.defect_severity ? ' - ' + esc(c.defect_severity) : ''}</div>` : ''}
-    ${isConcreteClient()&&c.photo_path?`<button class="btn secondary slim concrete-area-button" data-id="${c.id}">Measure Patio / Foundation Area</button>`:''}
-    ${(c.footprints||[]).map(f=>`<div class="concrete-evidence"><strong>${esc(f.name)}</strong><p>${esc(concreteAreaText(f))}</p>${f.notes?`<p>${esc(f.notes)}</p>`:''}</div>`).join('')}
-    ${state.view === 'organize' && measurementOn() && c.defect_type ? `<div class="meta saved-classification"><strong>Classification:</strong> ${esc(defectLabelClient(c.defect_type))}${c.defect_type !== 'none' && c.defect_severity ? ' - ' + esc(c.defect_severity) : ''}</div>` : ''}
     ${isConcreteClient()&&c.photo_path?`<button class="btn secondary slim" data-visual-analysis="${c.id}">Analyze Photo</button>`:''}
     ${c.concrete_reviewed_observation&&isConcreteClient()?`<p><strong>User Reviewed visual observation:</strong> ${esc(c.concrete_reviewed_observation)}</p>`:''}
     ${classifyRow}
@@ -2574,6 +2572,7 @@ function pairCardHtml(before, after, pair={}) {
 }
 
 function wireCards(cards, rows) {
+  window.PhotoNotesQR?.wireSavedCards(cards,rows,selectedEdition(),{api,esc,toast});
   wirePhotoMarkers(cards);
   cards.querySelectorAll('.concrete-area-button').forEach(b=>b.onclick=()=>openConcreteFootprints(Number(b.dataset.id)));
   cards.querySelectorAll('.capchk').forEach(c => c.onchange = () => { if (c.checked) state.selectedIds.add(String(c.value)); else state.selectedIds.delete(String(c.value)); });

@@ -918,6 +918,7 @@ const ramoIntake=require('./ramo-intake').registerRamoIntake(app,{pool,requireAu
 require('./related-photos').register(app,{pool,requireAuth,currentProduct});
 require('./photo-comments').register(app,{pool,requireAuth,currentProduct});
 registerConcreteFootprints(app,{pool,requireAuth,requireConcrete,computeZone});
+require('./visual-analysis').registerVisualAnalysis(app,{pool,requireAuth,requireConcrete,localPhoto,visionJSON});
 require('./location-intelligence').registerLocationIntelligence(app,{pool,requireAuth,currentProduct});
 
 app.get('/api/concrete/report',requireAuth,requireConcrete,async(req,res)=>{try{

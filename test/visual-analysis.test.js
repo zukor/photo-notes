@@ -12,3 +12,6 @@ test('Paving classifier retains its transport, prompt vocabulary, normalization 
  vm.createContext(context);vm.runInContext(source.slice(start,end),context);const r=await context.classifyCapture(9,1);assert.equal(r.capture.defect_type,'pothole');assert.equal(r.capture.defect_severity,'high');assert.equal(r.capture.defect_user_confirmed,false);assert.deepEqual(r.capture.defect_ai,raw);assert.match(prompt,/alligator_cracking, transverse_cracking, longitudinal_cracking/);assert.match(prompt,/base_failure, other, none/);assert.equal(updates[0][5],9);
  data=null;const failure=await context.classifyCapture(9,1);assert.equal(failure.ai_error,'billing');assert.equal(updates.length,1);
 });
+test('full server wires shared routes, schema and reviewed-only report/search observations',()=>{
+ const fs=require('node:fs'),path=require('node:path'),read=name=>fs.readFileSync(path.join(__dirname,'..',name),'utf8');const server=read('server.js');assert.equal((server.match(/registerVisualAnalysis\(app/g)||[]).length,1);assert.match(read('db.js'),/visual-analysis'\).SCHEMA/);assert.match(server,/capture\.concrete_reviewed_observation&&`User Reviewed visual observation:/);assert.match(server,/row\.concrete_reviewed_observation&&`User Reviewed visual observation:/);assert.match(server,/COALESCE\(c\.concrete_reviewed_observation,''\) ILIKE/);
+});
