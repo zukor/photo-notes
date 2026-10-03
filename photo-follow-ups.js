@@ -88,7 +88,7 @@ async function assignment(db,user,context,value){
  if(!context.company_id||!(await db.query('SELECT 1 FROM hoa_company_members m JOIN users u ON u.id=m.user_id WHERE m.company_id=$1 AND m.user_id=$2 AND u.active=true',[context.company_id,id])).rowCount)throw fail('Choose an authorized team member.');return id;
 }
 async function generate(db,s,now=new Date()){
- if(!s.active)return;const target=today(s.timezone,now);if((await db.query("SELECT 1 FROM photo_follow_up_occurrences WHERE schedule_id=$1 AND status='pending' AND due_date>$2::date LIMIT 1",[s.id,target])).rowCount)return;let index=s.next_index;
+ if(!s.active)return;const target=today(s.timezone,now),previous=s.next_index>0?recurrenceDate(s.anchor_date,s.recurrence,s.next_index-1):null;if(previous&&previous>target&&(await db.query("SELECT 1 FROM photo_follow_up_occurrences WHERE schedule_id=$1 AND status='pending' AND due_date=$2::date LIMIT 1",[s.id,previous])).rowCount)return;let index=s.next_index;
  for(let n=0;n<200;n++){
   const date=recurrenceDate(s.anchor_date,s.recurrence,index);if(!date)break;
   await db.query(`INSERT INTO photo_follow_up_occurrences(schedule_id,due_date,title,instructions,timezone) VALUES($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING`,[s.id,date,s.title,s.instructions,s.timezone]);
