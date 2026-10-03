@@ -35,7 +35,7 @@ test('first retests are automatic, durable, and return first failed bug results 
   await pool.query("UPDATE issue_reports SET management_status='ready_to_test',verification='Verified',release_reference='test-release' WHERE id=$1",[positive]);
   const unable=await fetch('http://127.0.0.1:'+server.address().port+'/api/issues/'+positive+'/retest',{method:'POST',headers:{'Content-Type':'application/json',Cookie:'pn_token='+token},body:JSON.stringify({result:'unable_to_test',notes:'Original test device unavailable.'})});
   assert.equal(unable.status,200);assert.equal((await unable.json()).status,'blocked');
-  const unableRow=(await pool.query('SELECT * FROM issue_reports WHERE id=$1',[positive])).rows[0];assert.equal(unableRow.tester_result,'unable_to_test');assert.match(unableRow.blocked_reason,/could not complete/);
+  const unableRow=(await pool.query('SELECT * FROM issue_reports WHERE id=$1',[positive])).rows[0];assert.equal(unableRow.tester_result,'unable_to_test');assert.match(unableRow.blocked_reason,/prevented the retest/);
   await pool.query("UPDATE issue_reports SET management_status='ready_to_test',verification='Verified',release_reference='test-release' WHERE id=$1",[positive]);
   const failedDeployed=await fetch('http://127.0.0.1:'+server.address().port+'/api/issues/'+positive+'/retest',{method:'POST',headers:{'Content-Type':'application/json',Cookie:'pn_token='+token},body:JSON.stringify({result:'still_happening',notes:'Deployed change still fails.'})});
   assert.equal(failedDeployed.status,200);assert.equal((await failedDeployed.json()).status,'new');
