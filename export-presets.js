@@ -32,7 +32,7 @@ function register(app,{pool,requireAuth}){
  if(!name||name.length>80||typeof description!=='string'||description.length>500||!b.config||typeof b.config!=='object')return res.status(400).json({error:'Enter a preset name (up to 80 characters) and valid settings.'});
  if(req.params.id&&!/^\d{1,9}$/.test(req.params.id))return res.status(404).json({error:'Preset not found.'});
  let client;try{client=await pool.connect();await client.query('BEGIN');await client.query('SELECT id FROM users WHERE id=$1 FOR UPDATE',[req.user.id]);
- if(req.params.id&&!(await client.query('SELECT id FROM export_presets WHERE id=$1 AND user_id=$2',[req.params.id,req.user.id])).rows.length){await client.query('ROLLBACK');return res.status(404).json({error:'Preset not found.'});}
+ if(req.params.id&&!(await client.query('SELECT id FROM export_presets WHERE id=$1 AND user_id=$2 FOR UPDATE',[req.params.id,req.user.id])).rows.length){await client.query('ROLLBACK');return res.status(404).json({error:'Preset not found.'});}
  if(b.is_default===true)await client.query('UPDATE export_presets SET is_default=false WHERE user_id=$1',[req.user.id]);
  const {config,warnings}=normalize(b.config),args=[name,description,JSON.stringify(config),b.is_default===true,req.user.id];
  const result=req.params.id?await client.query('UPDATE export_presets SET name=$1,description=$2,config=$3,is_default=$4 WHERE user_id=$5 AND id=$6 RETURNING *',[...args,req.params.id]):await client.query('INSERT INTO export_presets(name,description,config,is_default,user_id) VALUES($1,$2,$3,$4,$5) RETURNING *',args);
