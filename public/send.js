@@ -74,7 +74,7 @@
   function showSavedShare(file, text) {
     document.getElementById('captureShareDialog')?.remove();
     var modal = document.createElement('div');modal.id='captureShareDialog';modal.className='export-share-modal';
-    modal.innerHTML='<section class="export-share-dialog" role="dialog" aria-modal="true" aria-labelledby="captureShareTitle"><h2 id="captureShareTitle">'+tr('Photo saved on this device')+'</h2><p>'+tr('Tap Share to choose where to send it. Closing sharing keeps your photo and notes here.')+'</p><button class="btn" data-share>'+tr('Share')+'</button><button class="btn secondary" data-close>'+tr('Close')+'</button></section>';
+    modal.innerHTML='<section class="export-share-dialog" role="dialog" aria-modal="true" aria-labelledby="captureShareTitle"><h2 id="captureShareTitle">'+tr('Saved in Photo Notes')+'</h2><p>'+tr('Your photo and notes are saved in Photo Notes. Pending uploads are stored in this browser on this device. Find them in the account menu under Pending Photos.')+'</p><p>'+tr('This does not automatically save a copy to Photos/Gallery or Files.')+'</p><p>'+tr('Tap Share to choose where to send or save a copy.')+'</p><button class="btn" data-share>'+tr('Share')+'</button><button class="btn secondary" data-close>'+tr('Close')+'</button></section>';
     var close=function(){modal.remove();q('send')?.focus();};
     modal.querySelector('[data-close]').onclick=close;
     modal.querySelector('[data-share]').onclick=async function(){this.disabled=true;try{await share(file,text);}finally{this.disabled=false;}};
