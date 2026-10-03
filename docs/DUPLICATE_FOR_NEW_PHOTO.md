@@ -33,7 +33,7 @@ Property Areas is not yet present on the current main baseline. The allowlist su
 
 ## Files
 
-`public/duplicate-context.js`, `public/app.js`, `server.js`, `public/help-catalog.js`, `public/index.html`, `public/sw.js`, `public/admin.html`, `public/install.html`, `test/duplicate-context.test.js`, `test/help-coverage.test.js`, `scripts/test-duplicate-context.cjs`, `scripts/test-duplicate-evidence.cjs`, and this report.
+`public/duplicate-context.js`, `public/app.js`, `server.js`, `public/help-catalog.js`, `public/index.html`, `public/sw.js`, `test/duplicate-context.test.js`, `scripts/test-duplicate-context.cjs`, `scripts/test-duplicate-evidence.cjs`, and this report.
 
 ## Validation
 
