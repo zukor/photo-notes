@@ -41,7 +41,7 @@ function data(url){const p=url.pathname;
 (async()=>{
  const app=express();app.use('/vendor/leaflet',express.static(path.dirname(require.resolve('leaflet/dist/leaflet.js'))));app.use(express.static(path.join(root,'public')));
  const serverSource=fs.readFileSync(path.join(root,'server.js'),'utf8');
- function publicForm(prefix,locals){const line=serverSource.split('\n').find(s=>s.includes("app.get('"+prefix));const a=line.indexOf('res.send(`')+9,b=line.lastIndexOf('`);');return vm.runInNewContext('('+line.slice(a,b+1)+')',{escXml:s=>String(s??'').replace(/[&<>"']/g,' '),...locals});}
+ function publicForm(prefix,locals){const line=serverSource.split('\n').find(s=>s.includes("app.get('"+prefix)&&s.includes("res.send(`"));const a=line.indexOf('res.send(`')+9,b=line.lastIndexOf('`);');return vm.runInNewContext('('+line.slice(a,b+1)+')',{escXml:s=>String(s??'').replace(/[&<>"']/g,' '),...locals});}
  app.get('/completion-photos/help-fixture',(req,res)=>res.send(publicForm('/completion-photos/:token',{row:{community_name:'Test property',title:'Repair gate',description:'Review returned evidence',original_photo:'',recipient_name:'',token:'help-fixture'}})));
  app.get('/review/help-fixture',(req,res)=>res.send(publicForm('/review/:token',{p:{title:'Photo review',message:'Review every photograph',status:'pending',token:'help-fixture'},cards:'<article><img src="/logo.svg" alt="Project photo"><p>Observed condition</p></article>'})));
  const server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));const base=process.env.PN_HELP_BASE_URL||`http://127.0.0.1:${server.address().port}`;
