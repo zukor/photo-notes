@@ -583,6 +583,7 @@ async function init() {
   await pool.query(require('fs').readFileSync(require('path').join(__dirname,'photo-requests-schema.sql'),'utf8'));
   await pool.query(require('./custom-fields').SCHEMA);
   await pool.query(require('./photo-markers').SCHEMA);
+  await pool.query(require('./photo-follow-ups').SCHEMA);
   await pool.query(require('./saved-views').SCHEMA);
 
   await pool.query("ALTER TABLE captures ADD COLUMN IF NOT EXISTS urgency TEXT NOT NULL DEFAULT 'standard'");

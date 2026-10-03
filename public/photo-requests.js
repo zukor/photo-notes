@@ -1,6 +1,6 @@
 'use strict';
 window.PhotoNotesRequests={
- async render({api,esc,toast,edition,openPhoto}){
+ async render({api,esc,toast,edition,openPhoto,followUp,focusRequestId,clearFollowUp}){
   const body=document.getElementById('body');body.className='photo-requests';
   const json=async(url,options)=>{const r=await api(url,options),d=await r.json();if(!r.ok)throw new Error(d.error||'Request failed.');return d;};
   const labels={open:'Open',partially_submitted:'Partially Submitted',completed:'Completed',expired:'Expired',cancelled:'Cancelled'};
@@ -22,10 +22,13 @@ window.PhotoNotesRequests={
     }catch(e){toast(e.message);}});
    };
    renderList(requests);
+   if(focusRequestId){list.querySelector('[data-pr-detail="'+focusRequestId+'"]')?.click();clearFollowUp?.();}
+   if(followUp){document.getElementById('prTitle').value=followUp.occurrence.title;document.getElementById('prInstructions').value=followUp.occurrence.instructions||'Photograph the same subject as the reference Photo Note.';document.getElementById('prViews').value='Follow-Up Photograph';const select=document.getElementById('prRelated');if([...select.options].some(o=>o.value===String(followUp.reference?.id)))select.value=String(followUp.reference.id);const text=document.createElement('p');text.textContent='This request satisfies the scheduled photograph after every requested view is received. Copy or share the link yourself.';document.getElementById('prCreateForm').prepend(text);}
+
    document.getElementById('prRefresh').onclick=async()=>{try{renderList(await json('/api/photo-requests'));toast('Requests refreshed');}catch(e){toast(e.message);}};
    document.getElementById('prCreateForm').onsubmit=async event=>{
     event.preventDefault();const val=id=>document.getElementById(id).value,button=document.getElementById('prCreate'),status=document.getElementById('prCreateStatus');button.disabled=true;
-    try{const created=await json('/api/photo-requests',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:val('prTitle'),recipient_name:val('prRecipient'),instructions:val('prInstructions'),views:val('prViews').split('\n').map(v=>v.trim()).filter(Boolean),days:Number(val('prDays')),allow_partial:document.getElementById('prPartial').checked,related_capture_id:val('prRelated'),job_id:val('prJob'),item_id:document.getElementById('prItem')?.value||''})});status.textContent='Request created. Copy or share its link below. Creating a request does not send it.';renderList([{...created,received_count:0},...await json('/api/photo-requests').then(rows=>rows.filter(r=>r.id!==created.id))]);}
+    try{const created=await json('/api/photo-requests',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({follow_up_occurrence_id:followUp?.occurrence.id,title:val('prTitle'),recipient_name:val('prRecipient'),instructions:val('prInstructions'),views:val('prViews').split('\n').map(v=>v.trim()).filter(Boolean),days:Number(val('prDays')),allow_partial:document.getElementById('prPartial').checked,related_capture_id:val('prRelated'),job_id:val('prJob'),item_id:document.getElementById('prItem')?.value||''})});followUp=null;clearFollowUp?.();status.textContent='Request created. Copy or share its link below. Creating a request does not send it.';renderList([{...created,received_count:0},...await json('/api/photo-requests').then(rows=>rows.filter(r=>r.id!==created.id))]);}
     catch(e){status.textContent=e.message;}finally{button.disabled=false;}
    };
   }catch(e){const status=document.getElementById('prStatus');if(status)status.textContent=e.message;}
