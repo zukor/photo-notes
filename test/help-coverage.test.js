@@ -9,7 +9,7 @@ test('all authored Help terms have definitions and instructions contain no place
 });
 test('all entrypoints use the same live Help and startup enforces authored coverage',()=>{
  const fs=require('node:fs');
- for(const file of ['public/index.html','public/admin.html','public/install.html']){const s=fs.readFileSync(file,'utf8');assert(s.includes('/help.css?v=320'));assert(s.includes('/help-catalog.js?v=320'));assert(s.includes('/help.js?v=320'));}
- const s=fs.readFileSync('server.js','utf8');assert.equal((s.match(/\/help.css\?v=320/g)||[]).length,3);
+ for(const file of ['public/index.html','public/admin.html','public/install.html']){const s=fs.readFileSync(file,'utf8');assert(s.includes('/help.css?v=321'));assert(s.includes('/help-catalog.js?v=321'));assert(s.includes('/help.js?v=321'));}
+ const s=fs.readFileSync('server.js','utf8');assert.equal((s.match(/\/help.css\?v=321/g)||[]).length,3);
  const p=require('../package.json');assert(p.scripts.postinstall.includes('help-coverage'));assert(p.scripts.prestart.includes('help-coverage'));
 });
