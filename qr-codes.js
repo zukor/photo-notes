@@ -14,7 +14,7 @@ async function target(pool,user,type,id,edition){
 function registerQrCodes(app,{pool,requireAuth,currentProduct}){
  const wrap=fn=>async(req,res)=>{res.set('Cache-Control','no-store');try{await fn(req,res);}catch(e){console.error('[qr]',e.message);res.status(500).json({error:'QR code unavailable.'});}};
  const access=async(req,res,type,id)=>{const product=await currentProduct(req.user.id),edition=product==='general'?'pro':product,record=await target(pool,req.user.id,type,id,edition);if(!record)res.status(404).json({error:'Photo Notes context unavailable. Sign in with an authorized account.'});return record;};
- const link=(req,t)=>`${req.protocol}://${req.get('host')}/qr/${t}`;
+ const link=(req,t)=>{const host=req.get('host'),protocol=/^(localhost|127\.0\.0\.1)(:\d+)?$/i.test(host)?req.protocol:'https';return `${protocol}://${host}/qr/${t}`;};
  const result=(req,row,record)=>({active:!!row&&!row.disabled,url:row&&!row.disabled?link(req,row.token):null,name:record.name,property:record.property||'',type:row?.target_type});
  // This public route reveals no record metadata and offers no uploads.
  app.get('/qr/:token',(req,res)=>{res.set({'Cache-Control':'no-store','Referrer-Policy':'no-referrer'});if(!validToken(req.params.token))return res.status(404).send('Photo Notes context unavailable.');res.redirect('/?qr='+encodeURIComponent(req.params.token));});
