@@ -80,7 +80,8 @@ function register(app,{pool,requireAuth,currentProduct}){
    const count=(await db.query(`SELECT count(*)::int n FROM custom_field_definitions WHERE user_id=$1 AND active=true AND scope=$2 AND edition IS NOT DISTINCT FROM $3 AND id<>$4`,[req.user.id,d.scope,d.edition,req.params.id])).rows[0].n;
    if(d.active&&count>=LIMITS.active)fail('Maximum 12 active fields per scope');
    const revision=(old?.revision||0)+1,versions={...(old?.versions||{}),[revision]:d};
-   const row=(await db.query(`INSERT INTO custom_field_definitions(id,user_id,scope,edition,name,type,prompt,required,active,options,revision,versions) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT(id) DO UPDATE SET name=EXCLUDED.name,prompt=EXCLUDED.prompt,required=EXCLUDED.required,active=EXCLUDED.active,options=EXCLUDED.options,revision=EXCLUDED.revision,versions=EXCLUDED.versions,updated_at=now() RETURNING *`,[req.params.id,req.user.id,d.scope,d.edition,d.name,d.type,d.prompt,d.required,d.active,JSON.stringify(d.options),revision,JSON.stringify(versions)])).rows[0];
+   const row=(await db.query(`INSERT INTO custom_field_definitions(id,user_id,scope,edition,name,type,prompt,required,active,options,revision,versions) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT(id) DO UPDATE SET name=EXCLUDED.name,prompt=EXCLUDED.prompt,required=EXCLUDED.required,active=EXCLUDED.active,options=EXCLUDED.options,revision=EXCLUDED.revision,versions=EXCLUDED.versions,updated_at=now() WHERE custom_field_definitions.user_id=EXCLUDED.user_id RETURNING *`,[req.params.id,req.user.id,d.scope,d.edition,d.name,d.type,d.prompt,d.required,d.active,JSON.stringify(d.options),revision,JSON.stringify(versions)])).rows[0];
+   if(!row)fail('Field unavailable',404);
    await db.query('COMMIT');res.json(row);
   }catch(e){if(db)await db.query('ROLLBACK');res.status(e.status||503).json({error:e.status?e.message:'Field could not be saved'});}finally{db?.release();}
  });
