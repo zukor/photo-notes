@@ -1,0 +1,10 @@
+.comments-overlay{position:fixed;inset:0;z-index:1400;background:#0008;overflow:auto;padding:12px;box-sizing:border-box;color:#000;font-family:Arial,Helvetica,sans-serif;text-align:left}
+.comments-panel{background:#fff;max-width:720px;margin:auto;padding:18px;border-radius:12px;color:#000;overflow-wrap:anywhere}
+.comments-panel *{color:#000;text-align:left;box-sizing:border-box}
+.comments-panel button,.comments-panel select{min-height:44px;background:#fff;border:1px solid #000;border-radius:6px;padding:10px;margin:4px;font:inherit}
+.comments-panel textarea{width:100%;font:inherit;font-size:16px;background:#fff;border:1px solid #000;padding:10px;min-height:110px}
+.comments-context{display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap;border-bottom:1px solid #000;padding:12px 0}
+.comments-context img{width:120px;height:110px;object-fit:contain}
+.comment-entry{padding:12px 0;border-bottom:1px solid #000}.comment-entry[data-reply-to]{padding-left:12px;border-left:2px solid #000}
+.comment-text{white-space:pre-wrap}.comments-panel #commentsPost{background:#ffdf62;font-weight:bold}
+@media(max-width:480px){.comments-overlay{padding:6px}.comments-panel{padding:12px}.comments-panel button{margin-left:0}}
