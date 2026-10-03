@@ -194,7 +194,7 @@ async function boot() {
     prefetchGroups();
     if(new URLSearchParams(location.search).has('issues'))state.view='my-issues';
     renderApp();
-    setTimeout(maybeOfferInstall, 700);
+    setTimeout(()=>{if(window.PhotoNotesFirstUse?.offer(state.me))installOfferShown=true;else maybeOfferInstall();},700);
   } else renderLogin();
   } catch(error) {renderLogin();document.getElementById('loginErr').textContent='Connection unavailable. Reconnect and sign in to resume pending uploads. Saved captures remain in this browser.';}
 }
@@ -220,7 +220,7 @@ function showInstallHelp(){
   document.body.append(dialog);PhotoNotesInstall.mount(dialog.querySelector('#installDeviceGuide'));dialog.querySelector('#closeInstallHelp').onclick=()=>dialog.close();dialog.addEventListener('close',()=>dialog.remove());dialog.showModal();
 }
 function maybeOfferInstall() {
-  if(document.getElementById('issueModal')?.hidden===false)return;
+  if(document.getElementById('firstUseSetup')||document.getElementById('issueModal')?.hidden===false)return;
   if (!state.me || installOfferShown || isInstalledApp() || !isPhoneInstallCandidate()) return;
   try{if(localStorage.getItem(INSTALL_PROMPT_KEY))return;}catch(error){}
   const ios = isIOS();
