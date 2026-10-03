@@ -51,3 +51,15 @@ test('deactivated accounts and invalid versions cannot switch',async()=>{
   assert.equal((await h.call('/api/switch-edition',{edition:'__proto__'})).code,400);
   assert.equal(h.writes.length,0);
 });
+
+test('Property Manager Pro keeps its identity through assignment and switching',async()=>{
+  const {currentEdition}=require('../editions');
+  const h=harness({edition_access:['hoa','property']});
+  assert.equal((await h.call('/api/switch-edition',{edition:'property'})).code,200);
+  assert.equal(h.record.plan,'pro');
+  assert.equal(currentEdition(h.record),'property');
+  assert.equal((await h.call('/api/switch-edition',{edition:'hoa'})).code,200);
+  assert.equal(currentEdition(h.record),'hoa');
+  const denied=harness({edition_access:['hoa']});
+  assert.equal((await denied.call('/api/switch-edition',{edition:'property'})).code,403);
+});
