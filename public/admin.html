@@ -176,7 +176,7 @@
     function st(n, l){ return `<span class="stat"><div class="n">${n}</div><div class="l">${l}</div></span>`; }
     function num(v){ return Number(v) || 0; }
     let allUsers = [], selectedUserId = null;
-    const editionLabels={basic:'Photo Notes Basic',pro:'Photo Notes Pro',contractor:'General Contractor Pro',roads:'Road Issue Reporter',paving:'Paving Pro',hoa:'HOA Maintenance Pro',concrete:'Concrete Pro',roofer:'Roofer Pro'};
+    const editionLabels={basic:'Photo Notes Basic',pro:'Photo Notes Pro',contractor:'General Contractor Pro',roads:'Road Issue Reporter',paving:'Paving Pro',hoa:'HOA Maintenance Pro',property:'Property Manager Pro',concrete:'Concrete Pro',roofer:'Roofer Pro'};
     function allowedVersions(u){return Array.isArray(u.edition_access)?u.edition_access:u.role==='admin'?Object.keys(editionLabels):[u.plan==='pro'?(u.pro_type==='general'?'pro':u.pro_type||'paving'):u.pro_type==='roads'?'roads':'basic'];}
     function versionChecks(owner,access){return Object.entries(editionLabels).map(([key,label])=>`<label class="feature-item"><input type="checkbox" data-version-owner="${owner}" value="${key}" ${access.includes(key)?'checked':''}><span>${label}</span></label>`).join('');}
     function showUser(id){selectedUserId=id;renderUserList();document.getElementById('users').scrollIntoView({block:'start'});document.getElementById(id?'backToUsers':'userSearch').focus();}
@@ -429,7 +429,7 @@
                 <div class="profile-menu" id="profileMenu" hidden>
                   <div class="profile-name">${esc((currentUser && currentUser.name) || 'Administrator')}</div>
                   <div class="profile-email">${esc((currentUser && currentUser.email) || '')}</div>
-                  <div class="profile-plan">${currentUser && currentUser.pro_type==='roads' ? 'Road Issue Reporter' : currentUser && currentUser.plan === 'pro' ? (currentUser.pro_type==='general'?'Photo Notes Pro':currentUser.pro_type==='contractor'?'General Contractor Pro':currentUser.pro_type==='hoa'?'HOA Maintenance Pro':currentUser.pro_type==='concrete'?'Concrete Pro':currentUser.pro_type==='roofer'?'Roofer Pro':'Paving Pro') : 'Basic'} · Administrator</div>
+                  <div class="profile-plan">${currentUser && currentUser.pro_type==='roads' ? 'Road Issue Reporter' : currentUser && currentUser.plan === 'pro' ? (currentUser.pro_type==='general'?'Photo Notes Pro':currentUser.pro_type==='contractor'?'General Contractor Pro':currentUser.pro_type==='property'?'Property Manager Pro':currentUser.pro_type==='hoa'?'HOA Maintenance Pro':currentUser.pro_type==='concrete'?'Concrete Pro':currentUser.pro_type==='roofer'?'Roofer Pro':'Paving Pro') : 'Basic'} · Administrator</div>
                   <a href="/admin?view=admin">Admin Dashboard</a>
                   ${accountIsSuperAdmin?'<a href="/admin?view=super">Super Admin Dashboard</a>':''}
                   <button type="button" id="signout">Sign Out</button>

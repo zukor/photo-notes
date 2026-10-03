@@ -1,6 +1,6 @@
 const assert=require('node:assert/strict'),{chromium,webkit}=require('playwright'),express=require('express');
 (async()=>{const app=express();app.use(express.static(require('node:path').join(__dirname,'../public')));const server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));let cases=0;
-try{for(const engine of [chromium,webkit]){const browser=await engine.launch();try{for(const edition of ['general','contractor','paving','concrete','hoa','roofer'])for(const width of [390,1440]){
+try{for(const engine of [chromium,webkit]){const browser=await engine.launch();try{for(const edition of ['general','contractor','paving','concrete','hoa','property','roofer'])for(const width of [390,1440]){
  const page=await browser.newPage({viewport:{width,height:900},serviceWorkers:'block',userAgent:'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/154.0.0.0 Safari/537.36'});page.setDefaultTimeout(10000);const exports=[],errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.addInitScript(()=>{localStorage.setItem('pn_install_prompt_dismissed_v1','dismissed');localStorage.setItem('pn_first_use_v1:'+encodeURIComponent('test@example.invalid'),'done');});
  await page.route('**/api/**',route=>{const u=new URL(route.request().url()),p=u.pathname;let data=[];
