@@ -21,3 +21,8 @@ test('vague reports do not invent a diagnosis or interpret clear controls as Cle
 test('all relevant checks fit the submission limit even for oversized raw reports',()=>{
  const message=build({description:'crop annotation screenshot template word sharing search scan microphone broken image '.repeat(1000),blocked_reason:'camera permission and network connection'});assert(message.length<5000);
 });
+
+
+test('retest guidance names every current edition including Issue Reporter',()=>{
+ for(const [edition,details] of Object.entries(require('../editions').EDITIONS))assert.match(build({reported_edition:edition}),new RegExp('Select '+details.label.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\.'));
+});

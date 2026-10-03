@@ -2,7 +2,7 @@
   if(typeof module==='object'&&module.exports)module.exports=factory();
   else root.PhotoNotesRetestGuidance=factory();
 })(typeof window!=='undefined'?window:globalThis,function(){
-  const versions={basic:'Photo Notes Basic',pro:'Photo Notes Pro',paving:'Paving Pro',concrete:'Concrete Pro',contractor:'General Contractor Pro',hoa:'HOA Maintenance Pro',roofer:'Roofer Pro',roads:'Road Issue Reporter'};
+  const versions={basic:'Photo Notes Basic',issue:'Issue Reporter',property:'Property Manager Pro',pro:'Photo Notes Pro',paving:'Paving Pro',concrete:'Concrete Pro',contractor:'General Contractor Pro',hoa:'HOA Maintenance Pro',roofer:'Roofer Pro',roads:'Road Issue Reporter'};
   function checksFor(issue={}){
     // Use report context to select user-side checks. Never forward private run
     // logs, credentials, or speculative repair diagnoses into the message.
