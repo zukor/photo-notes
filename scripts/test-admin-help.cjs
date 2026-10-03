@@ -1,0 +1,44 @@
+// Local UI Help verification. Mock data and blocked external traffic prevent production writes/provider calls.
+const express=require('express'),assert=require('node:assert/strict'),fs=require('node:fs');
+const {chromium,webkit}=require('playwright');
+const vm=require('node:vm');
+const path=require('node:path'),root=path.join(__dirname,'..');
+const photo={id:1,user_id:99,photo_path:'/logo.svg',photo_title:'Site photo',note:'Observed condition',area_tags:['Site'],address:'Test site',latitude:29.5,longitude:-98.5,created_at:'2026-10-03T10:00:00Z',overlays:[],kind:'note'};
+const job={id:1,name:'Test job',job_number:'J1',customer:'Test customer',address:'Test site',photo_count:1};
+const group={id:1,title:'Evidence report',description:'Review photos',item_count:1,created_at:photo.created_at,layout:{font:'Arial',photo_layout:'one_per_page'}};
+const community={id:1,name:'Test property',address:'Test site'};
+const asset={id:1,name:'Gate',community_id:1,community_name:community.name,asset_type:'gate',condition:'good',location_description:'North entrance',photo_count:1};
+const item={id:1,title:'Repair gate',community_id:1,community_name:community.name,priority:'routine',status:'new',item_type:'maintenance',area:'Maintenance',photo_path:'/logo.svg',description:'Hinge damage',budget_source:'operating',created_at:photo.created_at};
+const stop={id:1,name:'North entrance',required_views:['overview','close-up'],status:'pending',photos:[]};
+const visit={id:1,route_name:'Monthly visit',community_name:community.name,status:'in_progress',started_at:photo.created_at,stops:[stop]};
+const route={id:1,name:'Monthly inspection',community_id:1,community_name:community.name,stops:[stop],stop_count:1};
+const assignment={id:1,user_id:99,edition:'pro',title:'Pro check',title_es:'Prueba Pro',summary:'Verify photo flow',status:'assigned',template_id:1,steps:[{id:'step1',title:'Take photo',instruction:'Take a photo',expected:'Preview visible'}],results:{},issues:[],photos:[]};
+const user={id:99,email:'help-test@example.invalid',name:'Help test',plan:'pro',pro_type:'general',role:'admin',is_super_admin:true,is_testing_manager:true,is_tester:true,edition_access:['basic','pro','contractor','roads','paving','hoa','concrete','roofer'],features:{measurements:true,extra_work:true,before_after:true},active:true};
+function data(url){const p=url.pathname;
+ if(p==='/api/me')return user;if(p==='/api/areas')return ['Site'];if(p==='/api/jobs')return [job];
+ if(p==='/api/captures'||p==='/api/captures/search')return [photo];if(p==='/api/groups')return [group];
+ if(p==='/api/groups/1')return {group,items:[{...photo,id:1,capture_id:1,caption:'Condition',sort_order:0}],pairs:[],zones:{}};
+ if(p==='/api/document-settings')return {branding:{company_name:'Test company'}};
+ if(p==='/api/hoa/context')return {company:{id:1,name:'Test management'},members:[],communities:[community]};
+ if(p==='/api/hoa/communities')return [community];if(p==='/api/hoa/assets')return [asset];if(p==='/api/hoa/assets/1')return {asset,photos:[{...photo,photo_type:'identity'}]};
+ if(p==='/api/hoa/routes')return [route];if(p==='/api/hoa/visits')return [visit];if(p==='/api/hoa/visits/1')return visit;
+ if(p==='/api/hoa/items')return [item];if(p==='/api/hoa/items/1')return {item,photos:[],history:[],comments:[]};
+ if(p==='/api/hoa/report')return {items:[item],summary:{}};if(p==='/api/hoa/dashboard')return {open:1,counts:{total:1,new:1},items:[item],communities:[community]};
+ if(p==='/api/concrete/dashboard')return {summary:{},captures:[photo],jobs:[job],readiness:[]};
+ if(p.includes('concrete/report'))return {summary:{},counts:{total:1},photos:[photo],captures:[photo],readiness:[],jobs:[job]};
+ if(p==='/api/ramo-intake')return {submissions:[]};
+ if(p==='/api/document-links')return [{id:1,path:'/shared-document/test',filename:'Report.pdf',expires_at:'2026-10-30T10:00:00Z'}];
+ if(p==='/api/jobs/1/timeline')return {job,captures:[photo],events:[]};
+ if(p==='/api/issues/mine')return [{id:1,description:'Test app issue',management_status:'retest_requested',issue_type:'bug_problem',created_at:photo.created_at,history:[]}];
+ if(p==='/api/testing/assignments/mine')return [assignment];if(p==='/api/admin/testing/assignments')return [assignment];
+ if(p==='/api/admin/testing/templates')return [{id:1,title:'Template',title_es:'Plantilla',summary:'Test',edition:'pro',steps:assignment.steps,assignee_ids:[99]}];
+ if(p==='/api/admin/users')return [user];if(p==='/api/admin/usage')return {users:[user],totals:{}};
+ if(p==='/api/admin/stats'||p==='/api/admin/system'||p==='/api/billing/config'||p==='/api/config')return {};
+ if(p==='/api/issues/attention')return {count:0};if(p==='/api/ewr/1')return {id:1,job_id:1,reason:'other',status:'open',description:'Added work',photos:[photo],notifications:[]};
+ if(p.includes('/evidence'))return {capture:photo,evidence:{},history:[],verification:{}};
+ return [];
+}
+(async()=>{const app=express();app.use(express.static(path.join(root,'public')));const server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));const base=`http://127.0.0.1:${server.address().port}`;try{for(const engine of [chromium,webkit]){const browser=await engine.launch();try{for(const width of [390,1440]){const page=await browser.newPage({viewport:{width,height:960},serviceWorkers:'block'});await page.route('**/*',r=>{const u=new URL(r.request().url());if(u.origin!==base)return r.abort();if(u.pathname.startsWith('/api/'))return r.fulfill({json:data(u)});return r.continue();});await page.goto(base+'/admin.html');await page.waitForTimeout(250);
+async function check(name){await page.evaluate(()=>PhotoNotesHelp.refresh());const items=await page.evaluate(()=>PhotoNotesHelp.inspect());assert.deepEqual(items.filter(i=>!i.authored),[],name);assert(items.length>0);}
+await page.evaluate(()=>{allUsers.push({...allUsers[0],id:101,email:'other@example.invalid',is_super_admin:false});showUser(101);});await check('User details');await page.evaluate(()=>{toggleAdminPanel('edit-user-101');toggleResetPassword(101);});await check('User/password editor');
+await page.evaluate(()=>{allIssues=[{id:1,user_id:99,reported_edition:'pro',priority:'normal',issue_type:'bug_problem',management_status:'blocked',description:'Test problem',review_decision:'implement',created_at:'2026-10-03T10:00:00Z'}];document.getElementById('issueStatusFilter').value='all';renderIssues();});await check('Issue decision');await page.evaluate(()=>{document.getElementById('ui-decision-1').value='developer';updateUiDecision(1);});await check('Developer decision instructions');console.log(engine.name()+' '+width+': administrator detail forms PASS');await page.close();}}finally{await browser.close();}}}finally{server.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

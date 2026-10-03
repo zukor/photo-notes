@@ -12,7 +12,7 @@
     "test:mobile": "node --test test/mobile-regression.test.js",
     "test:web-browser": "node scripts/test-web-browser.cjs",
     "help:check": "node scripts/help-coverage.cjs",
-    "test:help": "node scripts/test-complete-help.cjs",
+    "test:help": "node scripts/test-complete-help.cjs && node scripts/test-admin-help.cjs",
     "prestart": "node scripts/help-coverage.cjs"
   },
   "engines": {
