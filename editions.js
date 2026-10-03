@@ -4,6 +4,7 @@ const EDITIONS = Object.freeze({
   contractor:{plan:'pro',pro_type:'contractor',label:'General Contractor Pro'},
   roads:{plan:'free',pro_type:'roads',label:'Road Issue Reporter'},
   paving:{plan:'pro',pro_type:'paving',label:'Paving Pro'},
+  property:{plan:'pro',pro_type:'property',label:'Property Manager Pro'},
   hoa:{plan:'pro',pro_type:'hoa',label:'HOA Maintenance Pro'},
   concrete:{plan:'pro',pro_type:'concrete',label:'Concrete Pro'},
   roofer:{plan:'pro',pro_type:'roofer',label:'Roofer Pro'}

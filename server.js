@@ -41,6 +41,7 @@ function normalizeProType(value) {
   if (value === 'contractor') return 'contractor';
   if (value === 'roads') return 'roads';
   if (value === 'hoa') return 'hoa';
+  if (value === 'property') return 'property';
   if (value === 'concrete') return 'concrete';
   if (value === 'roofer') return 'roofer';
   return 'paving';
@@ -595,7 +596,7 @@ app.get('/api/me', requireAuth, async (req, res) => {
 });
 
 async function hoaCompanyForUser(userId,create=false,db=pool){let row=(await db.query(`SELECT c.*,m.company_role FROM hoa_management_companies c JOIN hoa_company_members m ON m.company_id=c.id WHERE m.user_id=$1 ORDER BY c.id LIMIT 1`,[userId])).rows[0];if(!row&&create){const u=(await pool.query(`SELECT name FROM users WHERE id=$1`,[userId])).rows[0];const client=await pool.connect();try{await client.query('BEGIN');row=(await client.query(`INSERT INTO hoa_management_companies(name) VALUES($1) RETURNING *`,[`${u&&u.name||'HOA'} Management`])).rows[0];await client.query(`INSERT INTO hoa_company_members(company_id,user_id,company_role) VALUES($1,$2,'administrator')`,[row.id,userId]);await client.query('COMMIT');}catch(e){await client.query('ROLLBACK');throw e;}finally{client.release();}}return row||null;}
-async function requireHoa(req,res,next){if(await currentProduct(req.user.id)!=='hoa')return res.status(403).json({error:'HOA Maintenance Pro required'});req.hoaCompany=await hoaCompanyForUser(req.user.id,true);next();}
+async function requireHoa(req,res,next){if(!['hoa','property'].includes(await currentProduct(req.user.id)))return res.status(403).json({error:'HOA Maintenance Pro or Property Manager Pro required'});req.hoaCompany=await hoaCompanyForUser(req.user.id,true);next();}
 async function requireConcrete(req,res,next){if(await currentProduct(req.user.id)!=='concrete')return res.status(403).json({error:'Concrete Pro required'});next();}
 async function hoaOwnsCommunity(companyId,communityId,db=pool){return !!(await db.query(`SELECT 1 FROM hoa_communities WHERE id=$1 AND company_id=$2 AND active=true`,[communityId,companyId])).rowCount;}
 
@@ -828,7 +829,7 @@ app.post('/api/captures', requireAuth, validateCaptureAccount, upload.single('ph
     }
     await recordCaptureHistory(req.user.id,saved.id,'captured',{photo:!!req.file,gps:lat!=null&&lng!=null,address:!!address},db);
     let maintenance_item=null;
-    if(await currentProduct(req.user.id,db)==='hoa'&&b.hoa_community_id){
+    if(['hoa','property'].includes(await currentProduct(req.user.id,db))&&b.hoa_community_id){
       const company=await hoaCompanyForUser(req.user.id,false,db),communityId=Number(b.hoa_community_id);
       if(company&&await hoaOwnsCommunity(company.id,communityId,db)){
         const itemType=HOA_TYPES.includes(b.hoa_item_type)?b.hoa_item_type:'maintenance',priority=HOA_PRIORITIES.includes(b.hoa_priority)?b.hoa_priority:'routine',stage=HOA_STAGES.includes(b.hoa_photo_stage)?b.hoa_photo_stage:'initial';
@@ -944,7 +945,7 @@ app.get('/api/captures/search', requireAuth, async (req,res)=>{
 app.get('/api/hoa/company',requireAuth,requireHoa,async(req,res)=>res.json(req.hoaCompany));
 app.post('/api/hoa/company',requireAuth,requireHoa,async(req,res)=>{try{const name=ticketText(req.body&&req.body.name,200);if(!name)return res.status(400).json({error:'name required'});res.json((await pool.query(`UPDATE hoa_management_companies SET name=$1 WHERE id=$2 RETURNING *`,[name,req.hoaCompany.id])).rows[0]);}catch(e){res.status(500).json({error:'company update failed'});}});
 app.get('/api/hoa/members',requireAuth,requireHoa,async(req,res)=>{try{res.json((await pool.query(`SELECT u.id,u.name,u.email,m.company_role FROM hoa_company_members m JOIN users u ON u.id=m.user_id WHERE m.company_id=$1 ORDER BY u.name`,[req.hoaCompany.id])).rows);}catch(e){res.status(500).json({error:'members failed'});}});
-app.post('/api/hoa/members',requireAuth,requireHoa,async(req,res)=>{try{if(req.hoaCompany.company_role!=='administrator')return res.status(403).json({error:'company administrator required'});const email=String(req.body&&req.body.email||'').toLowerCase().trim(),user=(await pool.query(`SELECT id,plan,pro_type FROM users WHERE email=$1 AND active=true`,[email])).rows[0];if(!user||user.plan!=='pro'||user.pro_type!=='hoa')return res.status(404).json({error:'HOA Maintenance Pro user not found'});await pool.query(`DELETE FROM hoa_company_members WHERE user_id=$1`,[user.id]);await pool.query(`INSERT INTO hoa_company_members(company_id,user_id,company_role) VALUES($1,$2,'manager') ON CONFLICT DO NOTHING`,[req.hoaCompany.id,user.id]);res.json({ok:true});}catch(e){res.status(500).json({error:'member add failed'});}});
+app.post('/api/hoa/members',requireAuth,requireHoa,async(req,res)=>{try{if(req.hoaCompany.company_role!=='administrator')return res.status(403).json({error:'company administrator required'});const email=String(req.body&&req.body.email||'').toLowerCase().trim(),user=(await pool.query(`SELECT id,plan,pro_type FROM users WHERE email=$1 AND active=true`,[email])).rows[0];if(!user||user.plan!=='pro'||!['hoa','property'].includes(user.pro_type))return res.status(404).json({error:'HOA Maintenance Pro or Property Manager Pro user not found'});await pool.query(`DELETE FROM hoa_company_members WHERE user_id=$1`,[user.id]);await pool.query(`INSERT INTO hoa_company_members(company_id,user_id,company_role) VALUES($1,$2,'manager') ON CONFLICT DO NOTHING`,[req.hoaCompany.id,user.id]);res.json({ok:true});}catch(e){res.status(500).json({error:'member add failed'});}});
 app.get('/api/hoa/communities',requireAuth,requireHoa,async(req,res)=>{try{res.json((await pool.query(`SELECT c.*,COUNT(i.id)::int open_items FROM hoa_communities c LEFT JOIN hoa_maintenance_items i ON i.community_id=c.id AND i.status NOT IN ('completed','cancelled') WHERE c.company_id=$1 AND c.active=true GROUP BY c.id ORDER BY c.name`,[req.hoaCompany.id])).rows);}catch(e){res.status(500).json({error:'communities failed'});}});
 app.post('/api/hoa/communities',requireAuth,requireHoa,async(req,res)=>{try{const b=req.body||{},name=ticketText(b.name,200);if(!name)return res.status(400).json({error:'name required'});const row=(await pool.query(`INSERT INTO hoa_communities(company_id,name,address,manager_name,assignment_rules) VALUES($1,$2,$3,$4,$5) RETURNING *`,[req.hoaCompany.id,name,ticketText(b.address,500),ticketText(b.manager_name,200),JSON.stringify(b.assignment_rules&&typeof b.assignment_rules==='object'?b.assignment_rules:{})])).rows[0];logEvent(req.user.id,'hoa_community_create',{});res.json(row);}catch(e){console.error('[hoa.community.create]',e);res.status(500).json({error:'community failed'});}});
 app.post('/api/hoa/communities/:id',requireAuth,requireHoa,async(req,res)=>{try{const id=Number(req.params.id);if(!await hoaOwnsCommunity(req.hoaCompany.id,id))return res.status(404).json({error:'not found'});const b=req.body||{},sets=[],vals=[];for(const [k,max] of [['name',200],['address',500],['manager_name',200]])if(typeof b[k]==='string'){vals.push(ticketText(b[k],max));sets.push(`${k}=$${vals.length}`);}if(b.assignment_rules&&typeof b.assignment_rules==='object'){vals.push(JSON.stringify(b.assignment_rules));sets.push(`assignment_rules=$${vals.length}`);}if(typeof b.active==='boolean'){vals.push(b.active);sets.push(`active=$${vals.length}`);}if(!sets.length)return res.status(400).json({error:'nothing to update'});vals.push(id,req.hoaCompany.id);res.json((await pool.query(`UPDATE hoa_communities SET ${sets.join(',')} WHERE id=$${vals.length-1} AND company_id=$${vals.length} RETURNING *`,vals)).rows[0]);}catch(e){res.status(500).json({error:'community update failed'});}});
@@ -2673,7 +2674,7 @@ app.post('/api/admin/users', requireAdmin, async (req, res) => {
     const industry = b.industry ? String(b.industry).trim() : null;
     const password = String(b.password || '');
     const requestedProduct = b.product === 'asphalt' ? 'paving' : b.product;
-    let proType=['roads','general','contractor','paving','hoa','concrete','roofer'].includes(requestedProduct)?requestedProduct:'general',plan=['general','contractor','paving','hoa','concrete','roofer'].includes(requestedProduct)?'pro':'free';
+    let proType=['roads','general','contractor','paving','hoa','property','concrete','roofer'].includes(requestedProduct)?requestedProduct:'general',plan=['general','contractor','paving','hoa','property','concrete','roofer'].includes(requestedProduct)?'pro':'free';
     const access=b.edition_access===undefined?null:validateEditions(b.edition_access);
     if(b.edition_access!==undefined&&!access)return res.status(400).json({error:'Select at least one valid version'});
     if(access){proType=EDITIONS[access[0]].pro_type;plan=EDITIONS[access[0]].plan;}
