@@ -63,7 +63,8 @@ function filter(where,vals,query){
  vals.push(query.custom_field,String(query.custom_value));
  where.push(`EXISTS(SELECT 1 FROM jsonb_array_elements(c.custom_fields) cf WHERE cf->>'id'=$${vals.length-1} AND cf->>'value'=$${vals.length})`);
 }
-function lines(c){return (c.custom_fields||[]).map(f=>`${f.name}: ${f.type==='boolean'?(f.value?'Yes':'No'):f.value}`).join('\n');}
+function display(f){return f.type==='boolean'?(f.value?'Yes':'No'):f.type==='date'?f.value.slice(5,7)+'/'+f.value.slice(8,10)+'/'+f.value.slice(0,4):String(f.value);}
+function lines(c){return (c.custom_fields||[]).map(f=>`${f.name}: ${display(f)}`).join('\n');}
 function register(app,{pool,requireAuth,currentProduct}){
  const gate=async(req,res,next)=>{try{req.cfEdition=normalizeEdition(await currentProduct(req.user.id));if(req.user.plan!=='pro'||!EDITIONS.includes(req.cfEdition))return res.status(403).json({error:'Pro edition required'});next();}catch{res.status(503).json({error:'Account unavailable'});}};
  app.get('/api/custom-fields',requireAuth,gate,async(req,res)=>{try{res.json((await pool.query('SELECT * FROM custom_field_definitions WHERE user_id=$1 ORDER BY updated_at,id',[req.user.id])).rows);}catch{res.status(503).json({error:'Custom Fields unavailable'});}});
@@ -96,4 +97,4 @@ function register(app,{pool,requireAuth,currentProduct}){
   }catch(e){if(db)await db.query('ROLLBACK');res.status(e.status||503).json({error:e.status?e.message:'Additional Details could not be saved'});}finally{db?.release();}
  });
 }
-module.exports={normalizeEdition,SCHEMA,EDITIONS,TYPES,LIMITS,definition,value,captureValues,filter,lines,register};
+module.exports={normalizeEdition,SCHEMA,EDITIONS,TYPES,LIMITS,definition,value,captureValues,filter,display,lines,register};

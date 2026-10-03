@@ -5,6 +5,7 @@ const editions=['pro','paving','concrete','property','hoa','contractor','roofer'
 const labels={text:'Short Text',number:'Number',date:'Date',boolean:'Yes / No',choice:'Choice'};
 let ctx=null,rows=[],draft={},loaded=false;
 const escape=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const display=f=>f.type==='boolean'?(f.value?'Yes':'No'):f.type==='date'?f.value.slice(5,7)+'/'+f.value.slice(8,10)+'/'+f.value.slice(0,4):String(f.value);
 const key=()=>`pn.customFields.v1.${ctx.user}`;
 const applicable=()=>rows.filter(d=>(d.active||draft[d.id]?.value!=null)&&(d.scope==='general'||d.edition===ctx.edition)).map(d=>draft[d.id]?.revision&&d.versions?.[draft[d.id].revision]?{...d,...d.versions[draft[d.id].revision],revision:draft[d.id].revision}:d);
 async function request(url,options){const r=await fetch(url,{credentials:'same-origin',...options});const data=await r.json();if(!r.ok)throw Error(data.error||'Custom Fields unavailable');return data;}
@@ -31,7 +32,7 @@ function remember(){const box=document.getElementById('cfCapture');if(!box)retur
  const raw=el.value;draft[d.id]={id:d.id,revision:d.revision,value:raw===''?null:d.type==='number'?Number(raw):d.type==='boolean'?raw==='Yes':raw};
 }}
 function render(){const anchor=document.getElementById('save');if(!anchor)return;
- let box=document.getElementById('cfCapture');if(!box){box=document.createElement('details');box.id='cfCapture';box.className='cf-section';anchor.before(box);}
+ let box=document.getElementById('cfCapture');if(!box){box=document.createElement('details');box.id='cfCapture';box.className='cf-section';(anchor.closest('.capture-actions')||anchor).before(box);}
  box.innerHTML=`<summary>Additional Details</summary><p>User-entered metadata, separate from photographic evidence.</p>${controls(applicable(),draft,'cfValue-')}${loaded&&!applicable().length?'<p>No active fields for this edition.</p>':''}${!loaded?'<p>Field definitions unavailable. Reconnect to load them.</p>':''}<button id="cfManage" type="button" class="btn secondary slim">Manage Custom Fields</button>`;
  box.querySelectorAll('[data-cf-id]').forEach(el=>el.oninput=remember);
  box.querySelector('#cfManage').onclick=manage;
@@ -52,7 +53,7 @@ async function manage(){
 function details(c,container,options){
  const fields=c.custom_fields||[];if(!editions.includes(options.edition))return;
  const section=document.createElement('section');section.className='cf-section';
- section.innerHTML=`<h3>Additional Details</h3><p>User-entered metadata, not verified photographic evidence.</p>${fields.length?fields.map(f=>`<p><strong>${escape(f.name)}:</strong> ${escape(f.type==='boolean'?(f.value?'Yes':'No'):f.value)}</p>`).join(''):'<p>No Additional Details saved.</p>'}<button class="btn secondary slim" id="cfEditValues">Edit Additional Details</button>`;
+ section.innerHTML=`<h3>Additional Details</h3><p>User-entered metadata, not verified photographic evidence.</p>${fields.length?fields.map(f=>`<p><strong>${escape(f.name)}:</strong> ${escape(display(f))}</p>`).join(''):'<p>No Additional Details saved.</p>'}<button class="btn secondary slim" id="cfEditValues">Edit Additional Details</button>`;
  container.append(section);section.querySelector('button').onclick=async()=>{try{
   const defs=await request('/api/custom-fields');const eligible=defs.filter(d=>d.active&&((d.scope==='general'||d.edition===options.edition)||fields.some(f=>f.id===d.id)));
   // Existing older choices remain selectable until deliberately changed.
@@ -75,9 +76,9 @@ async function filters(options){
   field.onchange=()=>{const d=defs.find(d=>d.id===field.value);value.disabled=!d;const choices=!d?[]:d.type==='boolean'?['Yes','No']:[...new Set([...d.options,...Object.values(d.versions||{}).flatMap(v=>v.options||[])])];value.innerHTML='<option value="">All values</option>'+choices.map(v=>`<option value="${escape(d?.type==='boolean'?v==='Yes'?'true':'false':v)}">${escape(v)}</option>`).join('');options.search();};value.onchange=options.search;
  }catch{}
 }
-window.PhotoNotesCustomFields={filters,query(params){const id=document.getElementById('cfFilterField')?.value,value=document.getElementById('cfFilterValue')?.value;if(id&&value){params.set('custom_field',id);params.set('custom_value',value);return true;}return false;},mount(options){if(!editions.includes(options.edition))return;
+window.PhotoNotesCustomFields={resetFilter(){const field=document.getElementById('cfFilterField'),value=document.getElementById('cfFilterValue');if(field)field.value='';if(value){value.value='';value.disabled=true;}},filters,query(params){const id=document.getElementById('cfFilterField')?.value,value=document.getElementById('cfFilterValue')?.value;if(id&&value){params.set('custom_field',id);params.set('custom_value',value);return true;}return false;},mount(options){if(!editions.includes(options.edition))return;
  const changed=!ctx||ctx.user!==options.user||ctx.edition!==options.edition;if(changed){draft={};rows=[];loaded=false;}ctx=options;
  if(changed)try{const cached=JSON.parse(localStorage.getItem(key())||'null');if(Array.isArray(cached)){rows=cached;loaded=true;}}catch{}
  render();void refresh();},payload(){if(!ctx||!document.getElementById('cfCapture'))return undefined;return JSON.stringify(collect(document.getElementById('cfCapture'),applicable(),draft));},clear(){draft={};},details,
- html(c){const fields=c.custom_fields||[];return fields.length?`<section class="cf-section"><strong>Additional Details (user-entered)</strong>${fields.map(f=>`<p>${escape(f.name)}: ${escape(f.type==='boolean'?(f.value?'Yes':'No'):f.value)}</p>`).join('')}</section>`:'';}};
+ html(c){const fields=c.custom_fields||[];return fields.length?`<section class="cf-section"><strong>Additional Details (user-entered)</strong>${fields.map(f=>`<p>${escape(f.name)}: ${escape(display(f))}</p>`).join('')}</section>`:'';}};
 })();

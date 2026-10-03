@@ -32,7 +32,7 @@ const express=require('express'),assert=require('node:assert/strict'),path=requi
    await page.evaluate(()=>renderCapture());await page.locator('#cfCapture').evaluate(el=>el.open=true);assert.equal(await page.locator('[data-cf-id="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"]').inputValue(),'1842');
    // The actual IndexedDB queue and FormData round trip retain all custom values.
    const queued=await page.evaluate(async()=>{const account=await PhotoNotesQueue.accountKey('test@example.invalid'),payload={note:'Test',custom_fields:PhotoNotesCustomFields.payload()};const q=await PhotoNotesQueue.create(payload,false,account,selectedEdition());const all=await PhotoNotesQueue.all();const row=all.find(r=>r.id===q.id);const fd=payloadFormData(row.payload);await PhotoNotesQueue.remove(q.id);return fd.get('custom_fields');});assert.deepEqual(JSON.parse(queued),values);
-   assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+   assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));assert.equal(await page.locator('#cfCapture').evaluate(el=>!!el.closest('.capture-actions')),false);
    if(edition==='concrete')assert(await page.locator('#concretePhase').count());
    if(edition==='property'||edition==='hoa')assert(await page.locator('#hoaType').count());
    if(edition==='property')await page.screenshot({path:`/tmp/custom-fields-${engine.name()}-${width}.png`});
@@ -45,6 +45,7 @@ const express=require('express'),assert=require('node:assert/strict'),path=requi
   await page.locator('#cfEditValues').click();await page.locator('#cfEdit-aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa').fill('1843');await page.locator('#cfValuesSave').click();await page.waitForFunction(()=>!document.getElementById('cfValuesDialog'));assert.equal(saved.values[0].value,'1843');assert((await page.locator('#cfFixture').textContent()).includes('1843'));
   // Dynamic control Help is authored in management, Capture and value dialogs.
   await page.locator('#cfEditValues').click();assert.deepEqual(await page.evaluate(()=>PhotoNotesHelp.inspect().filter(x=>!x.authored).map(x=>x.title)),[]);await page.locator('#cfValuesClose').click();
+  await page.evaluate(()=>{document.getElementById('cfValuesDialog')?.remove();state.view='organize';renderList();});await page.waitForSelector('#cfFilterField');await page.locator('#cfFilterField').selectOption('dddddddd-dddd-4ddd-8ddd-dddddddddddd');await page.locator('#cfFilterValue').selectOption('false');assert.equal(await page.evaluate(()=>{const p=new URLSearchParams();PhotoNotesCustomFields.query(p);return p.get('custom_value');}),'false');await page.locator('#photoSearchClear').click();assert.equal(await page.locator('#cfFilterField').inputValue(),'');
   for(const edition of ['basic','issue','roads']){
    await page.evaluate(edition=>{state.plan=edition==='issue'?'pro':'free';state.proType=edition==='basic'?'general':edition;state.view='capture';renderApp();},edition);assert.equal(await page.locator('#cfCapture').count(),0);
   }
