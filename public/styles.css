@@ -846,6 +846,10 @@ body:has(#desktopHelp) .issue-fab { left:max(14px,env(safe-area-inset-left)); ri
  #desktopHelp .help-reading { padding:0 16px 16px; }
 }
 
+.location-dialog{position:fixed;inset:0;z-index:1400;background:#fff;overflow:auto;color:#000;text-align:left;font-family:Arial,Helvetica,sans-serif}.location-panel{max-width:760px;margin:auto;padding:18px;color:#000}.location-panel p,.location-panel label,.location-panel input,.location-panel textarea,.location-panel select{color:#000}.location-photo{max-height:180px;max-width:100%;object-fit:contain}.location-panel .btn{margin:8px 8px 8px 0}.location-panel input,.location-panel textarea{width:100%;box-sizing:border-box}
+.location-panel .leaflet-control-attribution,.location-panel .leaflet-control-attribution a,.location-panel .leaflet-tooltip{color:#000}
+.location-panel{padding-bottom:90px}.location-panel .btn{color:#000;background:#ffd85a;border:1px solid #000}.location-panel .btn.secondary{background:#fff}.location-panel input,.location-panel select,.location-panel textarea{font-size:16px;min-height:44px;padding:8px}.location-panel .leaflet-control-attribution{background:#fff}
+.location-subject-pin{display:flex;align-items:center;justify-content:center;box-sizing:border-box;border:2px solid #000;border-radius:50%;background:#80eda5;color:#000;font:bold 18px Arial,Helvetica,sans-serif}
 /* Internal photo markers never become printed customer evidence. */
 @media print { .photo-marker-controls, .photo-marker-filters { display:none !important; } }
 .photo-marker[aria-pressed="true"] { background:#fff3b0; border:2px solid #000; font-weight:bold; }
