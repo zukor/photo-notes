@@ -327,6 +327,7 @@ function renderApp() {
         <button type="button" class="tab ${['create','hoa-inspections'].includes(state.view)?'on':''}" id="tabCreate" aria-current="${['create','hoa-inspections'].includes(state.view)?'page':'false'}">${isHoaClient()?'Inspections':'Create'}</button>
         <button type="button" class="tab ${['send','hoa-maintenance'].includes(state.view)?'on':''}" id="tabSend" aria-current="${['send','hoa-maintenance'].includes(state.view)?'page':'false'}">${isHoaClient()?'Records':'Send'}</button>
       </nav>`}
+      ${isProClient()&&['general','property','hoa','paving','concrete','contractor','roofer'].includes(state.proType)?'<div class="pr-actions"><button type="button" class="btn secondary" id="prOpen">Request Photos</button></div>':''}
       <div id="body"></div>
       <div class="footer">&copy; ${new Date().getFullYear()} Zukor AI. All Rights Reserved.<br><a href="/install.html" target="_blank" rel="noopener">Install Photo Notes on your device</a></div>
     </div>
@@ -391,6 +392,7 @@ function renderApp() {
     editionSwitcher.hidden=true;editionSwitcher.after(picker);
   }
   void window.PhotoNotesQR?.resume({api,state,renderApp,toast});
+  const prOpen=document.getElementById('prOpen');if(prOpen)prOpen.onclick=()=>{state.view='photo-requests';renderApp();};
   refreshIssueAttention();
   const updates=document.getElementById('issueUpdates');if(updates)updates.onclick=e=>{e.preventDefault();state.view='my-issues';renderApp();};
   const issueFab = document.getElementById('issueFab'); if (issueFab) issueFab.onclick = openIssueReporter;
@@ -416,6 +418,7 @@ function renderApp() {
   else if (state.view === 'create') renderGroups();
   else if (state.view === 'send') renderSend();
   else if (state.view === 'hoa-maintenance') renderHoaMaintenance();
+  else if (state.view === 'photo-requests') window.PhotoNotesRequests.render({api,esc,toast,edition:state.proType,openPhoto:id=>{state.view='edit';state.editTopic='';state._focusCapture=id;state.selectedIds=new Set([String(id)]);renderApp();}});
   else if (state.view === 'hoa-visits') renderHoaVisits();
   else if (state.view === 'hoa-visit') renderHoaVisit(state.hoaVisitId);
   else if (state.view === 'hoa-assets') renderHoaAssets();
