@@ -37,14 +37,14 @@ const {chromium,webkit}=require('playwright');
    if(width===1440){
     for(const edition of ['hoa','property'])for(const view of ['capture','organize','edit','create','send','hoa-visits','hoa-assets','hoa-inspections','hoa-maintenance','hoa-reports','hoa-dashboard','hoa-communities']){
      await page.evaluate(({edition,view})=>{state.proType=edition;state.view=view;renderApp();},{edition,view});
-     await page.locator('.help-fab').click();
-     await page.locator('#helpSearch').fill('');
+     await page.locator('.pn-help-fab').click();
+     await page.locator('#pnHelpSearch').fill('');
      await page.getByRole('button',{name:'This page',exact:true}).click();
-     assert(await page.locator('.help-article').count()>0,`${edition} ${view} has contextual help`);
-     await page.getByRole('button',{name:'All topics',exact:true}).click();
-     await page.locator('#helpSearch').fill('completion');
-     assert(await page.locator('.help-article').count()>0,`${edition} finds completion help`);
-     await page.locator('#helpClose').click();
+     assert(await page.locator('.pn-help-article').count()>0,`${edition} ${view} has contextual help`);
+     await page.getByRole('button',{name:'Using PhotoNotes',exact:true}).click();
+     await page.locator('#pnHelpSearch').fill('completion');
+     assert(await page.locator('.pn-help-article').count()>0,`${edition} finds completion help`);
+     await page.locator('#pnHelpClose').click();
     }
    }
    await page.close();console.log(`${engine.name()} ${width}: shared workflow parity and specialist actions PASS`);

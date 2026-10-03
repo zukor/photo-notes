@@ -24,7 +24,7 @@ function data(url){const p=url.pathname;
  if(p==='/api/hoa/items')return [item];if(p==='/api/hoa/items/1')return {item,photos:[],history:[],comments:[]};
  if(p==='/api/hoa/report')return {items:[item],summary:{}};if(p==='/api/hoa/dashboard')return {open:1,counts:{total:1,new:1},items:[item],communities:[community]};
  if(p==='/api/concrete/dashboard')return {summary:{},captures:[photo],jobs:[job],readiness:[]};
- if(p.includes('concrete/report'))return {summary:{},captures:[photo],readiness:[],jobs:[job]};
+ if(p.includes('concrete/report'))return {summary:{},counts:{total:1},photos:[photo],captures:[photo],readiness:[],jobs:[job]};
  if(p==='/api/ramo-intake')return {submissions:[]};
  if(p==='/api/document-links')return [{id:1,path:'/shared-document/test',filename:'Report.pdf',expires_at:'2026-10-30T10:00:00Z'}];
  if(p==='/api/jobs/1/timeline')return {job,captures:[photo],events:[]};
@@ -43,7 +43,7 @@ function data(url){const p=url.pathname;
  const missing=new Map(),errors=[],seen=new Set();let cases=0;
  try{for(const engine of [chromium,webkit]){const browser=await engine.launch();try{for(const width of [390,1440]){
   const page=await browser.newPage({viewport:{width,height:960},serviceWorkers:'block',reducedMotion:'reduce',...(width===390?{hasTouch:true}: {})});
-  await page.addInitScript(()=>localStorage.setItem('pn_install_prompt_dismissed_v1','dismissed'));
+  await page.addInitScript(()=>{localStorage.setItem('pn_install_prompt_dismissed_v1','dismissed');localStorage.setItem('pn_first_use_v1:'+encodeURIComponent('help-test@example.invalid'),'done');});
   page.on('pageerror',e=>errors.push(e.message));
   await page.route('**/*',r=>{const u=new URL(r.request().url());if(u.origin!==new URL(base).origin)return r.abort();if(u.pathname.startsWith('/api/'))return r.fulfill({json:data(u)});return r.continue();});
   await page.goto(base);await page.waitForFunction(()=>typeof state!=='undefined'&&state.me&&document.getElementById('body'));

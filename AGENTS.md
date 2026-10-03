@@ -18,3 +18,10 @@
 - Desktop Help uses 28% of viewport width. On phones/tablets use the responsive drawer. Report Issue stays bottom left, yellow ? Help bottom right.
 - Definitions must work on hover, keyboard focus, and tap. Help text stays black.
 - Run `npm run help:check`, `npm test`, and `npm run test:help` before release. The installation/start gate and CI reject missing source-control guidance. Verify dynamic fields/dialogs in browser fixtures too.
+
+## Property Manager Pro and global changes
+
+- Include Property Manager Pro (`property`) in global edition lists, Help coverage, shared feature gates, and phone/desktop regression checks. It inherits shared Photo Notes behavior and the same property workflows as HOA Maintenance Pro through common code.
+- Do not publish stale copies of shared files from an older branch. Integrate the latest main before releasing global changes and preserve the Property Manager edition registry, access grants, branding, and HOA endpoint authorization.
+- Update Help when changing a screen or control. Verify Property Manager's searchable and contextual Help for shared tools and its capture, communities/team, assets/history, inspection routes, guided visits, maintenance/evidence, completion links, dashboard/notifications, and reports.
+- Run `node scripts/test-property-global-parity.cjs` and `node scripts/test-all-edition-help.cjs` for shared UI or Help changes, along with the standard tests. Preserve specialist navigation and actions.

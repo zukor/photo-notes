@@ -270,6 +270,10 @@ add('bgstatus','Inspect the current browser’s pending capture uploads. Reconne
 add('data-step-field','Write the ordered test step’s title/instructions in the language labeled here. Describe a specific action and observable expected result, then save the assignment draft and preview it before publishing.',['Testing assignment']);
 add('data-assignee','Choose this tester to receive their own copy of the published assignment. Verify account identity and intended edition access before publishing.',['Testing assignment','Account access']);
 add('data-person|data-status','Filter testing runs by the person or recorded workflow status. This changes the results shown, not the assignment’s saved outcomes.',['Testing assignment','Filter']);
+add('keyboardDictation','Use the microphone on your phone keyboard to enter notes if browser recording is unavailable. Tap the notes field, open the keyboard microphone, speak, review the words, and save the capture.',['Capture']);
+add('shareOriginalPhotos','Share the selected original photo files using the available device sharing or download action. Review the recipients and attachments. Original photos do not include the composed document layout or every saved annotation.',['Selection','Document']);
+add('firstUseYes','Enable the microphone or camera requested in this setup step, or follow the Home Screen installation instructions. Browser permission may be requested. Check the displayed result and continue; permissions can also be changed later in browser settings.',['Installation']);
+add('firstUseNext','Skip the current setup request or continue after its result. Not Now leaves that permission or installation step incomplete. You can enable it later when using the relevant feature.',['Installation']);
 const terms={
 'Before/after':'Two linked photographs showing an earlier condition and a later condition. Compare matching viewpoints and confirm their dates before drawing conclusions.',
  'Capture':'A photograph and its supporting note, location, and other details recorded in PhotoNotes.',

@@ -2,7 +2,7 @@
 
 Help reads controls from the actual page in DOM order. It tracks asynchronous records, open dialogs, labels, selector choices, and feature removal with a MutationObserver. Only the current UI is listed, so editions and permissions determine their own Help without copied page implementations. Repeated equivalent controls are described once at their first occurrence.
 
-Detailed instructions and 72 Key Terms live in `public/help-catalog.js`. Definitions support hover, focus, and tap. The right drawer takes 28% of desktop width and adapts to phone/tablet screens. Help is also loaded on sign-in, administration, installation, customer review, and completion-photo pages.
+Detailed instructions and 73 Key Terms live in `public/help-catalog.js`. Definitions support hover, focus, and tap. The right drawer takes 28% of desktop width and adapts to phone/tablet screens. Help is also loaded on sign-in, administration, installation, customer review, and completion-photo pages.
 
 ## Updating features
 
