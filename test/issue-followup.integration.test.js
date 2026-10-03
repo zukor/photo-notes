@@ -1,0 +1,32 @@
+const test=require('node:test'),assert=require('node:assert/strict');
+test('bug follow-up is transactional, bounded, owner-safe and keeps tester evidence',{skip:process.env.PN_ISSUE_FLOW_TEST!=='1',timeout:60000},async()=>{
+ process.env.DATABASE_URL='postgresql://127.0.0.1:55519/pn_issue_flow';process.env.PGSSL='disable';process.env.SESSION_SECRET='issue-flow-local-test';process.env.TESTER_QUEUE_TOKEN='local-fixture-queue';process.env.ISSUE_CLOUD_RUNNER_ENABLED='false';delete process.env.RESEND_API_KEY;
+ const {pool,init}=require('../db');assert.equal((await pool.query('SHOW data_directory')).rows[0].data_directory,'/tmp/pn-issue-flow/db');await init();await require('../issue-cloud').initCloud(pool);
+ const {app}=require('../server'),server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));const base='http://127.0.0.1:'+server.address().port;
+ const user=(await pool.query("INSERT INTO users(email,password_hash,role,plan) VALUES($1,'none','user','pro') RETURNING id",['flow-'+Date.now()+'@example.invalid'])).rows[0].id;
+ const cookie='pn_token='+require('jsonwebtoken').sign({id:user},process.env.SESSION_SECRET);const ids=[];
+ const make=async(type='bug_problem',status='ready_to_test',reason=null)=>{const i=(await pool.query("INSERT INTO issue_reports(user_id,issue_type,description,management_status,blocked_reason,verification,release_reference) VALUES($1,$2,'Missing photo in output',$3,$4,'Synthetic tests passed','fixture-sha') RETURNING *",[user,type,status,reason])).rows[0];ids.push(i.id);return i;};
+ const post=(id,action,body,headers={Cookie:cookie})=>fetch(base+'/api/'+action.replace('ID',id),{method:'POST',headers:{'Content-Type':'application/json',...headers},body:JSON.stringify(body)});
+ try{
+ const bug=await make();let r=await post(bug.id,'issues/ID/retest',{result:'still_happening',notes:'The extra work photo is missing.'});assert.equal(r.status,200);assert.equal((await r.json()).status,'new');
+ let saved=(await pool.query('SELECT * FROM issue_reports WHERE id=$1',[bug.id])).rows[0];assert.equal(saved.tester_notes,'The extra work photo is missing.');assert.equal(saved.verification,'Synthetic tests passed');
+ assert.equal((await post(bug.id,'issues/ID/retest',{result:'still_happening'})).status,404);
+ await pool.query("UPDATE issue_reports SET management_status='ready_to_test' WHERE id=$1",[bug.id]);r=await post(bug.id,'issues/ID/retest',{result:'still_happening',notes:'Second fix still fails'});assert.equal((await r.json()).status,'blocked');saved=(await pool.query('SELECT * FROM issue_reports WHERE id=$1',[bug.id])).rows[0];assert.equal(saved.blocked_kind,'decision');
+ const fixed=await make();assert.equal((await(await post(fixed.id,'issues/ID/retest',{result:'fixed'})).json()).status,'tester_confirmed');
+ const unknown=await make();r=await post(unknown.id,'issues/ID/retest',{result:'fixed'},{Cookie:'pn_token='+require('jsonwebtoken').sign({id:99999999},process.env.SESSION_SECRET)});assert.equal(r.status,401);
+ const unable=await make();assert.equal((await(await post(unable.id,'issues/ID/retest',{result:'unable_to_test',notes:'Device unavailable'})).json()).status,'blocked');saved=(await pool.query('SELECT * FROM issue_reports WHERE id=$1',[unable.id])).rows[0];assert.equal(saved.review_decision,'clarify');
+ r=await post(unable.id,'issues/ID/details',{details:'I now have the original device. Here are the steps.'});assert.equal(r.status,200);assert.equal((await pool.query('SELECT management_status FROM issue_reports WHERE id=$1',[unable.id])).rows[0].management_status,'new');
+ const idea=await make('new_feature','blocked','Original example is needed.');const missing=await make('bug_problem','blocked','Original photo is needed to reproduce.');const technical=await make('bug_problem','blocked','The fix is outside the allowed files.');const retry=await make('bug_problem','blocked','The automatic repair did not pass testing.');const sensitive=await make('bug_problem','blocked','This requires destructive storage changes.');
+ const {followupIssues}=require('../issue-followup');await Promise.all([followupIssues(pool),followupIssues(pool)]);
+ assert.equal((await pool.query('SELECT review_decision FROM issue_reports WHERE id=$1',[missing.id])).rows[0].review_decision,'clarify');
+ assert.equal((await pool.query('SELECT count(*)::int n FROM issue_repair_events WHERE issue_id=$1',[missing.id])).rows[0].n,1);
+ assert.equal((await pool.query('SELECT blocked_kind FROM issue_reports WHERE id=$1',[technical.id])).rows[0].blocked_kind,'developer');
+ assert.equal((await pool.query('SELECT management_status FROM issue_reports WHERE id=$1',[retry.id])).rows[0].management_status,'new');
+ assert.equal((await pool.query('SELECT review_decision FROM issue_reports WHERE id=$1',[idea.id])).rows[0].review_decision,null);
+ assert.equal((await pool.query('SELECT blocked_kind FROM issue_reports WHERE id=$1',[sensitive.id])).rows[0].blocked_kind,'decision');
+ const auth={Authorization:'Bearer local-fixture-queue'};
+ const current=(await pool.query('SELECT * FROM issue_reports WHERE id=$1',[technical.id])).rows[0];r=await post(technical.id,'automation/issues/ID/claim',{resume:true,expected_updated_at:current.updated_at},auth);assert.equal(r.status,200);const claim=await r.json();assert(claim.claim_token);
+ assert.equal((await post(technical.id,'automation/issues/ID/claim',{resume:true,expected_updated_at:current.updated_at},auth)).status,409);
+ const held=(await pool.query('SELECT * FROM issue_reports WHERE id=$1',[sensitive.id])).rows[0];assert.equal((await post(sensitive.id,'automation/issues/ID/claim',{resume:true,expected_updated_at:held.updated_at},auth)).status,409);
+ }finally{await new Promise(r=>server.close(r));await pool.query('DELETE FROM issue_reports WHERE id=ANY($1::int[])',[ids]);await pool.query('DELETE FROM users WHERE id=$1',[user]);await pool.end();}
+});

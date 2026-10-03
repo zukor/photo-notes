@@ -118,7 +118,7 @@ async function notifyWorkerIncidents(client,keys,send){
 }
 async function startCloud(pool) {
   const keys=await initCloud(pool);let running=false;
-  const tick=async()=>{if(running)return;running=true;try{const retests=await require('./issue-auto-retest').requestFirstRetests(pool);if(retests.length)console.info('[issues] Automatic first retests requested:',retests.join(','));await tickCloud(pool,keys);}catch{await pool.query("INSERT INTO issue_cloud_state(id,last_tick,last_error) VALUES(1,now(),'Worker cycle failed') ON CONFLICT(id) DO UPDATE SET last_error='Worker cycle failed'").catch(()=>{});}finally{running=false;}};
+  const tick=async()=>{if(running)return;running=true;try{await require('./issue-followup').followupIssues(pool);const retests=await require('./issue-auto-retest').requestFirstRetests(pool);if(retests.length)console.info('[issues] Automatic first retests requested:',retests.join(','));await tickCloud(pool,keys);}catch{await pool.query("INSERT INTO issue_cloud_state(id,last_tick,last_error) VALUES(1,now(),'Worker cycle failed') ON CONFLICT(id) DO UPDATE SET last_error='Worker cycle failed'").catch(()=>{});}finally{running=false;}};
   await tick();const timer=setInterval(tick,2000);timer.unref();return()=>clearInterval(timer);
 }
 module.exports={validSubscription,initCloud,registerCloud,tickCloud,startCloud,dispatchRepairs};

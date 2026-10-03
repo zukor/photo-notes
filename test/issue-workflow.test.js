@@ -22,8 +22,9 @@ test('iPhone issue reports attach a real voice recording instead of relying on s
 test('testers can see only their reports and return a retest result',()=>{
   assert.match(server,/app\.get\('\/api\/issues\/mine', requireAuth/);
   assert.match(server,/WHERE user_id=\$1 ORDER BY created_at DESC/);
-  assert.match(server,/app\.post\('\/api\/issues\/:id\/retest',requireAuth/);
-  assert.match(server,/id=\$4 AND user_id=\$5/);
+  const retest=fs.readFileSync(path.join(__dirname,'..','issue-retest.js'),'utf8');
+  assert.match(retest,/app\.post\('\/api\/issues\/:id\/retest',requireAuth/);
+  assert.match(retest,/id=\$1 AND user_id=\$2 FOR UPDATE/);
   assert.match(app,/My Issue Reports/);assert.match(app,/Retest Succeeded/);assert.match(app,/Retest Failed/);
 });
 
