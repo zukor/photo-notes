@@ -44,7 +44,7 @@ function registerIssueRepair(app,{pool,requireAuth,requireAdmin,requireTestingQu
       if(['reviewing','fixing','testing'].includes(req.body.management_status))sets.push("repair_lease_until=now()+interval '45 minutes'");
       for(const [key,value] of Object.entries(fields)){vals.push(value);sets.push(`${key}=$${vals.length}`);}
       if(req.body.management_status!=='blocked')sets.push('blocked_kind=NULL');
-      if(req.body.management_status==='ready_to_test')sets.push("tester_notification_status='in_app'",'tester_notified_at=now()','tester_notification_error=NULL','blocked_reason=NULL');
+      if(req.body.management_status==='ready_to_test')sets.push("tester_notification_status='in_app'",'tester_notified_at=now()','tester_notification_error=NULL','blocked_reason=NULL','tester_result=NULL','tester_notes=NULL','tester_retested_at=NULL');
       if(['blocked','ready_to_test'].includes(req.body.management_status))sets.push('repair_claim_hash=NULL','repair_lease_until=NULL');
       vals.push(id,digest(req.body.claim_token));
       const {rows}=await client.query(`UPDATE issue_reports SET ${sets.join(',')} WHERE id=$${vals.length-1} AND ${eligibleIssueSql()} AND repair_claim_hash=$${vals.length} AND repair_lease_until>now() AND management_status IN ('reviewing','fixing','testing') RETURNING id,management_status,release_reference`,vals);

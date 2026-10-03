@@ -13,6 +13,7 @@ test('missing evidence and restricted file scopes are not product decisions',()=
  assert.equal(kind({blocked_reason:'Fix is outside the allowed files.'}),'developer');
  assert.equal(kind({blocked_reason:'The tester checked again and confirmed still happening.'}),'retry');
  assert.equal(kind({blocked_reason:'This changes storage behavior.'}),'decision');
+ assert.equal(kind({blocked_reason:'The automatic repair attempt ended without a confirmed live fix. Request clarification if the report is unclear.'}),'retry');
 });
 test('wrong job evidence and repeated failures rank ahead of ordinary bugs',()=>{
  assert(priority({description:'Evidence from another job'}).score>priority({priority:'high'}).score);
