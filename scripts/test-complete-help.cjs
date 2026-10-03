@@ -1,6 +1,7 @@
 // Local UI Help verification. Mock data and blocked external traffic prevent production writes/provider calls.
 const express=require('express'),assert=require('node:assert/strict'),fs=require('node:fs');
 const {chromium,webkit}=require('playwright');
+const vm=require('node:vm');
 const path=require('node:path'),root=path.join(__dirname,'..');
 const photo={id:1,user_id:99,photo_path:'/logo.svg',photo_title:'Site photo',note:'Observed condition',area_tags:['Site'],address:'Test site',latitude:29.5,longitude:-98.5,created_at:'2026-10-03T10:00:00Z',overlays:[],kind:'note'};
 const job={id:1,name:'Test job',job_number:'J1',customer:'Test customer',address:'Test site',photo_count:1};
@@ -39,6 +40,10 @@ function data(url){const p=url.pathname;
 }
 (async()=>{
  const app=express();app.use('/vendor/leaflet',express.static(path.dirname(require.resolve('leaflet/dist/leaflet.js'))));app.use(express.static(path.join(root,'public')));
+ const serverSource=fs.readFileSync(path.join(root,'server.js'),'utf8');
+ function publicForm(prefix,locals){const line=serverSource.split('\n').find(s=>s.includes("app.get('"+prefix));const a=line.indexOf('res.send(`')+9,b=line.lastIndexOf('`);');return vm.runInNewContext('('+line.slice(a,b+1)+')',{escXml:s=>String(s??'').replace(/[&<>"']/g,' '),...locals});}
+ app.get('/completion-photos/help-fixture',(req,res)=>res.send(publicForm('/completion-photos/:token',{row:{community_name:'Test property',title:'Repair gate',description:'Review returned evidence',original_photo:'',recipient_name:'',token:'help-fixture'}})));
+ app.get('/review/help-fixture',(req,res)=>res.send(publicForm('/review/:token',{p:{title:'Photo review',message:'Review every photograph',status:'pending',token:'help-fixture'},cards:'<article><img src="/logo.svg" alt="Project photo"><p>Observed condition</p></article>'})));
  const server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));const base=process.env.PN_HELP_BASE_URL||`http://127.0.0.1:${server.address().port}`;
  const missing=new Map(),errors=[],seen=new Set();let cases=0;
  try{for(const engine of [chromium,webkit]){const browser=await engine.launch();try{for(const width of [390,1440]){
@@ -88,6 +93,8 @@ function data(url){const p=url.pathname;
   await page.screenshot({path:`/tmp/pn-complete-help-${engine.name()}-${width}.png`});await page.locator('#pnHelpClose').click();
   // Feature insertion/removal must synchronize without a navigation or manual Help refresh.
   await page.locator('.pn-help-fab').click();await page.evaluate(()=>{const b=document.createElement('button');b.id='captureUrgency';b.textContent='Urgency';document.getElementById('body').append(b);});await page.waitForFunction(()=>document.getElementById('pnHelpResults').textContent.includes('Urgency'));await page.evaluate(()=>document.getElementById('captureUrgency').remove());await page.waitForFunction(()=>!document.getElementById('pnHelpResults').textContent.includes('Urgency'));await page.locator('#pnHelpClose').click();
+  await page.evaluate(()=>{localStorage.removeItem('pn_first_use_v1:'+encodeURIComponent(state.me.email));PhotoNotesFirstUse.offer(state.me);});await page.waitForTimeout(150);await check('First-use permissions');await page.locator('#firstUseNext').click();await check('First-use camera');await page.locator('#firstUseNext').click();
+  await page.goto(base+'/completion-photos/help-fixture');await check('Public completion form');await page.goto(base+'/review/help-fixture');await check('Public customer review');
   await page.goto(base+'/install.html');await check('Installation guide');
   await page.goto(base+'/admin.html');await page.waitForTimeout(250);await check('Administration');
   await page.close();console.log(`${engine.name()} ${width}: page order, dynamic update, terms, drawer, edition/screens PASS`);

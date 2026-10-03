@@ -20,11 +20,11 @@ function label(n){
   const before=n.parentElement?.previousElementSibling;if(before?.tagName==='LABEL')return clean(before.textContent);
   return clean(n.getAttribute('placeholder')||n.getAttribute('title')||n.name||n.id.replace(/([a-z])([A-Z])/g,'$1 $2')||'Selection');
  }
- return clean(n.getAttribute('title')||n.textContent||n.getAttribute('alt')||(n.dataset.col?'Annotation color '+n.dataset.col:'')||n.id);
+ return clean(n.getAttribute('title')||n.textContent||n.getAttribute('alt')||(n.dataset.col?'Annotation color '+n.dataset.col:'')||({'AUDIO':'Play recorded audio','VIDEO':'Play video'}[n.tagName])||n.id);
 }
 function matches(key,value){return key.endsWith('*')?value.startsWith(key.slice(0,-1)):key===value;}
 function guide(n,title){
- const keys=[n.id,n.name,...Object.keys(n.dataset).filter(k=>k!=='add'||n.closest('#stampAdd')).map(k=>`data-${k.replace(/[A-Z]/g,m=>'-'+m.toLowerCase())}`),...n.classList].filter(Boolean);
+ const keys=[n.id,n.name,...Object.keys(n.dataset).filter(k=>k!=='add'||n.closest('#stampAdd')).map(k=>`data-${k.replace(/[A-Z]/g,m=>'-'+m.toLowerCase())}`),...n.classList,n.tagName.toLowerCase()].filter(Boolean);
  const rule=keys.map(v=>catalog.rules.find(r=>r.keys.some(k=>matches(k,v)))).find(Boolean);
  if(rule)return {text:rule.text,terms:rule.terms,authored:true};
  const words=title.toLowerCase();
@@ -40,7 +40,7 @@ function guide(n,title){
 function controls(){
  const dialogs=[...document.querySelectorAll('dialog[open],#issueModal:not([hidden]),.modal-backdrop,.evidence-modal,.photo-viewer-modal,.export-share-dialog[role=dialog]')].filter(n=>!hidden(n)&&!n.closest('#photoNotesHelp'));
  const active=dialogs.at(-1);
- const nodes=[...(active||document.body).querySelectorAll('button,input:not([type="hidden"]),select,textarea,summary,a[href],[role="button"],.pill,.areax,.stamp-tool,#gps,#addr,#qualityStatus,#documentPreview,#stampStage,#cropStage,.evidence-readiness')];
+ const nodes=[...(active||document.body).querySelectorAll('button,audio[controls],video[controls],input:not([type="hidden"]),select,textarea,summary,a[href],[role="button"],.pill,.areax,.stamp-tool,#gps,#addr,#qualityStatus,#documentPreview,#stampStage,#cropStage,.evidence-readiness')];
  const seen=new Set(),items=[];
  if(!active&&location.pathname.startsWith('/completion-photos/')&&document.querySelector('h1')?.textContent.includes('Photos received'))items.push({title:'Photos received',text:'The completion photos were added to the maintenance record. The property manager still needs to review the evidence. Receipt of photos is separate from verification and closure of the maintenance item.',terms:['Completion link','Verification','Receipt'],choices:[],authored:true,key:'completion-receipt'});
  if(!active&&location.pathname.startsWith('/review/'))items.push({title:'Review the photo evidence',text:'Inspect every photograph, its note, location, and date before responding. The displayed status shows whether the package is awaiting review or has already received a response. Approval records your decision about this package; request changes with a specific explanation when work needs attention.',terms:['Approval','Evidence'],choices:[],authored:true,key:'review-evidence'});
@@ -121,6 +121,6 @@ function start(){
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});else start();
 document.addEventListener('keydown',e=>{if(e.key==='Tab'&&opened){const els=[...document.querySelectorAll('#photoNotesHelp button,#photoNotesHelp input,#photoNotesHelp summary')].filter(n=>!hidden(n)&&n.getClientRects().length);const first=els[0],last=els.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}}
- if(e.key==='Escape'&&opened){e.preventDefault();e.stopPropagation();const expanded=document.querySelector('#photoNotesHelp [data-term][aria-expanded="true"]');if(expanded){expanded.setAttribute('aria-expanded','false');expanded.focus();}else close();}});
+ if(e.key==='Escape'&&opened){e.preventDefault();e.stopImmediatePropagation();const expanded=document.querySelector('#photoNotesHelp [data-term][aria-expanded="true"]');if(expanded){expanded.setAttribute('aria-expanded','false');expanded.focus();}else close();}},true);
 window.PhotoNotesHelp={mount,reset,inspect:()=>controls().map(({node,...item})=>item),refresh:()=>{signature='';render();}};
 })();
