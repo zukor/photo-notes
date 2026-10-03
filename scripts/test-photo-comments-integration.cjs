@@ -33,7 +33,7 @@ assert.equal((await db.query('SELECT * FROM hoa_notifications WHERE user_id=2'))
 assert.equal((await call(2)).data.comments.length,1);assert.equal((await db.query('SELECT count(*)::int n FROM hoa_notifications WHERE user_id=3')).rows[0].n,0);assert.equal((await call(1,1,'POST',{text:'x'.repeat(4001)})).status,400);
 assert.equal((await call(2,1,'PATCH',{text:'bad'},id)).status,403);
 assert.equal((await call(3,1,'DELETE',null,id)).status,404);
-assert.equal((await call(1,1,'PATCH',{text:'Updated'},id)).status,200);
+assert.equal((await call(1,1,'PATCH',{text:'Updated'},id)).status,200);const notices=Number((await db.query('SELECT count(*)::int n FROM hoa_notifications WHERE user_id=2')).rows[0].n);assert.equal((await call(1,1,'PATCH',{text:'Updated @Sam'},id)).status,200);assert.equal((await db.query('SELECT count(*)::int n FROM hoa_notifications WHERE user_id=2')).rows[0].n,notices+1);
 const reply=await call(2,1,'POST',{text:'This afternoon',reply_to:id});assert.equal(reply.status,201);
 assert.equal((await call(1,1,'POST',{text:'Thanks',reply_to:reply.data.id})).status,201);
 assert.equal((await call(1)).data.comments.at(-1).reply_to,id);
@@ -43,7 +43,7 @@ assert.equal((await call(1,1,'POST',{text:' '})).status,400);
 assert.equal((await call(4,1,'PATCH',{text:'admin cannot edit'},id)).status,403);
 assert.equal((await call(4,1,'DELETE',null,id)).status,200);
 assert.equal((await call(2)).data.comments[0].text,'');assert.ok((await call(2)).data.comments[0].deleted_at);
-assert.equal((await db.query('SELECT count(*)::int n FROM photo_comment_history WHERE comment_id=$1',[id])).rows[0].n,2);
+assert.equal((await db.query('SELECT count(*)::int n FROM photo_comment_history WHERE comment_id=$1',[id])).rows[0].n,3);
 await db.query('DELETE FROM hoa_company_members WHERE user_id=2');assert.equal((await call(2)).status,404);
 console.log('Comments PostgreSQL integration passed: access, editions, replies, moderation, history, mentions, revoked access, repeat migration.');
 }finally{if(server)await new Promise(r=>server.close(r));await db.query('ROLLBACK');await db.query('SET search_path TO public');await db.query(`DROP SCHEMA ${schema} CASCADE`);await db.end();}})().catch(e=>{console.error(e);process.exitCode=1;});

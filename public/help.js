@@ -38,7 +38,7 @@ function guide(n,title){
  return {text:`Use ${title} for the current record or selection. Review the scope and any confirmation or status shown before continuing.`,terms:[],authored:false};
 }
 function controls(){
- const dialogs=[...document.querySelectorAll('dialog[open],#issueModal:not([hidden]),.modal-backdrop,.evidence-modal,.photo-viewer-modal,.export-share-dialog[role=dialog]')].filter(n=>!hidden(n)&&!n.closest('#photoNotesHelp'));
+ const dialogs=[...document.querySelectorAll('dialog[open],#issueModal:not([hidden]),.modal-backdrop,.evidence-modal,.photo-viewer-modal,.export-share-dialog[role=dialog],.location-dialog[role=dialog]')].filter(n=>!hidden(n)&&!n.closest('#photoNotesHelp'));
  const active=dialogs.at(-1);
  const nodes=[...(active||document.body).querySelectorAll('button,audio[controls],video[controls],input:not([type="hidden"]),select,textarea,summary,a[href],[role="button"],.pill[data-area],.pill[data-ref],.pill[data-add],.pill[data-col],.areax,.stamp-tool,#gps,#addr,#qualityStatus,#documentPreview,#stampStage,#cropStage,.evidence-readiness')];
  const seen=new Set(),items=[];
@@ -82,7 +82,7 @@ function shell(){
  return root;
 }
 function pageTitle(){
- const dialog=document.querySelector('dialog[open],#issueModal:not([hidden]),.photo-viewer-modal,.evidence-modal,.export-share-dialog[role=dialog]');
+ const dialog=document.querySelector('dialog[open],#issueModal:not([hidden]),.photo-viewer-modal,.evidence-modal,.export-share-dialog[role=dialog],.location-dialog[role=dialog]');
  return clean(dialog?.querySelector('h1,h2,h3,[id$=Title]')?.textContent||document.querySelector('#body .workflow-intro strong,#body h1,#body h2,#body .formhead,main h1')?.textContent||context.page.replaceAll('-',' ').replace(/^./,s=>s.toUpperCase()));
 }
 const general=[
