@@ -57,6 +57,7 @@ function registerPhotoRequests(app,{pool,requireAuth,uploadDir,hoaHistory,hoaNot
    const sender=clean(req.user.name,200)+(company?' / '+clean(company.name,200):'');
    const token=privatePhotoToken(),expires=new Date(Date.now()+data.days*86400000);
    const row=(await db.query(`INSERT INTO photo_requests(user_id,token,edition,title,recipient_name,sender_name,instructions,views,allow_partial,related_capture_id,job_id,item_id,expires_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,[req.user.id,token,currentEdition(req.user),data.title,data.recipient_name,sender,data.instructions,JSON.stringify(data.views),data.allow_partial,association.related_capture_id||null,association.job_id||association.inheritedJob||null,association.item_id||null,expires])).rows[0];
+   if(req.body.follow_up_occurrence_id)await require('./photo-follow-ups').linkRequest(db,req.user,req.body.follow_up_occurrence_id,row);
    await history(db,row.id,'created');await history(db,row.id,'link_created');await db.query('COMMIT');
    res.json({...row,url:`${req.protocol}://${req.get('host')}/photo-request/${token}`});
   }catch(e){if(db)await db.query('ROLLBACK');res.status(400).json({error:'Request could not be created. Check the related record.'});}finally{if(db)db.release();}
@@ -107,7 +108,7 @@ function registerPhotoRequests(app,{pool,requireAuth,uploadDir,hoaHistory,hoaNot
    }
    await db.query('UPDATE photo_requests SET status=$1,submitted_at=now() WHERE id=$2',[status,r.id]);
    await history(db,r.id,'submission_received',{submitter_name:name,views:indices,photo_count:files.length});
-   if(status==='completed')await history(db,r.id,'completed');
+   if(status==='completed'){await history(db,r.id,'completed');if(await require('./photo-follow-ups').completeRequest(db,r))await history(db,r.id,'follow_up_completed');}
    if(item){await hoaHistory(r.item_id,null,'photo_request_submission',{request_id:r.id,photo_count:files.length},db);await hoaNotifyCompany(item.company_id,r.item_id,`Requested photos received: ${r.title}`,0,db);}
    await db.query('COMMIT');committed=true;res.json({ok:true,status});
   }catch(e){if(db&&!committed)await db.query('ROLLBACK');await removeUploads(req.files);const messages=['Choose the requested photos.','Invalid view selection.','This photo request is closed or expired.','Related record is unavailable.','Select a photo for a missing requested view.','Supply every requested view before submitting.','Use a supported photograph (JPEG, PNG, WebP or HEIC).'];res.status(400).json({error:messages.includes(e.message)?e.message:'Photos could not be submitted. Use supported photographs and try again.'});}

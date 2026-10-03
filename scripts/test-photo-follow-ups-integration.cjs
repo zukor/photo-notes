@@ -34,6 +34,14 @@ await req(a,'/api/photo-follow-ups/push/enable',{endpoint:'https://fcm.googleapi
 let attempts=0;await f.push(pool,async()=>{attempts++;throw {statusCode:503};});assert(attempts>0);const delivery=(await pool.query('SELECT * FROM photo_follow_up_push_delivery WHERE attempts>0 LIMIT 1')).rows[0];assert.equal(delivery.attempts,1);assert(delivery.next_try>new Date());
 await pool.query('UPDATE photo_follow_up_push_delivery SET next_try=now()');await f.push(pool,async()=>{});assert((await pool.query('SELECT 1 FROM photo_follow_up_push_delivery WHERE sent_at IS NOT NULL')).rowCount>0);
 await req(a,'/api/photo-follow-ups/push/disable',{endpoint:'https://fcm.googleapis.com/followup-test'});assert.equal((await pool.query('SELECT 1 FROM photo_follow_up_push_subscriptions WHERE user_id=$1',[a.id])).rowCount,0);
+const requestedSchedule=await create(a,{recurrence:null,due_date:f.today('America/Chicago')}),requestedOccurrence=(await req(a,'/api/photo-follow-ups')).occurrences.find(o=>o.schedule_id===requestedSchedule.id);
+const requestBody={title:'Requested follow-up',instructions:'Photograph entire crack',views:['Overview','Detail'],allow_partial:true,follow_up_occurrence_id:requestedOccurrence.id};
+await req(b,'/api/photo-requests',requestBody,400);
+const requested=await req(a,'/api/photo-requests',requestBody);await req(a,'/api/photo-requests',requestBody,400);
+async function submitView(index){const body=new FormData();body.append('photos',new Blob([photo],{type:'image/jpeg'}),'requested.jpg');body.append('view_indices',JSON.stringify([index]));body.append('notes','["Fresh observation"]');const r=await fetch(base+'/api/public/photo-requests/'+requested.token,{method:'POST',body});const d=await r.json();assert.equal(r.status,200,JSON.stringify(d));return d;}
+assert.equal((await submitView(0)).status,'partially_submitted');assert.equal((await pool.query('SELECT status FROM photo_follow_up_occurrences WHERE id=$1',[requestedOccurrence.id])).rows[0].status,'pending');
+assert.equal((await submitView(1)).status,'completed');const completedRequest=(await pool.query('SELECT * FROM photo_follow_up_occurrences WHERE id=$1',[requestedOccurrence.id])).rows[0];assert.equal(completedRequest.status,'completed');assert.equal(completedRequest.photo_request_id,requested.id);assert(completedRequest.result_capture_id);assert.equal((await pool.query('SELECT 1 FROM photo_request_photos WHERE request_id=$1',[requested.id])).rowCount,2);
+console.log('PASS Photo Requests authorization, duplicate request prevention, partial and complete reconciliation');
 console.log('PASS advance reminders, due reminders, push opt-in, retry and success state, push opt-out');
 console.log('PASS recurrence, missed dates, reminder deduplication, capture receipt replay, permissions, rollback, asset and maintenance history, guided route visits');
 }finally{if(server)await new Promise(r=>server.close(r));await pool.end();}})().catch(e=>{console.error(e);process.exitCode=1;});

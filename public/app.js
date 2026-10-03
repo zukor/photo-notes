@@ -423,7 +423,7 @@ function renderApp() {
   else if (state.view === 'create') renderGroups();
   else if (state.view === 'send') renderSend();
   else if (state.view === 'hoa-maintenance') renderHoaMaintenance();
-  else if (state.view === 'photo-requests') window.PhotoNotesRequests.render({api,esc,toast,edition:state.proType,openPhoto:id=>{state.view='edit';state.editTopic='';state._focusCapture=id;state.selectedIds=new Set([String(id)]);renderApp();}});
+  else if (state.view === 'photo-requests') window.PhotoNotesRequests.render({api,esc,toast,followUp:state._photoRequestFollowUp,focusRequestId:state._photoRequestFocus,clearFollowUp:()=>{state._photoRequestFollowUp=null;state._photoRequestFocus=null;},edition:state.proType,openPhoto:id=>{state.view='edit';state.editTopic='';state._focusCapture=id;state.selectedIds=new Set([String(id)]);renderApp();}});
   else if (state.view === 'hoa-visits') renderHoaVisits();
   else if (state.view === 'hoa-visit') renderHoaVisit(state.hoaVisitId);
   else if (state.view === 'hoa-assets') renderHoaAssets();

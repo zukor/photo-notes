@@ -111,7 +111,7 @@ async function completeCapture(db,user,occurrenceId,captureId){
  if(o.subject_type==='inspection_stop'&&context.asset_id)await subject(db,user,'asset',context.asset_id);
  if(o.subject_type==='asset'||o.subject_type==='inspection_stop'&&context.asset_id)await db.query(`INSERT INTO hoa_asset_photos(asset_id,capture_id,photo_type) VALUES($1,$2,'condition') ON CONFLICT DO NOTHING`,[o.subject_type==='asset'?o.subject_id:context.asset_id,captureId]);
  if(o.subject_type==='maintenance'){
-  await db.query(`INSERT INTO hoa_item_photos(item_id,capture_id,photo_stage) VALUES($1,$2,'follow_up')`,[o.subject_id,captureId]);
+  await db.query(`INSERT INTO hoa_item_photos(item_id,capture_id,photo_stage) VALUES($1,$2,'follow_up') ON CONFLICT(item_id,capture_id) DO UPDATE SET photo_stage='follow_up'`,[o.subject_id,captureId]);
   await db.query(`INSERT INTO hoa_item_history(item_id,user_id,action,detail) VALUES($1,$2,'follow_up_photo',$3)`,[o.subject_id,user.id,JSON.stringify({occurrence_id:o.id,capture_id:captureId})]);
  }
  if(context.community_id&&context.property_area_id!==undefined)await db.query('UPDATE captures SET property_community_id=$1,property_area_id=$2 WHERE id=$3',[context.community_id,context.property_area_id||null,captureId]);
@@ -122,6 +122,26 @@ async function completeCapture(db,user,occurrenceId,captureId){
  await clearReminders(db,o.id);
  await db.query(`INSERT INTO capture_history(capture_id,user_id,action,detail) VALUES($1,$2,'follow_up_completed',$3)`,[captureId,user.id,JSON.stringify({occurrence_id:o.id,reference_capture_id:o.reference_capture_id})]);
  const s=(await db.query('SELECT * FROM photo_follow_up_schedules WHERE id=$1',[o.schedule_id])).rows[0];await generate(db,s);return o.id;
+}
+async function linkRequest(db,user,id,request){
+ const o=await lockedOccurrence(db,user,id);
+ if(o.status!=='pending'||o.subject_type==='route')throw fail('Choose an open photographic occurrence.');
+ if(o.photo_request_id&&(await db.query("SELECT 1 FROM photo_requests WHERE id=$1 AND status IN ('open','partially_submitted') AND expires_at>now()",[o.photo_request_id])).rowCount)throw fail('This occurrence already has an open Photo Request.',409);
+ await db.query('UPDATE photo_follow_up_occurrences SET photo_request_id=$1 WHERE id=$2',[request.id,o.id]);
+}
+async function completeRequest(db,request){
+ const o=(await db.query('SELECT o.*,s.subject_type,s.subject_id FROM photo_follow_up_occurrences o JOIN photo_follow_up_schedules s ON s.id=o.schedule_id WHERE o.photo_request_id=$1',[request.id])).rows[0];
+ if(!o||o.status!=='pending')return false;
+ const user=(await db.query('SELECT * FROM users WHERE id=$1 AND active=true',[request.user_id])).rows[0];if(!eligible(user))return false;
+ try{await authorize(db,user,(await lockedOccurrence(db,user,o.id)));}catch(e){if(e.status===403||e.status===404)return false;throw e;}
+ const photos=(await db.query('SELECT capture_id FROM photo_request_photos WHERE request_id=$1 ORDER BY view_index',[request.id])).rows;if(!photos.length)return false;
+ await completeCapture(db,user,o.id,photos[0].capture_id);
+ const context=await subject(db,user,o.subject_type,o.subject_id);
+ for(const p of photos.slice(1)){
+  if(o.subject_type==='asset'||o.subject_type==='inspection_stop'&&context.asset_id)await db.query("INSERT INTO hoa_asset_photos(asset_id,capture_id,photo_type) VALUES($1,$2,'condition') ON CONFLICT DO NOTHING",[o.subject_type==='asset'?o.subject_id:context.asset_id,p.capture_id]);
+  if(o.subject_type==='maintenance')await db.query("INSERT INTO hoa_item_photos(item_id,capture_id,photo_stage) VALUES($1,$2,'follow_up') ON CONFLICT(item_id,capture_id) DO UPDATE SET photo_stage='follow_up'",[o.subject_id,p.capture_id]);
+ }
+ return true;
 }
 async function completeVisit(db,user,visitId){
  const rows=(await db.query(`SELECT o.id FROM photo_follow_up_occurrences o WHERE o.visit_id=$1 AND o.status='pending'`,[visitId])).rows;
@@ -181,4 +201,4 @@ async function push(pool,send=require('web-push').sendNotification){
  await db.query('COMMIT');}catch(e){await db.query('ROLLBACK');throw e;}finally{db.release();}
 }
 function start(pool){let running=false;const run=async()=>{if(running)return;running=true;try{await tick(pool);await push(pool);}catch(e){console.error('[photo-follow-ups.worker]',e.message);}finally{running=false;}};void run();const timer=setInterval(run,60000);timer.unref();return timer;}
-module.exports={EDITIONS,SCHEMA,eligible,dateString,validDate,today,recurrenceDate,validate,subject,authorize,generate,completeCapture,completeVisit,tick,push,register,start};
+module.exports={EDITIONS,SCHEMA,eligible,dateString,validDate,today,recurrenceDate,validate,subject,authorize,generate,completeCapture,linkRequest,completeRequest,completeVisit,tick,push,register,start};
