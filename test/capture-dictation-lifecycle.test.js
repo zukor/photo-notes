@@ -26,3 +26,20 @@ test('Android still restarts after a pause and Stop prevents a restart',async()=
 test('unresponsive speech service releases the Stop button after a bounded wait',async()=>{
  const h=harness();await h.run('toggleDictation()');const done=h.run('finishCaptureDictation()');[...h.timers.values()].find(t=>t.ms===8000).fn();await done;assert.equal(h.elements.dictate.disabled,false);assert.equal(h.run('recognizer'),null);
 });
+
+
+test('unavailable speech constructors and failed startup show an actionable fallback',async()=>{
+ for(const constructorFails of [true,false]){
+  const h=harness();h.run(constructorFails?'window.SpeechRecognition=class{constructor(){throw Error("unavailable")}}':'window.SpeechRecognition=class{start(){throw Error("unavailable")}}');
+  await h.run('toggleDictation()');assert.equal(h.run('dictationActive'),false);assert.equal(h.elements.dictate.disabled,false);assert.match(h.elements.dictationStatus.textContent,/keyboard microphone/);assert.equal(h.elements.note.value,'Existing note');assert.equal(h.timers.size,0);
+ }
+});
+
+
+test('terminal speech errors release controls even when Safari never emits onend',async()=>{
+ for(const error of ['not-allowed','service-not-allowed','network','audio-capture']){
+  const h=harness();await h.run('toggleDictation()');h.sessions[0].onerror({error});
+  assert.equal(h.run('dictationActive'),false);assert.equal(h.elements.dictate.textContent,'Record Notes');assert.equal(h.timers.size,0);assert.equal(h.elements.note.value,'Existing note');
+  await h.run('toggleDictation()');assert.equal(h.sessions.length,2);h.sessions[0].onend();assert.equal(h.run('dictationActive'),true);
+ }
+});

@@ -1,6 +1,14 @@
 (function () {
   const STORAGE_KEY = 'photo-notes-language';
   const ES = {
+    'Starting microphone...': 'Iniciando el micrófono...',
+    'Share original photos': 'Compartir fotos originales',
+    'Share or download the selected file format, or share original photos below.': 'Comparta o descargue el formato seleccionado, o comparta las fotos originales abajo.',
+    'Use keyboard microphone': 'Usar el micrófono del teclado',
+    'Tap the microphone on your iPhone keyboard and speak. If it is missing, enable Dictation in Settings > General > Keyboard.': 'Toque el micrófono del teclado del iPhone y hable. Si no aparece, active Dictado en Configuración > General > Teclado.',
+    'Speech could not start. Use the keyboard microphone to dictate your notes.': 'No se pudo iniciar el reconocimiento de voz. Use el micrófono del teclado para dictar sus notas.',
+    'Send a document link': 'Enviar un enlace al documento',
+
     "Photo or notes changed. Tap Send/Share again.": "La foto o las notas cambiaron. Toque Enviar/Compartir de nuevo.",
     "Ready to share. Tap Send/Share again.": "Listo para compartir. Toque Enviar/Compartir de nuevo.",
     "Could not share. Your photo and notes are still here.": "No se pudo compartir. Su foto y sus notas siguen aquí.",
