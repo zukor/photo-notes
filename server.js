@@ -37,6 +37,7 @@ if (process.env.NODE_ENV === 'production' && (!process.env.SESSION_SECRET || SES
 }
 
 function normalizeProType(value) {
+  if (value === 'issue') return 'issue';
   if (value === 'general') return 'general';
   if (value === 'contractor') return 'contractor';
   if (value === 'roads') return 'roads';
@@ -2674,7 +2675,7 @@ app.post('/api/admin/users', requireAdmin, async (req, res) => {
     const industry = b.industry ? String(b.industry).trim() : null;
     const password = String(b.password || '');
     const requestedProduct = b.product === 'asphalt' ? 'paving' : b.product;
-    let proType=['roads','general','contractor','paving','hoa','property','concrete','roofer'].includes(requestedProduct)?requestedProduct:'general',plan=['general','contractor','paving','hoa','property','concrete','roofer'].includes(requestedProduct)?'pro':'free';
+    let proType=['issue','roads','general','contractor','paving','hoa','property','concrete','roofer'].includes(requestedProduct)?requestedProduct:'general',plan=['general','contractor','paving','hoa','property','concrete','roofer'].includes(requestedProduct)?'pro':'free';
     const access=b.edition_access===undefined?null:validateEditions(b.edition_access);
     if(b.edition_access!==undefined&&!access)return res.status(400).json({error:'Select at least one valid version'});
     if(access){proType=EDITIONS[access[0]].pro_type;plan=EDITIONS[access[0]].plan;}

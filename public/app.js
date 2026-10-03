@@ -15,8 +15,9 @@ function isConcreteClient(){return isProClient()&&state.proType==='concrete';}
 function isPavingClient(){return isProClient()&&(state.proType==='paving'||state.proType==='asphalt');}
 function isRooferClient(){return isProClient()&&state.proType==='roofer';}
 function isRoadIssuesClient(){return !isProClient()&&state.proType==='roads';}
-function productName(){return isRoadIssuesClient()?'Road Issue Reporter':isGeneralProClient()?'Photo Notes Pro':isGeneralContractorClient()?'General Contractor Pro':isHoaClient()?(state.proType==='property'?'Property Manager Pro':'HOA Maintenance Pro'):isConcreteClient()?'Concrete Pro':isRooferClient()?'Roofer Pro':isPavingClient()?'Paving Pro':'Photo Notes AI Basic';}
-const editionNames={basic:'Photo Notes Basic',pro:'Photo Notes Pro',contractor:'General Contractor Pro',roads:'Road Issue Reporter',paving:'Paving Pro',hoa:'HOA Maintenance Pro',property:'Property Manager Pro',concrete:'Concrete Pro',roofer:'Roofer Pro'};
+function isIssueReporterClient(){return !isProClient()&&state.proType==='issue';}
+function productName(){return isIssueReporterClient()?'Issue Reporter':isRoadIssuesClient()?'Road Issue Reporter':isGeneralProClient()?'Photo Notes Pro':isGeneralContractorClient()?'General Contractor Pro':isHoaClient()?(state.proType==='property'?'Property Manager Pro':'HOA Maintenance Pro'):isConcreteClient()?'Concrete Pro':isRooferClient()?'Roofer Pro':isPavingClient()?'Paving Pro':'Photo Notes AI Basic';}
+const editionNames={basic:'Photo Notes Basic',issue:'Issue Reporter',pro:'Photo Notes Pro',contractor:'General Contractor Pro',roads:'Road Issue Reporter',paving:'Paving Pro',hoa:'HOA Maintenance Pro',property:'Property Manager Pro',concrete:'Concrete Pro',roofer:'Roofer Pro'};
 function editionSwitcherOptions() {
   const allowed = state.me.edition_access;
   const core = ['basic','pro'].filter(key=>allowed.includes(key));
@@ -25,7 +26,7 @@ function editionSwitcherOptions() {
   const option = key=>`<option value="${esc(key)}" ${key===selectedEdition()?'selected':''}>${esc(editionNames[key]||key)}</option>`;
   return core.map(option).join('') + (core.length && others.length ? '<hr>' : '') + others.map(option).join('');
 }
-function selectedEdition(){return isBasicClient()?'basic':isRoadIssuesClient()?'roads':isGeneralProClient()?'pro':state.proType;}
+function selectedEdition(){return isIssueReporterClient()?'issue':isBasicClient()?'basic':isRoadIssuesClient()?'roads':isGeneralProClient()?'pro':state.proType;}
 function issueFabLabel(){return 'Report Issue';}
 function featureOn(name) { return isPavingClient() && (!state.me || !state.me.feature_access || state.me.feature_access[name] !== false); }
 function measurementOn(){return isConcreteClient()||featureOn('measurements');}
@@ -305,7 +306,7 @@ function renderApp() {
             <div class="profile-menu" id="profileMenu" hidden>
               <div class="profile-name">${esc((state.me && state.me.name) || 'Photo Notes User')}</div>
               <div class="profile-email">${esc((state.me && state.me.email) || '')}</div>
-              <div class="profile-plan">${isRoadIssuesClient()?'Road Issue Reporter':isGeneralProClient()?'Photo Notes Pro':isProClient()?esc(productName()):'Photo Notes Basic'}</div>
+              <div class="profile-plan">${isIssueReporterClient()?'Issue Reporter':isRoadIssuesClient()?'Road Issue Reporter':isGeneralProClient()?'Photo Notes Pro':isProClient()?esc(productName()):'Photo Notes Basic'}</div>
               ${state.me&&Array.isArray(state.me.edition_access)&&state.me.edition_access.length>1?`<div class="profile-version"><span>Photo Notes Version</span><select id="editionSwitcher" aria-label="Switch Photo Notes version">${editionSwitcherOptions()}</select></div>`:''}
               <button type="button" id="manageTesting" ${state.me?.is_testing_manager||state.me?.role==='admin'?'':'hidden'}>${uiT('Manage Testing')}</button>
               <button type="button" id="myAssignment" ${state.me?.is_tester||state.me?.is_testing_manager||state.me?.role==='admin'?'':'hidden'}>Testing Hub</button>
@@ -360,7 +361,7 @@ function renderApp() {
       const r=await api('/api/switch-edition',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({edition})});
       if(!r.ok)throw new Error();
       stopCaptureDictation();
-      state.view=edition==='roads'?'road-report':edition==='basic'?'capture':(IS_HANDHELD?'capture':'organize');state._captureShareSave=null;state.photoFile=null;state._note='';state._concreteCapture=null;state._pavingReason=null;
+      state.view=edition==='roads'?'road-report':(edition==='basic'||edition==='issue')?'capture':(IS_HANDHELD?'capture':'organize');state._captureShareSave=null;state.photoFile=null;state._note='';state._concreteCapture=null;state._pavingReason=null;
       await boot();toast('Version switched');
     }catch(e){toast('Version could not be switched. Please try again.');}
     finally{editionSwitcher.disabled=false;editionSwitcher.value=selectedEdition();}
@@ -664,10 +665,10 @@ function renderCapture() {
     <textarea id="note" placeholder="Your recorded notes will appear here as words."></textarea>
     ${isConcreteClient()?concreteCaptureDetailsMarkup():''}
 
-    ${isHoaClient()?`<label>Maintenance Category</label><select id="hoaArea">${HOA_AREAS.map(a=>`<option value="${esc(a)}">${esc(a)}</option>`).join('')}</select><div id="hoaDirectedWrap" style="display:none"><label>Directed To</label><input id="hoaDirected" placeholder="Person expected to answer"></div>`:`<label data-topic-heading="Topic (optional)">Topic (optional)</label>
+    ${isHoaClient()?`<label>Maintenance Category</label><select id="hoaArea">${HOA_AREAS.map(a=>`<option value="${esc(a)}">${esc(a)}</option>`).join('')}</select><div id="hoaDirectedWrap" style="display:none"><label>Directed To</label><input id="hoaDirected" placeholder="Person expected to answer"></div>`:`<label data-topic-heading="${isIssueReporterClient()?'Topic':'Topic (optional)'}">${isIssueReporterClient()?'Topic':'Topic (optional)'}</label>
     <div class="pill-group" id="areas">${areaChips()}</div>
     <div class="row compact" style="margin-top:10px">
-      <input type="text" id="newarea" placeholder="${isBasicClient()?'Type topic name here':'Add a topic...'}" />
+      <input type="text" id="newarea" placeholder="${isIssueReporterClient()?'Type issue name here':isBasicClient()?'Type topic name here':'Add a topic...'}" />
       <button class="btn ${isBasicClient()?'':'secondary'}" id="addarea">Add</button>
     </div>`}
 
@@ -1790,7 +1791,7 @@ async function drainQueue() {
         await queueDelete(item.id);
         if(queueAccount!==account||selectedEdition()!==edition)break;
         bgQueue=bgQueue.filter(row=>row.id!==item.id);
-        toast(edition==='basic'?'Saved to Photo Notes.':'Saved to Photo Notes. Find it in Organize.');
+        toast((edition==='basic'||edition==='issue')?'Saved to Photo Notes.':'Saved to Photo Notes. Find it in Organize.');
         if(state.view==='organize'||state.view==='edit'){const f=document.getElementById('filter');void loadCards(f?f.value||'':'');}
       }catch(error){
         if(queueAccount!==account||selectedEdition()!==edition)break;

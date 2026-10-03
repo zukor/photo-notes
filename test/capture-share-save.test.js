@@ -47,3 +47,13 @@ test('Basic waits for captioned photo preparation and invalidates changed notes'
  f.c.noteVal=()=> 'changed';f.c.prepareBasicShare();assert.equal(f.buttons.send.disabled,true);
  finish({name:'revised.jpg'});await new Promise(r=>setImmediate(r));await f.c.onSend();assert.equal(f.events[1].file.name,'revised.jpg');
 });
+
+
+test('Issue Reporter shares the selected Topic and refreshes prepared shares after topic changes',async()=>{
+ const f=fixture(async()=>{throw Error('Issue Reporter follows Basic sharing');});f.c.isBasicClient=()=>true;
+ f.c.state.area='Broken gate';f.c.isIssueReporterClient=()=>true;f.c.tr=text=>text;f.c.shortState=text=>text;
+ vm.runInContext(source.slice(source.indexOf('  function caption()'),source.indexOf('  function toast(')),f.c);
+ await f.c.onSend();assert.match(f.events[0].text,/Topic: Broken gate/);
+ f.c.state.area='Leaking pipe';await f.c.onSend();assert.match(f.events[1].text,/Topic: Leaking pipe/);assert.doesNotMatch(f.events[1].text,/Broken gate/);
+ f.c.isIssueReporterClient=()=>false;assert.doesNotMatch(f.c.caption(),/Topic:/);
+});

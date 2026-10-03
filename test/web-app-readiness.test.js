@@ -56,3 +56,17 @@ test('all offline shell assets exist and scripts are loaded before the main app'
 test('offline installation caches each URL only once',async()=>{
  const handlers={};let installed,urls;const c={self:{addEventListener:(name,handler)=>handlers[name]=handler,skipWaiting(){}},caches:{open:async()=>({addAll:async values=>{urls=values;}})}};vm.createContext(c);vm.runInContext(fs.readFileSync('public/sw.js','utf8'),c);handlers.install({waitUntil:value=>installed=value});await installed;assert.equal(urls.length,new Set(urls).size);assert(urls.includes('/install.html'));
 });
+
+
+test('every current edition can persist a capture and keeps retries isolated',async()=>{
+ global.indexedDB=new IDBFactory();
+ const account=await queue.accountKey('issue-reporter@example.invalid');
+ for(const edition of Object.keys(require('../editions').EDITIONS)){
+  const saved=await queue.create({photo:new Blob(['evidence']),note:'Issue details',area_tags:'["Broken gate"]'},false,account,edition);
+  const restored=(await queue.all()).find(row=>row.id===saved.id);
+  assert.equal(restored.edition,edition);assert.equal(restored.payload.area_tags,'["Broken gate"]');
+  assert.equal(await restored.payload.photo.text(),'evidence');assert(queue.eligible(restored,account,edition));
+  if(edition!=='basic')assert(!queue.eligible(restored,account,'basic'));
+  await queue.remove(saved.id);
+ }
+});

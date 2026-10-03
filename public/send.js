@@ -30,6 +30,7 @@
 
   function caption() {
     var parts = [];
+    if (typeof isIssueReporterClient==='function' && isIssueReporterClient() && state.area) parts.push(tr('Topic') + ': ' + state.area);
     var addr = q('addr') ? q('addr').textContent.trim() : '';
     if (addr && addr.indexOf('...') === -1 && !/^(address not found|address lookup)/i.test(addr)) {
       parts.push(shortState(addr));
@@ -73,7 +74,7 @@
   var sending = false;
   // Reuse the prepared share on a fresh tap if a browser requires user activation.
   var readyShare=null;
-  function shareKey(){return JSON.stringify([noteVal(),q('addr')?.textContent,q('gps')?.textContent,typeof state==='undefined'?null:state.me?.email,typeof state==='undefined'?null:state.proType,locale()]);}
+  function shareKey(){return JSON.stringify([noteVal(),q('addr')?.textContent,q('gps')?.textContent,typeof state==='undefined'?null:state.me?.email,typeof state==='undefined'?null:state.proType,typeof state==='undefined'?null:state.area,locale()]);}
   var basicShare=null;
   function basicMode(){return typeof isBasicClient==='function'&&isBasicClient();}
   function recording(){return (typeof dictationActive!=='undefined'&&dictationActive)||(typeof dictationFinish!=='undefined'&&!!dictationFinish);}

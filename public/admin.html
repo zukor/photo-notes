@@ -176,7 +176,7 @@
     function st(n, l){ return `<span class="stat"><div class="n">${n}</div><div class="l">${l}</div></span>`; }
     function num(v){ return Number(v) || 0; }
     let allUsers = [], selectedUserId = null;
-    const editionLabels={basic:'Photo Notes Basic',pro:'Photo Notes Pro',contractor:'General Contractor Pro',roads:'Road Issue Reporter',paving:'Paving Pro',hoa:'HOA Maintenance Pro',property:'Property Manager Pro',concrete:'Concrete Pro',roofer:'Roofer Pro'};
+    const editionLabels={basic:'Photo Notes Basic',issue:'Issue Reporter',pro:'Photo Notes Pro',contractor:'General Contractor Pro',roads:'Road Issue Reporter',paving:'Paving Pro',hoa:'HOA Maintenance Pro',property:'Property Manager Pro',concrete:'Concrete Pro',roofer:'Roofer Pro'};
     function allowedVersions(u){return Array.isArray(u.edition_access)?u.edition_access:u.role==='admin'?Object.keys(editionLabels):[u.plan==='pro'?(u.pro_type==='general'?'pro':u.pro_type||'paving'):u.pro_type==='roads'?'roads':'basic'];}
     function versionChecks(owner,access){return Object.entries(editionLabels).map(([key,label])=>`<label class="feature-item"><input type="checkbox" data-version-owner="${owner}" value="${key}" ${access.includes(key)?'checked':''}><span>${label}</span></label>`).join('');}
     function showUser(id){selectedUserId=id;renderUserList();document.getElementById('users').scrollIntoView({block:'start'});document.getElementById(id?'backToUsers':'userSearch').focus();}

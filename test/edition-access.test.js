@@ -63,3 +63,18 @@ test('Property Manager Pro keeps its identity through assignment and switching',
   const denied=harness({edition_access:['hoa']});
   assert.equal((await denied.call('/api/switch-edition',{edition:'property'})).code,403);
 });
+
+test('Issue Reporter is a free edition with its own persisted identity',()=>{
+  const {EDITIONS,currentEdition}=require('../editions');
+  assert.deepEqual(EDITIONS.issue,{plan:'free',pro_type:'issue',label:'Issue Reporter'});
+  assert.equal(currentEdition({plan:'free',pro_type:'issue'}),'issue');
+  assert.deepEqual(validateEditions(['basic','issue']),['basic','issue']);
+});
+test('authorized accounts can switch to Issue Reporter and back to Basic',async()=>{
+  const h=harness({edition_access:['basic','issue']});
+  const issue=await h.call('/api/switch-edition',{edition:'issue'});
+  assert.equal(issue.code,200);assert.equal(h.record.plan,'free');assert.equal(h.record.pro_type,'issue');
+  const basic=await h.call('/api/switch-edition',{edition:'basic'});
+  assert.equal(basic.code,200);assert.equal(h.record.pro_type,'general');
+});
+
