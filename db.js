@@ -89,6 +89,7 @@ CREATE TABLE IF NOT EXISTS captures (
   concrete_phase TEXT,
   concrete_purpose TEXT,
   paving_photo_reason TEXT,
+  urgency TEXT NOT NULL DEFAULT 'standard',
   concrete_element TEXT,
   concrete_stage TEXT,
   concrete_condition TEXT,
@@ -667,6 +668,7 @@ async function init() {
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS concrete_phase TEXT`);
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS concrete_purpose TEXT`);
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS paving_photo_reason TEXT`);
+  await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS urgency TEXT NOT NULL DEFAULT 'standard'`);
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS concrete_element TEXT`);
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS concrete_stage TEXT`);
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS concrete_condition TEXT`);
