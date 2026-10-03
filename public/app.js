@@ -419,7 +419,7 @@ function renderApp() {
   else if (state.view === 'hoa-visits') renderHoaVisits();
   else if (state.view === 'hoa-visit') renderHoaVisit(state.hoaVisitId);
   else if (state.view === 'hoa-assets') renderHoaAssets();
-  else if (state.view === 'hoa-asset') renderHoaAsset(state.hoaAssetId).then(()=>window.PhotoNotesQR?.mountAsset({id:state.hoaAssetId,edition:selectedEdition(),api,esc,toast}));
+  else if (state.view === 'hoa-asset') {const id=state.hoaAssetId;renderHoaAsset(id).then(()=>{if(state.view==='hoa-asset'&&state.hoaAssetId===id)window.PhotoNotesQR?.mountAsset({id,edition:selectedEdition(),api,esc,toast});});}
   else if (state.view === 'hoa-inspections') renderHoaInspections();
   else if (state.view === 'hoa-communities') renderHoaCommunities();
   else if (state.view === 'hoa-dashboard') renderHoaDashboard();

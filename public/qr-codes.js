@@ -9,7 +9,7 @@ window.PhotoNotesQR={
  wire(root,opts){root.querySelectorAll('[data-qr-target]').forEach(b=>b.onclick=()=>this.manage(b.dataset.qrTarget,b.dataset.qrId,opts));},
  wireSavedCards(root,rows,edition,opts){
   if(!editions.has(edition))return;
-  for(const row of rows){const card=root.querySelector(`.capchk[value="${Number(row.id)}"]`)?.closest('.card');if(card&&!card.querySelector(`[data-qr-id="${Number(row.id)}"]`))card.querySelector('.photo-title')?.insertAdjacentHTML('afterend',this.button('note',row.id,edition));}
+  for(const row of rows){const title=root.querySelector(`.phototitlewrap[data-id="${Number(row.id)}"] .photo-title`);if(title&&!title.parentElement.querySelector(`[data-qr-id="${Number(row.id)}"]`))title.insertAdjacentHTML('afterend',this.button('note',row.id,edition));}
   this.wire(root,opts);
  },
  mountAsset({id,edition,...opts}){
