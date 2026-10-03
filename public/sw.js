@@ -6,10 +6,10 @@ SHELL.push('/concrete-purpose-menu.js?v=286', '/ramo-intake.js?v=286', '/capture
 SHELL.push('/qr-codes.js?v=1','/qr-codes.css?v=1');
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll([...new Set(SHELL)])).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(DUPLICATE_CACHE).then(c => c.addAll([...new Set(SHELL)])).then(() => self.skipWaiting()));
 });
 self.addEventListener('activate', (e) => {
-  e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim()));
+  e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== DUPLICATE_CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim()));
 });
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
@@ -26,3 +26,7 @@ self.addEventListener('fetch', (e) => {
 
 self.addEventListener('push',event=>{let url='/?issues=1';try{if(event.data.json().url==='/admin')url='/admin';}catch{}event.waitUntil(self.registration.showNotification('Photo Notes',{body:'There is an update in your issue reports.',icon:'/icon-192.png?v=150',tag:'photo-notes-issue-update',data:{url}}));});
 self.addEventListener('notificationclick',event=>{event.notification.close();const url=event.notification.data?.url==='/admin'?'/admin':'/?issues=1';event.waitUntil(self.clients.openWindow(url));});
+
+// Context reuse shares the shell with a separate cache generation.
+const DUPLICATE_CACHE = CACHE + '-duplicate-1';
+SHELL.push('/duplicate-context.js?v=1');

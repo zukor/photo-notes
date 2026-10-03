@@ -742,6 +742,8 @@ app.post('/api/captures', requireAuth, validateCaptureAccount, upload.single('ph
     const db=receipt.db;
     const b = req.body || {};
     if(!req.file&&!String(b.note||'').trim())throw Object.assign(new Error('Take a photo or add a note first'),{status:400});
+    const contextSourceId=Number(b.context_source_id);
+    if(b.context_source_id&&!req.file)throw Object.assign(new Error('A new photo is required when reusing Photo Note context'),{status:400});
     const lat = b.latitude ? parseFloat(b.latitude) : null;
     const lng = b.longitude ? parseFloat(b.longitude) : null;
     // Address geocoding is kept OFF the save path so the record commits
@@ -839,6 +841,10 @@ app.post('/api/captures', requireAuth, validateCaptureAccount, upload.single('ph
       } catch (e) { console.error('[evidence.fingerprint]',e&&e.message); }
     }
     await recordCaptureHistory(req.user.id,saved.id,'captured',{photo:!!req.file,gps:lat!=null&&lng!=null,address:!!address},db);
+    if(Number.isInteger(contextSourceId)&&contextSourceId>0&&['general','paving','concrete','property','hoa','contractor','roofer'].includes(captureProduct)){
+      const source=(await db.query('SELECT id FROM captures WHERE id=$1 AND user_id=$2',[contextSourceId,req.user.id])).rows[0];
+      if(source)await recordCaptureHistory(req.user.id,saved.id,'context_reused',{source_capture_id:source.id},db);
+    }
     let maintenance_item=null;
     if(['hoa','property'].includes(await currentProduct(req.user.id,db))&&b.hoa_community_id){
       const company=await hoaCompanyForUser(req.user.id,false,db),communityId=Number(b.hoa_community_id);
@@ -884,9 +890,9 @@ app.get('/api/captures', requireAuth, async (req, res) => {
     let rows;
     if (area) {
       ({ rows } = await pool.query(
-        `SELECT c.*,j.name job_name,j.job_number FROM captures c LEFT JOIN jobs j ON j.id=c.job_id WHERE c.user_id = $1 AND $2 = ANY(c.area_tags) ORDER BY c.created_at DESC`, [req.user.id, area]));
+        `SELECT c.*,(SELECT community_id FROM hoa_maintenance_items WHERE capture_id=c.id LIMIT 1) duplicate_community_id,(SELECT area FROM hoa_maintenance_items WHERE capture_id=c.id LIMIT 1) duplicate_category,(SELECT item_type FROM hoa_maintenance_items WHERE capture_id=c.id LIMIT 1) duplicate_record_type,j.name job_name,j.job_number FROM captures c LEFT JOIN jobs j ON j.id=c.job_id WHERE c.user_id = $1 AND $2 = ANY(c.area_tags) ORDER BY c.created_at DESC`, [req.user.id, area]));
     } else {
-      ({ rows } = await pool.query(`SELECT c.*,j.name job_name,j.job_number FROM captures c LEFT JOIN jobs j ON j.id=c.job_id WHERE c.user_id = $1 ORDER BY c.created_at DESC`, [req.user.id]));
+      ({ rows } = await pool.query(`SELECT c.*,(SELECT community_id FROM hoa_maintenance_items WHERE capture_id=c.id LIMIT 1) duplicate_community_id,(SELECT area FROM hoa_maintenance_items WHERE capture_id=c.id LIMIT 1) duplicate_category,(SELECT item_type FROM hoa_maintenance_items WHERE capture_id=c.id LIMIT 1) duplicate_record_type,j.name job_name,j.job_number FROM captures c LEFT JOIN jobs j ON j.id=c.job_id WHERE c.user_id = $1 ORDER BY c.created_at DESC`, [req.user.id]));
     }
     res.json(rows);
   } catch (err) {
@@ -924,7 +930,7 @@ require('./location-intelligence').registerLocationIntelligence(app,{pool,requir
 app.get('/api/concrete/report',requireAuth,requireConcrete,async(req,res)=>{try{
   const vals=[req.user.id],where=['c.user_id=$1','c.photo_path IS NOT NULL'];
   if(Number.isInteger(Number(req.query.job_id))){vals.push(Number(req.query.job_id));where.push(`c.job_id=$${vals.length}`);}
-  const rows=(await pool.query(`SELECT c.*,j.name job_name,j.job_number FROM captures c LEFT JOIN jobs j ON j.id=c.job_id WHERE ${where.join(' AND ')} AND COALESCE(c.concrete_stage,'')<>'batch_ticket' ORDER BY c.created_at DESC LIMIT 500`,vals)).rows;
+  const rows=(await pool.query(`SELECT c.*,(SELECT community_id FROM hoa_maintenance_items WHERE capture_id=c.id LIMIT 1) duplicate_community_id,(SELECT area FROM hoa_maintenance_items WHERE capture_id=c.id LIMIT 1) duplicate_category,(SELECT item_type FROM hoa_maintenance_items WHERE capture_id=c.id LIMIT 1) duplicate_record_type,j.name job_name,j.job_number FROM captures c LEFT JOIN jobs j ON j.id=c.job_id WHERE ${where.join(' AND ')} AND COALESCE(c.concrete_stage,'')<>'batch_ticket' ORDER BY c.created_at DESC LIMIT 500`,vals)).rows;
   const ids=rows.map(r=>r.id),links=ids.length?(await pool.query(`SELECT l.placement_capture_id,l.reference_type,c.* FROM concrete_ticket_links l JOIN captures c ON c.id=l.ticket_capture_id WHERE l.user_id=$1 AND l.placement_capture_id=ANY($2::int[]) ORDER BY l.created_at`,[req.user.id,ids])).rows:[];
   for(const row of rows)row.supporting_photos=links.filter(link=>link.placement_capture_id===row.id);
   const footprints=ids.length?(await pool.query('SELECT * FROM concrete_footprints WHERE user_id=$1 AND capture_id=ANY($2::int[]) ORDER BY created_at',[req.user.id,ids])).rows:[];
@@ -955,7 +961,7 @@ app.get('/api/captures/search', requireAuth, async (req,res)=>{
     if(req.query.missing_address==='1')where.push(`COALESCE(c.address,'')=''`);
     for(const marker of ['favorite','flagged'])if(req.query[marker]==='1')where.push(`c.${marker}=true`);
     if(req.query.has_photo==='1')where.push(`c.photo_path IS NOT NULL`);
-    const rows=(await pool.query(`SELECT c.*,j.name job_name,j.job_number FROM captures c LEFT JOIN jobs j ON j.id=c.job_id WHERE ${where.join(' AND ')} ORDER BY c.created_at DESC LIMIT 500`,vals)).rows;
+    const rows=(await pool.query(`SELECT c.*,(SELECT community_id FROM hoa_maintenance_items WHERE capture_id=c.id LIMIT 1) duplicate_community_id,(SELECT area FROM hoa_maintenance_items WHERE capture_id=c.id LIMIT 1) duplicate_category,(SELECT item_type FROM hoa_maintenance_items WHERE capture_id=c.id LIMIT 1) duplicate_record_type,j.name job_name,j.job_number FROM captures c LEFT JOIN jobs j ON j.id=c.job_id WHERE ${where.join(' AND ')} ORDER BY c.created_at DESC LIMIT 500`,vals)).rows;
     res.json(rows);
   }catch(err){console.error('[captures.search]',err);res.status(500).json({error:'search failed'});}
 });
