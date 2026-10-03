@@ -2,6 +2,7 @@ const {test}=require('node:test'),assert=require('node:assert/strict');
 const {sanitize,register}=require('../capture-templates');
 test('templates exclude evidence and isolate specialty fields',()=>{
  const unsafe={topic:'Pavement',urgency:'urgent',note:'damaged',latitude:42,address:'site',created_at:'yesterday',job_id:5,photo:'file',concreteCondition:'unsafe',concreteSeverity:'critical',hoaType:'inspection',concretePhase:'work',concretePurpose:'work_problem',concreteElement:'patio',pavingPhotoReason:'ticket'};
+ assert.deepEqual(sanitize('pro',null),{});
  assert.deepEqual(sanitize('pro',unsafe),{topic:'Pavement',urgency:'urgent'});
  assert.equal(sanitize('concrete',unsafe).concreteCondition,undefined);
  assert.equal(sanitize('paving',unsafe).pavingPhotoReason,undefined);
