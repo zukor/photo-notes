@@ -3,7 +3,7 @@ const SHELL = ['/photo-follow-ups.js?v=1','/photo-follow-ups.css?v=1','/visual-a
 SHELL.push('/concrete-purpose-menu.js?v=286', '/ramo-intake.js?v=286', '/capture-queue.js?v=310', '/install-help.js?v=332', '/install-page.js?v=286', '/install-help.css?v=332', '/install.html', '/issue-markup.js?v=286', '/concrete-capture.js?v=175', '/issue-reporter.js?v=314', '/concrete-footprints.js?v=332', '/app.js?v=336', '/favicon-16.png?v=150', '/favicon-32.png?v=150', '/favicon-48.png?v=150', '/icon-180.png?v=150', '/icon-192.png?v=150', '/icon-512.png?v=150', '/icon-maskable-192.png?v=150', '/icon-maskable-512.png?v=150');
 
 // Optional physical-context QR shell resources.
-SHELL.push('/qr-codes.js?v=1','/qr-codes.css?v=1');
+SHELL.push('/qr-codes.js?v=2','/qr-codes.css?v=2');
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(DUPLICATE_CACHE).then(c => c.addAll([...new Set(SHELL)])).then(() => self.skipWaiting()));
