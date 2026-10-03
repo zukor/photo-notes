@@ -28,7 +28,7 @@ function editionSwitcherOptions() {
 }
 function selectedEdition(){return isIssueReporterClient()?'issue':isBasicClient()?'basic':isRoadIssuesClient()?'roads':isGeneralProClient()?'pro':state.proType;}
 function issueFabLabel(){return 'Report Issue';}
-function featureOn(name) { return isPavingClient() && (!state.me || !state.me.feature_access || state.me.feature_access[name] !== false); }
+function featureOn(name) { return (name === 'camera_readers' ? isProClient() && ['general','paving','asphalt','concrete','property','hoa','contractor','roofer'].includes(state.proType) : isPavingClient()) && (!state.me || !state.me.feature_access || state.me.feature_access[name] !== false); }
 function measurementOn(){return isConcreteClient()||featureOn('measurements');}
 function beforeAfterOn(){return isConcreteClient()||featureOn('before_after');}
 function isMacClient() { return /Macintosh|MacIntel/.test(navigator.userAgent + ' ' + navigator.platform) && !isIOS(); }
@@ -644,7 +644,7 @@ function renderCapture() {
     <label>Photo</label>
     <button type="button" class="btn" id="takephoto">Take Photo</button>
     <button type="button" class="btn secondary" id="choosephoto" style="margin-top:8px">Choose from library or files</button>
-    ${isIndustryProClient() && ['ticket_scanner','camera_readers','before_after'].some(featureOn) && !isPavingClient() ? `<button type="button" class="btn secondary" id="openCameraTools" style="margin-top:8px">Other Camera Tools</button>` : ''}
+    ${featureOn('camera_readers') && !isPavingClient() ? `<button type="button" class="btn secondary" id="openCameraTools" style="margin-top:8px">Camera Tools</button>` : ''}
     <input type="file" accept="image/*" capture="environment" id="photoCam" style="display:none" />
     <input type="file" accept="image/*" id="photoLib" style="display:none" />
     <div class="photo-box capture-preview" id="previewBox" style="display:none;margin-top:12px"><img id="preview" alt="Selected photo preview" style="display:block" /><div class="capture-preview-actions"><button type="button" class="btn secondary" id="retakePhoto">Retake Photo</button><button type="button" class="btn secondary" id="cancelPhoto">Cancel Photo</button></div></div>
@@ -765,12 +765,12 @@ function renderCameraTools() {
         ${featureOn('camera_readers') ? cameraToolCard('Gauge & Instrument Reader','Read gauges, scales, hour meters, thermometers, fuel displays, and other instruments.','Read Instrument','toolGauge') : ''}
       </div>
     </section>
-    <section class="camera-tool-group">
+    ${beforeAfterOn()?`<section class="camera-tool-group">
       <div class="camera-tool-heading"><strong>Comparison Tools</strong><span>Create consistent visual records of work before and after completion.</span></div>
       <div class="camera-tool-grid">
         ${beforeAfterOn() ? cameraToolCard('Before & After Alignment','Use an earlier photo as a framing reference, compare the alignment, and save the pair.','Match Photos','toolAlignment') : ''}
       </div>
-    </section>`;
+    </section>`:''}`;
   document.getElementById('toolsBack').onclick = () => { state.view='capture'; renderApp(); };
   const wire=(id,fn)=>{const b=document.getElementById(id);if(b)b.onclick=fn;};
   wire('toolTicket',() => { state.view='ticket'; renderApp(); });
@@ -791,6 +791,7 @@ const readerConfigs = {
   business_card: { title:'Business Card Scanner', noun:'business card', captureLabel:'Business Card', readLabel:'Read Business Card', fields:[['name','Name'],['job_title','Job Title'],['company','Company'],['phone','Phone'],['email','Email'],['address','Address'],['website','Website']] },
 };
 function renderCameraReader() {
+  if (!featureOn('camera_readers')) { state.view='capture'; renderApp(); return; }
   const cfg = readerConfigs[cameraReaderType], body = pavingToolMount(), embedded=pavingToolEmbedded();
   body.className = 'workflow-camera-tools'; cameraReaderFile = null; cameraReaderDraft = null;
   body.innerHTML = `
@@ -2428,7 +2429,7 @@ function formatGpsClient(c){
   return c&&c.latitude!=null&&c.longitude!=null?`${Number(c.latitude).toFixed(5)}, ${Number(c.longitude).toFixed(5)}`:'Not available';
 }
 function photoLocationHtml(c,addressFallback='No address'){
-  return `<div class="photo-location"><div class="photo-location-label">GPS</div><div class="photo-gps">${esc(formatGpsClient(c))}</div><div class="photo-location-label">Address</div><div class="addr">${esc(c&&c.address||addressFallback)}</div></div>`;
+  return `<div class="photo-location"><div class="photo-location-label">GPS</div><div class="photo-gps">${esc(formatGpsClient(c))}</div><div class="photo-location-label">Address</div><div class="addr">${esc(c&&c.address||addressFallback)}</div>${locationIntelligenceEnabled()&&c&&c.id?`<button class="btn secondary slim locationView" data-location-id="${c.id}">View Location</button>`:''}</div>`;
 }
 function captureCardHtml(c) {
   const when = new Date(c.created_at).toLocaleString(uiLocale(), { year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' });
@@ -2491,7 +2492,7 @@ async function exportConcreteReport(format){const p=new URLSearchParams({doc:for
 async function showEvidence(id){
   try{
     const r=await api(`/api/captures/${id}/evidence`);if(!r.ok)throw new Error();const d=await r.json();
-    const labels={photo_linked:'Photo linked',photo_relationship_changed:'Relationship changed',photo_unlinked:'Photo unlinked',captured:'Original capture saved',details_updated:'Details updated',photo_rotated:'Photo rotated',photo_flipped:'Photo flipped',photo_cropped:'Photo cropped',original_restored:'Original photo restored'};
+    const labels={subject_location_updated:'Subject Location updated',photo_linked:'Photo linked',photo_relationship_changed:'Relationship changed',photo_unlinked:'Photo unlinked',captured:'Original capture saved',details_updated:'Details updated',photo_rotated:'Photo rotated',photo_flipped:'Photo flipped',photo_cropped:'Photo cropped',original_restored:'Original photo restored'};
     const hash=d.evidence&&d.evidence.original_sha256||'';
     const modal=document.createElement('div');modal.className='evidence-modal';modal.setAttribute('role','dialog');modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.58);z-index:80;padding:18px;overflow:auto';
     const fileStatus=d.fingerprint_verified===true?'Original photo matches':d.fingerprint_verified===false?'Original photo does not match':'File check unavailable';
@@ -3119,11 +3120,7 @@ async function renderMap() {
   try { const gr = await api('/api/groups'); if (gr.ok) { const gs = await gr.json(); gsel.innerHTML = '<option value="">All Documents</option>' + gs.map(g => `<option value="${g.id}">${esc(g.title || 'Untitled')}</option>`).join(''); } } catch (e) {}
   const div = document.getElementById('mapdiv');
   mapObj = L.map(div).setView([29.5, -98.5], 12);
-  if (cfg.mapbox_token) {
-    L.tileLayer(`https://api.mapbox.com/styles/v1/mapbox/satellite-v9/tiles/512/{z}/{x}/{y}@2x?access_token=${cfg.mapbox_token}`, { tileSize: 512, zoomOffset: -1, maxZoom: 22, maxNativeZoom: 19, attribution: '&copy; Mapbox &copy; Maxar' }).addTo(mapObj);
-  } else {
-    installMapTileFallback(L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}?blankTile=false', { maxZoom: 22, maxNativeZoom: 19, attribution: 'Tiles &copy; Esri, Maxar, Earthstar Geographics' }),mapObj).addTo(mapObj);
-  }
+  sharedSatelliteLayer(cfg,mapObj).addTo(mapObj);
   mapObj.on('popupopen', (e) => {
     const btn = e.popup.getElement().querySelector('.mapopen');
     if (btn) btn.onclick = () => openCaptureInLibrary(parseInt(btn.getAttribute('data-id'), 10));

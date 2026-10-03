@@ -674,6 +674,7 @@ async function init() {
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS concrete_severity TEXT`);
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS concrete_mix TEXT`);
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS concrete_location TEXT`);
+  await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS subject_latitude DOUBLE PRECISION, ADD COLUMN IF NOT EXISTS subject_longitude DOUBLE PRECISION, ADD COLUMN IF NOT EXISTS location_description TEXT, ADD COLUMN IF NOT EXISTS camera_direction DOUBLE PRECISION, ADD COLUMN IF NOT EXISTS camera_direction_source TEXT`);
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS overlays JSONB`);
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS job_id INTEGER REFERENCES jobs(id) ON DELETE SET NULL`);
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS perceptual_hash TEXT`);
