@@ -54,10 +54,11 @@ function data(url){const p=url.pathname;
   await page.goto(base);await page.waitForFunction(()=>typeof state!=='undefined'&&state.me&&document.getElementById('body'));
   async function check(name){
    await page.waitForFunction(()=>typeof PhotoNotesHelp!=='undefined');
-   await page.evaluate(()=>PhotoNotesHelp.refresh());const items=await page.evaluate(()=>PhotoNotesHelp.inspect());assert(items.length>0,name+' has features');
-   for(const i of items){seen.add(i.key+'|'+i.title);if(!i.authored)missing.set(i.key+'|'+i.title,{name,...i});}
    await page.locator('.pn-help-fab').click();assert.equal(await page.locator('.pn-help-fab').getAttribute('aria-expanded'),'true');
-   const titles=await page.locator('.pn-help-article summary').allTextContents();assert.deepEqual(titles,items.map((i,k)=>`${k+1}. ${i.title}`),name+' Help follows page order');
+   // Compare the current page controls and current Help in one task. Saved records can arrive while opening Help.
+   const {items,titles}=await page.evaluate(()=>{PhotoNotesHelp.refresh();return {items:PhotoNotesHelp.inspect(),titles:[...document.querySelectorAll('.pn-help-article summary')].map(n=>n.textContent)};});assert(items.length>0,name+' has features');
+   for(const i of items){seen.add(i.key+'|'+i.title);if(!i.authored)missing.set(i.key+'|'+i.title,{name,...i});}
+   assert.deepEqual(titles,items.map((i,k)=>`${k+1}. ${i.title}`),name+' Help follows page order');
    const h=await page.locator('.pn-help-fab').boundingBox();assert(h.x>width/2);const report=page.locator('#issueFab');if(await report.count()){const b=await report.boundingBox();assert(b.x<width/2&&b.x+b.width<h.x);}
    const drawer=await page.locator('.pn-help-drawer').boundingBox();assert(drawer.x>=-1&&drawer.x+drawer.width<=width+1);if(width>=1100)assert(drawer.width/width>=.25&&drawer.width/width<=.3);
    const terms=page.locator('[data-term]');if(await terms.count()){await terms.first().press('Enter');await page.evaluate(()=>PhotoNotesHelp.refresh());assert.equal(await terms.first().getAttribute('aria-expanded'),'true');assert(await terms.first().locator('xpath=following-sibling::*').isVisible());}
