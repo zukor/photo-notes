@@ -815,6 +815,7 @@ async function init() {
   if (adminAreas.rows.length === 0) await seedUserAreas(adminId);
 
   await pool.query(require('./related-photos').SCHEMA);
+  await pool.query(require('./photo-comments').SCHEMA);
   await require('./testing-hub').initTestingHub(pool);
   await pool.query(require('./visual-analysis').SCHEMA);
   console.log('[db] schema ready');
