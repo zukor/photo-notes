@@ -14,7 +14,7 @@ await page.evaluate(({edition,source})=>{state.plan=['basic','issue','roads'].in
 const action=page.locator('.duplicate-photo-note');if(['basic','issue','roads'].includes(edition)){assert.equal(await action.count(),0);continue;}
 assert.equal(await action.count(),1);await action.click();assert.equal(await page.locator('#duplicateCopyNotes').isChecked(),false);assert(await page.locator('#duplicatePhotoDialog').evaluate(d=>d.getBoundingClientRect().right<=innerWidth&&d.getBoundingClientRect().left>=0));await page.locator('#duplicateStart').click();
 await page.waitForSelector('#duplicateCaptureContext');if(['pro','concrete','property'].includes(edition))await page.screenshot({path:`/tmp/duplicate-${engine.name()}-${edition}-${width}.png`});
-assert.equal(await page.locator('#note').inputValue(),'');
+assert.equal(await page.locator('#note').inputValue(),'');if(!['hoa','property'].includes(edition))assert.equal(await page.locator('#duplicateTopicSummary').textContent(),'Topic: Pavement');
 assert.deepEqual(await page.evaluate(()=>[state.photoFile,state.location,state.address,state._measure]),[null,null,null,null]);
 if(['hoa','property'].includes(edition)){assert.equal(await page.locator('#hoaCommunity').inputValue(),'3');assert.equal(await page.locator('#hoaArea').inputValue(),'Lighting and Electrical');assert.equal(await page.locator('#hoaPriority').inputValue(),'routine');}
 else if(edition==='concrete'){assert.equal(await page.locator('#concreteJob').inputValue(),'4');assert.equal(await page.locator('#concreteMix').inputValue(),'');assert.equal(await page.locator('#concreteCondition').inputValue(),'not_assessed');}
