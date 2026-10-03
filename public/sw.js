@@ -26,3 +26,7 @@ self.addEventListener('fetch', (e) => {
 
 self.addEventListener('push',event=>{let data={};try{data=event.data.json();}catch{}const follow=data.url==='/?followups=1',url=follow?'/?followups=1':data.url==='/admin'?'/admin':'/?issues=1';event.waitUntil(self.registration.showNotification(follow?'Photo Follow-Up':'Photo Notes',{body:follow?String(data.body||'A follow-up photograph is due.'):'There is an update in your issue reports.',icon:'/icon-192.png?v=150',tag:follow?String(data.tag||'photo-follow-up'):'photo-notes-issue-update',data:{url}}));});
 self.addEventListener('notificationclick',event=>{event.notification.close();const target=event.notification.data?.url,url=target==='/?followups=1'?target:target==='/admin'?'/admin':'/?issues=1';event.waitUntil(self.clients.openWindow(url));});
+
+// Context reuse shares the shell with a separate cache generation.
+const DUPLICATE_CACHE = CACHE + '-duplicate-1';
+SHELL.push('/duplicate-context.js?v=1');

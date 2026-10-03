@@ -36,7 +36,7 @@ async function render(){
  }catch(e){const loading=document.getElementById('fuLoading');if(loading)loading.textContent=e.message;}
 }
 async function take(id){try{const d=await json('/occurrences/'+id);if(d.occurrence.subject_type==='route'){const v=await json('/occurrences/'+id+'/visit',{});state.view='hoa-visit';state.hoaVisitId=Number(v.id);renderApp();return;}
- state._followUp={...d,account:state.me.email,edition:state.proType};state.photoFile=null;state._note='';state.location=null;state.address=null;state._locationPromise=null;state._captureShareSave=null;state._duplicateContext=null;state._dims=freshDims();state._measure=null;
+ captureLocationGeneration++;stopCaptureDictation();globalThis.PhotoNotesCustomFields?.clear();state._followUp={...d,account:state.me.email,edition:state.proType};state.photoFile=null;state._note='';state.location=null;state.address=null;state._locationPromise=null;state._captureShareSave=null;state._duplicateContext=null;state._dims=freshDims();state._measure=null;
  if(d.context.community_id)state.communityId=String(d.context.community_id);state.jobId=d.context.job_id?String(d.context.job_id):d.occurrence.subject_type==='job'?String(d.context.id):'';
  if(state.proType==='concrete')state._concreteCapture={phase:'follow_up',purpose:'routine_review',jobId:state.jobId};state.view='capture';renderApp();
  }catch(e){toast(e.message);}}

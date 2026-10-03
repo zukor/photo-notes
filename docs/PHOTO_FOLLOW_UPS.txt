@@ -1,0 +1,36 @@
+Scheduled Follow-Up Photography
+
+Photo Follow-Ups is shared by Photo Notes Pro, Paving, Concrete, Property Manager, HOA Maintenance, General Contractor and Roofer. Basic and both reporters have no scheduling UI or API access.
+
+Use Photo Follow-Ups above the shared workflow, or Schedule Follow-Up Photo alongside a saved photo, asset, route or maintenance record. Choose a stable subject, monitoring title, short photo instructions, first date, named time zone and calendar frequency. Weekly uses the weekday of the first date. Custom intervals use days, weeks, months or years. Schedules require a connection.
+
+The server creates occurrences through the current local date plus the next future date. Each missed occurrence remains pending. Completed, skipped and cancelled records retain their original instructions and date. End Schedule cancels future requirements; overdue requirements remain actionable. Editing a schedule replaces unstarted future occurrences and leaves completed, skipped, cancelled, overdue, started-visit and requested occurrences intact.
+
+Take Follow-Up Photo opens normal Capture with the reference image and existing reference Location Intelligence action. It resets draft evidence, notes and measurements. Save uses the existing IndexedDB queue and capture receipt identity. A new capture, evidence fingerprint and occurrence completion commit together. Local save is pending, not completion. A second upload of the same receipt returns the original response. If someone closes an occurrence before a pending photo synchronizes, the queue retains the photo for recovery rather than reporting completion.
+
+Property subjects require current company membership. Assignment is limited to authorized members of that subject's company. The owner can change schedules; the owner or assigned user can complete or skip an occurrence while subject access remains valid. General Photo Notes and job schedules are owned by one user. A new result photo belongs to its photographer; its relationship is visible through authorized monitoring and existing property histories.
+
+Asset results use hoa_asset_photos. Maintenance results use hoa_item_photos with follow_up and hoa_item_history, without changing maintenance status. Route schedules create/resume existing hoa_property_visits and hoa_visit_stops. Completing a photographic visit satisfies that occurrence; worker reconciliation retries association. Asset-linked stop photographs join the existing asset history when the scheduled visit completes. Property area columns are preserved when that concurrent infrastructure is present.
+
+No second image store exists. reference_capture_id and result_capture_id reference captures. Deleting a capture leaves the occurrence outcome while the image link becomes null. Deleted or inaccessible subjects cannot be opened or completed. Monthly/annual recurrence uses the original anchor day and clamps to the last day of short months, returning to the original day afterward, including leap years. Date-only status uses each schedule's IANA zone, not the server's zone.
+
+The server worker runs at startup and every minute. Transactional PostgreSQL advisory locks prevent duplicate processing across instances. Notification uniqueness is occurrence, recipient and reminder kind. Due and optional 1/3/7-day advance notifications persist in-app. Unread reminders appear on the shared Photo Follow-Ups button. Worker heartbeat/error state is stored in photo_follow_up_worker_state.
+
+Follow-up push requires separate device opt-in. It reuses existing VAPID configuration and subscription validation, with separate photographic subscriptions and delivery records. Retries use exponential backoff, up to eight attempts. Expired subscriptions are removed. Closing/reading occurrences suppresses pending pushes. Push payloads open /?followups=1; existing issue notification routing remains intact. No email or SMS requirement.
+
+Photo Requests was not in the released main used for this implementation. Occurrences reserve photo_request_id as an integration point. This feature does not create another external-request system. Photo Set requirements can extend the occurrence model later. Alignment is deliberately not modified during the concurrent audit. The reference image is displayed; existing comparison remains available separately. No AI change detection, project calendar, warranty management or personnel management is added.
+
+Implementation files:
+photo-follow-ups.js: schema, recurrence, authorization, routes, completion, worker, push.
+db.js: idempotent additive schema initialization.
+server.js: registration, transactional capture association, guided-visit completion hook and startup worker.
+public/photo-follow-ups.js and .css: common UI, context actions, reference display and Capture context.
+public/app.js: common navigation, serializer, durable payload and context clearing.
+public/sw.js: offline assets, cache generation and photographic notification routing.
+public/index.html, admin.html, install.html, help-catalog.js: shared assets, synchronized Help versions and authored guidance/terms.
+test/photo-follow-ups.test.js, test/help-coverage.test.js and scripts/test-photo-follow-ups-*.cjs: calendar, offline, HTTP/database, browser and Help checks.
+
+Schema additions:
+photo_follow_up_schedules, photo_follow_up_occurrences, photo_follow_up_notifications,
+photo_follow_up_push_subscriptions, photo_follow_up_push_delivery, photo_follow_up_worker_state.
+No historical captures or maintenance statuses are migrated or rewritten.
