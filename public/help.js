@@ -112,7 +112,7 @@ function render(){
  root.querySelector('#pnHelpReport').hidden=!context.reportIssue&&!document.getElementById('issueFab');
 }
 function open(){opened=true;document.body.classList.add('pn-help-open');const root=shell();root.querySelector('aside').inert=false;root.querySelector('aside').setAttribute('aria-hidden','false');root.querySelector('.pn-help-fab').setAttribute('aria-expanded','true');signature='';render();root.querySelector('#pnHelpSearch').focus();}
-function close(focus=true){opened=false;document.body.classList.remove('pn-help-open');const root=shell();root.querySelector('aside').inert=true;root.querySelector('aside').setAttribute('aria-hidden','true');root.querySelector('.pn-help-fab').setAttribute('aria-expanded','false');if(focus)root.querySelector('.pn-help-fab').focus();}
+function close(focus=true){opened=false;document.body.classList.remove('pn-help-open');const root=shell();root.querySelectorAll('[data-term]').forEach(n=>n.setAttribute('aria-expanded','false'));root.querySelector('aside').inert=true;root.querySelector('aside').setAttribute('aria-hidden','true');root.querySelector('.pn-help-fab').setAttribute('aria-expanded','false');if(focus)root.querySelector('.pn-help-fab').focus();}
 function mount(next){context={...context,...next};signature='';render();}
 function reset(){context={edition:'public',page:'login',name:'Sign in'};query='';scope='page';if(opened)close(false);signature='';}
 function schedule(){clearTimeout(timer);timer=setTimeout(()=>{if(opened||!document.getElementById('photoNotesHelp')){render();}},80);}
