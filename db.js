@@ -816,6 +816,7 @@ async function init() {
 
   await pool.query(require('./related-photos').SCHEMA);
   await require('./testing-hub').initTestingHub(pool);
+  await pool.query(require('./visual-analysis').SCHEMA);
   console.log('[db] schema ready');
 }
 

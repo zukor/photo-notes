@@ -2465,6 +2465,11 @@ function captureCardHtml(c) {
     ${isConcreteClient()&&c.photo_path?`<button class="btn secondary slim concrete-area-button" data-id="${c.id}">Measure Patio / Foundation Area</button>`:''}
     ${(c.footprints||[]).map(f=>`<div class="concrete-evidence"><strong>${esc(f.name)}</strong><p>${esc(concreteAreaText(f))}</p>${f.notes?`<p>${esc(f.notes)}</p>`:''}</div>`).join('')}
     ${state.view === 'organize' && measurementOn() && c.defect_type ? `<div class="meta saved-classification"><strong>Classification:</strong> ${esc(defectLabelClient(c.defect_type))}${c.defect_type !== 'none' && c.defect_severity ? ' - ' + esc(c.defect_severity) : ''}</div>` : ''}
+    ${isConcreteClient()&&c.photo_path?`<button class="btn secondary slim concrete-area-button" data-id="${c.id}">Measure Patio / Foundation Area</button>`:''}
+    ${(c.footprints||[]).map(f=>`<div class="concrete-evidence"><strong>${esc(f.name)}</strong><p>${esc(concreteAreaText(f))}</p>${f.notes?`<p>${esc(f.notes)}</p>`:''}</div>`).join('')}
+    ${state.view === 'organize' && measurementOn() && c.defect_type ? `<div class="meta saved-classification"><strong>Classification:</strong> ${esc(defectLabelClient(c.defect_type))}${c.defect_type !== 'none' && c.defect_severity ? ' - ' + esc(c.defect_severity) : ''}</div>` : ''}
+    ${isConcreteClient()&&c.photo_path?`<button class="btn secondary slim" data-visual-analysis="${c.id}">Analyze Photo</button>`:''}
+    ${c.concrete_reviewed_observation&&isConcreteClient()?`<p><strong>User Reviewed visual observation:</strong> ${esc(c.concrete_reviewed_observation)}</p>`:''}
     ${classifyRow}
     ${dims ? `<div class="meta"><strong>Dimensions:</strong> ${esc(dims)}</div>` : ''}
     ${measureRow}
@@ -2569,6 +2574,7 @@ function wireCards(cards, rows) {
   wirePhotoMarkers(cards);
   cards.querySelectorAll('.concrete-area-button').forEach(b=>b.onclick=()=>openConcreteFootprints(Number(b.dataset.id)));
   cards.querySelectorAll('.capchk').forEach(c => c.onchange = () => { if (c.checked) state.selectedIds.add(String(c.value)); else state.selectedIds.delete(String(c.value)); });
+  cards.querySelectorAll('[data-visual-analysis]').forEach(b=>b.onclick=()=>window.PhotoNotesVisualAnalysis.open(Number(b.dataset.visualAnalysis),()=>loadCards(document.getElementById('filter')?.value||'')));
   wireRotate(cards);
   cards.querySelectorAll('.edittitle').forEach(b => b.onclick = () => startEditPhotoTitle(parseInt(b.getAttribute('data-id'), 10), rows));
   cards.querySelectorAll('.edittopics').forEach(b => b.onclick = () => startEditTopics(parseInt(b.getAttribute('data-id'), 10), rows));
