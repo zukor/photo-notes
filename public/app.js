@@ -362,7 +362,7 @@ function renderApp() {
       const r=await api('/api/switch-edition',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({edition})});
       if(!r.ok)throw new Error();
       stopCaptureDictation();
-      state.view=edition==='roads'?'road-report':(edition==='basic'||edition==='issue')?'capture':(IS_HANDHELD?'capture':'organize');state._captureShareSave=null;state.photoFile=null;state._note='';state._captureTemplateName='';state._concreteCapture=null;state._pavingReason=null;
+      state.view=edition==='roads'?'road-report':(edition==='basic'||edition==='issue')?'capture':(IS_HANDHELD?'capture':'organize');state._captureShareSave=null;state.photoFile=null;state._note='';state._captureTemplateName='';state._concreteCapture=null;state._pavingReason=null;state._duplicateContext=null;
       await boot();toast('Version switched');
     }catch(e){toast('Version could not be switched. Please try again.');}
     finally{editionSwitcher.disabled=false;editionSwitcher.value=selectedEdition();}
@@ -636,6 +636,44 @@ function renderPavingToolCapture(){
   else{cameraReaderType=reason.id;renderCameraReader();}
 }
 
+function duplicatePhotoNote(source) {
+  if(captureSavePending||!PhotoNotesDuplicate.editions.includes(selectedEdition()))return;
+  const dialog=document.createElement('dialog');dialog.id='duplicatePhotoDialog';dialog.style.cssText='color:#000;text-align:left;max-width:480px';
+  dialog.innerHTML='<h2>Duplicate for New Photo</h2><p>Start a new Photo Note using reusable context. Take or select a new photo, review the context, and enter new details. The original photo, location, evidence and relationships stay separate.</p><label for="duplicateCopyNotes"><input id="duplicateCopyNotes" type="checkbox"> Copy Notes</label><p>Notes may describe the original photograph. Review any copied notes before saving.</p><button class="btn" id="duplicateStart">Start New Capture</button><button class="btn secondary" id="duplicateCancel">Cancel</button>';
+  document.body.append(dialog);dialog.addEventListener('close',()=>dialog.remove());dialog.querySelector('#duplicateCancel').onclick=()=>dialog.close();
+  dialog.querySelector('#duplicateStart').onclick=()=>{
+    if((state.photoFile||state._note)&&!confirm('Discard the current unsaved Capture and start from this Photo Note?'))return;
+    if(window.PhotoNotesIncidents?.active()){toast('Return to Ordinary Capture in the incident workflow before starting a new Photo Note.');return;}
+    const context=PhotoNotesDuplicate.context(source,selectedEdition(),dialog.querySelector('#duplicateCopyNotes').checked);
+    stopCaptureDictation();captureLocationGeneration++;
+    if(state._previewUrl)URL.revokeObjectURL(state._previewUrl);
+    state._previewUrl=null;state.photoFile=null;state.location=null;state.address=null;state._locationPromise=null;state._qualityPromise=null;state._qualityResult=null;state._captureShareSave=null;
+    state._dims=freshDims();state._measure=null;state.urgency='standard';state._note=context.note;state.area=context.topics[0]||'';state.jobId=context.jobId;state._concreteCapture=context.concrete||null;state._pavingReason='proposal';state._captureTemplateName='';state._duplicateContext=context;
+    if(state.area&&!state.areas.includes(state.area))state.areas=[...state.areas,state.area];
+    if(context.property)state.communityId=context.property.communityId;
+    dialog.close();state.view='capture';renderApp();
+  };dialog.showModal();
+}
+function duplicateAction(c){return PhotoNotesDuplicate.editions.includes(selectedEdition())&&['organize','edit'].includes(state.view)?`<button type="button" class="btn secondary slim duplicate-photo-note" data-id="${c.id}">Duplicate for New Photo</button>`:'';}
+function mountDuplicateContext(){
+  const d=state._duplicateContext;if(!d)return;
+  const body=document.getElementById('body'),box=document.createElement('section');box.id='duplicateCaptureContext';box.style.cssText='color:#000;text-align:left';
+  box.innerHTML='<p><strong>Started from existing Photo Note</strong>. Review the copied context and take or select a new photograph.</p>';
+  if(!isHoaClient())box.innerHTML+=`<p id="duplicateTopicSummary">Topic: ${esc(state.area||'No Topic')}</p>`;
+  if(!isHoaClient()&&!isConcreteClient()){
+    box.innerHTML+=`<label for="duplicateJob">Job / project</label><select id="duplicateJob"><option value="">No job selected</option>${state.jobs.map(j=>`<option value="${j.id}" ${String(j.id)===String(state.jobId)?'selected':''}>${esc(j.job_number?j.job_number+' - '+j.name:j.name)}</option>`).join('')}</select>`;
+    box.querySelector('select').onchange=e=>state.jobId=e.target.value;
+  }
+  body.prepend(box);
+  if(d.property){
+    const category=document.getElementById('hoaArea'),type=document.getElementById('hoaType');
+    if(category&&[...category.options].some(o=>o.value===d.property.category))category.value=d.property.category;
+    if(type&&[...type.options].some(o=>o.value===d.property.recordType))type.value=d.property.recordType;
+    if(category)category.onchange=()=>d.property.category=category.value;
+    if(type)type.addEventListener('change',()=>d.property.recordType=type.value);
+  }
+}
+
 function renderCapture() {
   if(isPavingClient()&&pavingPhotoReason().id!=='proposal'){renderPavingToolCapture();return;}
   const body = document.getElementById('body');
@@ -734,6 +772,7 @@ function renderCapture() {
       acquireLocation();
     }
   }
+  mountDuplicateContext();
 }
 
 // ================= Paving Pro camera tools =================
@@ -1799,7 +1838,7 @@ async function showPendingPhotos(){
   const retry=document.createElement('button');retry.className='btn';retry.textContent='Retry Current Version';retry.onclick=async()=>{dialog.close();await restoreOfflineQueue();};
   const close=document.createElement('button');close.className='btn secondary';close.textContent='Close';close.onclick=()=>dialog.close();dialog.append(retry,close);dialog.addEventListener('close',()=>dialog.remove());document.body.append(dialog);dialog.showModal();
 }
-function payloadFormData(p){const fd=new FormData();if(p.photo)fd.append('photo',p.photo,p.photoName||'offline-photo.jpg');fd.append('note',p.note||'');fd.append('area_tags',p.area_tags||'[]');fd.append('kind',p.kind||'note');if(p.job_id)fd.append('job_id',p.job_id);for(const k of ['urgency','paving_photo_reason','concrete_phase','concrete_purpose','concrete_element','concrete_stage','concrete_condition','concrete_severity','concrete_location','concrete_mix','hoa_community_id','hoa_title','hoa_item_type','hoa_priority','hoa_area','hoa_directed_to','hoa_budget_source','hoa_photo_stage','hoa_target_date'])if(p[k])fd.append(k,p[k]);if(p.latitude!=null)fd.append('latitude',p.latitude);if(p.longitude!=null)fd.append('longitude',p.longitude);if(p.address)fd.append('address',p.address);return fd;}
+function payloadFormData(p){const fd=new FormData();if(p.photo)fd.append('photo',p.photo,p.photoName||'offline-photo.jpg');fd.append('note',p.note||'');fd.append('area_tags',p.area_tags||'[]');fd.append('kind',p.kind||'note');if(p.context_source_id)fd.append('context_source_id',p.context_source_id);if(p.job_id)fd.append('job_id',p.job_id);for(const k of ['urgency','paving_photo_reason','concrete_phase','concrete_purpose','concrete_element','concrete_stage','concrete_condition','concrete_severity','concrete_location','concrete_mix','hoa_community_id','hoa_title','hoa_item_type','hoa_priority','hoa_area','hoa_directed_to','hoa_budget_source','hoa_photo_stage','hoa_target_date'])if(p[k])fd.append(k,p[k]);if(p.latitude!=null)fd.append('latitude',p.latitude);if(p.longitude!=null)fd.append('longitude',p.longitude);if(p.address)fd.append('address',p.address);return fd;}
 
 function bgIndicator() {
   let box=document.getElementById('bgstatus');
@@ -1866,12 +1905,14 @@ async function saveCaptureDurably(options = {}) {
   await finishCaptureDictation();
   stopCaptureDictation();
   const note = document.getElementById('note').value.trim();
+  if(state._duplicateContext&&!state.photoFile){toast('Take or select a new photo before saving this Photo Note.');return false;}
   if (!state.photoFile && !note) { toast('Take a photo or add a note first'); return; }
   if(isHoaClient()&&!state.communityId){toast('Select an HOA or community');return;}
   if(isHoaClient()&&!document.getElementById('hoaTitle').value.trim()&&!note){toast('Enter an issue title or note');return;}
   if (!(await confirmPhotoQuality())) { toast('Photo kept for retaking'); return; }
   // Build the payload from the CURRENT state before we clear the form.
   const payload={photo:state.photoFile||null,photoName:state.photoFile&&state.photoFile.name||'offline-photo.jpg',note,area_tags:JSON.stringify(isHoaClient()?[document.getElementById('hoaArea').value]:(state.area?[state.area]:[])),kind:'note'};
+  if(state._duplicateContext){payload.context_source_id=state._duplicateContext.sourceId;if(state.jobId)payload.job_id=state.jobId;}
   if(document.getElementById('captureUrgency'))payload.urgency=state.urgency==='urgent'?'urgent':'standard';
   if(isHoaClient()){Object.assign(payload,{hoa_community_id:state.communityId,hoa_title:document.getElementById('hoaTitle').value.trim(),hoa_item_type:document.getElementById('hoaType').value,hoa_priority:document.getElementById('hoaPriority').value,hoa_area:document.getElementById('hoaArea').value,hoa_directed_to:(document.getElementById('hoaDirected')||{}).value||'',hoa_budget_source:'unassigned',hoa_photo_stage:'initial'});}
   if(isConcreteClient())Object.assign(payload,concreteCapturePayload());
@@ -1892,7 +1933,7 @@ async function saveCaptureDurably(options = {}) {
     state._captureShareSave={photo:payload.photo,signature,account:state.me?.email,edition:selectedEdition()};
     return true;
   }
-  state._captureShareSave=null;
+  state._captureShareSave=null;state._duplicateContext=null;
   // Only an explicit Save clears the saved draft and hands upload to the background.
   captureLocationGeneration++;
   state._captureTemplateName=''; state.urgency='standard'; state.photoFile = null; state._note = ''; state.location = null; state.address = null; state._locationPromise = null;
@@ -2502,12 +2543,14 @@ function captureCardHtml(c) {
     ${isConcreteClient()&&c.photo_path?`<button class="btn secondary slim concrete-area-button" data-id="${c.id}">Measure Patio / Foundation Area</button>`:''}
     ${(c.footprints||[]).map(f=>`<div class="concrete-evidence"><strong>${esc(f.name)}</strong><p>${esc(concreteAreaText(f))}</p>${f.notes?`<p>${esc(f.notes)}</p>`:''}</div>`).join('')}
     ${state.view === 'organize' && measurementOn() && c.defect_type ? `<div class="meta saved-classification"><strong>Classification:</strong> ${esc(defectLabelClient(c.defect_type))}${c.defect_type !== 'none' && c.defect_severity ? ' - ' + esc(c.defect_severity) : ''}</div>` : ''}
+    ${isConcreteClient()&&c.photo_path?`<button class="btn secondary slim" data-visual-analysis="${c.id}">Analyze Photo</button>`:''}
+    ${c.concrete_reviewed_observation&&isConcreteClient()?`<p><strong>User Reviewed visual observation:</strong> ${esc(c.concrete_reviewed_observation)}</p>`:''}
     ${classifyRow}
     ${dims ? `<div class="meta"><strong>Dimensions:</strong> ${esc(dims)}</div>` : ''}
     ${measureRow}
     ${c.photo_path ? `<button class="btn secondary slim stampbtn" data-id="${c.id}">Mark Up Photo${(c.overlays && c.overlays.length) ? ' (' + c.overlays.length + ')' : ''}</button>` : ''}
     ${c.photo_path ? `<button class="btn secondary slim cropbtn" data-id="${c.id}">Crop Photo</button>` : ''}
-    ${matchingPhotoAction(c)}<button class="btn secondary slim evidencebtn" data-id="${c.id}">Photo Details &amp; History</button>
+    ${matchingPhotoAction(c)}${duplicateAction(c)}<button class="btn secondary slim evidencebtn" data-id="${c.id}">Photo Details &amp; History</button>
     ${c.photo_original_path ? `<button class="btn secondary slim restorebtn" data-id="${c.id}">Restore Original Photo</button>` : ''}
     <div class="notewrap photo-notes-panel" data-id="${c.id}">
       <div class="photo-notes-heading">Notes</div>
@@ -2526,6 +2569,7 @@ async function showEvidence(id){
   try{
     const r=await api(`/api/captures/${id}/evidence`);if(!r.ok)throw new Error();const d=await r.json();
     const labels={subject_location_updated:'Subject Location updated',photo_linked:'Photo linked',photo_relationship_changed:'Relationship changed',photo_unlinked:'Photo unlinked',captured:'Original capture saved',details_updated:'Details updated',photo_rotated:'Photo rotated',photo_flipped:'Photo flipped',photo_cropped:'Photo cropped',original_restored:'Original photo restored'};
+    labels.context_reused='Started using context from an earlier Photo Note';
     const hash=d.evidence&&d.evidence.original_sha256||'';
     const modal=document.createElement('div');modal.className='evidence-modal';modal.setAttribute('role','dialog');modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.58);z-index:80;padding:18px;overflow:auto';
     const fileStatus=d.fingerprint_verified===true?'Original photo matches':d.fingerprint_verified===false?'Original photo does not match':'File check unavailable';
@@ -2590,7 +2634,7 @@ function pairCardHtml(before, after, pair={}) {
       ${dims ? `<div class="meta"><strong>Dimensions:</strong> ${esc(dims)}</div>` : ''}
       ${measurementOn() && state.view === 'edit' && c.photo_path ? `<button class="btn secondary slim editdims" data-id="${c.id}">Measurements</button>` : ''}
       ${photoMarkerControls(c)}
-      ${matchingPhotoAction(c)}<button class="btn secondary slim evidencebtn" data-id="${c.id}">Photo Details &amp; History</button>
+      ${matchingPhotoAction(c)}${duplicateAction(c)}<button class="btn secondary slim evidencebtn" data-id="${c.id}">Photo Details &amp; History</button>
       <div class="photo-notes-panel"><div class="photo-notes-heading">Notes</div><div class="photo-notes-box">${esc(c.note || 'No notes added.')}</div></div>
       ${['organize','photo-library'].includes(state.view) ? `<button class="btn secondary slim organize-delete-capture" data-delete-organize="${c.id}" type="button">Delete Photo Note</button>` : ''}
     </div>`;
@@ -2610,7 +2654,9 @@ function wireCards(cards, rows) {
   wirePhotoMarkers(cards);
   cards.querySelectorAll('.concrete-area-button').forEach(b=>b.onclick=()=>openConcreteFootprints(Number(b.dataset.id)));
   cards.querySelectorAll('.capchk').forEach(c => c.onchange = () => { if (c.checked) state.selectedIds.add(String(c.value)); else state.selectedIds.delete(String(c.value)); });
+  cards.querySelectorAll('[data-visual-analysis]').forEach(b=>b.onclick=()=>window.PhotoNotesVisualAnalysis.open(Number(b.dataset.visualAnalysis),()=>loadCards(document.getElementById('filter')?.value||'')));
   wireRotate(cards);
+  cards.querySelectorAll('.duplicate-photo-note').forEach(b=>b.onclick=()=>{const source=rows.find(c=>String(c.id)===b.dataset.id);if(source)duplicatePhotoNote(source);});
   cards.querySelectorAll('.edittitle').forEach(b => b.onclick = () => startEditPhotoTitle(parseInt(b.getAttribute('data-id'), 10), rows));
   cards.querySelectorAll('.edittopics').forEach(b => b.onclick = () => startEditTopics(parseInt(b.getAttribute('data-id'), 10), rows));
   cards.querySelectorAll('.editnote').forEach(b => b.onclick = () => startEditNote(parseInt(b.getAttribute('data-id'), 10), rows));
