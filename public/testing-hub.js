@@ -13,7 +13,7 @@ function errorText(e){if(!es())return e.message;return 'No se pudo guardar. Sus 
 function totals(a){const c={not_tested:0,passed:0,failed:0,blocked:0};for(const s of a.steps)c[a.results?.[s.id]?.status||'not_tested']++;return Object.entries(c).map(([k,n])=>`${n} ${labels()[k]}`).join(' · ');}
 function photoLinks(a,step){return (a.evidence||[]).filter(e=>e.step_id===step).map(e=>`<a target="_blank" rel="noopener" href="/api/testing/evidence/${e.id}">${tr('Photo','Foto')} #${e.id}</a>`).join(' · ');}
 function issueLinks(a,step){return (a.issues||[]).filter(i=>i.testing_step_id===step).map(i=>`<div>${tr('Issue','Reporte')} #${i.id}: ${esc(i.management_status)} · ${esc(i.issue_type)}<br>${esc(i.description)}${i.fix_summary?`<p>${esc(i.fix_summary)}</p>`:''}${i.retest_instructions?`<p>${esc(i.retest_instructions)}</p>`:''}</div>`).join('');}
-function download(a){return `<a class="btn secondary" href="/api/testing/assignments/${a.id}/download?lang=${es()?'es':'en'}">${tr('Download assignment PDF','Descargar asignación PDF')}</a>`;}
+function download(a){return `<a class="btn secondary testing-download" href="/api/testing/assignments/${a.id}/download?lang=${es()?'es':'en'}">${tr('Download assignment PDF','Descargar asignación PDF')}</a>`;}
 function localKey(a){return `pn-testing-draft:${a.user_id}:${a.id}`;}
 function getDraft(a){try{return JSON.parse(localStorage.getItem(localKey(a))||'null');}catch{return null;}}
 function localSave(a,data){try{localStorage.setItem(localKey(a),JSON.stringify(data));return true;}catch{return false;}}

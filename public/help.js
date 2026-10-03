@@ -1,126 +1,123 @@
-/* Shared help for all editions and devices. Static guidance works without a help service or paid calls. */
+/* Page-order Help follows the actual UI, including async panels and dialogs. */
 (() => {
 'use strict';
-const core = {
-  capture: [
-    ['Take or import a photo', 'Use Capture to take a new business photo or import one you already have. The photo is the main record; notes and details add useful context to it.'],
-    ['Voice notes', 'Record a short spoken note while the details are fresh. Photo Notes turns it into text attached to the photo so you can review and search it later.'],
-    ['Location, topics, and jobs', 'Location records where the photo was taken when permission is available. Topics and jobs help you file the photo with the right work without changing the original image.'],
-    ['Photo quality check', 'The quality check warns you about common problems such as a blurry or dark photo before you save. You can still choose to keep the photo when it is the best evidence available.'],
-    ['Offline save / waiting to upload', 'If the connection is unavailable, Photo Notes can hold the capture on this device until it can upload. Keep the page open long enough to see that the photo was saved or is waiting to upload.']
-  ],
-  organize: [
-    ['Library cards and selection', 'Library cards show the photo and its most useful details together. Select cards when you want to edit, compare, create, or send a specific set of photos.'],
-    ['Topics and jobs', 'Topics group photos by subject, while jobs group them by a piece of work or customer. They make a growing photo library easier to find and reuse.'],
-    ['Smart search', 'Smart search looks across photo notes, addresses, jobs, customers, topics, dates, and other saved details. Use it when you remember the work but not where the photo was filed.'],
-    ['Photo comparison', 'Photo comparison places selected photos together so changes are easier to see. It is useful for before-and-after evidence or checking progress over time.'],
-    ['Batch templates', 'Batch templates apply the same useful structure to several selected photos. They reduce repeated entry while keeping each photo as its own record.']
-  ],
-  edit: [
-    ['Rotate / flip / crop', 'Use these tools to correct the view or focus attention on the useful part of a photo. Photo Notes keeps the original so you can return to it.'],
-    ['Markup and annotation templates', 'Markup adds arrows, shapes, or labels that make visible evidence easier to understand. Templates help you reuse a consistent annotation style.'],
-    ['Fix addresses', 'Fix Addresses retries missing location descriptions for selected photos that have usable coordinates. It does not change the photo itself.'],
-    ['Evidence fingerprint / verification', 'Verification records a digital fingerprint of the original file and its history. It helps show whether the original photo still matches the file first received.'],
-    ['Restore original photo', 'Restore Original removes saved visual edits and returns to the first uploaded image. Notes and other record details remain available.']
-  ],
-  create: [
-    ['Document setup', 'Create turns selected photos into an ordered business document. Add a clear title and short description so the reader knows what the photos document.'],
-    ['Photo order and captions', 'Arrange photos in the sequence that tells the clearest story. Captions explain why each image matters without replacing the visible evidence.'],
-    ['PDF, Word, or Markdown + Photos', 'Choose PDF for a finished document, Word for editing, or Markdown + Photos for a ZIP file containing an AI-readable Markdown document and its photos.'],
-    ['Export quality and format', 'Quality and format settings balance image clarity against file size. Use higher quality when small visual details are important to the reader.']
-  ],
-  send: [
-    ['Share selected photos', 'Share sends the photos you selected in Organize through the options available on this device. Check the selection summary before sending.'],
-    ['Customer approval package', 'An approval package creates a private, expiring review link for selected photos. The customer can approve the package or request changes.'],
-    ['Send or save a document', 'You can send a finished PDF or Word document, or save it for delivery another way. The document keeps the photos and their supporting details together.'],
-    ['Mac-to-Android messaging notice', 'Texting from a Mac to an Android phone may require Text Message Forwarding from your iPhone. The notice appears when that setup may affect delivery.']
-  ]
-};
-const all = ['basic','issue','pro','contractor','roads','paving','hoa','property','concrete','roofer'];
-const pro = ['pro','contractor','paving','hoa','property','concrete','roofer'];
-const articles = [];
-function add(category, editions, page, title, text) { articles.push({id:articles.length,category,editions,page,title,text}); }
-Object.entries(core).forEach(([page, topics]) => topics.forEach(([title,text]) => add(page[0].toUpperCase()+page.slice(1),page==='capture'?(title==='Location, topics, and jobs'?all.filter(e=>!['basic','issue','roads'].includes(e)):all.filter(e=>e!=='roads')):pro,page,title,text)));
-add('Getting started',all,'','Start with a photo','The photo is your evidence. Take or choose a clear photo, add a title and a note explaining what matters, check its location, then save. Review the save status before leaving the page. Use the topics below for the tools available in your current version.');
-add('Getting started',all,'','Versions and account access','The version selector at the top of the page lists the versions enabled for your account. Finish saving your current photo before switching. Basic focuses on capture and sending the current photo. Pro adds Organize, Edit, Create, and Send. Industry versions add their own photo workflows. Contact your administrator if a version is missing.');
-add('Getting started',all,'','Use this help panel','Search by a task, tool, or problem, or choose a category. Open a question to read its answer. This page shows guidance for your current workspace. All topics shows everything available for this version. You can keep working with help open. Close help with the × button, the yellow question mark, or Escape. Help is available on phones, tablets, and computers in every version.');
-add('Capture',all.filter(e=>e!=='roads'),'capture','Save and send the current photo','Take or import a photo, review the preview, and enter your note. Use Save Photo Notes to save the capture. Use Send Photo Notes to prepare the current capture for sharing, then choose an available destination. Check the preview before completing the share. Closing or canceling the share sheet does not mean the message was delivered.');
-add('Capture',all.filter(e=>e!=='roads'),'capture','Titles, topics, and location','Give the photo a short, specific title. Select a topic to group related evidence. Allow location access when prompted, then review the displayed GPS and address. An imported image may not contain usable location information. Confirm the location before relying on it in a report.');
-add('Organize',pro,'organize','Find photos and work with a selection','Open Organize and search using a note, title, job, address, or date. Apply the available filters to narrow the library. Select the photos you want to work with before opening Edit, Create, or Send. Check the selected count so unrelated photos are not included. Open a photo to inspect it at a larger size.');
-add('Organize',pro,'organize','Jobs and timelines','Create or select a job and associate the relevant photos with it. Add the customer, job number, and address where available. Open the job timeline to review its photographic record over time. Keep photo titles and notes specific enough to explain each stage of the work.');
-add('Edit',pro,'edit','Edit a photo and review its history','Select a photo in Organize, then open Edit. Choose a tool, make the change, and save it before moving on. Use Photo Details & History to review the original evidence and recorded changes. Use Restore Original when you need to undo saved visual edits, and review the result.');
-add('Create',pro,'create','Build a document step by step','Select the photos in Organize, open Create, and set the document title. Review the photo order, captions, and supporting details in the preview. Adjust the content before exporting. Choose PDF for distribution, Word for further editing, or Markdown + Photos to use the text and image files together. Open the downloaded file to confirm its contents.');
-add('Create',pro,'create','Company logo and Word templates','Use the company branding and template controls in the document workflow to add your logo or import a Word template. Review the generated preview after applying the template, especially photo placement, captions, and page breaks. Export and check the final file before sharing it.');
-add('Send',pro,'send','Downloads, printing, and share options','Review the selected photos or finished document in Send. Use an available share destination, save the file, or print it. Browser and operating-system share options vary. If the destination you need is absent, download the file and attach it directly in your email or messaging application.');
-add('Send',pro,'send','Review an approval link before sharing','Prepare the selected photos as a customer approval package. Check the recipient-facing preview and expiration settings before copying or sending the link. Review the recorded approval or requested changes in the app. Creating a link alone does not mean the customer received or approved it.');
-add('Paving tools',['paving'],'capture','Classify pavement evidence','Photograph the pavement clearly and select the reason for the photo. Review the suggested defect classification and severity, correcting them when needed. Add job and location context before saving. Tool availability depends on your account. AI suggestions need your review.');
-add('Paving tools',['paving'],'ticket','Scan a paving delivery ticket','Open the delivery ticket scanner in Camera Tools. Photograph the entire ticket straight on, with readable text and no glare. Review the extracted ticket fields, correct errors, and choose the right job before saving. Use saved tickets and daily tonnage to review the deliveries documented by those tickets.');
-add('Paving tools',['paving'],'camera-reader','Read a display or document with the camera','Choose the appropriate reader in Camera Tools. Fill the frame with the display or document and keep it sharp. Review the extracted reading and units, correct any error, then save. Retake the photo if the source is not legible.');
-add('Paving tools',['paving'],'map','Map, measurement zones, and extra work','Use the job-site map to review located photos and the available area or roadway zones. Check measurement references and units before using estimates. For extra work, attach the relevant photos to an Extra Work Record and explain what changed. Review evidence readiness before exporting a job report.');
-add('Measurement and comparison',['paving','concrete'],'alignment','Capture a matched before-and-after pair','Open Before & After Alignment and choose an unpaired before photo. Match the camera location, height, direction, and landmarks when taking the after photo. Move the comparison overlay slider to check alignment. Retake when needed, add the after-photo note, and use Save Matched Pair.');
-add('Measurement and comparison',['paving','concrete'],'edit','Measure a photo','Open the measurement controls for a photo. Use a clearly visible reference object for assisted measurement or enter dimensions yourself. Check the units and dimensions against the site. Perspective and uncertain reference sizes can affect estimates. Save reviewed dimensions with the photo.');
-add('Concrete tools',['concrete'],'capture','Document concrete work by stage','Choose the concrete element and photo stage, such as pre-pour, reinforcement, placement, curing, defect, or repair. Add the exact location, condition, severity, and relevant mix or specification details. Keep the photo focused on the stage being documented, and review the fields before saving.');
-add('Concrete tools',['concrete'],'concrete-report','Build a concrete evidence report','Review the project photo summary and readiness checklist. Link relevant batch-ticket or specification photos, check dimensions and comparison photos, and fill gaps in the evidence. Export the concrete PDF or Word report and review it. Use Create for a more flexible general photo document.');
-add('HOA workflows',['hoa','property'],'hoa-visits','Organize a community photo visit','Choose the community and document a visit with photos and notes. Identify the maintenance issue, information request, or inspection being recorded. Add a clear title, category, priority, and location so the next person can understand the evidence.');
-add('HOA workflows',['hoa','property'],'hoa-assets','Create and update an asset photo record','Open Assets, select the community, and enter the asset name, type, exact location, and current condition. Add the required identity photo and save the record. Open an existing asset to add condition, damage, repair-progress, or verification photos to its history.');
-add('HOA workflows',['hoa','property'],'hoa-inspections','Record inspection evidence','Open Inspections and choose the relevant community or asset. Add photos and notes showing the condition you inspected. Review findings and link maintenance follow-up where available. A checked item should be supported by the corresponding photo evidence.');
-add('HOA workflows',['hoa','property'],'hoa-maintenance','Track maintenance through final review','Open Records to review maintenance evidence and status. Add original-condition, work-in-progress, completed-work, and final-review photos as work advances. Review assignment, target date, approval, and cost fields. Use completion photo request links when appropriate, then verify the returned evidence before closing the work.');
-add('HOA workflows',['hoa','property'],'hoa-reports','Prepare a board photo report','Review the community records, photo timelines, and before-and-after evidence. Confirm the status and supporting details, then export a board-ready PDF or Word report. Inspect the file before distribution. The dashboard and notifications help identify records needing attention.');
-// Shared property guidance applies to both editions.
-add('HOA workflows',['hoa','property'],'capture','Capture a property maintenance record','Choose HOA / Community before saving. Add an Issue Title and choose Maintenance Issue, Information Request, or Inspection Finding. Set Priority, enter notes describing the visible evidence, review the location, and save the photo. Capture priority belongs to the property record; any shared capture Urgency selector is a separate photo flag.');
-add('HOA workflows',['hoa','property'],'hoa-communities','Set up the management company and team','Open Communities. Under Management Company & Team, edit Management Company Name and Save. Add an existing enabled HOA Maintenance Pro or Property Manager Pro user by Employee email. Team members share the company property workspace. Confirm the account and company before adding someone.');
-add('HOA workflows',['hoa','property'],'hoa-assets','Add a community and its physical assets','In Assets, add a community name and full address if none exists. Choose the community for each asset. Enter Asset Name, Asset Type, exact Location, Condition, an identity photo, and a note. Use Create Asset Photo Record, then open it to review its condition history.');
-add('HOA workflows',['hoa','property'],'hoa-asset','Maintain the asset photo history','Open an asset to inspect its identity and condition photos. Choose the Photo Type, review Current Condition, attach a photo, and explain what changed in the note. Add Condition Photo to preserve that evidence in the asset timeline.');
-add('HOA workflows',['hoa','property'],'hoa-inspections','Build an inspection route and required views','Select a Community, enter Route Name and Route Instructions, and list one Inspection Stop per line. Separate a stop name from required views with a vertical bar, for example Pool gate | front, latch, hinges. Create Photo Route, then Start Property Visit to document the route.');
-add('HOA workflows',['hoa','property'],'hoa-visit','Complete and resume a guided property visit','Open a Property Visit from Organize. Follow Next Stop, read the Required views, select the needed photos, and enter an Inspection Note. Save Photos & Complete This Stop, then continue until the Visit Checklist shows every stop documented. Continue Visit reopens an unfinished visit; Review Photos opens completed evidence.');
-add('HOA workflows',['hoa','property'],'hoa-maintenance','Find active and closed maintenance records','Use Community, Status, Priority, and Record Type filters in Records. Search titles, notes, communities, or categories, then press Search. Show completed and cancelled includes closed work. Open Maintenance Record to review its evidence and edit details; filters do not change saved records.');
-add('HOA workflows',['hoa','property'],'hoa-maintenance','Assign work, review costs, and record completion','In a maintenance record, review title, description, category, person assigned, and Directed To. Set Status, Priority, Target Date, Budget Source, Estimated Cost, Actual Cost, and Board Approval as applicable. Before marking work completed, enter Vendor or Completed By and Completion Date, and review completion evidence. Save the record.');
-add('HOA workflows',['hoa','property'],'hoa-maintenance','Compare original and completed maintenance photos','Use the photo timeline to inspect initial condition, work in progress, completed work, and final verification. Add a documentation photo with the correct Photo Stage and note using Add Photo to Timeline. Review the original and completed comparison and the evidence checklist before closing work.');
-add('HOA workflows',['hoa','property'],'hoa-maintenance','Request completion photos from an outside worker','Enter the person completing the work and Create Photo Submission Link. Copy the link and deliver it yourself. The recipient can upload completion photos and a note without a Photo Notes account while the link is open. Review submitted photos before updating status; creating a link does not send it or confirm completed work.');
-add('HOA workflows',['hoa','property'],'hoa-dashboard','Review property attention and notifications','Dashboard summarizes open work, emergency and high priorities, overdue work, board decisions, and records needing review. Open a record to act on it. Mark All Read clears unread notifications; it does not resolve maintenance work.');
-add('HOA workflows',['hoa','property'],'hoa-reports','Filter and export the property photo report','Choose Community and Budget filters and whether to include completed or cancelled records. Review the matching maintenance records. Use the PDF, Word, or Print action, then inspect the finished report. Reports include photo-backed findings; records without supporting photos do not establish photographic evidence.');
-add('Road reporting',['roads'],'road-report','Photograph and send a road issue','Choose the road issue type, take a photo with the camera, and inspect the preview. Retake or cancel if needed. Review the location and use Send to submit the road report. Read the resulting status. The red Report Issue button is for a problem with the application itself.');
-add('Troubleshooting',all,'','Photo waiting to upload or connection lost','A pending capture is stored in this browser until upload is confirmed. Keep Photo Notes open and reconnect. Use Pending Photos, when shown, to inspect waiting captures. Do not clear browser data or uninstall while photos are pending. If signed out, reconnect and sign in to the same account. Check that the waiting status clears before assuming the upload finished.');
-add('Troubleshooting',all,'','Camera, microphone, or location blocked','Open your browser site permissions for Photo Notes and allow the permission needed for your task. Check the operating system privacy settings as well. Retry the action after granting access. If dictation is unavailable, type your note. If a camera cannot be used, use photo import where your version supports it.');
-add('Troubleshooting',all,'','A file will not download or share','Wait for file preparation to finish. Check the browser downloads list and download permissions. Try saving the file first and opening it from Downloads. A canceled share is not a completed delivery. If an export repeatedly fails, report the format, version, and steps used.');
-add('Troubleshooting',all,'my-issues','Report a problem and follow its repair','Use Report Issue to describe what you did, what you expected, and what happened. Review the screenshot and mark the relevant area before submitting. Open My Issue Reports or Testing Hub from the account menu to follow progress. When a repair is ready, repeat the supplied steps and report whether it is fixed on your device.');
-add('Testing',all,'my-assignment','Complete a testing assignment','Open My Testing Assignment from the account menu. Perform each listed check before marking it complete. Use Report Issue for defects and screenshots. Add overall notes to the assignment, then submit once all required checks are complete. Submission records completion of the assignment, not proof that every behavior passed.');
-let context = null, opened = false, query = '', category = '', currentOnly = false;
-const escape = value => String(value).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-function reset() { context=null; opened=false; query=''; category=''; currentOnly=false; document.getElementById('desktopHelp')?.remove(); document.body.classList.remove('desktop-help-open'); }
-function close(focus=true) { opened=false; document.body.classList.remove('desktop-help-open'); const root=document.getElementById('desktopHelp'); if(!root)return; root.querySelector('aside').inert=true; root.querySelector('aside').setAttribute('aria-hidden','true'); root.querySelector('.help-fab').setAttribute('aria-expanded','false'); if(focus)root.querySelector('.help-fab').focus(); }
-function relevant(article) { return article.page===context.page || (context.page.startsWith('hoa-') && article.category==='HOA workflows') || (context.page==='camera-tools' && ['Paving tools','Measurement and comparison'].includes(article.category)); }
-function results() {
- const root=document.getElementById('desktopHelp'); if(!root)return;
- const terms=query.toLocaleLowerCase().trim().split(/\s+/).filter(Boolean);
- const found=articles.filter(a=>a.editions.includes(context.edition)&&(!category||a.category===category)&&(!currentOnly||relevant(a))&&terms.every(t=>(a.title+' '+a.text+' '+a.category).toLocaleLowerCase().includes(t)));
- root.querySelector('#helpCount').textContent=`${found.length} ${found.length===1?'topic':'topics'}`;
- root.querySelector('#helpResults').innerHTML=found.length?found.map(a=>`<details class="help-article"><summary>${escape(a.title)}</summary><p>${escape(a.text)}</p></details>`).join(''):'<p>No matching topics. Try fewer words, choose All categories, or open All topics.</p>';
- root.querySelectorAll('[data-help-scope]').forEach(b=>b.setAttribute('aria-pressed',String((b.dataset.helpScope==='page')===currentOnly)));
+const catalog=window.PhotoNotesHelpCatalog;
+if(!catalog)throw new Error('PhotoNotes Help catalog must load before Help.');
+let context={edition:'public',page:'login',name:'PhotoNotes AI'},opened=false,query='',scope='page',timer,signature='';
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const clean=s=>String(s||'').replace(/\s+/g,' ').trim();
+function hidden(n){
+ for(let p=n;p&&p!==document.body;p=p.parentElement){if(p.hidden||p.getAttribute('aria-hidden')==='true'||p.style.display==='none'||getComputedStyle(p).display==='none'||p.id==='desktopHelp'||p.id==='photoNotesHelp')return true;}
+ return false;
 }
-function mount(next) {
- if(context?.edition!==next.edition) {query='';category='';currentOnly=false;}
- context=next; document.getElementById('desktopHelp')?.remove();
- const categories=[...new Set(articles.filter(a=>a.editions.includes(context.edition)).map(a=>a.category))];
- document.getElementById('app').insertAdjacentHTML('beforeend',`<div id="desktopHelp" data-html2canvas-ignore="true">
- <button class="help-fab" type="button" aria-label="Open Photo Notes help" title="Photo Notes help" aria-controls="helpDrawer" aria-expanded="${opened}"><span aria-hidden="true">?</span></button>
- <aside id="helpDrawer" class="help-drawer" aria-labelledby="helpTitle" aria-hidden="${!opened}" ${opened?'':'inert'}>
- <header><div><h2 id="helpTitle">Photo Notes Help</h2><p>${escape(context.name)}</p></div><button id="helpClose" type="button" aria-label="Close help">×</button></header>
- <div class="help-search"><label for="helpSearch">Search help</label><div><input id="helpSearch" type="search" placeholder="Try photos, PDF, or offline" value="${escape(query)}"><button id="helpClear" type="button">Clear</button></div>
- <label for="helpCategory">Browse topics</label><select id="helpCategory"><option value="">All categories</option>${categories.map(c=>`<option ${category===c?'selected':''}>${escape(c)}</option>`).join('')}</select>
- <nav aria-label="Help topics"><button type="button" data-help-scope="page">This page</button><button type="button" data-help-scope="all">All topics</button></nav></div>
- <div class="help-reading"><p id="helpCount" role="status" aria-live="polite"></p><div id="helpResults"></div></div>
- <footer><button type="button" id="helpReport">Report an app problem</button><p>Include the steps and a screenshot.</p></footer></aside></div>`);
- const root=document.getElementById('desktopHelp');
- root.querySelector('.help-fab').onclick=()=>{if(opened)return close();opened=true;document.body.classList.add('desktop-help-open');root.querySelector('aside').inert=false;root.querySelector('aside').setAttribute('aria-hidden','false');root.querySelector('.help-fab').setAttribute('aria-expanded','true');root.querySelector('#helpSearch').focus();};
- root.querySelector('#helpClose').onclick=()=>close();
- root.querySelector('#helpSearch').oninput=e=>{query=e.target.value;results();};
- root.querySelector('#helpClear').onclick=()=>{query='';category='';currentOnly=false;root.querySelector('#helpSearch').value='';root.querySelector('#helpCategory').value='';results();root.querySelector('#helpSearch').focus();};
- root.querySelector('#helpCategory').onchange=e=>{category=e.target.value;currentOnly=false;results();};
- root.querySelectorAll('[data-help-scope]').forEach(b=>b.onclick=()=>{currentOnly=b.dataset.helpScope==='page';category='';query='';root.querySelector('#helpSearch').value='';root.querySelector('#helpCategory').value='';results();});
- root.querySelector('#helpReport').onclick=()=>{close(false);context.reportIssue();};
- document.body.classList.toggle('desktop-help-open',opened);results();
+function labelText(n){const copy=n.cloneNode(true);copy.querySelectorAll('input,select,textarea,button').forEach(c=>c.remove());return clean(copy.textContent);}
+function label(n){
+ if(n.labels?.length)return clean([...n.labels].map(labelText).join(' '));
+ const a=n.getAttribute('aria-label');if(a)return clean(a);
+ if(n.tagName==='INPUT'||n.tagName==='TEXTAREA'||n.tagName==='SELECT'){
+  const prev=n.previousElementSibling;if(prev?.tagName==='LABEL')return clean(prev.textContent);
+  const parent=n.closest('label');if(parent)return labelText(parent);
+  const before=n.parentElement?.previousElementSibling;if(before?.tagName==='LABEL')return clean(before.textContent);
+  return clean(n.getAttribute('placeholder')||n.getAttribute('title')||n.name||n.id.replace(/([a-z])([A-Z])/g,'$1 $2')||'Selection');
+ }
+ return clean(n.getAttribute('title')||n.textContent||n.getAttribute('alt')||(n.dataset.col?'Annotation color '+n.dataset.col:'')||n.id);
 }
-document.addEventListener('keydown',event=>{if(event.key==='Escape'&&opened&&!document.querySelector('dialog[open], #issueModal:not([hidden])')) {event.preventDefault();close();}});
-window.PhotoNotesHelp={mount,reset};
+function matches(key,value){return key.endsWith('*')?value.startsWith(key.slice(0,-1)):key===value;}
+function guide(n,title){
+ const keys=[n.id,n.name,...Object.keys(n.dataset).filter(k=>k!=='add'||n.closest('#stampAdd')).map(k=>`data-${k.replace(/[A-Z]/g,m=>'-'+m.toLowerCase())}`),...n.classList].filter(Boolean);
+ const rule=keys.map(v=>catalog.rules.find(r=>r.keys.some(k=>matches(k,v)))).find(Boolean);
+ if(rule)return {text:rule.text,terms:rule.terms,authored:true};
+ const words=title.toLowerCase();
+ const textRule=catalog.textRules.find(r=>new RegExp(r.match,'i').test(title));
+ if(textRule)return {text:textRule.text,terms:textRule.terms||[],authored:true};
+ // New fields get current labels/options immediately; the release check flags unmapped controls.
+ if(n.tagName==='SELECT')return {text:`Choose ${title.toLowerCase()} using the options listed on this page. Review the surrounding record before saving or applying the selection. Changing a filter changes the view rather than deleting records.`,terms:['Selection'],authored:false};
+ if(n.tagName==='TEXTAREA')return {text:`Enter ${title.toLowerCase()} for the current record. Use specific facts supported by the photos, then review the text and use the form’s save/submit action.`,terms:['Photo note'],authored:false};
+ if(n.tagName==='INPUT')return {text:n.type==='checkbox'?`Include or exclude ${title.toLowerCase()} in the current form or selection. Review the selected scope before saving or applying an action.`:n.type==='file'?`Choose the file requested by ${title.toLowerCase()}, using an accepted format. Review the selected source and use the form’s save/submit action.`:`Enter ${title.toLowerCase()} in the format shown by the field. Review the related record and save the form to retain the change.`,terms:['Selection'],authored:false};
+ if(n.tagName==='SUMMARY')return {text:`Expand ${title} to see its settings, records, or instructions. The controls appear below this heading in Help in the same order as the page. Opening or closing this section does not save or delete work.`,terms:[],authored:true};
+ return {text:`Use ${title} for the current record or selection. Review the scope and any confirmation or status shown before continuing.`,terms:[],authored:false};
+}
+function controls(){
+ const dialogs=[...document.querySelectorAll('dialog[open],#issueModal:not([hidden]),.modal-backdrop,.evidence-modal,.photo-viewer-modal,.export-share-dialog[role=dialog]')].filter(n=>!hidden(n)&&!n.closest('#photoNotesHelp'));
+ const active=dialogs.at(-1);
+ const nodes=[...(active||document.body).querySelectorAll('button,input:not([type="hidden"]),select,textarea,summary,a[href],[role="button"],.pill,.areax,.stamp-tool,#gps,#addr,#qualityStatus,#documentPreview,#stampStage,#cropStage,.evidence-readiness')];
+ const seen=new Set(),items=[];
+ for(const n of nodes){
+  if(n.closest('#photoNotesHelp')||hidden(n)||n.closest('.document-preview-page')||n.closest('.leaflet-control-attribution')||n.closest('[inert]'))continue;
+  if(n.tagName==='INPUT'&&n.style.display==='none')continue;
+  const title=label(n);if(!title||title==='!'||title==='→')continue;
+  const g=guide(n,title),key=[n.id.replace(/\d+/g,'#'),title,g.text].join('|');
+  if(seen.has(key))continue;seen.add(key);
+  const choices=n.tagName==='SELECT'?[...n.options].filter(o=>!o.hidden).map(o=>clean(o.textContent)).filter(Boolean):[];
+  // Only structural choices, never user-entered field values, are read into Help.
+  items.push({title,text:g.text,terms:g.terms,choices,authored:g.authored,key:keysFor(n),node:n});
+ }
+ return items;
+}
+function keysFor(n){return n.id||[...n.classList].filter(c=>!['btn','secondary','slim','tab','on'].includes(c)).join(' ')||n.tagName.toLowerCase();}
+function relevantTerms(items){const names=new Set(items.flatMap(i=>i.terms));return [...names].filter(n=>catalog.terms[n]);}
+function shell(){
+ let root=document.getElementById('photoNotesHelp');
+ const host=[...document.querySelectorAll('dialog[open]')].filter(n=>!n.closest('#photoNotesHelp')).at(-1)||document.body;
+ if(root){if(root.parentElement!==host)host.append(root);return root;}
+ root=document.createElement('div');root.id='photoNotesHelp';root.dataset.html2canvasIgnore='true';
+ root.innerHTML=`<button class="pn-help-fab" type="button" aria-label="Open PhotoNotes AI Help" aria-controls="pnHelpDrawer" aria-expanded="${opened}" title="Help"><span aria-hidden="true">?</span></button>
+ <aside id="pnHelpDrawer" class="pn-help-drawer" aria-labelledby="pnHelpTitle" aria-hidden="${!opened}" ${opened?'':'inert'}>
+ <header><div><h2 id="pnHelpTitle">PhotoNotes AI Help</h2><p id="pnHelpPage"></p></div><button id="pnHelpClose" type="button" aria-label="Close Help">×</button></header>
+ <div class="pn-help-search"><label for="pnHelpSearch">Search this page</label><div><input id="pnHelpSearch" type="search" placeholder="Find a feature or term"><button id="pnHelpClear" type="button">Clear</button></div>
+ <nav aria-label="Help scope"><button type="button" data-pn-help-scope="page">This page</button><button type="button" data-pn-help-scope="general">Using PhotoNotes</button></nav></div>
+ <div class="pn-help-reading"><p id="pnHelpCount" role="status" aria-live="polite"></p><div id="pnHelpResults"></div><section id="pnHelpTerms" aria-labelledby="pnHelpTermsTitle"><h3 id="pnHelpTermsTitle">Key Terms</h3><p>Hover, focus, or tap a term for its definition.</p><div id="pnHelpTermsList"></div></section></div>
+ <footer><button id="pnHelpReport" type="button">Report an app problem</button></footer></aside>`;
+ host.append(root);
+ root.querySelector('.pn-help-fab').onclick=()=>opened?close():open();
+ root.querySelector('#pnHelpClose').onclick=()=>close();
+ root.querySelector('#pnHelpSearch').oninput=e=>{query=e.target.value;render();};
+ root.querySelector('#pnHelpClear').onclick=()=>{query='';root.querySelector('#pnHelpSearch').value='';render();root.querySelector('#pnHelpSearch').focus();};
+ root.querySelectorAll('[data-pn-help-scope]').forEach(b=>b.onclick=()=>{scope=b.dataset.pnHelpScope;query='';root.querySelector('#pnHelpSearch').value='';signature='';render();});
+ root.querySelector('#pnHelpReport').onclick=()=>{close(false);if(context.reportIssue)context.reportIssue();else document.getElementById('issueFab')?.click();};
+ root.querySelector('#pnHelpTermsList').addEventListener('click',e=>{const b=e.target.closest('[data-term]');if(!b)return;const expanded=b.getAttribute('aria-expanded')==='true';root.querySelectorAll('[data-term]').forEach(x=>x.setAttribute('aria-expanded','false'));b.setAttribute('aria-expanded',String(!expanded));});
+ return root;
+}
+function pageTitle(){
+ const dialog=document.querySelector('dialog[open],#issueModal:not([hidden]),.photo-viewer-modal,.evidence-modal,.export-share-dialog[role=dialog]');
+ return clean(dialog?.querySelector('h1,h2,h3,[id$=Title]')?.textContent||document.querySelector('#body .workflow-intro strong,#body h1,#body h2,#body .formhead,main h1')?.textContent||context.page.replaceAll('-',' ').replace(/^./,s=>s.toUpperCase()));
+}
+const general=[
+ {title:'Follow the photo workflow',text:'Take or import a photo, review it, add factual notes and relevant context, then use the Save or Send action offered by your edition. In Pro workflows, Organize finds and groups saved photos, Edit corrects them, Create composes documents, and Send prepares delivery. Industry tools add evidence specific to their work.',terms:['Capture','Edition','Document']},
+ {title:'Save, upload, and delivery are different',text:'A local save means the browser is holding the photo on this device. Upload confirmation means PhotoNotes has received it. Sharing requires completing the chosen delivery action. Keep pending photos in this browser until upload succeeds; do not clear storage or change accounts while evidence is waiting.',terms:['Local save','Upload','Share sheet','Receipt']},
+ {title:'Permissions and connection',text:'Allow camera, microphone, or location when using the corresponding tool. Check browser and device privacy settings if blocked. Type notes if dictation is unavailable. AI reading, server reports, road submissions, and most external delivery require a connection.',terms:['Permission','Dictation','AI']},
+ {title:'Selecting the right version',text:'Use the account menu’s version selector to choose an enabled edition. Save your draft first. Your account’s permissions determine the versions and tools shown; contact the administrator if expected access is missing.',terms:['Edition','Account access','Draft']},
+ {title:'Check exported files and received submissions',text:'Open downloaded PDF or Word documents and review the photos, captions, order, and page layout. Check the receiving workflow’s receipt for grouped submissions. Copying a link or opening a share sheet is not proof of delivery or approval.',terms:['PDF','Word','Caption','Receipt','Approval']},
+ {title:'Report and retest an application problem',text:'Use Report Issue for a software problem, with the exact page, steps, expected result, actual result, and screenshot. Follow My Issue Reports or Testing Hub for repair requests. A retest is complete only when you repeat the requested steps and record what happened on your device.',terms:['App issue','Retest','Testing assignment']}
+];
+function render(){
+ const root=shell(),items=scope==='page'?controls():general;
+ const words=query.toLowerCase().trim().split(/\s+/).filter(Boolean);
+ const found=items.filter(i=>words.every(w=>(i.title+' '+i.text+' '+i.choices?.join(' ')+' '+i.terms.map(t=>t+' '+catalog.terms[t]).join(' ')).toLowerCase().includes(w)));
+ const sig=JSON.stringify([pageTitle(),context.edition,query,scope,items.map(i=>[i.title,i.text,i.choices])]);if(sig===signature)return;signature=sig;
+ const expanded=new Set([...root.querySelectorAll('details[open]')].map(n=>n.dataset.helpTitle));
+ root.querySelector('#pnHelpPage').textContent=`${context.name} · ${pageTitle()}`;
+ root.querySelector('#pnHelpCount').textContent=scope==='page'?`${items.length} page features, in page order${query?` · ${found.length} matches`:''}`:'PhotoNotes guidance';
+ root.querySelector('#pnHelpResults').innerHTML=found.length?found.map((i,k)=>`<details class="pn-help-article" data-help-title="${esc(i.title)}" ${expanded.has(i.title)?'open':''}><summary>${scope==='page'?items.indexOf(i)+1+'. ':''}${esc(i.title)}</summary><p>${esc(i.text)}</p>${i.choices?.length?`<p><strong>Current choices:</strong> ${i.choices.map(esc).join('; ')}.</p>`:''}</details>`).join(''):'<p>No matching features. Try fewer words or clear the search.</p>';
+ const terms=relevantTerms(items);
+ root.querySelector('#pnHelpTermsList').innerHTML=terms.map((name,k)=>`<div class="pn-help-term"><button type="button" data-term="${esc(name)}" aria-expanded="false" aria-describedby="pnTerm${k}">${esc(name)}</button><span id="pnTerm${k}" role="tooltip">${esc(catalog.terms[name])}</span></div>`).join('');
+ root.querySelectorAll('[data-pn-help-scope]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.pnHelpScope===scope)));
+ root.querySelector('#pnHelpReport').hidden=!context.reportIssue&&!document.getElementById('issueFab');
+}
+function open(){opened=true;document.body.classList.add('pn-help-open');const root=shell();root.querySelector('aside').inert=false;root.querySelector('aside').setAttribute('aria-hidden','false');root.querySelector('.pn-help-fab').setAttribute('aria-expanded','true');signature='';render();root.querySelector('#pnHelpSearch').focus();}
+function close(focus=true){opened=false;document.body.classList.remove('pn-help-open');const root=shell();root.querySelector('aside').inert=true;root.querySelector('aside').setAttribute('aria-hidden','true');root.querySelector('.pn-help-fab').setAttribute('aria-expanded','false');if(focus)root.querySelector('.pn-help-fab').focus();}
+function mount(next){context={...context,...next};signature='';render();}
+function reset(){context={edition:'public',page:'login',name:'Sign in'};query='';scope='page';if(opened)close(false);signature='';}
+function schedule(){clearTimeout(timer);timer=setTimeout(()=>{if(opened||!document.getElementById('photoNotesHelp')){signature='';render();}},80);}
+const observer=new MutationObserver(changes=>{if(changes.some(c=>!(c.target instanceof Element?c.target:c.target.parentElement)?.closest('#photoNotesHelp')))schedule();});
+function start(){
+ const standalone=location.pathname.includes('admin')?'Administration':location.pathname.includes('install')?'Installation':location.pathname.startsWith('/review/')?'Customer review':location.pathname.startsWith('/completion-photos/')?'Completion photos':null;
+ if(standalone)context={edition:'public',page:standalone,name:standalone};
+ shell();observer.observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:['hidden','aria-hidden','disabled','class','style','open'],characterData:true});
+ render();
+}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});else start();
+document.addEventListener('keydown',e=>{if(e.key==='Tab'&&opened){const els=[...document.querySelectorAll('#photoNotesHelp button,#photoNotesHelp input,#photoNotesHelp summary')].filter(n=>!hidden(n)&&n.getClientRects().length);const first=els[0],last=els.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}}
+ if(e.key==='Escape'&&opened){e.preventDefault();e.stopPropagation();const expanded=document.querySelector('#photoNotesHelp [data-term][aria-expanded="true"]');if(expanded){expanded.setAttribute('aria-expanded','false');expanded.focus();}else close();}});
+window.PhotoNotesHelp={mount,reset,inspect:()=>controls().map(({node,...item})=>item),refresh:()=>{signature='';render();}};
 })();

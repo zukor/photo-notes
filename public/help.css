@@ -1,0 +1,45 @@
+/* Help owns its styles so it can also be used by admin, installation, and public review screens. */
+:root { --pn-help-width:28vw; }
+#photoNotesHelp { color:#000; font:15px/1.45 Arial,Helvetica,sans-serif; text-align:left; }
+#photoNotesHelp *,#photoNotesHelp *::before,#photoNotesHelp *::after { box-sizing:border-box; }
+#photoNotesHelp p,#photoNotesHelp h2,#photoNotesHelp h3,#photoNotesHelp label,#photoNotesHelp input,#photoNotesHelp select,#photoNotesHelp button,#photoNotesHelp summary { color:#000; text-align:left; }
+#photoNotesHelp button { cursor:pointer; font:700 14px Arial,Helvetica,sans-serif; border:1px solid #000; background:#fff; padding:9px 11px; border-radius:8px; margin:0; width:auto; }
+#photoNotesHelp button:focus-visible,#photoNotesHelp summary:focus-visible,#photoNotesHelp input:focus-visible { outline:3px solid #2455d9; outline-offset:2px; }
+#photoNotesHelp .pn-help-fab { position:fixed; right:max(14px,env(safe-area-inset-right)); bottom:max(14px,env(safe-area-inset-bottom)); z-index:10021; display:grid; place-items:center; padding:0; width:48px; height:48px; border:2px solid #9c7400; border-radius:50%; background:radial-gradient(circle at 32% 23%,#fff4a3,#ffdf38 32%,#ffc400 64%,#b98600); box-shadow:0 3px 0 #785800,0 6px 12px #0003; text-align:center; }
+#photoNotesHelp .pn-help-fab span { color:#000; font-size:34px; font-weight:900; line-height:1; }
+#photoNotesHelp .pn-help-drawer { position:fixed; right:0; top:0; bottom:0; width:var(--pn-help-width); z-index:10020; display:flex; flex-direction:column; background:#fff; border-left:2px solid #2455d9; box-shadow:-6px 0 22px #0002; padding-top:env(safe-area-inset-top); padding-bottom:calc(76px + env(safe-area-inset-bottom)); transform:translateX(105%); visibility:hidden; transition:transform .2s ease,visibility .2s; }
+.pn-help-open #photoNotesHelp .pn-help-drawer { transform:translateX(0); visibility:visible; }
+.pn-help-open #app { margin-right:var(--pn-help-width); }
+#photoNotesHelp header { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; padding:16px; border-bottom:1px solid #000; }
+#photoNotesHelp h2 { font-size:20px; line-height:1.2; margin:0 0 6px; }
+#photoNotesHelp h3 { font-size:17px; margin:0 0 8px; }
+#photoNotesHelp p { margin:0; font-size:14px; }
+#photoNotesHelp #pnHelpClose { min-width:40px; min-height:40px; font-size:24px; text-align:center; }
+#photoNotesHelp .pn-help-search { padding:12px 16px; border-bottom:1px solid #000; }
+#photoNotesHelp label { display:block; font-weight:bold; margin-bottom:6px; }
+#photoNotesHelp .pn-help-search>div { display:flex; gap:6px; }
+#photoNotesHelp input { min-width:0; width:100%; margin:0; padding:10px; font:16px Arial,Helvetica,sans-serif; border:1px solid #000; border-radius:8px; background:#fff; }
+#photoNotesHelp input::placeholder { color:#000; opacity:1; }
+#photoNotesHelp nav { display:flex; gap:6px; margin-top:10px; }
+#photoNotesHelp nav [aria-pressed=true] { background:#ffdf38; }
+#photoNotesHelp .pn-help-reading { flex:1; min-height:0; overflow-y:auto; overscroll-behavior:contain; padding:12px 16px; }
+#photoNotesHelp #pnHelpCount { font-weight:bold; margin-bottom:12px; }
+#photoNotesHelp .pn-help-article { border:1px solid #000; border-radius:8px; margin:0 0 10px; background:#fff; }
+#photoNotesHelp summary { cursor:pointer; padding:12px; font-size:14px; line-height:1.4; font-weight:bold; }
+#photoNotesHelp .pn-help-article[open] summary { background:#fff2af; border-radius:8px 8px 0 0; }
+#photoNotesHelp .pn-help-article p { padding:12px; overflow-wrap:anywhere; }
+#photoNotesHelp footer { padding:10px 16px; border-top:1px solid #000; background:#fff; }
+#photoNotesHelp #pnHelpTerms { margin:22px 0 0; padding:16px 0 6px; border-top:2px solid #2455d9; }
+#photoNotesHelp #pnHelpTerms>p { margin:0 0 10px; }
+#photoNotesHelp #pnHelpTermsList { display:flex; flex-direction:column; gap:8px; }
+#photoNotesHelp .pn-help-term { position:relative; }
+#photoNotesHelp .pn-help-term button { text-decoration:underline; min-height:40px; }
+#photoNotesHelp [role=tooltip] { display:none; margin-top:6px; padding:10px; background:#fff9cf; color:#000; border:1px solid #000; border-radius:8px; font-size:14px; }
+#photoNotesHelp .pn-help-term:hover [role=tooltip],#photoNotesHelp .pn-help-term:focus-within [role=tooltip],#photoNotesHelp [aria-expanded=true]+[role=tooltip] { display:block; }
+.issue-fab { left:max(14px,env(safe-area-inset-left))!important; right:auto!important; min-height:40px; z-index:10019!important; }
+body:has(#photoNotesHelp) { padding-bottom:calc(80px + env(safe-area-inset-bottom)); }
+@media (max-width:1099px) {
+ :root { --pn-help-width:min(100vw,540px); }
+ .pn-help-open #app { margin-right:0; }
+}
+@media (prefers-reduced-motion:reduce) { #photoNotesHelp .pn-help-drawer { transition:none; } }

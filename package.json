@@ -5,12 +5,15 @@
   "description": "Photo Notes: photograph something, say what you see, and it's saved with location. Multi-user, exportable, Board-Hub-ready.",
   "main": "server.js",
   "scripts": {
-    "postinstall": "node scripts/gen-icons.js",
+    "postinstall": "node scripts/help-coverage.cjs && node scripts/gen-icons.js",
     "dev": "node --env-file=.env server.js",
     "start": "node server.js",
     "test": "node --test test/*.test.js",
     "test:mobile": "node --test test/mobile-regression.test.js",
-    "test:web-browser": "node scripts/test-web-browser.cjs"
+    "test:web-browser": "node scripts/test-web-browser.cjs",
+    "help:check": "node scripts/help-coverage.cjs",
+    "test:help": "node scripts/test-complete-help.cjs",
+    "prestart": "node scripts/help-coverage.cjs"
   },
   "engines": {
     "node": ">=20"

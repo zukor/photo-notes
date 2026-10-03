@@ -1,0 +1,396 @@
+/* Authored explanations. The Help renderer discovers controls and their order from the live page. */
+(() => {
+'use strict';
+const rules=[];
+const add=(keys,text,terms=[])=>rules.push({keys:keys.split('|'),text,terms});
+add('takephoto|photoCam|readerTake|readerCam|ticketTake|ticketCam|ewrTake|ewrCam','Open the camera and photograph the subject clearly. Keep the important evidence in frame, check the preview, and retake if blurred or incomplete. Camera permission is required. Taking a photo does not by itself save or send it.',['Capture','Permission']);
+add('choosephoto|photoLib|readerChoose|readerLib|ticketChoose|ticketLib|alignChoose|alignLib|ewrChoose|ewrLib','Choose an image from this device. Review the imported image before continuing. Imported photos may not contain usable GPS information, so check the displayed location. This selects a photo; use the relevant Save or Send action to complete the task.',['GPS','Capture']);
+add('retakePhoto|alignRetake','Replace the current draft photo with another camera shot. Check the replacement preview and location. Retaking does not delete photographs already saved in your library.',['Draft']);
+add('cancelPhoto','Discard the current unsaved photo draft and its preview. This does not remove photos previously saved in PhotoNotes.',['Draft']);
+add('dictate|ewrDictate|issueRecord','Allow microphone access, press Record, and speak clearly. Press Stop before saving. Review and correct the transcribed words, including names and numbers. You can type instead if speech recognition is unavailable. Speech recognition may require a connection.',['Dictation','Permission']);
+add('note|editarea|ewrDesc','Explain what the photo shows, why it matters, and any work or follow-up needed. Review dictated text before saving. Editing a note changes supporting text, not the photograph.',['Photo note']);
+add('retryLocation','Retry this device’s location permission and GPS lookup, then review the coordinates and address. Location can be unavailable indoors or when permissions are blocked. Confirm an approximate address before relying on it.',['GPS','Geocoding']);
+add('correctAddress|editaddress','Enter the correct address or geographic area for this photo. Check street, city, and site details. Correcting address text does not change the photograph or recreate missing GPS coordinates.',['GPS','Geocoding']);
+add('gps|addr|locwrap','The coordinates describe the location obtained for this capture. The address is a readable description of those coordinates. Accuracy varies; review both and correct the address when needed. A missing address does not necessarily mean GPS is missing.',['GPS','Geocoding']);
+add('qualityStatus|previewBox|readerPreviewBox|ticketPreviewBox|preview','Inspect the photo for legibility, blur, framing, and important details. Follow any quality warning, retake if possible, or consciously keep the available evidence. A preview is not confirmation that the photo has been uploaded.',['Capture','Upload']);
+add('save','Save the current photo and note in PhotoNotes. A local save or waiting message means it is stored on this device until upload succeeds. Keep the app connected, and use Pending Photos to check unfinished uploads. A save does not send the photo to another person.',['Local save','Upload']);
+add('send','Share the current capture through the delivery choices supported by this device. Review the photo and note first. Basic shares without creating a saved PhotoNotes record. Canceling the share sheet does not deliver anything. Other editions may save before preparing a share; follow the status shown.',['Share sheet','Capture']);
+add('roadIssueType','Choose the type of road problem visible in your photograph. Match the category to the evidence rather than a guess about its cause. Review the camera preview and location before sending. This is different from reporting a fault in the PhotoNotes application.',['Road issue']);
+add('roadIssueSend','Submit the road issue category, photograph, and available location. A connection and photo are required. Read the result: a saved report with email pending is different from confirmed email delivery. If it fails, keep the draft and retry after reconnecting.',['Road issue','Upload']);
+add('areas|newarea|organizenewtopic','Use your own topics to group related photos. Add a concise reusable topic name, then select it for the current photo. Topics belong to your account. No Topic leaves the photo untagged; adding a topic is optional unless the current workflow says otherwise.',['Topic']);
+add('addarea|createtopic','Create the topic using the name in the adjacent field. The new name becomes available in your topic list. Reuse an existing topic when it already describes the subject, to avoid duplicate spellings.',['Topic']);
+add('areax','Remove this topic from your selectable list after reviewing the confirmation. Photos already tagged keep their existing labels. This does not delete those photos.',['Topic']);
+add('captureUrgency','Choose Standard for normal handling or Urgent when the captured item needs prompt attention. This saves urgency with the capture. It does not automatically contact emergency services or guarantee that someone has been notified.',['Urgency']);
+add('openCameraTools|toolsBack|readerBack|ticketBack|alignBack|pavingToolsGuide','Open the available specialist camera tools or return to their menu. Choose the tool suited to the source photo. Reading, measuring, and saving are separate steps; review extracted values before recording them.',['Camera reader']);
+add('pavingPhotoReason','Choose why this paving photograph is being taken. The selection determines which supporting tools or details appear. Read the on-page description and choose the reason supported by the photo.',['Photo purpose']);
+add('concretePhase','Choose the project phase that the photo documents, from proposal planning through work, completion, or later follow-up. The photo-purpose choices update to suit the phase. Leave it blank if the phase is not yet known.',['Project phase']);
+add('concretePurpose|concretePurposeButton','Choose the specific purpose of the photo within the selected project phase. Read the description beneath the selector. Use this to distinguish a customer wish, existing condition, work stage, completed result, or reported problem.',['Photo purpose']);
+add('concreteElement','Choose the photographed project type, such as patio, driveway, slab, or foundation. Use Other when none fits. This describes the physical work, not a defect classification.',['Project']);
+add('concreteJob|jobFilter|batchJob|ewrJob','Choose the project or job to associate with the work. A job gathers related evidence for the same site or customer. All Jobs shows records across jobs; No project selected leaves the capture unassigned. Verify the site before applying changes.',['Job','Project']);
+add('concreteLocation','Describe exactly where on the property this subject appears, such as the rear patio or north side of the driveway. This supplements the street address and GPS rather than replacing them.',['GPS']);
+add('concreteCondition|hapCondition|haCondition','Record the observed physical condition. Not assessed means no judgment has been made. Monitor means follow-up may be needed; repair needed or unsafe should be supported by a clear photo and explanation. Review the choices currently offered for this record.',['Condition']);
+add('concreteSeverity|ovsev','Choose the seriousness of the visible issue. Use Not rated or None if it has not been assessed. Severity describes the evidence; it is separate from urgency and maintenance scheduling. Review AI suggestions before saving.',['Severity','Urgency']);
+add('concreteMix','Record only a confirmed mix or specification taken from a ticket, approved plan, or other reliable source. Do not infer strength or mix composition from a photograph of finished concrete.',['Specification']);
+add('hoaCommunity|haCommunity|hirCommunity|hcName|hrCommunity|hoaFilterCommunity|haFilter','Select or name the community/property to which the photos and records belong. Community filters narrow the results. Check the property before creating a record or starting an inspection route.',['Community']);
+add('hoaTitle|hiTitle','Give the maintenance issue a concise title that identifies the subject and location. A clear title makes later searches, assignment, and board reports easier to understand.',['Maintenance record']);
+add('hoaType|hoaFilterType','Choose or filter the record type: a maintenance issue, information request, or inspection finding. Match the type to what the photo and note document.',['Maintenance record']);
+add('hoaPriority|hiPriority|hoaFilterPriority','Set or filter maintenance priority. Routine, High, Emergency, and Monitor support different follow-up needs. This is the property workflow’s priority, separate from the capture’s Standard/Urgent field. Selecting a priority does not itself dispatch a contractor.',['Priority','Urgency']);
+add('hoaArea|hiArea','Choose the maintenance category matching the photograph. Use it consistently so records for the same kind of work can be found together.',['Category']);
+add('hoaDirected|hiDirected','Name the person expected to answer this information request or follow-up. Add clear instructions in the description. Entering a name alone is not proof that the person received a notification.',['Assignment']);
+add('haCommunityName|hcCompanyName','Enter the community or management-company name used to identify these property records. Check spelling before saving so the team can recognize the organization.',['Community']);
+add('haCommunityAddress|hcAddress','Enter the property’s full address. This identifies the community; individual asset locations and photo GPS provide more specific evidence.',['Community','GPS']);
+add('haAddCommunity|hcCreate','Create the community using the entered name and address. It will be available for property photos, asset records, and inspection routes. Review details before saving.',['Community']);
+add('haName','Name the specific physical asset, such as North entrance monument or Pool gate. Use a stable name that the next inspection can reuse.',['Asset']);
+add('haType','Describe the kind of physical asset, such as a light, gate, fence, or playground. The type helps group similar assets.',['Asset']);
+add('haLocation','Describe the exact position of the asset within the property. Include landmarks or direction so another person can find and photograph the same object.',['Asset']);
+add('haPhoto|hapPhoto|hoaItemPhoto|hvsPhotos','Choose clear documentation photos for this asset, maintenance item, or inspection stop. Include an overview and close-up when useful. Review the selected files and note before saving them to the record.',['Evidence']);
+add('haNote|hapNote|hoaItemPhotoNote|hvsNote','Describe the condition visible in these property photos, what changed, and any follow-up needed. Keep the note tied to the photographed asset or visit stop.',['Evidence']);
+add('haCreate','Save the physical asset record and its required identity photo. Verify community, name, type, location, and condition first. The identity photo is the starting point for future condition history.',['Asset','Evidence']);
+add('hapType|hoaPhotoStage','Choose the role of this documentation photo, such as initial condition, damage, work in progress, completed work, or final verification. This allows the timeline to distinguish evidence before and after work.',['Photo purpose','Verification']);
+add('hapAdd|hoaAddPhoto','Attach the selected documentation photo and note to the existing history. Check purpose/stage before saving. This adds evidence; it does not automatically mark the maintenance work complete.',['Evidence','Timeline']);
+add('hirName','Give the inspection route a clear reusable name, such as Monthly common-area inspection. The route becomes a template for later guided visits.',['Inspection route']);
+add('hirInstructions','Describe how to walk the route and what inspectors should look for. Include the start point, direction, access needs, and safety considerations relevant to the property.',['Inspection route']);
+add('hirStops','Enter one inspection stop per line. Use the format shown beside the field: the stop name followed by the requested photo views. These become the ordered stops and photo requirements of the route.',['Inspection route']);
+add('hirCreate','Save the route’s community, name, instructions, and ordered stops. Review that each stop has clear photo requirements before starting a visit.',['Inspection route']);
+add('hvNew','Start a guided property visit using an available inspection route. Review the community and route first, then work through stops in order and provide the requested photos.',['Property visit','Inspection route']);
+add('hvsComplete','Save the photos and note for the current stop, then mark that stop complete. Check that all requested views are present before moving on. Completed stops form the photographic visit record.',['Property visit','Evidence']);
+add('hoaFilterStatus|hiStatus','Filter records by status or update the maintenance item’s workflow stage. Completed means the work has been verified, not merely photographed. Supply the required completion details before saving a completed record.',['Status','Verification']);
+add('hoaSearch','Search maintenance titles, descriptions, communities, or categories. Combine the search with the community, status, priority, and type filters to narrow the records.',['Filter']);
+add('hoaSearchBtn','Apply the entered maintenance search and current filters. Clear the search or broaden filters if a known record is missing.',['Filter']);
+add('hoaShowClosed|hrClosed','Include completed and canceled records in this view or report. Turn this off to focus on active work. Showing a closed record does not reopen it.',['Status']);
+add('hiDescription','Explain the maintenance issue, what the photo demonstrates, and the requested work. Include relevant measurements, access details, and questions for the assigned person.',['Maintenance record']);
+add('hiAssignee|hcManager','Identify the responsible person or community manager. Use a recognizable name and keep it consistent across records. Check the workflow’s notification status separately.',['Assignment']);
+add('hiTarget','Set the target completion date for the maintenance work. Review overdue items against this date. A target date is a plan, not proof of completion.',['Target date']);
+add('hiBudget|hrBudget','Choose or filter the budget source, such as operating funds or reserves, using the available choices. Review funding before approving or reporting work.',['Budget']);
+add('hiEstimated|hiActual','Record the estimated or actual cost, as labeled. Use an estimate before work and verified final costs after completion. Keep supporting invoices or photos with the record where appropriate.',['Budget']);
+add('hiApproval','Record the board-approval stage. Requested, approved, rejected, or deferred represent distinct decisions. Update this only when you have evidence of the decision.',['Approval']);
+add('hiCompletedBy','Enter who completed the work. This is required before a maintenance item can be saved as completed. Verify the final photos before closing the item.',['Verification']);
+add('hiCompletion','Enter the actual completion date. Keep it distinct from the target date and check it against the completed-work evidence.',['Verification']);
+add('hoaItemSave','Save the edited maintenance fields. Review status, responsibility, target date, approval, and costs together. Completion requires the responsible person and evidence that the work was finished.',['Maintenance record']);
+add('hoaCompletionName','Enter the person expected to submit completion photos. The resulting link lets that person provide evidence for this maintenance item.',['Completion link']);
+add('hoaCompletionCreate|hoaCompletionUrl|hoaCompletionCopy','Create or copy the completion-photo submission link. Share it with the person doing the work, verify the returned images, and update the maintenance record yourself. Creating or copying a link does not deliver it.',['Completion link','Verification']);
+add('hcMemberEmail','Enter the existing team member’s email address to add them to the management company. Confirm the account and organization before granting access.',['Account access']);
+add('hcAddMember|hcSaveCompany','Save the entered company/team change. Review the management organization and member identity first; access to property records should match the person’s role.',['Account access']);
+add('hoaReadAll','Mark the displayed property notifications as read. This clears unread indicators; it does not resolve the related maintenance records.',['Notification']);
+add('hoaReportPdf|hoaReportWord|hoaPrintReport|concreteReportPdf|concreteReportWord|concretePrint|pavingJobPdf|pavingJobWord','Prepare or print the photo-evidence report for the selected community/project and filters. PDF preserves the finished layout; Word allows further editing. Open and inspect the output before distribution, including photos, notes, locations, and dates.',['PDF','Word','Evidence']);
+add('concreteReportJob','Filter the concrete evidence report to the relevant project. All Projects includes records across projects; choose a specific site before exporting a customer report.',['Project','Filter']);
+add('concreteReadiness|pavingReadiness','Review the evidence checklist for the selected job. Missing or unverified items indicate gaps to resolve before export. Readiness is a summary of recorded evidence, not independent certification of the work.',['Evidence','Verification']);
+add('newJobName','Enter a recognizable name for the job or site. Use the same job for photos documenting the same piece of work.',['Job']);
+add('newJobNumber','Enter your organization’s job reference when available. This helps distinguish projects with similar names.',['Job']);
+add('newJobCustomer','Enter the customer or client for this job. Check the name before using it in reports.',['Job']);
+add('newJobAddress','Enter the job-site address. It provides project context; each photo’s GPS and address should still be reviewed.',['Job','GPS']);
+add('createJobBtn','Create the job from the entered name, number, customer, and address. Select it when organizing or capturing its photographs.',['Job']);
+add('timelineBtn|jobStatusBtn','Open the selected job’s photographic timeline or change its job status. Review the date sequence and associated evidence. A job’s completion status is separate from individual maintenance or extra-work records.',['Timeline','Status']);
+add('filter|mapTopic','Filter the library or map by a topic. All Topics shows the full eligible set. Filtering changes what you see, not the topics already attached to photos.',['Topic','Filter']);
+add('photoSearch','Search saved notes and supporting details such as jobs, customers, addresses, topics, dates, or defects. Use specific words and combine them with filters to locate evidence.',['Filter']);
+add('photoSearchBtn','Run the library search using the current words, topic, job, and additional filters. Check the result count before selecting photos.',['Filter']);
+add('photoSearchClear','Clear the library search and refresh the results. This does not delete records or notes.',['Filter']);
+add('searchFrom|searchTo','Limit results to the date range shown. Set either endpoint or both. Check the date range if an older or newer capture is absent from the results.',['Filter']);
+add('searchMissingAddress','Show captures that need address information. Open them to correct the address or retry a lookup where usable GPS exists.',['Geocoding','Filter']);
+add('selall|selectAllSendCaptures','Select all photos offered by this current view for the next action. Review the selected count and filters; Select All does not automatically mean every record in your account.',['Selection']);
+add('selnone|clearSendSelection','Clear the current selection. This does not delete photos. Select the intended photos again before applying a batch change, sharing, or building a document.',['Selection']);
+add('capchk|sendchk','Include or exclude this photo from the current selection. Selected photos are the scope of batch changes, document creation, deletion, or sharing. Always verify the selected count.',['Selection']);
+add('compareSelected|pairbtn','Select exactly two photographs, then compare them or create a Before/After pair as labeled. Check which image represents the earlier condition. Comparison does not alter the underlying originals.',['Before/after','Selection']);
+add('cmpSideBtn|cmpOverlayBtn|cmpOpacity','Choose side-by-side or overlay comparison. In overlay mode, move the transparency slider to inspect differences. Check camera alignment and perspective before judging a change.',['Before/after']);
+add('classifybatch|classifybtn','Ask the available AI classifier to suggest a defect type and severity for the selected evidence. A connection and enabled account feature are required. Review and correct results; AI output is not a verified diagnosis.',['AI','Severity']);
+add('ovtype','Choose the visible defect type. Correct an AI suggestion when it does not match the evidence. Use Other or No Defect when appropriate.',['AI','Defect']);
+add('ovsave|overridebtn','Open or save a manual correction to defect type and severity. Base the correction on the photograph and site knowledge, then check the updated result.',['Defect','Severity']);
+add('bulktopic|applytopic|replacetopic','Choose a topic for the selected photos. Add Topic retains their existing topics; Replace Topics replaces their topic assignments with the selected one. Check the selection and the action before applying it.',['Topic','Selection']);
+add('groupsel|newgroupname|addtogroup|batchDocument','Choose an existing document, or enter a new document title where offered, then add the selected photos. Document copies can be ordered and captioned separately from the library originals.',['Document','Selection']);
+add('batchTemplate|singleTemplate','Choose a saved annotation template to reuse a consistent set of markup items. Review the resulting placement on each photo; a template may not fit photos with different framing.',['Template','Markup']);
+add('runBatch','Apply the chosen job, document, or annotation-template changes to the current selection. Review all settings and the selected count before applying; unrelated photos should be deselected first.',['Selection','Template']);
+add('concreteAreas|concrete-area-button|areaBack','Open the photo-linked patio/foundation area workspace. Select the relevant source photo, trace or locate the area, and record measured dimensions with their source. This documents a proposed or existing area; it is not a certified survey.',['Area','Measurement']);
+add('openmap|gotoMap|mapGroup','Open the job-site map or filter it to a document. Located photos appear in context. Missing GPS can prevent a photo from appearing at the correct site. Trace only the intended area and review units before reporting measurements.',['GPS','Area']);
+add('rotccw|rotcw|flipphoto','Rotate the photo 90 degrees in the indicated direction or flip it horizontally. Check orientation afterward. The original is retained so saved edits can be restored.',['Original']);
+add('editdims|measureBtn|doMeasure','Open measurements or run assisted measurement. Use a known reference visible in the same plane as the subject, enter its real size and units, then review the estimate. Perspective and an incorrect reference can produce inaccurate dimensions.',['Measurement','Reference']);
+add('dimLength|dimWidth|dimDepth|reflen','Enter the dimension identified by this field. Confirm the unit alongside it. Reference length must be a known real-world length visible in the source photo. Use verified site measurements when precision matters.',['Measurement','Reference']);
+add('dimLengthUnit|dimWidthUnit|reflenunit','Choose the unit matching the entered measurement. Feet and inches are not interchangeable; review the converted values before saving or exporting.',['Measurement']);
+add('dimShape','Choose the shape used to calculate area. A rectangle and circle use different formulas; use Irregular or a reviewed manual area where the subject does not fit either.',['Area']);
+add('dimArea','Review the calculated square-foot area or enter a measured override where supported. Confirm dimensions and shape before relying on the result.',['Area','Measurement']);
+add('measureConfirm','Confirm that you have reviewed the assisted measurement. Low-confidence estimates can be excluded from reports until you confirm them. Confirmation records your review; it does not independently verify accuracy.',['AI','Measurement']);
+add('saveDims','Save the reviewed dimensions, units, shape, and area with this photo. Check the result and any confirmation requirement before including measurements in a report.',['Measurement']);
+add('concrete-ticket-file','Choose a clear batch-ticket or specification photo to link to this concrete evidence. Review readable mix and delivery details rather than inferring them from the concrete appearance.',['Specification']);
+add('edittitle|photoTitle*|savephototitle','Enter and save a short descriptive photo title. Name the subject and condition so it can be recognized in the library and exported documents. This changes the title, not the photo file.',['Photo note']);
+add('edittopics|savetopics','Choose the topic checkboxes for this photo and save them. Multiple topics may be used. Review which labels are being retained or removed before saving.',['Topic']);
+add('editnote|savenote','Open or save the text note attached to the photo. Correct dictated text and retain the details that explain the visible evidence. Saving a note does not apply image markup.',['Photo note']);
+add('stampbtn|stampSave','Open the markup editor or save the current annotations. Use arrows, shapes, and text to call attention to visible evidence. Save Changes before leaving; Download Marked Photo creates a file but is not a substitute for saving the edit.',['Markup','Original']);
+add('stampCopy','Download the currently marked photo for use outside PhotoNotes. Review the output. A downloaded marked photo and saved annotations in the app are separate results.',['Markup','Download']);
+add('applySingleTemplate','Apply the selected annotation template to this photo. Check every item’s placement and text, then Save Changes to retain the result.',['Template','Markup']);
+add('ovText|ovFont|ovSize|ovThick|ovColorPick|ovOutline','Adjust the selected annotation’s text, font, size, line thickness, color, or outline as labeled. Keep labels legible and avoid obscuring the evidence. Save Changes when the markup is complete.',['Markup']);
+add('ovDelete|issueMarkupDelete','Delete only the selected markup item. Use Undo where available if removed by mistake. This does not delete the underlying photograph.',['Markup']);
+add('cropbtn|cropApply','Open the crop tool, frame the relevant area, and apply the crop. Review the result before exporting. The original photograph is retained for Restore Original.',['Crop','Original']);
+add('restorebtn','Restore the first uploaded photo and remove its saved visual edits after confirming. Review the restored result. Text notes and other record details remain separate.',['Original']);
+add('evidencebtn','Inspect the photo’s evidence details, original-file fingerprint, and recorded history. Review who captured it and subsequent changes. A fingerprint checks file identity; it does not prove that the pictured event or statement is true.',['Fingerprint','Evidence']);
+add('photoViewerReset','Reset zoom and panning to view the full photo. This changes the viewer only, not the saved photograph.',['Original']);
+add('delbtn|delall|organize-delete-capture|send-delete-capture','Delete the selected photo records or all records in the stated scope, as labeled. Read the confirmation carefully. This removes saved evidence, unlike clearing a selection or removing a document copy.',['Selection','Original']);
+add('unpairbtn','Remove the Before/After association between these photos. The photos remain separate records in the library.',['Before/after']);
+add('areaPhoto','Choose the source photo for the area record. The saved outline and dimensions should describe the photographed patio, foundation, or other intended work.',['Area']);
+add('areaName','Name the measured/proposed area, such as Backyard patio. Use a name that identifies its purpose and position at the site.',['Area']);
+add('areaPhotoLocation|areaMyLocation','Center the map using the selected photo’s GPS or this device’s current location, as labeled. Verify the displayed site before drawing. Current device location may differ from where an imported photo was taken.',['GPS']);
+add('areaTrace|drawArea|drawSpan','Start tracing an area boundary or measuring a span. Add points in the intended order. Close the outline for an area, then review its shape and measurement source. Map tracing is approximate.',['Area','Measurement']);
+add('areaUndo','Remove the most recently added corner from the active outline. Review the remaining points before continuing.',['Area']);
+add('areaClear','Clear the draft outline and start again. Check whether the action affects the current draft or a saved record before confirming.',['Area','Draft']);
+add('areaFinish|drawFinish','Finish the current area outline or span. Review the boundary and units before saving or attaching it to a report.',['Area','Measurement']);
+add('areaLength|areaWidth','Enter the verified real-world dimensions of the area using the units displayed. Check length and width against the site or plans.',['Area','Measurement']);
+add('areaMethod','Identify the source of the measurement, such as manual site measurement or map-based estimate. This provenance explains how the dimensions were obtained.',['Provenance','Measurement']);
+add('areaNotes','Document who measured the area, when, and any assumptions, layout details, or source plan. This makes later review of the dimensions possible.',['Provenance']);
+add('areaSave','Save the reviewed area outline, dimensions, method, and notes linked to the selected photo. Check the source and site before using the area in a proposal.',['Area','Evidence']);
+add('areaNew','Start a separate new area record. Use a distinct name and source photo if it documents a different part of the site.',['Area']);
+add('zn-edit|zn-rename|zn-attach|zn-del','Edit the zone’s points, rename it, attach it to a document, or delete the zone as labeled. Deleting a map zone is different from deleting its associated photos. Review the target zone before applying the action.',['Area','Document']);
+add('sendformat|document-delivery-format|export-res|export-fmt','Choose the output type or image quality. PDF is a finished layout; Word is editable; Markdown + Photos is a ZIP with text and images. Smaller image exports reduce size but can lose fine detail. These settings do not lower the resolution of the stored original.',['PDF','Word','Markdown','Resolution']);
+add('sharephotos','Prepare the selected photos and use this device’s share destinations. Confirm the selected count and destination, then complete the operating system’s share sheet. Canceling or closing it is not proof of delivery.',['Share sheet','Selection']);
+add('senddocument','Download an export in the selected format. Wait for preparation, check the browser’s Downloads, and open the file to confirm its content before attaching it elsewhere.',['Download','PDF','Word']);
+add('sendshortcuts|shortcutSelect','Open saved delivery shortcuts or choose a destination. Shortcuts store your own email, SMS, HTTPS website, or Ramo destination. Select the photos first. Some destinations prepare a message but require you to attach the downloaded file yourself.',['Shortcut','Share sheet']);
+add('shortcutName','Name the saved destination so it is easy to recognize, such as the customer or project team. The name is a label, not the delivery address.',['Shortcut']);
+add('shortcutType','Choose the delivery method. Email and SMS prepare a message; HTTPS opens a website destination; Ramo uses the grouped submission workflow when authorized.',['Shortcut','HTTPS']);
+add('shortcutTarget','Enter the email address, phone number, or HTTPS URL appropriate to the chosen shortcut type. Verify the destination carefully before using it. A Ramo shortcut uses the configured integration rather than a pasted secret token.',['Shortcut','HTTPS']);
+add('shortcutCreate|shortcutSave','Save the named destination for reuse by your account. Confirm its type and target first. Creating a shortcut does not send the current photos.',['Shortcut']);
+add('shortcutDelete','Delete this saved destination after checking its name. This removes the shortcut, not previously shared files or photo records.',['Shortcut']);
+add('sendToRamo|ramoIntakeSend|ramoSend','Prepare selected photos as one grouped submission to Ramo Optimizer. Enter a title and description, review captions and photos, then submit. Read the receipt: received means the receiver confirmed all attachments; a queued or failed status needs follow-up. Each send is a separate submission.',['Ramo','Receipt']);
+add('ramoIntakeHistory','Review previous grouped submissions, delivery status, and available receipts. Retry a failed/pending submission using the existing record to avoid duplicates. Verify received status rather than assuming a button click completed delivery.',['Ramo','Receipt']);
+add('ramoTitle','Give the grouped submission a meaningful title identifying the proposed change or evidence. A title is required; keep your selected photos if the form requests a correction.',['Ramo']);
+add('ramoDescription','Describe what changed, why the grouped photos matter, and the requested review. Keep the scope limited to the photos included in this submission.',['Ramo']);
+add('ramoCaption*','Explain this photo’s role in the grouped submission. Captions should identify the condition, location, and change supported by the image. Review all attachments before submitting.',['Ramo','Caption']);
+add('approvalTitle','Name the customer review package so the recipient can recognize the work. Check the selected photos before creating the link.',['Approval']);
+add('approvalMessage','Write instructions for the customer, including what to review and any question needing a response. This message accompanies the review link.',['Approval']);
+add('createApproval','Create a private, expiring review link for the selected photos. Review the package before sharing the URL. Creating the link does not send it or mark the photos approved.',['Approval','Selection']);
+add('approvalUrl|copyApproval|copyExistingApproval','Copy the review URL and send it to the intended customer through your chosen channel. Treat it as a private link. Check expiration and recorded responses in PhotoNotes.',['Approval']);
+add('billing-checkout','Open the configured Stripe checkout for this offer. Review the provider, description, quantity, and price before completing payment. Opening checkout does not complete a purchase.',['Checkout']);
+add('gtitle|gdtitle','Enter the document title that will appear in the generated report. Identify the job or subject and the report purpose. Save an edited title before exporting.',['Document']);
+add('gdesc|gddesc','Enter the report subtitle or description. Explain the scope and context of the selected evidence. Keep it distinct from individual photo captions.',['Document','Caption']);
+add('gcreate','Create a document using the title, description, and selected photos. You may create an empty document and add photos later from Organize. The document’s copies can be arranged independently of library originals.',['Document','Selection']);
+add('gopen','Open the document composer to review details, photos, captions, order, branding, preview, and export settings. Changes to document copies do not replace the library originals.',['Document']);
+add('editTitle|saveTitle','Edit or save the document title. Check the saved heading in the preview before exporting.',['Document']);
+add('editDesc|saveDesc','Edit or save the document subtitle/description. Review the preview so the context is accurate for the included photos.',['Document']);
+add('greverse','Reverse the order of photos in this document. Review the result before export, particularly where the report tells a before-and-after story. Library order is unaffected.',['Document','Before/after']);
+add('gcaption|gsavecaption|ewrcap|ewrcapsave','Edit and save the caption for this document/evidence copy. Explain what the photograph demonstrates. A caption belongs to this presentation of the photo and is separate from the library note.',['Caption']);
+add('gup|gdown','Move this document photo one position up or down. Arrange photos in the sequence that best explains the evidence. This does not reorder originals in the library.',['Document']);
+add('documentCompanyName','Enter the company name used on this report. Review spelling and identity before saving branding text.',['Branding']);
+add('documentHeaderText','Enter optional header text for the report. Enable Header in Layout if it should appear in exported pages.',['Branding']);
+add('documentFooterText','Enter optional footer or contact details. Enable Footer in Layout if this text should appear in the exported pages.',['Branding']);
+add('saveDocumentBranding','Save the company, header, and footer text. Review the document preview and the relevant layout toggles before exporting.',['Branding']);
+add('documentLogoFile','Upload the company logo using an accepted image format. Check that the image belongs to the organization and is legible in the preview. This affects report branding, not photo evidence.',['Branding']);
+add('documentTemplateFile','Import a .docx template for this document. It must include {{PHOTO_NOTES_CONTENT}}; optional placeholders include {{TITLE}}, {{DESCRIPTION}}, and {{COMPANY_NAME}}. Check the generated preview and exported file for placement and page breaks.',['Template','Word']);
+add('document-remove-asset','Remove the uploaded logo or Word template identified by this control. Removing a template returns the document to its regular layout. The photos remain in the document.',['Template','Branding']);
+add('documentFont','Choose the report typeface. Review readability in the preview and exported Word/PDF file. The document font setting does not change photo contents.',['Document']);
+add('documentPhotoLayout','Choose one or two photos per page. One gives more image detail; two supports compact comparisons. Check captions and page breaks in the preview.',['Document','Resolution']);
+add('documentAccent','Choose the report’s accent color. Keep body text readable and inspect the exported output. This affects report decoration, not the original photos.',['Branding']);
+add('documentCover|documentHeader|documentFooter|documentPageNumbers','Include or omit the cover page, header, footer, or page numbers as labeled. Review the preview and save the layout before export. Header/footer text is configured separately in Branding.',['Document','Branding']);
+add('saveDocumentLayout','Save the current typeface, photo arrangement, accent, and page-element toggles. Preview changes alone are not proof they were saved. Export and inspect the final file.',['Document']);
+add('documentPreview','Review the assembled document, including title, descriptions, photos, captions, branding, and page order. The preview helps find omissions; open the downloaded PDF or Word file for final verification.',['Document','PDF','Word']);
+add('ewrNew','Create an Extra Work Record linked to the job. Document the cause, added work, notification details, and supporting photos before seeking review. PhotoNotes records evidence; it does not independently approve contract changes.',['Extra work']);
+add('ewrOther','Describe the extra-work reason when the listed reasons do not fit. Tie it to the condition shown by the photos.',['Extra work']);
+add('ewrCustomer','Identify the customer or client whose job the added work concerns. Confirm that the job and customer match before saving.',['Extra work']);
+add('ewrNname|ewrNcompany|ewrNnotes','Record the person notified, their company/role, and what was communicated. This records your account of the notification; it is not an independent delivery receipt.',['Extra work','Receipt']);
+add('ewrStatus','Choose the extra-work record’s current workflow status. Keep pending, approved, completed, or other offered stages consistent with the evidence and actual decision.',['Extra work','Status']);
+add('ewrSave|ewrSaveEdit','Save the Extra Work Record and reviewed supporting details. Check the job, reason, explanation, notification information, and evidence photos. Saving is not customer approval.',['Extra work']);
+add('ewrExport','Export this Extra Work Record as a PDF for review. Check captions, notification details, and attachments before distribution.',['Extra work','PDF']);
+add('ewrDelete','Delete this Extra Work Record after reviewing the confirmation. Removing the record is different from deleting a photo from the library.',['Extra work']);
+add('ewrphotodel|ewrrm','Remove this photo attachment from the extra-work record. Verify the target attachment before confirming. Library originals are separate from this record’s attachments.',['Extra work','Original']);
+add('alignTake','Take the After photo from a matching viewpoint. Match camera height, direction, landmarks, and framing to the selected Before image. Use the overlay to compare alignment.',['Before/after']);
+add('alignOpacity','Adjust the Before-photo overlay transparency while matching the After shot. This is a visual alignment aid and does not correct perspective automatically.',['Before/after']);
+add('alignNote','Describe the completed work or condition shown by the After image. Keep the note specific to this comparison.',['Before/after']);
+add('alignSave','Save the reviewed After photo, note, and association with the chosen Before photo. Verify image alignment and chronological meaning before saving.',['Before/after']);
+add('readerRead|ticketRead','Read the source photograph using the configured scanner. Wait for the result, then check every extracted value against the visible source. If reading fails or confidence is low, correct fields manually or retake the image.',['AI','Camera reader']);
+add('readerSave|ticketSave','Save the reviewed reading or ticket with its source photo. Confirm dates, quantities, units, identifiers, and job association first. A scan result is not saved until this step succeeds.',['Camera reader','Evidence']);
+add('tkJobLink','Associate the ticket with the correct job. This determines where delivery evidence and quantities appear in job reports.',['Job','Specification']);
+add('cr_*|tk*','Review this extracted field against the source photograph and correct it before saving. Dates, material names, ticket numbers, weights, temperatures, and units must match the readable source. Leave unknown values blank rather than guessing.',['Camera reader','AI']);
+add('issueFab|myIssues|issuesBack|issueUpdates','Open application issue reporting or your submitted issue history. Use this for a PhotoNotes software problem. Describe the exact screen, action, expected result, and actual result; road/property records are separate workflows.',['App issue']);
+add('issueType','Choose the kind of application report, such as a bug/problem or idea. A reproducible failure and a feature suggestion should be described separately.',['App issue']);
+add('issueDescription','Describe what you did, what you expected, and what happened. Include the screen and steps to reproduce. Review dictated words before sending. Do not include passwords or secret keys.',['App issue']);
+add('issueFrequency','Choose how often the problem occurs. If it happens intermittently, include the circumstances and any reliable way to reproduce it.',['App issue']);
+add('issueSend','Submit the app issue with its description and screenshot evidence. Review the screenshot and markup first. Wait for the displayed receipt/status and use My Issue Reports to track follow-up.',['App issue','Receipt']);
+add('myIssueFilter','Show open, closed, or all your issue reports. Read the repair/retest status for each report before deciding whether it still needs action.',['App issue','Status']);
+add('issueDetails-*','Supply the additional reproduction details requested for this report. Answer the specific question, describe your device/browser, and distinguish what you observed from what you suspect.',['App issue']);
+add('retestNotes-*','Record the steps you repeated, what happened, and any reason you could not retest. Only mark the retest successful after verifying the requested behavior on your device.',['Retest']);
+add('issueMarkupUndo','Undo the latest screenshot annotation. Review the remaining marks before submitting the issue. This does not alter your saved photo evidence.',['Markup','App issue']);
+add('issueMarkupClear','Clear all annotations on the issue screenshot. Keep only marks that identify the problem before sending.',['Markup','App issue']);
+add('issueMarkupRetake','Capture a replacement screenshot of the current app state. Check it shows the problem and does not include information you do not want to submit.',['App issue']);
+add('issueMarkupColor|issueMarkupText','Choose screenshot-markup color or enter a text label, then place the label on the screenshot. Use arrows/marks to identify the app problem without covering relevant details.',['Markup','App issue']);
+add('profileButton','Open your account menu to switch versions, access your testing/issue records, inspect pending uploads, install the app, or sign out. Available options depend on your account permissions.',['Account access']);
+add('editionSwitcher','Choose one of the versions enabled for your account. Save the current draft first. Changing version changes available workflows and does not change your account identity.',['Edition','Draft']);
+add('signout','Sign out of this device’s session. Save your draft and finish pending uploads first. Pending files may remain in this browser; return with the same account and original version to upload them.',['Local save','Account access']);
+add('pendingPhotos','Review photos waiting in this browser’s upload queue. Reconnect using the same account and the capture’s original version, or download a backup before clearing browser storage. A local save is not yet a server upload.',['Local save','Upload']);
+add('installHelp|installAppButton|installGuideDone|closeInstallHelp|installDevice','Open or follow the installation guidance for this device. Add an app icon using the browser/operating-system steps shown. Installation uses the same account and versions; it does not make every tool work offline.',['Installation']);
+add('installNotNow','Dismiss the installation prompt and continue in the browser. You can open installation guidance later from the account menu or footer.',['Installation']);
+add('myAssignment|manageTesting|testingManagementBack','Open your assigned testing instructions or the testing-management workspace when authorized. Work through each step, attach failures to app issue reports, and record actual results before submitting.',['Testing assignment','Retest']);
+add('email|pw|loginBtn','Sign in with the email and password for your PhotoNotes account. Check the email spelling. If credentials fail, contact your administrator rather than creating a second account to access the same records.',['Account access']);
+add('tabCapture|tabOrganize|tabEdit|tabCreate|tabSend','Open the workflow named by this tab. Capture creates evidence, Organize finds and groups it, Edit corrects/marks it, Create builds reports, and Send prepares delivery. HOA uses property-specific workspaces where indicated. Save unfinished edits before switching.',['Capture','Document']);
+add('cname|edit-name-*','Enter the person’s first and last name for their account. Check identity before editing an existing user.',['Account access']);
+add('cemail|edit-email-*','Enter the user’s sign-in email. Verify it belongs to the intended person, especially before changing an existing account.',['Account access']);
+add('cindustry|edit-industry-*','Describe the account’s industry when useful. This descriptive field is separate from its version access and paid-plan permissions.',['Edition']);
+add('cpass|reset-password-*','Set a new password for this account. Use a strong password and deliver it through an appropriate private channel. Resetting a password does not send it automatically.',['Account access']);
+add('generatepass|copypass','Generate or copy a recommended password for the account being created. Check which user the password is for before saving or sharing it.',['Account access']);
+add('createbtn|addUser','Open account creation or create the entered user. Confirm first/last name, email, password, versions, testing access, and features before saving.',['Account access','Edition']);
+add('userSearch|sortsel','Search the account list by name/email or change its sort order. This affects the list view, not account permissions.',['Filter']);
+add('issueVersionFilter|issueTypeFilter|issueStatusFilter|issuePriorityFilter|issueDateSort|issueRecommendedAction|issueTesterFilter|issueDeviceFilter','Filter or sort app issue reports by the field named here. Combine filters to find the desired reports, and broaden them if an expected issue is missing. The filter does not update the report’s saved status or priority.',['Filter','App issue']);
+add('ui-decision-*|ui-instructions-*','Choose the review decision and enter specific instructions for this app issue. Explain the evidence and next action. Submitting a decision updates the review workflow; verify the resulting status.',['App issue','Retest']);
+add('refreshAssignments','Refresh testing-assignment progress and submissions. Compare recorded steps, defects, and the tester’s summary before marking an assignment reviewed.',['Testing assignment']);
+add('stripeCustomerName|stripeCustomerEmail','Enter the customer/company and billing email for this invoice. Verify the billing recipient before creating a draft.',['Invoice']);
+add('stripeDba','Select the business identity issuing the invoice. Confirm the intended provider before billing.',['Invoice']);
+add('stripeDue','Choose the invoice payment due period. Check the resulting due date in the draft before finalizing or sending it.',['Invoice']);
+add('stripeDescription','Describe the billed service or product clearly enough for the customer to identify it.',['Invoice']);
+add('stripeAmount','Enter the invoice amount using the currency/units shown. Review the total before creating the draft.',['Invoice']);
+add('stripeCreateInvoice','Create a Stripe draft invoice using the reviewed customer, business, description, amount, and due period. A draft is separate from a finalized/sent invoice or a completed payment.',['Invoice']);
+add('delete-email-*|confirmDeleteUser','Review the permanent account-deletion scope and type the required email confirmation. This can remove associated records; cancel if the identity or scope is uncertain.',['Account access']);
+add('retryUsers','Retry loading the account list after checking the connection. This does not recreate users or alter their permissions.',['Account access']);
+add('footer-install|button','Open the full installation guide or return to the app as indicated by this link. Read the device-specific instructions and confirm saved uploads before changing browsers.',['Installation']);
+add('alignCam|alignment-choice','Choose the Before source photo or capture the matching After image. Review the date, location, landmarks, and camera angle. An alignment guide helps compare the pair but does not certify that the viewpoints are identical.',['Before/after']);
+add('photo-title-input','Enter a short descriptive photo title, then save it. Identify the subject, condition, and site so it can be found in the library and reports.',['Photo note']);
+add('user-list-item|data-open-user','Open this account’s details. Confirm its name and email before changing versions, feature/testing access, active status, password, or deletion scope.',['Account access']);
+add('data-active','Activate or deactivate the identified account. Deactivation blocks active use but is different from permanently deleting its records. Review identity before confirming.',['Account access']);
+add('data-retry','Retry this saved Ramo submission. Reuse the existing submission and attachments instead of creating a duplicate. Verify received status and the receipt afterward.',['Ramo','Receipt']);
+add('ramoBack|shortcutClose|data-back','Return to the previous workspace or close the current panel. Save unfinished work first when needed. Closing does not confirm delivery.',['Draft']);
+add('data-issues|data-report','Open issue history or report a defect linked to the current test step. Include the step, actual behavior, expected result, and source screenshot.',['App issue','Testing assignment']);
+add('data-device','Record the device, operating system, browser, and interface language used for this test. This helps distinguish platform-specific failures and reproduce the result.',['Testing assignment']);
+add('data-result','Record this step as passed, failed, blocked, or not tested, using the offered choices. Only mark Passed after observing the expected behavior; a completed checkbox alone is not proof of success.',['Testing assignment','Retest']);
+add('data-notes','Describe the actual test result and related issue report numbers. Include the failure steps or reason the step was blocked/not tested.',['Testing assignment','App issue']);
+add('data-photo','Attach photo/screenshot evidence to the current test step. Observe the stated size and count limits and check that the image supports the recorded result.',['Testing assignment','Evidence']);
+add('data-overall','Summarize the testing session, remaining failures, blockers, and untested steps. Do not describe an untested feature as working.',['Testing assignment']);
+add('data-save','Save the testing results entered so far. Review the displayed save status. Saving progress is separate from submitting the assignment for manager review.',['Testing assignment','Draft']);
+add('data-submit','Submit the testing results and evidence for review. Failures and untested steps may be submitted with explanations. Submitted is not the same as Passed.',['Testing assignment','Status']);
+add('data-new|data-edit|data-add-step|data-remove-step|data-save-draft|data-publish|data-preview|data-close','Create or edit the testing assignment, add/remove steps, save a draft, preview, or publish as labeled. Review ordered instructions and expected results before publishing to the selected testers.',['Testing assignment','Draft']);
+add('data-field|data-user','Edit the testing template field named by its label or choose the intended tester. Supply accurate English/Spanish instructions and observable expected results. Preview the complete assignment before publishing.',['Testing assignment']);
+add('submitter_name|customer_name','Enter your name so the property submission or customer review records who provided this response. Check the photographs and instructions before submitting.',['Evidence','Approval']);
+add('photos','Choose the required completion photos showing the finished work. Include clear overview and detail images, then describe what was done before submitting to the property manager.',['Completion link','Verification']);
+add('comment','Explain your customer review response. Identify any change requested and the relevant photo. Submit only after inspecting the package.',['Approval']);
+add('pill','Choose this saved topic for the current capture, or choose No Topic to leave it untagged. Add a new topic using the topic-name field when none fits.',['Topic']);
+add('data-camera-tool','Open this specialist photo tool. Read its description, photograph the source clearly, review the extracted or measured fields, and save only confirmed details. Tool availability depends on the selected edition and account features.',['Camera reader','Evidence']);
+add('data-visit','Continue this guided property visit or review its completed photos. Work through route stops in order, inspect the required views, and record actual findings.',['Property visit','Inspection route']);
+add('data-issue-tool','Choose the screenshot annotation tool: select/move, arrow, rectangle, circle, line, or text. Drag on the screenshot to mark the relevant app problem, then review the screenshot before submitting.',['Markup','App issue']);
+add('data-version-owner','Enable or disable this edition for the selected user. Check that the version and account match the intended access before saving. This changes access, not the photo records.',['Edition','Account access']);
+add('testing-download','Download the current published assignment as a PDF. Use the live Testing Hub form to record results and evidence for each step; the PDF alone does not submit results.',['Testing assignment','PDF']);
+add('data-add','Add the named annotation to the photo: date/time, address, GPS, copyright, topic, custom text, box, arrow, or the offered specialist details. Drag it to the relevant evidence, adjust its appearance, and save changes.',['Markup','GPS']);
+add('data-col','Choose this preset annotation color. Use contrast against the photograph and avoid hiding important evidence. Save Changes to retain the completed markup.',['Markup']);
+add('data-pos|data-dir','Position the selected label at the indicated corner or set the arrow direction. Check the target evidence, then save the completed markup.',['Markup']);
+add('stampStage','Add an annotation above/below this canvas, drag it into position, and drag the corner handle to resize a box or arrow. Select an item to change its appearance. Save Changes retains the editable markings; Download Marked Photo creates a separate flattened image.',['Markup','Original']);
+add('cropStage','Drag the crop region and its handles to frame the relevant evidence. Review all edges before Apply Crop. Cancel leaves the saved photo unchanged, and Restore Original can recover the first uploaded image.',['Crop','Original']);
+add('photo-viewer-button','Open the full photo viewer. Zoom and pan to inspect visible details, then reset the view or close it. These viewing adjustments do not edit the original.',['Original']);
+add('bgstatus','Inspect the current browser’s pending capture uploads. Reconnect using the same account and original edition, retry upload, or download a backup. Do not clear browser storage until pending evidence is safe.',['Local save','Upload']);
+add('data-step-field','Write the ordered test step’s title/instructions in the language labeled here. Describe a specific action and observable expected result, then save the assignment draft and preview it before publishing.',['Testing assignment']);
+add('data-assignee','Choose this tester to receive their own copy of the published assignment. Verify account identity and intended edition access before publishing.',['Testing assignment','Account access']);
+add('data-person|data-status','Filter testing runs by the person or recorded workflow status. This changes the results shown, not the assignment’s saved outcomes.',['Testing assignment','Filter']);
+const terms={
+'Before/after':'Two linked photographs showing an earlier condition and a later condition. Compare matching viewpoints and confirm their dates before drawing conclusions.',
+ 'Capture':'A photograph and its supporting note, location, and other details recorded in PhotoNotes.',
+ 'Photo note':'The words attached to a photo explaining what it shows and why it matters.',
+ 'Draft':'Work still being edited on this device that has not yet been saved or submitted.',
+ 'Original':'The first uploaded image, retained separately from later visual edits where supported.',
+ 'Evidence':'The source photo and supporting record used to document a condition, event, or work.',
+ 'Topic':'A user-created subject label that groups related photos. A photo can be untagged.',
+ 'Category':'A named type of property issue or work used to classify and find records.',
+ 'Job':'A named work/site record grouping photos for the same customer or piece of work.',
+ 'Project':'The job or site context associated with photos and supporting records.',
+ 'Community':'The managed property/community associated with its assets, visits, and maintenance records.',
+ 'Asset':'A specific physical object maintained by a property, tracked through identity and condition photos.',
+ 'Property visit':'A recorded inspection walk containing ordered stops, required photos, and findings.',
+ 'Inspection route':'A reusable ordered list of inspection stops and the photo views expected at each stop.',
+ 'Maintenance record':'A property issue or request with photos, description, responsibility, and progress.',
+ 'GPS':'Latitude and longitude obtained from location services or usable photo metadata. Accuracy varies.',
+ 'Geocoding':'Translating coordinates into an address or readable geographic description.',
+ 'Permission':'Browser or operating-system authorization for access such as camera, microphone, or location.',
+ 'Dictation':'Speech converted to editable written text. Review the words before saving.',
+ 'Local save':'A draft/capture stored in this browser on this device while awaiting server upload.',
+ 'Upload':'Sending the photo/record to the PhotoNotes server. It is separate from a local save.',
+ 'Selection':'The set of photos chosen for an action. Filters and this set determine the action’s scope.',
+ 'Filter':'A view restriction that narrows displayed results without deleting records.',
+ 'Document':'An ordered report made from photo copies, captions, and supporting details.',
+ 'Caption':'Text explaining an individual photo in a report or grouped submission.',
+ 'PDF':'A document format preserving the finished page layout for viewing and printing.',
+ 'Word':'An editable .docx document that can be opened in Word or compatible software.',
+ 'Markdown':'Plain text with simple formatting. Markdown + Photos exports text and images in a ZIP package.',
+ 'Resolution':'The number of pixels in an image. Lower-resolution exports can lose visible detail.',
+ 'Download':'Saving a generated file to this device. It does not automatically send the file to anyone.',
+ 'Share sheet':'The operating system or browser’s destination chooser used to share a prepared file.',
+ 'Shortcut':'A saved delivery destination associated with your account for reuse.',
+ 'HTTPS':'A secure website URL starting with https://. It protects the connection, not the accuracy of content.',
+ 'Approval':'A recorded customer/board decision. Creating a review link is not approval.',
+ 'Completion link':'A private link used to submit photos of completed property work for later verification.',
+ 'Receipt':'A saved confirmation from the receiving workflow. Check its status and attachment count.',
+ 'Ramo':'The authorized Ramo Optimizer integration receiving grouped photo evidence submissions.',
+ 'Checkout':'The hosted payment review flow. Opening it does not complete a payment.',
+ 'Invoice':'A billing document. Draft, finalized, sent, and paid are different states.',
+ 'Markup':'Arrows, shapes, text, or other annotations placed on a photo or screenshot.',
+ 'Crop':'Reducing the visible image frame to a chosen region. The original may be restored where supported.',
+ 'Template':'Reusable annotation or document structure. A Word template needs the supported placeholders.',
+ 'Branding':'Company name, logo, and header/footer elements used in a report.',
+ 'AI':'Automated image/text analysis. Its output must be checked against the source evidence.',
+ 'Camera reader':'A tool extracting visible values from a source photograph for review and saving.',
+ 'Condition':'The observed state of the photographed object, distinguished from scheduling priority.',
+ 'Defect':'A visible fault/classification suggested by AI or entered after human review.',
+ 'Severity':'How serious the observed issue is. It is separate from response urgency.',
+ 'Urgency':'Standard or Urgent handling recorded with a capture. It is not a notification guarantee.',
+ 'Priority':'The property workflow’s follow-up importance, such as Routine, High, Emergency, or Monitor.',
+ 'Project phase':'The stage of work documented by a concrete photo, from proposal to follow-up.',
+ 'Photo purpose':'The reason the photograph is being captured within the selected workflow or phase.',
+ 'Specification':'A confirmed requirement or mix/material detail from a reliable source, not a visual guess.',
+ 'Area':'The two-dimensional size of a traced shape or measured surface, with stated units and source.',
+ 'Measurement':'A reviewed dimension or area. Assisted/photo/map estimates are not certified surveys.',
+ 'Reference':'A known real-world size visible in the image used to estimate another dimension.',
+ 'Provenance':'Information about where a record or measurement came from and how it was obtained.',
+ 'Fingerprint':'A digital hash identifying file bytes. Matching hashes do not prove an event’s truth.',
+ 'Verification':'A documented review of supporting evidence and results, separate from an automatic suggestion.',
+ 'Timeline':'An ordered history of photographs, work stages, and recorded changes.',
+ 'Status':'The recorded stage of a workflow. Read its meaning rather than assuming a click completed the task.',
+ 'Target date':'The planned completion date, distinguished from actual completion.',
+ 'Budget':'The source and estimated/actual cost of funds associated with property work.',
+ 'Assignment':'The person responsible for a record or the person asked to answer a request.',
+ 'Extra work':'Additional work documented with its cause, scope, notification details, and photo evidence.',
+ 'Notification':'An app/browser alert. Reading an alert does not resolve the underlying work or issue.',
+ 'Road issue':'A photographed road problem submitted through Road Issue Reporter, separate from app defects.',
+ 'App issue':'A software problem or suggestion concerning PhotoNotes, sent through Report Issue.',
+ 'Retest':'Repeating specified steps after a repair and recording whether the behavior actually works.',
+ 'Testing assignment':'A set of instructed checks and results for a tester, with review/submission status.',
+ 'Account access':'The versions, tools, and roles assigned to a signed-in account.',
+ 'Edition':'One enabled version of PhotoNotes, such as Basic, Pro, or an industry edition.',
+ 'Installation':'Adding an app icon through a supported browser. This does not provide offline support for every feature.'
+};
+const textRules=[
+ {match:'^Light mode$|^Dark mode$',text:'Choose the app appearance. Changing the theme does not alter photo records, notes, or exported document content.'},
+ {match:'Open the printable PDF version',text:'Prepare the printable PDF of this document, review the print preview, and choose the desired printer/settings. This does not send the document to a customer.',terms:['PDF','Document']},
+ {match:'^Tester$|^Status$|^Version$',text:'Filter testing assignments by the selected tester, workflow status, or PhotoNotes edition. These filters narrow the view and do not change assignment results or account access.',terms:['Testing assignment','Filter']},
+ {match:'^View & Zoom$',text:'Open the full photo viewer to zoom and pan across visible evidence. Reset the view or close it when done; viewing controls do not edit the original.',terms:['Original']},
+ {match:'Download Original Photo|Download Notes and Details',text:'Save a backup of this pending photo or its supporting note/details to this device. Verify the backup before clearing browser storage. A backup is separate from successful server upload.',terms:['Local save','Original','Upload']},
+ {match:'Retry Current Version',text:'Retry pending uploads owned by the signed-in account in the current edition. Return to a capture’s original version if needed and wait for upload confirmation.',terms:['Local save','Upload']},
+ {match:'Document download link|Copy link|Share link|Create.*link|Revoke',text:'Create, copy, share, or revoke the private document link as labeled. Check the file and expiration before sending it. Copying a link is not delivery; revoking it prevents later access through that link.',terms:['Document','Receipt']},
+ {match:'^(L|D)$',text:'Choose the light or dark appearance for the app. This changes the interface theme, not photographs, saved notes, or document content.'},
+ {match:'^(EN|ES)$',text:'Choose English or Spanish for available interface text. Your existing photo notes and user-entered titles are not translated by changing this preference.'},
+ {match:'^([×✕]|Close|Cancel|Back|Not Now|Got It|‹|←)',text:'Close this panel, cancel the current operation, or return to the named workspace. Save edits first if they should be kept. Cancel does not submit or confirm a delivery.',terms:['Draft']},
+ {match:'^Zoom (In|Out)$|^Move (Left|Right|Up|Down)$',text:'Adjust the viewer’s zoom or pan to inspect image details. These viewing controls do not modify the saved photograph.',terms:['Original']},
+ {match:'^(Top L|Top R|Bot L|Bot R|↘|↙|↗|↖)$',text:'Position the selected annotation at the indicated corner or adjust its direction. Review that the annotation points to the intended evidence, then save the markup.',terms:['Markup']},
+ {match:'^No Topic$',text:'Leave the current photo without a topic tag. You can still save it and add topics later.',terms:['Topic']},
+ {match:'Photo quality.*format',text:'Choose the resolution and image format for generated files. These settings affect exported copies, not full-resolution originals stored by PhotoNotes. Review small visual details before choosing a reduced resolution.',terms:['Resolution','Original']},
+ {match:'^Apply Template$|annotation|arrow|rectangle|ellipse|line|^Text$',text:'Add or adjust the selected annotation tool/template on the photograph. Select the item to edit its position, size, color, or text. Review placement and save changes.',terms:['Markup','Template']},
+ {match:'^Edit Document$|^Open$',text:'Open the selected record for review and editing. Check its identity, source photos, and details before changing it. Save edited fields before returning to the list.',terms:['Evidence']},
+ {match:'^Delete$|^Remove$|Delete Record',text:'Remove the indicated record or attachment after checking the confirmation. Removing a document/photo copy does not delete the library original; deleting a saved record has a different scope. Read the exact target before confirming.',terms:['Original','Document']},
+ {match:'View / Edit Area',text:'Open this saved photo-linked area to inspect and revise its outline, dimensions, measurement method, and notes. Verify the source photo and site before saving changes.',terms:['Area','Measurement']},
+ {match:'Start Property Visit',text:'Start a guided visit from this inspection route. Confirm the community, then complete its ordered stops with the requested evidence photos and findings.',terms:['Property visit','Inspection route']},
+ {match:'Open Photo History',text:'Review this physical asset’s identity photo and condition history. Add dated documentation as damage, repair, and verification progress.',terms:['Asset','Timeline']},
+ {match:'Open Maintenance Record',text:'Open this property issue to review details, responsibility, priority, status, costs, and its photo timeline. Verify completed-work photos before closing it.',terms:['Maintenance record','Verification']},
+ {match:'Open in Photo Library',text:'Open the source capture in the library to inspect its image, notes, location, and related history. The extracted reading remains linked to its source.',terms:['Camera reader','Evidence']},
+ {match:'^Open in Organize$',text:'Open this map photo in the library workspace to review its note and supporting details. Check the location before attaching it to a site report.',terms:['GPS']},
+ {match:'^Print$|Print Current Report',text:'Prepare the selected document/report for printing and review the browser’s print preview. Confirm page layout, paper size, and photo detail before printing.',terms:['PDF','Document']},
+ {match:'^(Share|Download|Download PDF|Download Word)$',text:'Prepare the indicated file, then share it through an available destination or download it to this device as labeled. Open the resulting file to check content and layout. Downloading alone does not deliver it to another person.',terms:['Share sheet','Download','PDF','Word']},
+ {match:'Download Starter Template',text:'Download the supported Word template starter. Preserve {{PHOTO_NOTES_CONTENT}} and any needed title/description/company placeholders, edit the design in Word, then import and preview it.',terms:['Template','Word']},
+ {match:'^Save User$|^Edit$|^Save Feature Access$|^Save Testing Access$|^Save Versions$',text:'Save the named account setting for the selected user. Verify identity, assigned versions, feature permissions, and testing role. Account-level access determines which screens and tools that user can open.',terms:['Account access','Edition']},
+ {match:'Reset Password|Recommend Password|Copy Password|Save Password',text:'Set or copy a strong replacement password for the selected user. Verify the account and save the change. Communicate the password privately; copying it does not notify the user.',terms:['Account access']},
+ {match:'Delete User|Delete Permanently',text:'Review the account-deletion scope and required email confirmation before proceeding. Permanent deletion can remove associated evidence and records. Cancel if the user identity or scope is uncertain.',terms:['Account access','Evidence']},
+ {match:'Activate|Deactivate',text:'Change whether the selected account is active. Review the user identity and access consequences before confirming. Deactivation differs from permanent deletion.',terms:['Account access']},
+ {match:'Admin Dashboard|Super Admin Dashboard|^Open App$|Back to the app',text:'Open the named administration workspace or return to PhotoNotes. Administrative functions depend on your account role; review account and environment scope before modifying records.',terms:['Account access']},
+ {match:'Submit Decision|Review Guidance|Status Descriptions',text:'Review the issue evidence and workflow definitions, choose the appropriate decision, and write clear instructions for the next action. Submit only after checking the report and intended status transition.',terms:['App issue','Retest','Status']},
+ {match:'Send Details for Review',text:'Send the additional reproduction details entered for this app issue. Answer the requested question and describe actual observed behavior. Check the resulting review status.',terms:['App issue']},
+ {match:'Retest Succeeded|Retest Failed|Unable to Retest',text:'Record the outcome of the requested repair retest. Repeat the exact steps on your device first, write what happened, and choose success, failure, or unable to test accurately. A deployment alone is not a successful retest.',terms:['Retest','App issue']},
+ {match:'Enable issue notifications',text:'Request browser notification permission for issue updates. Check browser/device notification settings if blocked. Alerts are separate from the repair and retest record.',terms:['Notification']},
+ {match:'Create assignment|Add step|Save draft|Publish reviewed assignment|Preview tester instructions|Close editor|Remove step',text:'Create or edit the testing instructions in the order the tester should follow. Each step should state the action and observable expected result. Preview and review the assignment before publishing; a draft is not yet the tester’s final instruction.',terms:['Testing assignment','Draft']},
+ {match:'Submit.*assignment|Submit.*results|Save.*progress|Mark reviewed|Return for retesting|Refresh results|Refresh assignments',text:'Record or review testing results against the assignment steps. Save progress during testing, submit after recording outcomes and defects, and return specific failed steps for retesting when needed. Mark reviewed only after evaluating the submitted evidence.',terms:['Testing assignment','Retest']},
+ {match:'Report.*problem|Report.*issue',text:'Report a PhotoNotes application problem with the exact steps, expected result, actual result, and screenshot. This is separate from capturing a road or maintenance issue.',terms:['App issue']},
+ {match:'GPS Address',text:'Choose this source photo for a matched Before/After comparison. Review its location and viewpoint before capturing the After image.',terms:['Before/after']},
+ {match:'Download assignment PDF',text:'Download this assignment’s instructions as a PDF. Follow the current published steps and record actual results in Testing Hub.',terms:['Testing assignment','PDF']},
+ {match:'^#$',text:'Open the linked issue report or record to inspect its details and status before deciding the next action.',terms:['App issue']},
+ {match:'^Save$|^Add$|^Create$',text:'Save or add the item entered in this form. Check the labeled fields and target record first. Read the resulting status, and do not assume that saving also sends or approves it.',terms:['Status']},
+ {match:'Install|home screen|Official installation|Full installation',text:'Follow the installation instructions for your device and browser. The icon uses the same PhotoNotes account. Verify pending uploads before changing browsers or clearing storage; not every feature works offline.',terms:['Installation','Local save']},
+ {match:'Approve Photos|Request Changes',text:'Review the photographs and message, enter your name and comments, then record your approval or requested changes. A response records the review decision; it does not certify facts outside the pictured evidence.',terms:['Approval','Evidence']},
+ {match:'(?:Send|Submit) Completion Photos',text:'Upload clear photographs showing the completed work, include the requested name and note, and submit. The property manager will review the returned evidence before closing the maintenance item.',terms:['Completion link','Verification']}
+];
+window.PhotoNotesHelpCatalog={rules,terms,textRules};
+})();
