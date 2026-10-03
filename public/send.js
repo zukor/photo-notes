@@ -1,5 +1,5 @@
 // Photo Notes add-on (loaded after app.js):
-//  1. Send/Share durably saves the capture, then opens sharing directly.
+//  1. Basic shares directly. Other editions save the capture before sharing.
 //     Desktop browsers without Web Share use email and a photo download.
 //  2. Moves the Zukor AI corner logo to the far left and shrinks it.
 // Shipped as a separate file so it can deploy without rebuilding app.js.
@@ -74,7 +74,35 @@
   // Reuse the prepared share on a fresh tap if a browser requires user activation.
   var readyShare=null;
   function shareKey(){return JSON.stringify([noteVal(),q('addr')?.textContent,q('gps')?.textContent,typeof state==='undefined'?null:state.me?.email,typeof state==='undefined'?null:state.proType,locale()]);}
+  var basicShare=null;
+  function basicMode(){return typeof isBasicClient==='function'&&isBasicClient();}
+  function recording(){return (typeof dictationActive!=='undefined'&&dictationActive)||(typeof dictationFinish!=='undefined'&&!!dictationFinish);}
+  // Prepare the captioned image before the tap, preserving native share activation.
+  function prepareBasicShare(){
+    if(!basicMode()||!q('send'))return;
+    var file=state.photoFile,key=shareKey(),button=q('send');
+    if(!basicShare||basicShare.original!==file||basicShare.key!==key){
+      var item={original:file,key:key,text:caption(),file:file,pending:false};
+      basicShare=item;
+      if(file&&window.PhotoNotesShareImage){
+        item.pending=true;
+        window.PhotoNotesShareImage.withDetails(file,item.text).then(function(result){item.file=result;},function(){item.failed=true;}).finally(function(){item.pending=false;prepareBasicShare();});
+      }
+    }
+    button.disabled=sending||basicShare.pending||recording();
+  }
+  async function sendBasic(){
+    prepareBasicShare();
+    if(sending||basicShare.pending||recording())return;
+    if(!basicShare.original&&!noteVal()){toast('Take a photo or add a note first');return;}
+    if(basicShare.failed){basicShare=null;toast('Could not share. Your photo and notes are still here.');return;}
+    sending=true;q('send').disabled=true;
+    try{await share(basicShare.file,basicShare.text);}
+    catch(e){toast('Could not share. Your photo and notes are still here.');}
+    finally{sending=false;prepareBasicShare();}
+  }
   async function onSend() {
+    if(basicMode())return sendBasic();
     if(sending)return;
     var f=typeof state!=='undefined'?state.photoFile:lastFile,t=caption();
     if (!f && !noteVal()) { toast('Take a photo or add a note first'); return; }
@@ -187,9 +215,10 @@
     }
   }
 
-  function apply() { injectButtons(); fixLogo(); fixTopics(); }
+  function apply() { injectButtons(); fixLogo(); fixTopics(); prepareBasicShare(); }
   var mo = new MutationObserver(apply);
   mo.observe(document.documentElement, { childList: true, subtree: true });
+  document.addEventListener('input', function(e){if(e.target&&e.target.id==='note')prepareBasicShare();});
   document.addEventListener('DOMContentLoaded', apply);
   document.addEventListener('photo-notes-languagechange', apply);
   apply();

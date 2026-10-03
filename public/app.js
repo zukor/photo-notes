@@ -660,7 +660,7 @@ function renderCapture() {
       <button class="btn ${isBasicClient()?'':'secondary'}" id="addarea">Add</button>
     </div>`}
 
-    <div class="capture-actions"><button class="btn" id="save" type="button">Save</button><button class="btn" id="send" type="button">Send/Share</button></div>
+    <div class="capture-actions">${isBasicClient()?'':'<button class="btn" id="save" type="button">Save</button>'}<button class="btn" id="send" type="button">Send/Share</button></div>
   `;
 
   if(isConcreteClient())bindConcreteCapture();
