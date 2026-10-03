@@ -162,7 +162,7 @@
   </style>
   <link rel="stylesheet" href="/testing-hub.css?v=277">
   <script src="/testing-hub.js?v=320"></script>
-<link rel="stylesheet" href="/theme.css?v=277"><script src="/theme.js?v=277"></script><link rel="stylesheet" href="/help.css?v=323"><script src="/help-catalog.js?v=331" defer></script><script src="/help.js?v=323" defer></script></head>
+<link rel="stylesheet" href="/theme.css?v=277"><script src="/theme.js?v=277"></script><link rel="stylesheet" href="/help.css?v=323"><script src="/help-catalog.js?v=333" defer></script><script src="/help.js?v=323" defer></script></head>
 <body>
   <div id="app"></div>
   <script src="/account-menu.js?v=277"></script>
@@ -294,7 +294,7 @@
             </div>
             <div class="admin-panel delete-user-panel" id="delete-user-${u.id}" hidden></div>
             <div class="admin-panel" id="edit-user-${u.id}" hidden><h4>Edit User</h4><div class="edit-user-grid"><label>First and Last Name<input id="edit-name-${u.id}" value="${esc(u.name||'')}"></label><label>Email<input id="edit-email-${u.id}" type="email" value="${esc(u.email||'')}"></label><label>Industry<input id="edit-industry-${u.id}" value="${esc(u.industry||'')}"></label></div><button class="btn" type="button" data-save-user="${u.id}" style="margin-top:8px">Save User</button></div>
-            ${allowedVersions(u).includes('paving')?`<div class="admin-panel"><h4>Paving Pro Options</h4><div class="helper">Optional Paving Pro features. These settings apply whenever this user opens Paving Pro.</div><div class="feature-grid">${featureToggle(u.id,'ticket_scanner','Paving Ticket Scanner',features)}${featureToggle(u.id,'camera_readers','Camera Readers & Scanners',features)}${featureToggle(u.id,'before_after','Before & After Matching',features)}${featureToggle(u.id,'measurements','Measurements, Map & AI Classification',features)}${featureToggle(u.id,'extra_work','Extra Work Records',features)}</div><button class="btn" type="button" data-save-features="${u.id}">Save Feature Access</button></div>`:''}
+            ${allowedVersions(u).some(k=>['pro','paving','concrete','property','hoa','contractor','roofer'].includes(k))?`<div class="admin-panel"><h4>Pro Camera Reader Access</h4><div class="helper">Camera readers apply across all enabled Pro editions. Other options apply only to Paving Pro.</div><div class="feature-grid">${featureToggle(u.id,'camera_readers','Camera Readers & Scanners',features)}</div>${allowedVersions(u).includes('paving')?`<h4>Paving Pro Options</h4><div class="helper">Optional Paving Pro features. These settings apply whenever this user opens Paving Pro.</div><div class="feature-grid">${featureToggle(u.id,'ticket_scanner','Paving Ticket Scanner',features)}${featureToggle(u.id,'before_after','Before & After Matching',features)}${featureToggle(u.id,'measurements','Measurements, Map & AI Classification',features)}${featureToggle(u.id,'extra_work','Extra Work Records',features)}</div>`:''}<button class="btn" type="button" data-save-features="${u.id}">Save Feature Access</button></div>`:''}
             <div class="reset-password-panel" id="reset-panel-${u.id}" hidden>
               <label for="reset-password-${u.id}">New Password</label>
               <input id="reset-password-${u.id}" type="password" autocomplete="new-password" placeholder="Enter or recommend a password" />
