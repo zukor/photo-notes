@@ -327,6 +327,7 @@ function renderApp() {
         <button type="button" class="tab ${['create','hoa-inspections'].includes(state.view)?'on':''}" id="tabCreate" aria-current="${['create','hoa-inspections'].includes(state.view)?'page':'false'}">${isHoaClient()?'Inspections':'Create'}</button>
         <button type="button" class="tab ${['send','hoa-maintenance'].includes(state.view)?'on':''}" id="tabSend" aria-current="${['send','hoa-maintenance'].includes(state.view)?'page':'false'}">${isHoaClient()?'Records':'Send'}</button>
       </nav>`}
+      ${isProClient()&&['general','property','hoa','paving','concrete','contractor','roofer'].includes(state.proType)?'<div class="fu-actions"><button type="button" class="btn secondary" id="fuOpen">Photo Follow-Ups</button></div>':''}
       <div id="body"></div>
       <div class="footer">&copy; ${new Date().getFullYear()} Zukor AI. All Rights Reserved.<br><a href="/install.html" target="_blank" rel="noopener">Install Photo Notes on your device</a></div>
     </div>
@@ -391,6 +392,8 @@ function renderApp() {
     editionSwitcher.hidden=true;editionSwitcher.after(picker);
   }
   void window.PhotoNotesQR?.resume({api,state,renderApp,toast});
+  if(new URLSearchParams(location.search).has('followups')&&isProClient()&&['general','paving','concrete','property','hoa','contractor','roofer'].includes(state.proType)){state.view='photo-follow-ups';history.replaceState(null,'',location.pathname);}
+  const fuOpen=document.getElementById('fuOpen');if(fuOpen)fuOpen.onclick=()=>window.PhotoNotesFollowUps.open();
   refreshIssueAttention();
   const updates=document.getElementById('issueUpdates');if(updates)updates.onclick=e=>{e.preventDefault();state.view='my-issues';renderApp();};
   const issueFab = document.getElementById('issueFab'); if (issueFab) issueFab.onclick = openIssueReporter;
@@ -405,6 +408,7 @@ function renderApp() {
   else if (isRoadIssuesClient()) { state.view='road-report'; renderRoadIssueReport(); }
 
   else if (isBasicClient()) { state.view='capture'; renderCapture(); }
+  else if (state.view === 'photo-follow-ups') window.PhotoNotesFollowUps.render();
   else if (state.view === 'capture') renderCapture();
   else if (state.view === 'camera-tools') renderCameraTools();
   else if (state.view === 'ticket') renderTicketScanner();
@@ -1801,7 +1805,7 @@ async function showPendingPhotos(){
   const retry=document.createElement('button');retry.className='btn';retry.textContent='Retry Current Version';retry.onclick=async()=>{dialog.close();await restoreOfflineQueue();};
   const close=document.createElement('button');close.className='btn secondary';close.textContent='Close';close.onclick=()=>dialog.close();dialog.append(retry,close);dialog.addEventListener('close',()=>dialog.remove());document.body.append(dialog);dialog.showModal();
 }
-function payloadFormData(p){const fd=new FormData();if(p.photo)fd.append('photo',p.photo,p.photoName||'offline-photo.jpg');fd.append('note',p.note||'');fd.append('area_tags',p.area_tags||'[]');fd.append('kind',p.kind||'note');if(p.context_source_id)fd.append('context_source_id',p.context_source_id);if(p.job_id)fd.append('job_id',p.job_id);for(const k of ['urgency','paving_photo_reason','concrete_phase','concrete_purpose','concrete_element','concrete_stage','concrete_condition','concrete_severity','concrete_location','concrete_mix','hoa_community_id','hoa_title','hoa_item_type','hoa_priority','hoa_area','hoa_directed_to','hoa_budget_source','hoa_photo_stage','hoa_target_date'])if(p[k])fd.append(k,p[k]);if(p.latitude!=null)fd.append('latitude',p.latitude);if(p.longitude!=null)fd.append('longitude',p.longitude);if(p.address)fd.append('address',p.address);return fd;}
+function payloadFormData(p){const fd=new FormData();if(p.photo)fd.append('photo',p.photo,p.photoName||'offline-photo.jpg');fd.append('note',p.note||'');fd.append('area_tags',p.area_tags||'[]');fd.append('kind',p.kind||'note');if(p.context_source_id)fd.append('context_source_id',p.context_source_id);if(p.job_id)fd.append('job_id',p.job_id);if(p.follow_up_occurrence_id)fd.append('follow_up_occurrence_id',p.follow_up_occurrence_id);for(const k of ['urgency','paving_photo_reason','concrete_phase','concrete_purpose','concrete_element','concrete_stage','concrete_condition','concrete_severity','concrete_location','concrete_mix','hoa_community_id','hoa_title','hoa_item_type','hoa_priority','hoa_area','hoa_directed_to','hoa_budget_source','hoa_photo_stage','hoa_target_date'])if(p[k])fd.append(k,p[k]);if(p.latitude!=null)fd.append('latitude',p.latitude);if(p.longitude!=null)fd.append('longitude',p.longitude);if(p.address)fd.append('address',p.address);return fd;}
 
 function bgIndicator() {
   let box=document.getElementById('bgstatus');
@@ -1880,6 +1884,7 @@ async function saveCaptureDurably(options = {}) {
   if(isHoaClient()){Object.assign(payload,{hoa_community_id:state.communityId,hoa_title:document.getElementById('hoaTitle').value.trim(),hoa_item_type:document.getElementById('hoaType').value,hoa_priority:document.getElementById('hoaPriority').value,hoa_area:document.getElementById('hoaArea').value,hoa_directed_to:(document.getElementById('hoaDirected')||{}).value||'',hoa_budget_source:'unassigned',hoa_photo_stage:'initial'});}
   if(isConcreteClient())Object.assign(payload,concreteCapturePayload());
   if(isPavingClient()){payload.paving_photo_reason='proposal';if(state.jobId)payload.job_id=state.jobId;}
+  try{globalThis.PhotoNotesFollowUps?.payload(payload);}catch(e){toast(e.message);return false;}
   const hadCoords = !!state.location;
   if (state.location) { payload.latitude=state.location.lat;payload.longitude=state.location.lng; }
   if (state.address) payload.address=state.address;
@@ -1896,7 +1901,7 @@ async function saveCaptureDurably(options = {}) {
     state._captureShareSave={photo:payload.photo,signature,account:state.me?.email,edition:selectedEdition()};
     return true;
   }
-  state._captureShareSave=null;state._duplicateContext=null;
+  state._captureShareSave=null;state._duplicateContext=null;state._followUp=null;
   // Only an explicit Save clears the saved draft and hands upload to the background.
   captureLocationGeneration++;
   state._captureTemplateName=''; state.urgency='standard'; state.photoFile = null; state._note = ''; state.location = null; state.address = null; state._locationPromise = null;
