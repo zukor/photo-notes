@@ -69,7 +69,7 @@ app.use((req, res, next) => {
     "object-src 'none'",
     `script-src 'self' 'nonce-${cspNonce}' https://unpkg.com`,
     "style-src 'self' 'unsafe-inline' https://unpkg.com",
-    "img-src 'self' data: blob: https://*.arcgisonline.com https://api.mapbox.com",
+    "img-src 'self' data: blob: https://*.arcgisonline.com https://api.mapbox.com https://tile.openstreetmap.org",
     "connect-src 'self' https://*.arcgisonline.com https://api.mapbox.com",
     "font-src 'self' data:"
   ].join('; '));
@@ -144,6 +144,7 @@ require('./capture-templates').register(app,{pool,requireAuth});
 function isPro(user) { return !!(user && user.plan === 'pro'); }
 
 registerEditionRoutes(app,{pool,requireAuth,requireAdmin,setSession,logEvent});
+require('./qr-codes').registerQrCodes(app,{pool,requireAuth,currentProduct});
 const cleanupDeletedUserFiles=registerUserDeletion(app,{pool,requireAdmin,uploadDir:UPLOAD_DIR});
 
 // ---- Pro dimension helpers ----
