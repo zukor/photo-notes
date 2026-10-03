@@ -30,3 +30,20 @@ test('changed notes are not silently skipped and storage failure retains the dra
  const f=saveFixture();await f.context.saveCaptureDurably({preserveDraft:true});f.note.value='Revised request';await f.context.saveCaptureDurably({});assert.equal(f.saves(),2);
  const failed=saveFixture();failed.context.enqueueUpload=async()=>{throw Error('disk unavailable');};assert.equal(await failed.context.saveCaptureDurably({preserveDraft:true}),false);assert.equal(failed.state.photoFile,failed.photo);assert.equal(failed.note.value,'Raise the wall one foot');assert.equal(failed.state._captureShareSave,undefined);
 });
+
+
+test('Basic invokes sharing synchronously on the tap without saving',async()=>{
+ let saves=0;const f=fixture(async()=>{saves++;return true;});f.c.isBasicClient=()=>true;
+ f.c.prepareBasicShare();const pending=f.c.onSend();
+ assert.equal(f.events.length,1,'native share is invoked before the first async pause');
+ await pending;assert.equal(saves,0);assert.equal(f.c.state.photoFile.name,'actual.jpg');
+});
+test('Basic waits for captioned photo preparation and invalidates changed notes',async()=>{
+ const f=fixture(async()=>{throw Error('Basic must not save');});f.c.isBasicClient=()=>true;
+ let finish;f.c.window.PhotoNotesShareImage={withDetails:()=>new Promise(r=>finish=r)};
+ f.c.prepareBasicShare();assert.equal(f.buttons.send.disabled,true);await f.c.onSend();assert.equal(f.events.length,0);
+ finish({name:'captioned.jpg'});await new Promise(r=>setImmediate(r));
+ const pending=f.c.onSend();assert.equal(f.events[0].file.name,'captioned.jpg');await pending;
+ f.c.noteVal=()=> 'changed';f.c.prepareBasicShare();assert.equal(f.buttons.send.disabled,true);
+ finish({name:'revised.jpg'});await new Promise(r=>setImmediate(r));await f.c.onSend();assert.equal(f.events[1].file.name,'revised.jpg');
+});
