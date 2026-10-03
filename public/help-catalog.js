@@ -3,6 +3,7 @@
 'use strict';
 const rules=[];
 const add=(keys,text,terms=[])=>rules.push({keys:keys.split('|'),text,terms});
+add('data-comments-id|commentsClose|commentsText|commentsPost|commentsCancel|commentsMention|data-comment-reply|data-comment-edit|data-comment-delete','Comments opens Internal Discussion about this saved photograph. Read comments in date order. Post Comment saves text when connected. Reply links to one original comment. Edit changes only your own comment; Delete retains a deletion record and authorized company administrators may remove comments. Choose a team member to insert @Name; authorized HOA and Property team members receive dashboard notifications. Comments are excluded from all external outputs and customer responses. Offline or failed posts keep your draft in this window; copy unfinished text before leaving or reloading. Back to Photo returns to the photograph. Cancel Reply or Edit clears the current draft.',['Internal Discussion','Mention','Comment History']);
 add('data-photo-marker','Tap the star to mark or remove Favorite for long-term access. Tap the distinct flag to mark or remove Flagged for personal attention. The pressed state shows the saved designation. A connection is required. These internal markers do not change urgency, topics, maintenance status, priority, assignee or target date, create reminders, or appear on exported photos or customer documents. Toggling is not added to evidence history.',['Favorite','Flagged']);
 add('markerPhotoLibrary','Open the shared saved Photo Notes library to find, select, favorite and flag your photographs. Property visit controls remain available from Organize.',['Favorite','Flagged']);
 add('markerFavorites|markerFlagged','Show only Favorites or Flagged Photo Notes in Organize. Combine with topic, job, text, date and missing-address filters. Selecting both shows photos with both markers. Clear resets these filters.',['Favorite','Flagged']);
@@ -351,6 +352,9 @@ const terms={
  'Condition':'The observed state of the photographed object, distinguished from scheduling priority.',
  'Defect':'A visible fault/classification suggested by AI or entered after human review.',
  'Severity':'How serious the observed issue is. It is separate from response urgency.',
+ 'Internal Discussion':'Private text discussion attached to a saved photograph, visible only through existing photo access.',
+ 'Mention':'An @Name reference to an authorized team member. HOA and Property use existing in-app notifications.',
+ 'Comment History':'Retained previous comment text and deletion metadata. Deleted text is hidden from the discussion.',
  'Urgency':'Standard or Urgent handling recorded with a capture. It is not a notification guarantee.',
  'Priority':'The property workflow’s follow-up importance, such as Routine, High, Emergency, or Monitor.',
  'Project phase':'The stage of work documented by a concrete photo, from proposal to follow-up.',
