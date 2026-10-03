@@ -653,7 +653,7 @@ function duplicatePhotoNote(source) {
     dialog.close();state.view='capture';renderApp();
   };dialog.showModal();
 }
-function duplicateAction(c){return PhotoNotesDuplicate.editions.includes(selectedEdition())&&['organize','edit'].includes(state.view)?`<button type="button" class="btn secondary slim duplicate-photo-note" data-id="${c.id}">Duplicate for New Photo</button>`:'';}
+function duplicateAction(c){return PhotoNotesDuplicate.editions.includes(selectedEdition())&&['organize','edit','photo-library'].includes(state.view)?`<button type="button" class="btn secondary slim duplicate-photo-note" data-id="${c.id}">Duplicate for New Photo</button>`:'';}
 function mountDuplicateContext(){
   const d=state._duplicateContext;if(!d)return;
   const body=document.getElementById('body'),box=document.createElement('section');box.id='duplicateCaptureContext';box.style.cssText='color:#000;text-align:left';
