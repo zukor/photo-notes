@@ -830,3 +830,18 @@ body:has(.issue-fab) { padding-bottom:calc(80px + env(safe-area-inset-bottom)); 
 .first-use-actions { display:flex; gap:10px; }
 .first-use-actions .btn { flex:1; margin:0; min-width:0; }
 .first-use-actions [hidden] { display:none!important; }
+
+/* Shared help stays available in every edition at phone and desktop widths. */
+#desktopHelp { display:block; color:#000; text-align:left; }
+#desktopHelp .help-drawer { background:#fff; padding-top:env(safe-area-inset-top); padding-bottom:calc(76px + env(safe-area-inset-bottom)); box-sizing:border-box; }
+#desktopHelp button,#desktopHelp input,#desktopHelp select,#desktopHelp p,#desktopHelp summary,#desktopHelp h2 { color:#000; }
+#desktopHelp input,#desktopHelp select,#desktopHelp .help-article { background:#fff; }
+body:has(#desktopHelp) .issue-fab { left:max(14px,env(safe-area-inset-left)); right:auto; }
+.desktop-help-open #desktopHelp .help-fab { right:max(14px,env(safe-area-inset-right)); }
+@media (max-width:1099px) {
+ #desktopHelp .help-drawer { width:min(100%,420px); }
+ .desktop-help-open #app { margin-right:0; }
+ #desktopHelp header { padding:14px 16px; }
+ #desktopHelp .help-search { padding:10px 16px; }
+ #desktopHelp .help-reading { padding:0 16px 16px; }
+}
