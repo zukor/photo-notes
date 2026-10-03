@@ -6,7 +6,7 @@ Export Presets are versioned, user-owned packaging defaults. They contain no pho
 
 Available in Photo Notes Pro, Paving, Concrete, Property Manager, HOA Maintenance, General Contractor, and Roofer Pro. Basic, Issue Reporter and Road Issue Reporter are excluded on the client and API.
 
-Use Export Preset appears in shared Create document setup, Send, and the Photo Library's Export Presets panel. The Photo Library provides access in HOA and Property without changing specialty navigation. Choose No preset to restore the configuration present when entering the workspace. The optional default is selected on entry. Download Using Preset uses the chosen format. Existing explicit PDF/Word actions continue to select their stated format.
+Use Export Preset appears in shared Create document setup, Send, and the Photo Library's Export Presets panel. The Photo Library provides access in HOA and Property without changing specialty navigation. Choose No preset to restore saved document settings, or the entry defaults for selected-photo packaging. The optional default is selected on entry. Download Using Preset uses the chosen format. Existing explicit PDF/Word actions continue to select their stated format.
 
 Save as Preset copies the current controls. Name is required, Description optional. Edit / Rename, Duplicate and Delete manage user-owned entries. Adjust Output Settings applies temporary settings without changing the saved preset or document. Deleting a preset keeps documents and photos. Save Layout and Save Branding Text remain the existing explicit persistence actions.
 

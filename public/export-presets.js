@@ -16,7 +16,7 @@ async function mount(box){
  const choose=box.querySelector('#epChoose'),status=box.querySelector('#epStatus');
  const context=box.id+':'+(box.id==='exportPresetDocument'?currentGroup.id:'')+':'+state.proType;const stored=baselines.get(box);const baseline=stored?.context===context?stored.config:current();baselines.set(box,{context,config:baseline});
  box.querySelector('#epExport').onclick=()=>deliverExport(current().format,box.id==='exportPresetDocument'?currentGroup.id:null,'download');
- function apply(row){active=row?{...row,config:structuredClone(row.config)}:null;const c=row?.config||baseline;
+ function apply(row){active=row?{...row,config:structuredClone(row.config)}:null;const c=row?.config||(box.id==='exportPresetDocument'?{...baseline,layout:normalizedDocumentLayout(),branding:currentDocumentSettings.branding||{}}:baseline);
  const map={font:'documentFont',photo_layout:'documentPhotoLayout',accent:'documentAccent',cover_page:'documentCover',header:'documentHeader',footer:'documentFooter',page_numbers:'documentPageNumbers'};
  for(const [key,id] of Object.entries(map)){const el=document.getElementById(id);if(el&&c.layout?.[key]!=null){if(el.type==='checkbox')el.checked=c.layout[key];else el.value=c.layout[key];}}
  for(const [key,id] of Object.entries({company_name:'documentCompanyName',header_text:'documentHeaderText',footer_text:'documentFooterText'})){const el=document.getElementById(id);if(el)el.value=c.branding?.[key]||'';}
