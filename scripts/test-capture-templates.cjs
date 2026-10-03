@@ -1,0 +1,29 @@
+const express=require('express'),assert=require('node:assert/strict'),{chromium,webkit}=require('playwright');
+(async()=>{const app=express();app.use(express.static(require('node:path').join(__dirname,'../public')));const server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));
+try{for(const engine of [chromium,webkit]){const browser=await engine.launch();try{for(const width of [390,1440]){
+ const saved=new Map();const page=await browser.newPage({viewport:{width,height:900},serviceWorkers:'block'}),errors=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.route('**/api/**',r=>{const p=new URL(r.request().url()).pathname;if(p.startsWith('/api/capture-templates/')){const row=r.request().postDataJSON();saved.set(row.id,row);return r.fulfill({json:{ok:true}});}if(p==='/api/capture-templates')return r.fulfill({json:[...saved.values()]});return r.fulfill({json:p==='/api/me'?{email:'capture-test@example.com',name:'Test',role:'user',plan:'pro',pro_type:'general',edition_access:['pro']}:p==='/api/areas'?['Pavement']:[]});});
+ await page.addInitScript(()=>{localStorage.setItem('pn_install_prompt_dismissed_v1','dismissed');localStorage.setItem('pn_first_use_v1:'+encodeURIComponent('capture-test@example.com'),'done');});
+ await page.goto(`http://127.0.0.1:${server.address().port}`);await page.waitForFunction(()=>state.me&&document.getElementById('body'));
+ for(const edition of ['general','paving','concrete','hoa','property','contractor','roofer']){
+  await page.evaluate(edition=>{state.plan='pro';state.proType=edition;state.view='capture';state._captureTemplateName='';renderApp();document.getElementById('firstUseSetup')?.remove();},edition);
+  assert(await page.locator('#takephoto').isVisible());await page.locator('#ctBar summary').click();assert(await page.locator('#ctUse').isVisible());
+  await page.locator('#ctSaveSetup').click();await page.evaluate(()=>PhotoNotesHelp.refresh());assert.deepEqual(await page.evaluate(()=>PhotoNotesHelp.inspect().filter(i=>!i.authored).map(i=>i.key)),[]);await page.locator('#ctName').fill('Parking Lot Condition');await page.locator('#ctUrgency').selectOption('urgent');
+  if(!['hoa','property'].includes(edition))await page.locator('#ctTopic').selectOption('Pavement');
+  if(edition==='concrete'){await page.locator('#ct-concretePhase').selectOption('work');await page.locator('#ct-concretePurpose').selectOption('work_problem');await page.locator('#ct-concreteElement').selectOption('patio');}
+  if(['hoa','property'].includes(edition)){await page.locator('#ct-hoaType').selectOption('inspection');await page.locator('#ct-hoaPriority').selectOption('high');}
+  await page.locator('#ctSave').click();await page.locator('#ctUse').click();await page.locator('#ctChoice').selectOption({label:'Parking Lot Condition'});await page.locator('#ctApply').click();
+  assert.equal(await page.locator('#captureUrgency').inputValue(),'urgent');assert.equal(await page.locator('#ctIndicator').textContent(),'Template: Parking Lot Condition');
+  await page.locator('#captureUrgency').selectOption('standard');assert.equal(await page.locator('#captureUrgency').inputValue(),'standard');
+  await page.evaluate(()=>{state.location={lat:12,lng:34};state.address='Fresh location';});await page.context().setOffline(true);await page.locator('#ctLast').click();assert.deepEqual(await page.evaluate(()=>({location:state.location,address:state.address})),{location:{lat:12,lng:34},address:'Fresh location'});assert.equal(await page.locator('#captureUrgency').inputValue(),'urgent');await page.context().setOffline(false);
+  if(edition==='concrete'){assert.equal(await page.locator('#concretePurpose').inputValue(),'work_problem');assert.equal(await page.locator('#concreteCondition').inputValue(),'not_assessed');}
+  await page.locator('#ctManage').click();await page.locator('#ctChoice').selectOption({label:'Parking Lot Condition'});await page.locator('#ctDuplicate').click();await page.locator('#ctName').fill('Copy');await page.locator('#ctSave').click();
+  await page.locator('#ctManage').click();await page.locator('#ctChoice').selectOption({label:'Copy'});await page.locator('#ctEdit').click();await page.locator('#ctName').fill('Renamed');await page.locator('#ctSave').click();
+  await page.locator('#ctManage').click();await page.locator('#ctChoice').selectOption({label:'Renamed'});page.once('dialog',d=>d.accept());await page.locator('#ctDelete').click();
+  assert(await page.locator('#takephoto').isVisible());assert(await page.locator('#note').isVisible());if(edition==='general')await page.screenshot({path:`/tmp/ct-${engine.name()}-${width}.png`});
+  assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+ }
+ await page.evaluate(()=>{state.me.email='another-user@example.com';state.proType='general';state.urgency='standard';state.view='capture';renderApp();});assert.equal(await page.locator('#ctLast').count(),0);assert.equal(await page.locator('#captureUrgency').inputValue(),'standard');
+ for(const edition of ['basic','issue','roads']){await page.evaluate(edition=>{state.plan='free';state.proType=edition;state.view='capture';renderApp();},edition);assert.equal(await page.locator('#ctUse').count(),0);}
+ assert.deepEqual(errors,[]);console.log(`${engine.name()} ${width}: all editions, editable defaults, management, offline PASS`);await page.close();
+ }}finally{await browser.close();}}}finally{server.close();}})().catch(e=>{console.error(e);process.exitCode=1;});
