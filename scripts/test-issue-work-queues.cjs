@@ -14,7 +14,7 @@ for(const [queue,count] of [['working',2],['waiting',2],['ideas',1],['closed',1]
 assert.deepEqual(errors,[]);assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
 await page.locator('#issueStatusFilter').selectOption('decision');await page.locator('[data-issue-card="1"] > summary').click();await page.locator('#issueFilters > summary').click();await page.screenshot({path:'/tmp/pn-issue-queues-'+engine.name()+'-'+width+'.png',fullPage:true});
 console.log(engine.name(),width,'queue ownership, decisions, tester notes, layout PASS');
-await page.goto('http://127.0.0.1:'+server.address().port);await page.waitForFunction(()=>state.me);
+await page.goto('http://127.0.0.1:'+server.address().port);await page.waitForFunction(()=>state.me);await page.locator('#body').waitFor();
 for(const edition of ['basic','issue','general','contractor','roads','paving','hoa','property','concrete','roofer']){
  await page.evaluate(edition=>{state.plan=['basic','issue','roads'].includes(edition)?'free':'pro';state.proType=edition;state.me.edition=edition;state.view='my-issues';renderApp();},edition);
  await page.waitForFunction(()=>document.querySelectorAll('#myIssueList .tester-issue-card').length===7);await page.locator('[data-retest-broken="4"]').waitFor();assert.equal(await page.locator('#myIssueList .tester-issue-card').count(),7);assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),edition+' issue reports fit');
