@@ -28,7 +28,8 @@
   const deployed=!!(i.release_reference&&i.verification);
   const attempt=last?.event==='blocked'?'A repair attempt stopped before a verified fix.':last?.event==='ready_to_test'?'A fix was verified and deployed.':last?'Investigation or repair was recorded.':i.admin_notes?'Attempt notes are available in the history.':'No repair attempt is recorded.';
   const latest=(i.retest_comments||[]).at(-1);
-  const reply=latest?{text:latest.notes||'No written comments provided.',result:latest.result,date:latest.created_at}:i.tester_result?{text:i.tester_notes||'No written comments provided.',result:i.tester_result,date:i.tester_retested_at}:null;
+  let reply=latest?{text:latest.notes||'No written comments provided.',result:latest.result,date:latest.created_at}:i.tester_result?{text:i.tester_notes||'No written comments provided.',result:i.tester_result,date:i.tester_retested_at}:null;
+  const clarification=(i.progress_events||[]).filter(e=>e.event==='reporter_details').at(-1);if(clarification&&(!reply||Date.parse(clarification.created_at)>Date.parse(reply.date||0)))reply={text:clarification.detail?.notes||i.reporter_details,result:'clarification',date:clarification.created_at};
   let actor='Repair worker',action='Investigate the report and record the next result.';
   if(lane==='closed'){actor='No one';action=i.management_status==='wont_fix'?'Closed without a fix.':'Closed. Check the confirmation in the history.';}
   else if(lane==='waiting'){actor='Tester';action=i.review_decision==='clarify'?'Answer the question shown below.':'Repeat the supplied test steps and submit the result.';}

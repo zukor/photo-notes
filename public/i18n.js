@@ -1,6 +1,8 @@
 (function () {
   const STORAGE_KEY = 'photo-notes-language';
   const ES = {
+    'Question About Your Report': 'Pregunta sobre su reporte',
+    'Your failed retest was received and this report is queued for another repair attempt. You do not need to submit a new report.': 'Recibimos el resultado fallido de su prueba y este reporte está en la cola para otro intento de reparación. No necesita enviar un reporte nuevo.',
     'Starting microphone...': 'Iniciando el micrófono...',
     'Share original photos': 'Compartir fotos originales',
     'Share or download the selected file format, or share original photos below.': 'Comparta o descargue el formato seleccionado, o comparta las fotos originales abajo.',

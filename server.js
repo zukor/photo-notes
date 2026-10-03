@@ -579,7 +579,9 @@ const MANAGED_FEATURES = ['ticket_scanner', 'camera_readers', 'before_after', 'm
 async function currentFeatureAccess(userId) {
   try {
     const row = (await pool.query(`SELECT plan,pro_type,feature_access FROM users WHERE id=$1`, [userId])).rows[0];
-    if (!row || row.plan !== 'pro' || normalizeProType(row.pro_type)!=='paving') return {};
+    if (!row || row.plan !== 'pro') return {};
+    if(row.pro_type==='concrete')return {before_after:true,measurements:true};
+    if(normalizeProType(row.pro_type)!=='paving')return {};
     const saved = row.feature_access && typeof row.feature_access === 'object' ? row.feature_access : {};
     return Object.fromEntries(MANAGED_FEATURES.map(k => [k, saved[k] !== false]));
   } catch { return {}; }
@@ -933,8 +935,12 @@ app.get('/api/captures/search', requireAuth, async (req,res)=>{
     const vals=[req.user.id],where=['c.user_id=$1'];
     if(q){vals.push(`%${q}%`);const n=vals.length;where.push(`(COALESCE(c.photo_title,'') ILIKE $${n} OR COALESCE(c.note,'') ILIKE $${n} OR COALESCE(c.address,'') ILIKE $${n} OR COALESCE(c.captured_by,'') ILIKE $${n} OR COALESCE(array_to_string(c.area_tags,' '),'') ILIKE $${n} OR COALESCE(c.defect_type,'') ILIKE $${n} OR COALESCE(j.name,'') ILIKE $${n} OR COALESCE(j.job_number,'') ILIKE $${n} OR COALESCE(j.customer,'') ILIKE $${n} OR to_char(c.created_at,'MM/DD/YYYY HH12:MI AM') ILIKE $${n})`);}
     if(Number.isInteger(Number(req.query.job_id))){vals.push(Number(req.query.job_id));where.push(`c.job_id=$${vals.length}`);}
-    if(req.query.from){vals.push(String(req.query.from));where.push(`c.created_at >= $${vals.length}::date`);}
-    if(req.query.to){vals.push(String(req.query.to));where.push(`c.created_at < ($${vals.length}::date + interval '1 day')`);}
+    const timestamp=value=>typeof value==='string'&&/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)&&Number.isFinite(Date.parse(value));
+    if((req.query.from_at&&!timestamp(req.query.from_at))||(req.query.to_before&&!timestamp(req.query.to_before)))return res.status(400).json({error:'invalid date range'});
+    if(req.query.from_at){vals.push(req.query.from_at);where.push(`c.created_at >= $${vals.length}::timestamptz`);}
+    else if(req.query.from){vals.push(String(req.query.from));where.push(`c.created_at >= $${vals.length}::date`);}
+    if(req.query.to_before){vals.push(req.query.to_before);where.push(`c.created_at < $${vals.length}::timestamptz`);}
+    else if(req.query.to){vals.push(String(req.query.to));where.push(`c.created_at < ($${vals.length}::date + interval '1 day')`);}
     if(req.query.missing_address==='1')where.push(`COALESCE(c.address,'')=''`);
     if(req.query.has_photo==='1')where.push(`c.photo_path IS NOT NULL`);
     const rows=(await pool.query(`SELECT c.*,j.name job_name,j.job_number FROM captures c LEFT JOIN jobs j ON j.id=c.job_id WHERE ${where.join(' AND ')} ORDER BY c.created_at DESC LIMIT 500`,vals)).rows;
@@ -2207,26 +2213,22 @@ app.get('/api/pairs', requireAuth, async (req, res) => {
 });
 
 app.post('/api/pairs', requireAuth, async (req, res) => {
+  let client;
   try {
     if (!(await featureAllowed(req.user.id, 'before_after'))) return res.status(403).json({ error: 'feature unavailable' });
-    const b = req.body || {};
-    const beforeId = parseInt(b.before_id, 10), afterId = parseInt(b.after_id, 10);
-    if (!Number.isInteger(beforeId) || !Number.isInteger(afterId) || beforeId === afterId) return res.status(400).json({ error: 'two distinct captures required' });
-    if (!(await ownsCaptures(req.user.id, [beforeId, afterId]))) return res.status(403).json({ error: 'not your captures' });
-    // reject if either is already in a pair
-    const existing = (await pool.query(
-      `SELECT 1 FROM capture_pairs WHERE user_id=$1 AND (before_id IN ($2,$3) OR after_id IN ($2,$3)) LIMIT 1`,
-      [req.user.id, beforeId, afterId])).rows;
-    if (existing.length) return res.status(409).json({ error: 'one of these is already paired' });
-    const row = (await pool.query(
-      `INSERT INTO capture_pairs (user_id, before_id, after_id,comparison_opacity) VALUES ($1,$2,$3,$4) RETURNING *`,
-      [req.user.id, beforeId, afterId, b.comparison_opacity==null?null:Math.max(0,Math.min(1,Number(b.comparison_opacity)||0))])).rows[0];
-    logEvent(req.user.id, 'pair_create', {});
-    res.json({ ok: true, pair: row });
-  } catch (err) {
-    if (err && err.code === '23505') return res.status(409).json({ error: 'already paired' });
-    console.error('[pairs.create]', err); res.status(500).json({ error: 'pair failed' });
-  }
+    const b = req.body || {}, beforeId=Number(b.before_id), afterId=Number(b.after_id);
+    if (!Number.isInteger(beforeId)||!Number.isInteger(afterId)||beforeId===afterId) return res.status(400).json({error:'two distinct captures required'});
+    client=await pool.connect();await client.query('BEGIN');
+    const photos=(await client.query('SELECT id,job_id FROM captures WHERE user_id=$1 AND id=ANY($2::int[]) ORDER BY id FOR UPDATE',[req.user.id,[beforeId,afterId]])).rows;
+    if(photos.length!==2){await client.query('ROLLBACK');return res.status(403).json({error:'not your captures'});}
+    const existing=(await client.query('SELECT 1 FROM capture_pairs WHERE user_id=$1 AND (before_id IN ($2,$3) OR after_id IN ($2,$3)) LIMIT 1',[req.user.id,beforeId,afterId])).rows;
+    if(existing.length){await client.query('ROLLBACK');return res.status(409).json({error:'one of these is already paired'});}
+    const row=(await client.query(`INSERT INTO capture_pairs (user_id,before_id,after_id,comparison_opacity) VALUES($1,$2,$3,$4) RETURNING *`,[req.user.id,beforeId,afterId,b.comparison_opacity==null?null:Math.max(0,Math.min(1,Number(b.comparison_opacity)||0))])).rows[0];
+    // Inherit an existing job only for the unassigned photo. Never move assigned evidence between jobs.
+    const assigned=photos.find(p=>p.job_id!=null),unassigned=photos.find(p=>p.job_id==null);
+    if(assigned&&unassigned)await client.query('UPDATE captures SET job_id=$1 WHERE id=$2 AND user_id=$3 AND job_id IS NULL',[assigned.job_id,unassigned.id,req.user.id]);
+    await client.query('COMMIT');logEvent(req.user.id,'pair_create',{});res.json({ok:true,pair:row});
+  }catch(err){if(client)await client.query('ROLLBACK');if(err?.code==='23505')return res.status(409).json({error:'already paired'});console.error('[pairs.create]',err.message);res.status(500).json({error:'pair failed'});}finally{client?.release();}
 });
 
 app.post('/api/pairs/unpair', requireAuth, async (req, res) => {

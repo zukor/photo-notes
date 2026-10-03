@@ -1,5 +1,5 @@
 (function(root,factory){if(typeof module==='object'&&module.exports)module.exports=factory();else root.PhotoNotesIssuePresentation=factory();})(typeof window!=='undefined'?window:globalThis,function(){
- const resultLabel=result=>({fixed:'Retest Succeeded',still_happening:'Retest Failed',unable_to_test:'Unable to Retest'}[result]||'Result Not Recorded');
+ const resultLabel=result=>({clarification:'Clarification Received',fixed:'Retest Succeeded',still_happening:'Retest Failed',unable_to_test:'Unable to Retest'}[result]||'Result Not Recorded');
  function title(issue){
   const description=String(issue.description||'');
   const current=description.match(/Current Result:\s*([\s\S]*?)(?=\n\s*Frequency:|$)/i);
