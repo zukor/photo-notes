@@ -2017,6 +2017,7 @@ async function renderList() {
     ${featureOn('measurements') ? `<div class="organize-footer-actions"><button class="btn secondary" id="openmap">Open Job Site Map</button></div>` : ''}
 
     <div class="organize-library-heading"><div><span class="organize-library-kicker">Your library</span><h2>Current Photo Notes</h2></div><p>Saved Photo Notes appear here. Select any photos you want to organize or compare.</p></div>
+    ${isProClient()?'<details class="organize-panel" id="epLibrary"><summary>Export Presets</summary><p style="color:#000;text-align:left">Package selected Photo Notes using reusable export settings.</p><section id="exportPresetLibrary"></section></details>':''}
     <div id="cards"></div>`;
   document.getElementById('filter').onchange = e => runSmartSearch();
   ['markerFavorites','markerFlagged'].forEach(id=>{const e=document.getElementById(id);if(e)e.onchange=()=>runSmartSearch();});
@@ -2047,6 +2048,7 @@ async function renderList() {
   if (pb) pb.onclick = pairSelected;
   const concreteAreas=document.getElementById('concreteAreas');if(concreteAreas)concreteAreas.onclick=()=>openConcreteFootprints();
   const om = document.getElementById('openmap'); if (om) om.onclick = () => { state.view = 'map'; renderApp(); };
+  window.PhotoNotesExportPresets?.mount(document.getElementById('exportPresetLibrary'));
   loadGroupOptions();
   loadCards('');
 }
@@ -3346,6 +3348,7 @@ async function renderSend() {
         <button class="btn secondary slim" id="clearSendSelection" type="button">Clear All</button>
       </div>
     </div>
+    <section id="exportPresetSend"></section>
     <div class="delivery-actions delivery-actions-shortcuts">
       <select id="sendformat" aria-label="File format"><option value="pdf">PDF</option><option value="docx">Word</option><option value="bundle">Markdown + Photos</option></select>
       <button class="btn" id="sharephotos">Share</button>
@@ -3375,6 +3378,7 @@ async function renderSend() {
   document.getElementById('clearSendSelection').onclick = clearSendSelection;
   const sendToRamo=document.getElementById('sendToRamo');if(sendToRamo)sendToRamo.onclick=()=>openRamoIntake();
   document.getElementById('createApproval').onclick=createApprovalPackage;
+  window.PhotoNotesExportPresets?.mount(document.getElementById('exportPresetSend'));
   loadSendCenter();
   loadApprovalPackages();
   loadBillingOffers();
@@ -3500,7 +3504,7 @@ function exportDownloadUrl(format, groupId) {
   const ids = Array.from(state.selectedIds);
   if (!groupId && !ids.length) throw new Error('Select at least one capture');
   const q = groupId ? `group=${encodeURIComponent(groupId)}` : `ids=${encodeURIComponent(ids.join(','))}`;
-  return `/api/export/${format}?${q}&res=standard&fmt=jpeg`;
+  return `/api/export/${format}?${q}&res=standard&fmt=jpeg${window.PhotoNotesExportPresets?.query()||''}`;
 }
 
 function safeSharedFileName(action, groupId, ext) {
@@ -3807,7 +3811,7 @@ async function renderGroupDetail(id) {
     <div class="document-setup-panel" id="documentSetup"></div>
 
     <div class="formhead" style="margin-top:24px">3. Page Layout &amp; Preview</div>
-    <div class="document-layout-controls" id="documentLayoutControls"></div>
+    <section id="exportPresetDocument"></section><div class="document-layout-controls" id="documentLayoutControls"></div>
     <div class="document-preview" id="documentPreview" aria-label="Document preview"></div>
 
     <div class="formhead" style="margin-top:24px">4. Document Contents</div>
@@ -3840,6 +3844,7 @@ async function renderGroupDetail(id) {
   renderDocumentSetup();
   renderDocumentLayoutControls();
   renderDocumentPreview();
+  window.PhotoNotesExportPresets?.mount(document.getElementById('exportPresetDocument'));
   renderGroupPairPreview();
   renderGroupItems();
   if (featureOn('extra_work')) loadEwrList();
@@ -4175,7 +4180,7 @@ function layoutFromControls(){return{cover_page:document.getElementById('documen
 function renderDocumentPreviewFromControls(){renderDocumentPreview(layoutFromControls());}
 async function saveDocumentLayout(){const layout=layoutFromControls(),r=await api(`/api/groups/${currentGroup.id}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({layout})});if(r.ok){currentGroup.layout=layout;toast('Layout saved');renderDocumentPreview(layout);}else toast('Layout could not be saved');}
 function documentPreviewItems(){return currentGroupItems;}
-function renderDocumentPreview(layoutOverride){const box=document.getElementById('documentPreview');if(!box)return;if(currentDocumentSettings.template_ready&&window.PhotoNotesWordPreview){const target=document.createElement('div');box.replaceChildren(target);window.PhotoNotesWordPreview.render(target,currentGroup.id);return;}const l=layoutOverride||normalizedDocumentLayout(),b=currentDocumentSettings.branding||{},perPage=l.photo_layout==='two_per_page'?2:1,pages=[],previewItems=documentPreviewItems();for(let i=0;i<previewItems.length;i+=perPage)pages.push(previewItems.slice(i,i+perPage));let pageNo=0;const chrome=(content)=>{pageNo++;return `<article class="document-preview-page" style="font-family:${esc(l.font)}"><div class="document-preview-header">${l.header?esc(b.header_text||b.company_name||''):''}</div><div class="document-preview-content">${content}</div><div class="document-preview-footer">${l.footer?esc(b.footer_text||''):''}${l.page_numbers?`${l.footer&&b.footer_text?' · ':''}Page ${pageNo}`:''}</div></article>`;};let html='';if(l.cover_page)html+=chrome(`<div class="document-preview-cover">${currentDocumentSettings.logo_path?`<img src="${esc(currentDocumentSettings.logo_path)}" alt="Company logo">`:''}<div class="document-preview-company" style="color:${esc(l.accent)}">${esc(b.company_name||'')}</div><h2>${esc(currentGroup.title||'Untitled Document')}</h2><p>${esc(currentGroup.description||'')}</p></div>`);if(!pages.length)html+=chrome(`<div class="document-preview-empty">Add photos from Organize to preview the document.</div>`);for(const page of pages)html+=chrome(`<div class="document-preview-photos ${perPage===2?'two-up':''}">${page.map(c=>`<section><h3>${esc(c.photo_title||'Untitled Photo')}</h3>${c.photo_path?`<img src="${capturePhotoSrc(c)}" alt="${esc(c.photo_title||'Photo')}">`:''}${photoLocationHtml(c)}<div>${esc(new Date(c.created_at).toLocaleString(uiLocale()))}</div><div>${esc((c.area_tags||[]).join(', '))}</div><p>${esc(c.note||'No notes')}</p></section>`).join('')}</div>`);box.innerHTML=html;}
+function renderDocumentPreview(layoutOverride){const box=document.getElementById('documentPreview');if(!box)return;if(currentDocumentSettings.template_ready&&window.PhotoNotesWordPreview){const target=document.createElement('div');box.replaceChildren(target);window.PhotoNotesWordPreview.render(target,currentGroup.id);return;}const l=layoutOverride||normalizedDocumentLayout(),b=window.PhotoNotesExportPresets?.previewBranding()||currentDocumentSettings.branding||{},perPage=l.photo_layout==='two_per_page'?2:1,pages=[],previewItems=documentPreviewItems();for(let i=0;i<previewItems.length;i+=perPage)pages.push(previewItems.slice(i,i+perPage));let pageNo=0;const chrome=(content)=>{pageNo++;return `<article class="document-preview-page" style="font-family:${esc(l.font)}"><div class="document-preview-header">${l.header?esc(b.header_text||b.company_name||''):''}</div><div class="document-preview-content">${content}</div><div class="document-preview-footer">${l.footer?esc(b.footer_text||''):''}${l.page_numbers?`${l.footer&&b.footer_text?' · ':''}Page ${pageNo}`:''}</div></article>`;};let html='';if(l.cover_page)html+=chrome(`<div class="document-preview-cover">${currentDocumentSettings.logo_path&&window.PhotoNotesExportPresets?.includeLogo()!==false?`<img src="${esc(currentDocumentSettings.logo_path)}" alt="Company logo">`:''}<div class="document-preview-company" style="color:${esc(l.accent)}">${esc(b.company_name||'')}</div><h2>${esc(currentGroup.title||'Untitled Document')}</h2><p>${esc(currentGroup.description||'')}</p></div>`);if(!pages.length)html+=chrome(`<div class="document-preview-empty">Add photos from Organize to preview the document.</div>`);for(const page of pages)html+=chrome(`<div class="document-preview-photos ${perPage===2?'two-up':''}">${page.map(c=>`<section><h3>${esc(c.photo_title||'Untitled Photo')}</h3>${c.photo_path?`<img src="${capturePhotoSrc(c)}" alt="${esc(c.photo_title||'Photo')}">`:''}${photoLocationHtml(c)}<div>${esc(new Date(c.created_at).toLocaleString(uiLocale()))}</div><div>${esc((c.area_tags||[]).join(', '))}</div><p>${esc(c.note||'No notes')}</p></section>`).join('')}</div>`);box.innerHTML=html;}
 
 function renderTitleView() {
   const box = document.getElementById('titleview');
@@ -4327,7 +4332,7 @@ async function groupExport() {
   btn.disabled = true; btn.textContent = 'Exporting...';
   for (const f of fmts) {
     try {
-      const r = await api(`/api/export/${f}?group=${state.groupId}&res=${imgRes}&fmt=${imgFmt}`);
+      const r = await api(`/api/export/${f}?group=${state.groupId}&res=${imgRes}&fmt=${imgFmt}${window.PhotoNotesExportPresets?.query()||''}`);
       if (!r.ok) throw new Error('bad');
       const blob = await r.blob();
       const url = URL.createObjectURL(blob);
