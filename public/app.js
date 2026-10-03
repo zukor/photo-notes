@@ -390,6 +390,7 @@ function renderApp() {
     picker.addEventListener('keydown',event=>{if(event.key==='Escape'){event.preventDefault();event.stopPropagation();picker.open=false;heading.focus();}});
     editionSwitcher.hidden=true;editionSwitcher.after(picker);
   }
+  void window.PhotoNotesQR?.resume({api,state,renderApp,toast});
   refreshIssueAttention();
   const updates=document.getElementById('issueUpdates');if(updates)updates.onclick=e=>{e.preventDefault();state.view='my-issues';renderApp();};
   const issueFab = document.getElementById('issueFab'); if (issueFab) issueFab.onclick = openIssueReporter;
@@ -418,7 +419,7 @@ function renderApp() {
   else if (state.view === 'hoa-visits') renderHoaVisits();
   else if (state.view === 'hoa-visit') renderHoaVisit(state.hoaVisitId);
   else if (state.view === 'hoa-assets') renderHoaAssets();
-  else if (state.view === 'hoa-asset') renderHoaAsset(state.hoaAssetId);
+  else if (state.view === 'hoa-asset') {const id=state.hoaAssetId;renderHoaAsset(id).then(()=>{if(state.view==='hoa-asset'&&state.hoaAssetId===id)window.PhotoNotesQR?.mountAsset({id,edition:selectedEdition(),api,esc,toast});});}
   else if (state.view === 'hoa-inspections') renderHoaInspections();
   else if (state.view === 'hoa-communities') renderHoaCommunities();
   else if (state.view === 'hoa-dashboard') renderHoaDashboard();
@@ -1978,7 +1979,7 @@ async function renderList() {
       <div class="organize-step-head"><span class="organize-step-number">3</span><div><h2>Work with selected Photo Notes</h2><p>Select photos in the library below, then use only the action you need.</p></div></div>
       <div class="organize-selection-toolbar" aria-label="Photo Note selection controls">
         <strong>Selection</strong>
-        <div class="organize-action-row"><button class="btn secondary" id="selall">Select All</button><button class="btn secondary" id="selnone">Clear Selection</button><button class="btn secondary" id="compareSelected">Compare 2 Photos</button>${featureOn('measurements') ? `<button class="btn secondary" id="classifybatch">Classify Selected (AI)</button>` : ''}</div>
+        <div class="organize-action-row"><button class="btn secondary" id="selall">Select All</button><button class="btn secondary" id="selnone">Clear Selection</button><button class="btn secondary" id="compareSelected">Compare 2 Photos</button>${window.PhotoNotesBulkMetadata?.enabled(state)?`<button type="button" class="btn secondary" id="editSelected">Edit Selected</button>`:''}${featureOn('measurements') ? `<button class="btn secondary" id="classifybatch">Classify Selected (AI)</button>` : ''}</div>
       </div>
       ${isConcreteClient()&&state.me.ramo_intake_access?`<div class="organize-action-row"><button class="btn secondary" id="ramoIntakeSend">Send to Ramo Optimizer</button><button class="btn secondary" id="ramoIntakeHistory">Ramo Submission History</button></div>`:''}
     ${beforeAfterOn() ? `<div class="status" id="classifyprog"></div><details class="pair-builder"><summary><span>Before &amp; After Photos</span><span class="pair-expand">Create a comparison</span></summary><p>When work is complete, select one photo from before the job and one photo from after the job. The older photo will be marked Before by default.</p><button class="btn secondary slim" id="pairbtn">Create Pair From 2 Selected Photos</button></details>` : ''}
@@ -2046,6 +2047,7 @@ async function renderList() {
   const pavingWord=document.getElementById('pavingJobWord');if(pavingWord)pavingWord.onclick=()=>exportPavingJobEvidence('docx');
   document.getElementById('compareSelected').onclick=compareSelectedPhotos;
   document.getElementById('runBatch').onclick=runBatchChanges;
+  const editSelected=document.getElementById('editSelected');if(editSelected)editSelected.onclick=()=>window.PhotoNotesBulkMetadata.open({ids:selectedCaptureIds(),jobs:state.jobs,topics:state.areas,api,esc,toast,refresh:async()=>{await loadAreas();runSmartSearch();}});
   const cb = document.getElementById('classifybatch');
   if (cb) cb.onclick = classifySelected;
   const pb = document.getElementById('pairbtn');
@@ -2499,7 +2501,7 @@ async function showEvidence(id){
     const hash=d.evidence&&d.evidence.original_sha256||'';
     const modal=document.createElement('div');modal.className='evidence-modal';modal.setAttribute('role','dialog');modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.58);z-index:80;padding:18px;overflow:auto';
     const fileStatus=d.fingerprint_verified===true?'Original photo matches':d.fingerprint_verified===false?'Original photo does not match':'File check unavailable';
-    modal.innerHTML=`<section style="max-width:620px;margin:30px auto;background:var(--pn-bg-fff,#fff);border-radius:12px;padding:18px;color:var(--pn-text-000,#000)"><div style="display:flex;justify-content:space-between;gap:12px"><div class="brand" style="font-size:21px">Photo History</div><button class="iconbtn" id="evidenceClose" aria-label="Close">×</button></div><p class="helper">See when this photo note was saved and what was changed later. Your private note text is not shown in this history.</p><div class="card"><strong>Original photo saved</strong><div class="muted">${fEvidenceDate(d.evidence&&d.evidence.captured_at||d.capture.created_at)}</div><div class="muted" style="margin-top:7px">Photo size: ${d.evidence?formatEvidenceBytes(d.evidence.original_bytes):'Unknown'}</div><div class="muted">Location saved: ${d.capture.latitude!=null&&d.capture.longitude!=null?'Yes':'No'} · Address saved: ${d.capture.address?'Yes':'No'}</div><div class="muted" style="margin-top:7px"><strong>${fileStatus}</strong></div><details style="margin-top:10px"><summary>Technical file details</summary><div class="muted" style="margin-top:7px">SHA-256 file ID</div><div style="font-family:monospace;word-break:break-all;margin-top:5px">${esc(hash||'Not available for this older photo')}</div><div class="muted" style="margin-top:7px">Original backup: ${d.original_preserved?'Preserved':'Not currently needed'}</div></details></div><h3 style="font-size:16px">Changes</h3>${d.history.length?`<div>${d.history.map(h=>`<div style="border-bottom:1px solid var(--pn-border-ddd,#ddd);padding:8px 0"><strong>${esc(labels[h.action]||h.action)}</strong><div class="muted">${fEvidenceDate(h.created_at)}${h.detail&&Array.isArray(h.detail.fields)&&h.detail.fields.length?' · '+esc(h.detail.fields.join(', ')):''}</div></div>`).join('')}</div>`:'<p class="helper">No change history is available for this older photo.</p>'}</section>`;
+    modal.innerHTML=`<section style="max-width:620px;margin:30px auto;background:var(--pn-bg-fff,#fff);border-radius:12px;padding:18px;color:var(--pn-text-000,#000)"><div style="display:flex;justify-content:space-between;gap:12px"><div class="brand" style="font-size:21px">Photo History</div><button class="iconbtn" id="evidenceClose" aria-label="Close">×</button></div><p class="helper">See when this photo note was saved and what was changed later. Your private note text is not shown in this history.</p><div class="card"><strong>Original photo saved</strong><div class="muted">${fEvidenceDate(d.evidence&&d.evidence.captured_at||d.capture.created_at)}</div><div class="muted" style="margin-top:7px">Photo size: ${d.evidence?formatEvidenceBytes(d.evidence.original_bytes):'Unknown'}</div><div class="muted">Location saved: ${d.capture.latitude!=null&&d.capture.longitude!=null?'Yes':'No'} · Address saved: ${d.capture.address?'Yes':'No'}</div><div class="muted" style="margin-top:7px"><strong>${fileStatus}</strong></div><details style="margin-top:10px"><summary>Technical file details</summary><div class="muted" style="margin-top:7px">SHA-256 file ID</div><div style="font-family:monospace;word-break:break-all;margin-top:5px">${esc(hash||'Not available for this older photo')}</div><div class="muted" style="margin-top:7px">Original backup: ${d.original_preserved?'Preserved':'Not currently needed'}</div></details></div><h3 style="font-size:16px">Changes</h3>${d.history.length?`<div>${d.history.map(h=>`<div style="border-bottom:1px solid var(--pn-border-ddd,#ddd);padding:8px 0"><strong>${esc(h.action==='details_updated'&&h.detail?.bulk?'Bulk metadata edit':labels[h.action]||h.action)}</strong><div class="muted">${fEvidenceDate(h.created_at)}${h.detail&&Array.isArray(h.detail.fields)&&h.detail.fields.length?' · '+esc(h.detail.fields.join(', ')):''}</div></div>`).join('')}</div>`:'<p class="helper">No change history is available for this older photo.</p>'}</section>`;
     modal.querySelector('.brand').textContent='Photo Details & History';
     window.PhotoNotesCustomFields?.details(d.capture,modal.querySelector('section'),{edition:selectedEdition(),toast});
     modal.querySelector('.card').insertAdjacentHTML('afterbegin',photoMarkerControls(d.capture));wirePhotoMarkers(modal);
@@ -2574,6 +2576,7 @@ function pairCardHtml(before, after, pair={}) {
 }
 
 function wireCards(cards, rows) {
+  window.PhotoNotesQR?.wireSavedCards(cards,rows,selectedEdition(),{api,esc,toast});
   wirePhotoMarkers(cards);
   cards.querySelectorAll('.concrete-area-button').forEach(b=>b.onclick=()=>openConcreteFootprints(Number(b.dataset.id)));
   cards.querySelectorAll('.capchk').forEach(c => c.onchange = () => { if (c.checked) state.selectedIds.add(String(c.value)); else state.selectedIds.delete(String(c.value)); });

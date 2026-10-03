@@ -10,3 +10,5 @@ test('distance and true-north bearing are correct for cardinal and coincident ta
  const east=context.locationDistanceBearing([0,0],[0,1]);assert(Math.abs(east.meters-111194.9266)<0.01);assert.equal(east.bearing,90);
  assert.equal(context.locationDistanceBearing([0,0],[1,0]).bearing,0);assert.equal(context.locationDistanceBearing([0,0],[0,-1]).bearing,270);assert.equal(context.locationDistanceBearing([0,0],[0,0]).meters,0);
 });
+
+test('standard map tiles are permitted by the production image policy',()=>{const s=require('node:fs').readFileSync('server.js','utf8');assert.match(s,/img-src[^\n]+https:\/\/tile\.openstreetmap\.org/);});
