@@ -845,3 +845,7 @@ body:has(#desktopHelp) .issue-fab { left:max(14px,env(safe-area-inset-left)); ri
  #desktopHelp .help-search { padding:10px 16px; }
  #desktopHelp .help-reading { padding:0 16px 16px; }
 }
+
+/* Internal photo markers never become printed customer evidence. */
+@media print { .photo-marker-controls, .photo-marker-filters { display:none !important; } }
+.photo-marker[aria-pressed="true"] { background:#fff3b0; border:2px solid #000; font-weight:bold; }
