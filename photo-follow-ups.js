@@ -116,7 +116,7 @@ async function completeCapture(db,user,occurrenceId,captureId){
  if(context.community_id&&context.property_area_id!==undefined)await db.query('UPDATE captures SET property_community_id=$1,property_area_id=$2 WHERE id=$3',[context.community_id,context.property_area_id||null,captureId]);
  if(o.subject_type==='job')await db.query('UPDATE captures SET job_id=$1 WHERE id=$2',[o.subject_id,captureId]);
  if(o.subject_type==='capture'&&context.job_id&&context.user_id===user.id)await db.query('UPDATE captures SET job_id=$1 WHERE id=$2',[context.job_id,captureId]);
- if(o.edition==='concrete')await db.query("UPDATE captures SET concrete_phase='follow_up',concrete_purpose='routine_review' WHERE id=$1",[captureId]);
+ if(o.edition==='concrete')await db.query("UPDATE captures SET concrete_phase=COALESCE(concrete_phase,'follow_up'),concrete_purpose=CASE WHEN concrete_phase IS NULL OR concrete_phase='follow_up' THEN COALESCE(concrete_purpose,'routine_review') ELSE concrete_purpose END WHERE id=$1",[captureId]);
  await db.query(`UPDATE photo_follow_up_occurrences SET status='completed',result_capture_id=$1,completed_at=now(),completed_by=$2 WHERE id=$3`,[captureId,user.id,o.id]);
  await db.query(`INSERT INTO capture_history(capture_id,user_id,action,detail) VALUES($1,$2,'follow_up_completed',$3)`,[captureId,user.id,JSON.stringify({occurrence_id:o.id,reference_capture_id:o.reference_capture_id})]);
  const s=(await db.query('SELECT * FROM photo_follow_up_schedules WHERE id=$1',[o.schedule_id])).rows[0];await generate(db,s);return o.id;
