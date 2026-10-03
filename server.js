@@ -587,7 +587,7 @@ async function currentFeatureAccess(userId) {
     const edition = row.pro_type === 'asphalt' ? 'paving' : row.pro_type;
     if (!['general','paving','concrete','property','hoa','contractor','roofer'].includes(edition)) return {};
     const saved = row.feature_access && typeof row.feature_access === 'object' ? row.feature_access : {};
-    return Object.fromEntries(MANAGED_FEATURES.map(k => [k, k === 'camera_readers' ? saved[k] !== false : edition === 'concrete' ? ['before_after','measurements'].includes(k) : edition === 'paving' && saved[k] !== false]));
+    return Object.fromEntries(MANAGED_FEATURES.map(k => [k, ['camera_readers','before_after'].includes(k) ? saved[k] !== false : edition === 'concrete' ? k === 'measurements' : edition === 'paving' && saved[k] !== false]));
   } catch { return {}; }
 }
 async function featureAllowed(userId, feature) {
@@ -2268,6 +2268,18 @@ app.post('/api/pairs', requireAuth, async (req, res) => {
     if(assigned&&unassigned)await client.query('UPDATE captures SET job_id=$1 WHERE id=$2 AND user_id=$3 AND job_id IS NULL',[assigned.job_id,unassigned.id,req.user.id]);
     await client.query('COMMIT');logEvent(req.user.id,'pair_create',{});res.json({ok:true,pair:row});
   }catch(err){if(client)await client.query('ROLLBACK');if(err?.code==='23505')return res.status(409).json({error:'already paired'});console.error('[pairs.create]',err.message);res.status(500).json({error:'pair failed'});}finally{client?.release();}
+});
+
+// Focused preference update, original evidence and pair membership are unchanged.
+app.patch('/api/pairs/:id', requireAuth, async (req,res) => {
+  try {
+    if (!(await featureAllowed(req.user.id,'before_after'))) return res.status(403).json({error:'feature unavailable'});
+    const id=Number(req.params.id), opacity=req.body?.comparison_opacity;
+    if(!Number.isInteger(id)||id<1||typeof opacity!=='number'||!Number.isFinite(opacity)||opacity<0||opacity>1)return res.status(400).json({error:'Opacity must be between 0 and 1'});
+    const pair=(await pool.query('UPDATE capture_pairs SET comparison_opacity=$1 WHERE id=$2 AND user_id=$3 RETURNING *',[opacity,id,req.user.id])).rows[0];
+    if(!pair)return res.status(404).json({error:'Pair not found'});
+    res.json({ok:true,pair});
+  }catch(e){console.error('[pairs.update]',e.message);res.status(500).json({error:'Pair could not be updated'});}
 });
 
 app.post('/api/pairs/unpair', requireAuth, async (req, res) => {
