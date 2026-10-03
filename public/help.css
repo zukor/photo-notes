@@ -43,3 +43,6 @@ body:has(#photoNotesHelp) { padding-bottom:calc(80px + env(safe-area-inset-botto
  .pn-help-open #app { margin-right:0; }
 }
 @media (prefers-reduced-motion:reduce) { #photoNotesHelp .pn-help-drawer { transition:none; } }
+
+/* Preserve access to issue dialog actions on phone and desktop. */
+body:has(#issueModal:not([hidden])) .issue-fab { visibility:hidden; pointer-events:none; }
