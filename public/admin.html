@@ -691,7 +691,7 @@
     }
     function issueActionBrief(i){
       const state=PhotoNotesIssueRouting.summary(i),latest=state.reply;
-      const entries=[['Problem',PhotoNotesIssuePresentation.title(i)],['Repair Attempt',state.attempt],['Deployed Fix',state.deployed?'A verified deployed fix is recorded. '+(i.fix_summary||'Read the repair summary below.')+(i.tester_result==='still_happening'?' The latest retest failed.':''):'No verified deployed fix is recorded.'],['Latest Tester Update',latest?(PhotoNotesIssuePresentation.resultLabel(latest.result)+' · '+(latest.date?fdatetime(latest.date):'Date not recorded')+'\n'+latest.text):i.reporter_details||'No tester reply recorded.'],['Next Action',state.actor+': '+state.action]];
+      const entries=[['Problem',PhotoNotesIssuePresentation.title(i)],['Repair Attempt',state.attempt],['Deployed Fix',state.deployed?'A verified deployed fix is recorded. '+(i.fix_summary||'Read the repair summary below.')+(i.management_status==='ready_to_test'?' Awaiting a new tester result.':i.tester_result==='still_happening'?' The latest retest failed.':''):'No verified deployed fix is recorded.'],['Latest Tester Update',latest?(PhotoNotesIssuePresentation.resultLabel(latest.result)+' · '+(latest.date?fdatetime(latest.date):'Date not recorded')+'\n'+latest.text):i.reporter_details||'No tester reply recorded.'],['Next Action',state.actor+': '+state.action]];
       return '<section class="admin-panel issue-action-brief"><h3>Where This Stands</h3>'+entries.map(([label,value])=>'<p><strong>'+esc(label)+':</strong> <span class="issue-description">'+esc(value)+'</span></p>').join('')+'</section>';
     }
     function issueProgress(i){

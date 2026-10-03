@@ -17,16 +17,21 @@ test('bug follow-up is transactional, bounded, owner-safe and keeps tester evide
  const unable=await make();assert.equal((await(await post(unable.id,'issues/ID/retest',{result:'unable_to_test',notes:'Device unavailable'})).json()).status,'blocked');saved=(await pool.query('SELECT * FROM issue_reports WHERE id=$1',[unable.id])).rows[0];assert.equal(saved.review_decision,'clarify');
  r=await post(unable.id,'issues/ID/details',{details:'I now have the original device. Here are the steps.'});assert.equal(r.status,200);assert.equal((await pool.query('SELECT management_status FROM issue_reports WHERE id=$1',[unable.id])).rows[0].management_status,'new');
  const idea=await make('new_feature','blocked','Original example is needed.');const missing=await make('bug_problem','blocked','Original photo is needed to reproduce.');const technical=await make('bug_problem','blocked','The fix is outside the allowed files.');const retry=await make('bug_problem','blocked','The automatic repair did not pass testing.');const sensitive=await make('bug_problem','blocked','This requires destructive storage changes.');
+ const misrouted=await make('bug_problem','blocked','Please clarify.');await pool.query("UPDATE issue_reports SET blocked_kind='evidence',review_decision='clarify',review_note='Please clarify.' WHERE id=$1",[misrouted.id]);await pool.query("INSERT INTO issue_repair_events(issue_id,event,detail) VALUES($1,'automatic_clarification',$2)",[misrouted.id,JSON.stringify({instructions:'Please clarify.',previous_reason:'The automatic repair attempt ended without a confirmed live fix. Request clarification if the report is unclear.'})]);
  const {followupIssues}=require('../issue-followup');await Promise.all([followupIssues(pool),followupIssues(pool)]);
  assert.equal((await pool.query('SELECT review_decision FROM issue_reports WHERE id=$1',[missing.id])).rows[0].review_decision,'clarify');
  assert.equal((await pool.query('SELECT count(*)::int n FROM issue_repair_events WHERE issue_id=$1',[missing.id])).rows[0].n,1);
  assert.equal((await pool.query('SELECT blocked_kind FROM issue_reports WHERE id=$1',[technical.id])).rows[0].blocked_kind,'developer');
+ assert.equal((await pool.query('SELECT management_status FROM issue_reports WHERE id=$1',[misrouted.id])).rows[0].management_status,'new');
  assert.equal((await pool.query('SELECT management_status FROM issue_reports WHERE id=$1',[retry.id])).rows[0].management_status,'new');
  assert.equal((await pool.query('SELECT review_decision FROM issue_reports WHERE id=$1',[idea.id])).rows[0].review_decision,null);
  assert.equal((await pool.query('SELECT blocked_kind FROM issue_reports WHERE id=$1',[sensitive.id])).rows[0].blocked_kind,'decision');
  const auth={Authorization:'Bearer local-fixture-queue'};
  const current=(await pool.query('SELECT * FROM issue_reports WHERE id=$1',[technical.id])).rows[0];r=await post(technical.id,'automation/issues/ID/claim',{resume:true,expected_updated_at:current.updated_at},auth);assert.equal(r.status,200);const claim=await r.json();assert(claim.claim_token);
  assert.equal((await post(technical.id,'automation/issues/ID/claim',{resume:true,expected_updated_at:current.updated_at},auth)).status,409);
+ await pool.query("UPDATE issue_reports SET tester_result='still_happening',tester_notes='Previous failed test' WHERE id=$1",[technical.id]);
+ const ready=await post(technical.id,'automation/issues/ID',{management_status:'ready_to_test',claim_token:claim.claim_token,fix_commit:'a'.repeat(40),deployed_commit:'b'.repeat(40),fix_summary:'Corrected output',verification:'Synthetic verification',retest_instructions:'Repeat the original case.'},auth);assert.equal(ready.status,200);
+ assert.equal((await pool.query('SELECT tester_result FROM issue_reports WHERE id=$1',[technical.id])).rows[0].tester_result,null);
  await pool.query('UPDATE issue_reports SET blocked_kind=NULL WHERE id=$1',[sensitive.id]);const held=(await pool.query('SELECT * FROM issue_reports WHERE id=$1',[sensitive.id])).rows[0];assert.equal((await post(sensitive.id,'automation/issues/ID/claim',{resume:true,expected_updated_at:held.updated_at},auth)).status,409);
  }finally{await new Promise(r=>server.close(r));await pool.query('DELETE FROM issue_reports WHERE id=ANY($1::int[])',[ids]);await pool.query('DELETE FROM users WHERE id=$1',[user]);await pool.end();}
 });
