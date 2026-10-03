@@ -583,10 +583,10 @@ async function currentFeatureAccess(userId) {
   try {
     const row = (await pool.query(`SELECT plan,pro_type,feature_access FROM users WHERE id=$1`, [userId])).rows[0];
     if (!row || row.plan !== 'pro') return {};
-    if(row.pro_type==='concrete')return {before_after:true,measurements:true};
-    if(normalizeProType(row.pro_type)!=='paving')return {};
+    const edition = row.pro_type === 'asphalt' ? 'paving' : row.pro_type;
+    if (!['general','paving','concrete','property','hoa','contractor','roofer'].includes(edition)) return {};
     const saved = row.feature_access && typeof row.feature_access === 'object' ? row.feature_access : {};
-    return Object.fromEntries(MANAGED_FEATURES.map(k => [k, saved[k] !== false]));
+    return Object.fromEntries(MANAGED_FEATURES.map(k => [k, k === 'camera_readers' ? saved[k] !== false : edition === 'concrete' ? ['before_after','measurements'].includes(k) : edition === 'paving' && saved[k] !== false]));
   } catch { return {}; }
 }
 async function featureAllowed(userId, feature) {
@@ -1293,7 +1293,7 @@ app.get('/api/paving/jobs/:id/report', requireAuth, async (req, res) => {
   } catch (error) { console.error('[paving.job-report]', error); if(!res.headersSent)res.status(500).json({error:'paving report failed'}); }
 });
 
-// ---- Camera readers and scanners (Paving Pro) ----
+// ---- Shared Pro camera readers and scanners ----
 const CAMERA_READER_TYPES = ['equipment_plate', 'gauge', 'plan_sketch', 'material_label', 'business_card'];
 function cameraReaderFields(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
@@ -1305,9 +1305,9 @@ function cameraReaderFields(value) {
   return out;
 }
 function cameraReaderPrompt(type) {
-  if (type === 'equipment_plate') return `You are reading a photographed equipment identification or data plate for a paving contractor. Extract only information visibly printed on the plate. Never guess. Respond with ONLY JSON using exactly these keys: {"manufacturer":string|null,"model":string|null,"serial_number":string|null,"year":string|null,"equipment_type":string|null,"specifications":string|null,"confidence":"high"|"medium"|"low"}. Preserve identifiers exactly. Put other useful rated capacities, voltage, power, weight, or engine information in specifications as a concise line. Use null when absent or unreadable.`;
-  if (type === 'gauge') return `You are reading a photographed gauge, meter, scale display, hour meter, fuel display, thermometer, or other job-site instrument. Extract only what is visibly shown. Never guess. Respond with ONLY JSON using exactly these keys: {"instrument_type":string|null,"reading":string|null,"unit":string|null,"equipment_name":string|null,"observed_at":string|null,"notes":string|null,"confidence":"high"|"medium"|"low"}. Read every visible dial independently, including separate Celsius and Fahrenheit scales. Preserve the displayed values and decimal points exactly. Never calculate or convert one scale into another. Put multiple observed readings with their units in reading, and describe disagreement or ambiguity in notes. Use null when absent or unreadable.`;
-  if (type === 'material_label') return `You are reading a photographed construction-material container label. Extract only information visibly printed on the label. Never infer missing product data. Respond with ONLY JSON using exactly these keys: {"product_name":string|null,"manufacturer":string|null,"product_code":string|null,"lot_number":string|null,"quantity":string|null,"manufactured_date":string|null,"expiration_date":string|null,"instructions":string|null,"warnings":string|null,"confidence":"high"|"medium"|"low"}. Preserve codes, dates, quantities, and units exactly. Summarize only visible instructions and warnings. Use null when absent or unreadable.`;
+  if (type === 'equipment_plate') return `You are reading a photographed equipment identification or data plate. Extract only information visibly printed on the plate. Never guess. Respond with ONLY JSON using exactly these keys: {"manufacturer":string|null,"model":string|null,"serial_number":string|null,"year":string|null,"equipment_type":string|null,"specifications":string|null,"confidence":"high"|"medium"|"low"}. Preserve identifiers exactly. Put other useful rated capacities, voltage, power, weight, or engine information in specifications as a concise line. Use null when absent or unreadable.`;
+  if (type === 'gauge') return `You are reading a photographed gauge, meter, scale display, hour meter, fuel display, thermometer, or other instrument. Extract only what is visibly shown. Never guess. Respond with ONLY JSON using exactly these keys: {"instrument_type":string|null,"reading":string|null,"unit":string|null,"equipment_name":string|null,"observed_at":string|null,"notes":string|null,"confidence":"high"|"medium"|"low"}. Read every visible dial independently, including separate Celsius and Fahrenheit scales. Preserve the displayed values and decimal points exactly. Never calculate or convert one scale into another. Put multiple observed readings with their units in reading, and describe disagreement or ambiguity in notes. Use null when absent or unreadable.`;
+  if (type === 'material_label') return `You are reading a photographed business, maintenance, or construction-material label. Extract only information visibly printed on the label. Never infer missing product data. Respond with ONLY JSON using exactly these keys: {"product_name":string|null,"manufacturer":string|null,"product_code":string|null,"lot_number":string|null,"quantity":string|null,"manufactured_date":string|null,"expiration_date":string|null,"instructions":string|null,"warnings":string|null,"confidence":"high"|"medium"|"low"}. Preserve codes, dates, quantities, and units exactly. Summarize only visible instructions and warnings. Use null when absent or unreadable.`;
   if (type === 'business_card') return `You are reading a photographed business card. Extract only information visibly printed on the card. Never guess or supplement it. Respond with ONLY JSON using exactly these keys: {"name":string|null,"job_title":string|null,"company":string|null,"phone":string|null,"email":string|null,"address":string|null,"website":string|null,"confidence":"high"|"medium"|"low"}. Preserve spelling, phone extensions, and email addresses exactly. Use null when absent or unreadable.`;
   return `You are reading a photographed construction plan, marked-up plan, or field sketch. Extract only text and dimensions clearly visible in the image. Do not calculate, infer, or invent measurements. Respond with ONLY JSON using exactly these keys: {"project_name":string|null,"site_address":string|null,"sheet_title":string|null,"sheet_number":string|null,"revision_date":string|null,"scale":string|null,"visible_dimensions":string|null,"visible_notes":string|null,"confidence":"high"|"medium"|"low"}. Preserve dimension values and units exactly. visible_notes should be a concise transcription of legible handwritten or printed work notes. Use null for anything absent, cut off, or unreadable.`;
 }
@@ -2725,7 +2725,7 @@ app.post('/api/admin/users/:id', requireAdmin, async (req, res) => {
     if(b.plan!==undefined||b.pro_type!==undefined)return res.status(400).json({error:'Use version access to change available products'});
     if (b.feature_access && typeof b.feature_access === 'object' && !Array.isArray(b.feature_access)) {
       const clean={}; MANAGED_FEATURES.forEach(k=>{if(typeof b.feature_access[k]==='boolean')clean[k]=b.feature_access[k];});
-      vals.push(JSON.stringify(clean));sets.push(`feature_access=$${vals.length}`);changed.push('feature_access');
+      vals.push(JSON.stringify(clean));sets.push(`feature_access=COALESCE(feature_access,'{}'::jsonb) || $${vals.length}::jsonb`);changed.push('feature_access');
     }
     if (!sets.length) return res.status(400).json({ error: 'nothing to update' });
     vals.push(id);
