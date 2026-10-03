@@ -30,8 +30,10 @@ Specialty paving/proposal, Concrete evidence, HOA and Property reports remain on
 
 ## Files and verification
 
-Implementation: `export-presets.js`, `db.js`, `server.js`, `public/export-presets.js`, `public/app.js`, `public/index.html`, `public/sw.js`, `public/help-catalog.js`. Help cache references also change in `public/admin.html` and `public/install.html`.
+Implementation: `export-presets.js`, `db.js`, `server.js`, `public/export-presets.js`, `public/app.js`, `public/index.html`, `public/sw.js`, `public/help-catalog.js`.
 
-Tests: `test/export-presets.test.js`, `scripts/test-export-presets.cjs`, `scripts/test-export-presets-output.cjs`, and the existing `test/help-coverage.test.js` entry-point version check. Integration scripts use only named disposable local PostgreSQL databases. Browser checks cover Chromium and WebKit, all seven Pro editions at phone/desktop widths, account isolation, defaults, CRUD, temporary overrides, excluded editions, document controls and authored Help. Existing shared workflow, Property parity, all-edition Help and Send Shortcut checks remain required.
+Tests: `test/export-presets.test.js`, `scripts/test-export-presets.cjs`, `scripts/test-export-presets-output.cjs`, and the existing `test/web-app-readiness.test.js` offline-shell check. Integration scripts use only named disposable local PostgreSQL databases. Browser checks cover Chromium and WebKit, all seven Pro editions at phone/desktop widths, account isolation, defaults, CRUD, temporary overrides, excluded editions, document controls and authored Help. Existing shared workflow, Property parity, all-edition Help and Send Shortcut checks remain required.
 
 Physical-device acceptance and team/company sharing are outside this implementation. Presets require an online connection for management and output, consistent with the existing export workflow.
+
+The preset shell uses an additional cache namespace and an additive build query for app/Help catalog assets. The served index applies the same query. Installation reloads these resources, refreshing the four-hour HTTP cache while preserving shared asset version counters used by concurrent releases.
