@@ -1,6 +1,6 @@
 # Duplicate for New Photo
 
-The shared saved-photo action opens a separate Capture with safe context. Copy Notes is off by default. A new photograph is required before saving. No source record is edited.
+The shared saved-photo action in Organize, Edit and Photo Library opens a separate Capture with safe context. Copy Notes is off by default. A new photograph is required before saving. No source record is edited.
 
 ## Copied context
 

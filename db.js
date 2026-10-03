@@ -580,6 +580,7 @@ async function seedUserAreas(userId) {
 
 async function init() {
   await pool.query(SCHEMA);
+  await pool.query(require('fs').readFileSync(require('path').join(__dirname,'photo-requests-schema.sql'),'utf8'));
   await pool.query(require('./custom-fields').SCHEMA);
   await pool.query(require('./photo-markers').SCHEMA);
   await pool.query(require('./photo-follow-ups').SCHEMA);

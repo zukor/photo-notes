@@ -9,7 +9,13 @@ test('all authored Help terms have definitions and instructions contain no place
 });
 test('all entrypoints use the same live Help and startup enforces authored coverage',()=>{
  const fs=require('node:fs');
- for(const file of ['public/index.html','public/admin.html','public/install.html']){const s=fs.readFileSync(file,'utf8');assert(s.includes('/help.css?v=332'));assert(s.includes('/help-catalog.js?v=337'));assert(s.includes('/help.js?v=332'));}
- const s=fs.readFileSync('server.js','utf8');assert.equal((s.match(/\/help.css\?v=332/g)||[]).length,3);
+ const entry=fs.readFileSync('public/index.html','utf8');
+ for(const asset of ['help.css','help-catalog.js','help.js']){
+  const pattern=new RegExp('/'+asset.replaceAll('.','\\.')+'\\?v=\\d+');
+  const url=entry.match(pattern)?.[0];assert(url,asset);
+  for(const file of ['public/admin.html','public/install.html','public/photo-request.html'])assert(fs.readFileSync(file,'utf8').includes(url),file+' '+asset);
+  const urls=fs.readFileSync('server.js','utf8').match(new RegExp(pattern.source,'g'))||[];
+  assert(urls.length>=3,asset);assert(urls.every(value=>value===url),asset);
+ }
  const p=require('../package.json');assert(p.scripts.postinstall.includes('help-coverage'));assert(p.scripts.prestart.includes('help-coverage'));
 });
