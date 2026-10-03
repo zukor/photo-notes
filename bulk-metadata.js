@@ -4,6 +4,7 @@ const EDITIONS=new Set(['general','pro','paving','asphalt','concrete','property'
 // Explicit registry: future safe custom fields can be added here without widening the SQL allowlist.
 function fieldsFor(edition){
  const fields={area_tags:{label:'Topic',type:'topics'},job_id:{label:'Job',type:'job'},urgency:{label:'Urgency',options:[['standard','Standard'],['urgent','Urgent']]},favorite:{label:'Favorite',type:'boolean',options:[[true,'Mark Favorite'],[false,'Remove Favorite']]},flagged:{label:'Flagged',type:'boolean',options:[[true,'Flag'],[false,'Remove Flag']]}};
+ if(edition==='concrete')fields.concrete_element={label:'Concrete Element',options:Object.entries(require('./public/concrete-capture').elements),clear:true};
  if(['paving','asphalt'].includes(edition))fields.paving_photo_reason={label:'Photo Reason',options:[['proposal','Proposal Photo']],clear:true};
  return fields;
 }
