@@ -579,6 +579,7 @@ async function seedUserAreas(userId) {
 
 async function init() {
   await pool.query(SCHEMA);
+  await pool.query(require('./custom-fields').SCHEMA);
   await pool.query(require('./photo-markers').SCHEMA);
 
   await pool.query("ALTER TABLE captures ADD COLUMN IF NOT EXISTS urgency TEXT NOT NULL DEFAULT 'standard'");

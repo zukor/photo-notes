@@ -685,6 +685,7 @@ function renderCapture() {
   });
   const urgencySelect=document.getElementById('captureUrgency');
   if(urgencySelect)urgencySelect.onchange=()=>{state.urgency=urgencySelect.value;};
+  if(isProClient())window.PhotoNotesCustomFields?.mount({user:state.me?.id,edition:selectedEdition(),toast});
   if(isConcreteClient())bindConcreteCapture();
   if(isPavingClient())bindPavingPhotoReason();
 
@@ -1761,7 +1762,7 @@ async function showPendingPhotos(){
   const retry=document.createElement('button');retry.className='btn';retry.textContent='Retry Current Version';retry.onclick=async()=>{dialog.close();await restoreOfflineQueue();};
   const close=document.createElement('button');close.className='btn secondary';close.textContent='Close';close.onclick=()=>dialog.close();dialog.append(retry,close);dialog.addEventListener('close',()=>dialog.remove());document.body.append(dialog);dialog.showModal();
 }
-function payloadFormData(p){const fd=new FormData();if(p.photo)fd.append('photo',p.photo,p.photoName||'offline-photo.jpg');fd.append('note',p.note||'');fd.append('area_tags',p.area_tags||'[]');fd.append('kind',p.kind||'note');if(p.job_id)fd.append('job_id',p.job_id);for(const k of ['urgency','paving_photo_reason','concrete_phase','concrete_purpose','concrete_element','concrete_stage','concrete_condition','concrete_severity','concrete_location','concrete_mix','hoa_community_id','hoa_title','hoa_item_type','hoa_priority','hoa_area','hoa_directed_to','hoa_budget_source','hoa_photo_stage','hoa_target_date'])if(p[k])fd.append(k,p[k]);if(p.latitude!=null)fd.append('latitude',p.latitude);if(p.longitude!=null)fd.append('longitude',p.longitude);if(p.address)fd.append('address',p.address);return fd;}
+function payloadFormData(p){const fd=new FormData();if(p.photo)fd.append('photo',p.photo,p.photoName||'offline-photo.jpg');fd.append('note',p.note||'');fd.append('area_tags',p.area_tags||'[]');fd.append('kind',p.kind||'note');if(p.custom_fields)fd.append('custom_fields',p.custom_fields);if(p.job_id)fd.append('job_id',p.job_id);for(const k of ['urgency','paving_photo_reason','concrete_phase','concrete_purpose','concrete_element','concrete_stage','concrete_condition','concrete_severity','concrete_location','concrete_mix','hoa_community_id','hoa_title','hoa_item_type','hoa_priority','hoa_area','hoa_directed_to','hoa_budget_source','hoa_photo_stage','hoa_target_date'])if(p[k])fd.append(k,p[k]);if(p.latitude!=null)fd.append('latitude',p.latitude);if(p.longitude!=null)fd.append('longitude',p.longitude);if(p.address)fd.append('address',p.address);return fd;}
 
 function bgIndicator() {
   let box=document.getElementById('bgstatus');
@@ -1835,6 +1836,7 @@ async function saveCaptureDurably(options = {}) {
   // Build the payload from the CURRENT state before we clear the form.
   const payload={photo:state.photoFile||null,photoName:state.photoFile&&state.photoFile.name||'offline-photo.jpg',note,area_tags:JSON.stringify(isHoaClient()?[document.getElementById('hoaArea').value]:(state.area?[state.area]:[])),kind:'note'};
   if(document.getElementById('captureUrgency'))payload.urgency=state.urgency==='urgent'?'urgent':'standard';
+  try{const fields=globalThis.PhotoNotesCustomFields?.payload();if(fields)payload.custom_fields=fields;}catch(e){toast(e.message);return false;}
   if(isHoaClient()){Object.assign(payload,{hoa_community_id:state.communityId,hoa_title:document.getElementById('hoaTitle').value.trim(),hoa_item_type:document.getElementById('hoaType').value,hoa_priority:document.getElementById('hoaPriority').value,hoa_area:document.getElementById('hoaArea').value,hoa_directed_to:(document.getElementById('hoaDirected')||{}).value||'',hoa_budget_source:'unassigned',hoa_photo_stage:'initial'});}
   if(isConcreteClient())Object.assign(payload,concreteCapturePayload());
   if(isPavingClient()){payload.paving_photo_reason='proposal';if(state.jobId)payload.job_id=state.jobId;}
@@ -1857,6 +1859,7 @@ async function saveCaptureDurably(options = {}) {
   state._captureShareSave=null;
   // Only an explicit Save clears the saved draft and hands upload to the background.
   captureLocationGeneration++;
+  globalThis.PhotoNotesCustomFields?.clear();
   state._captureTemplateName=''; state.urgency='standard'; state.photoFile = null; state._note = ''; state.location = null; state.address = null; state._locationPromise = null;
   state._dims = freshDims(); state._measure = null;
   if(isConcreteClient()){const d=concreteCaptureDraft();state._concreteCapture={phase:d.phase,purpose:d.purpose,element:d.element,jobId:d.jobId};}
@@ -2026,6 +2029,7 @@ async function renderList() {
   document.getElementById('photoSearchBtn').onclick=runSearch;
   for(const id of ['searchFrom','searchTo','searchMissingAddress'])document.getElementById(id).onchange=runSmartSearch;
   document.getElementById('photoSearch').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();runSearch();}};
+  void window.PhotoNotesCustomFields?.filters({edition:selectedEdition(),search:runSmartSearch});
   document.getElementById('photoSearchClear').onclick=()=>{document.getElementById('photoSearch').value='';document.getElementById('filter').value='';document.getElementById('jobFilter').value='';document.getElementById('searchFrom').value='';document.getElementById('searchTo').value='';document.getElementById('searchMissingAddress').checked=false;['markerFavorites','markerFlagged'].forEach(id=>{const e=document.getElementById(id);if(e)e.checked=false;});runSmartSearch();};
   document.getElementById('selall').onclick = () => document.querySelectorAll('.capchk').forEach(c => { c.checked = true; state.selectedIds.add(String(c.value)); });
   document.getElementById('selnone').onclick = () => { state.selectedIds.clear(); document.querySelectorAll('.capchk').forEach(c => c.checked = false); };
@@ -2377,8 +2381,9 @@ async function loadCards(area, query = '', filters = {}) {
   const cards = document.getElementById('cards');
   if (!cards) return;
   cards.innerHTML = '<p class="status">Loading...</p>';
-  const smart=query||filters.job||filters.from||filters.to||filters.missing||filters.favorite||filters.flagged;
-  const params=new URLSearchParams();if(query)params.set('q',query);if(filters.job)params.set('job_id',filters.job);if(filters.from)params.set('from',filters.from);if(filters.to)params.set('to',filters.to);if(filters.missing)params.set('missing_address','1');
+  const customParams=new URLSearchParams();const customFilter=globalThis.PhotoNotesCustomFields?.query(customParams);
+  const smart=customFilter||query||filters.job||filters.from||filters.to||filters.missing||filters.favorite||filters.flagged;
+  const params=customParams;if(query)params.set('q',query);if(filters.job)params.set('job_id',filters.job);if(filters.from)params.set('from',filters.from);if(filters.to)params.set('to',filters.to);if(filters.missing)params.set('missing_address','1');
   if(filters.from){const start=new Date(filters.from+'T00:00:00');if(Number.isFinite(start.getTime()))params.set('from_at',start.toISOString());}
   if(filters.to){const end=new Date(filters.to+'T00:00:00');if(Number.isFinite(end.getTime())){end.setDate(end.getDate()+1);params.set('to_before',end.toISOString());}}
   for(const k of ['favorite','flagged'])if(filters[k])params.set(k,'1');
@@ -2476,7 +2481,7 @@ function captureCardHtml(c) {
     ${c.photo_original_path ? `<button class="btn secondary slim restorebtn" data-id="${c.id}">Restore Original Photo</button>` : ''}
     <div class="notewrap photo-notes-panel" data-id="${c.id}">
       <div class="photo-notes-heading">Notes</div>
-      <div class="notetext photo-notes-box">${esc(c.note || 'No notes added.')}</div>
+      <div class="notetext photo-notes-box">${esc(c.note || 'No notes added.')}</div>${window.PhotoNotesCustomFields?.html(c)||''}
       <button class="btn secondary editnote" data-id="${c.id}" style="margin-top:6px">Edit Note</button>
     </div>
     ${state.view === 'organize' ? `<button class="btn secondary slim organize-delete-capture" data-delete-organize="${c.id}" type="button">Delete Photo Note</button>` : ''}
@@ -2490,12 +2495,13 @@ async function exportConcreteReport(format){const p=new URLSearchParams({doc:for
 async function showEvidence(id){
   try{
     const r=await api(`/api/captures/${id}/evidence`);if(!r.ok)throw new Error();const d=await r.json();
-    const labels={subject_location_updated:'Subject Location updated',photo_linked:'Photo linked',photo_relationship_changed:'Relationship changed',photo_unlinked:'Photo unlinked',captured:'Original capture saved',details_updated:'Details updated',photo_rotated:'Photo rotated',photo_flipped:'Photo flipped',photo_cropped:'Photo cropped',original_restored:'Original photo restored'};
+    const labels={custom_fields_updated:'Additional Details updated',subject_location_updated:'Subject Location updated',photo_linked:'Photo linked',photo_relationship_changed:'Relationship changed',photo_unlinked:'Photo unlinked',captured:'Original capture saved',details_updated:'Details updated',photo_rotated:'Photo rotated',photo_flipped:'Photo flipped',photo_cropped:'Photo cropped',original_restored:'Original photo restored'};
     const hash=d.evidence&&d.evidence.original_sha256||'';
     const modal=document.createElement('div');modal.className='evidence-modal';modal.setAttribute('role','dialog');modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.58);z-index:80;padding:18px;overflow:auto';
     const fileStatus=d.fingerprint_verified===true?'Original photo matches':d.fingerprint_verified===false?'Original photo does not match':'File check unavailable';
     modal.innerHTML=`<section style="max-width:620px;margin:30px auto;background:var(--pn-bg-fff,#fff);border-radius:12px;padding:18px;color:var(--pn-text-000,#000)"><div style="display:flex;justify-content:space-between;gap:12px"><div class="brand" style="font-size:21px">Photo History</div><button class="iconbtn" id="evidenceClose" aria-label="Close">×</button></div><p class="helper">See when this photo note was saved and what was changed later. Your private note text is not shown in this history.</p><div class="card"><strong>Original photo saved</strong><div class="muted">${fEvidenceDate(d.evidence&&d.evidence.captured_at||d.capture.created_at)}</div><div class="muted" style="margin-top:7px">Photo size: ${d.evidence?formatEvidenceBytes(d.evidence.original_bytes):'Unknown'}</div><div class="muted">Location saved: ${d.capture.latitude!=null&&d.capture.longitude!=null?'Yes':'No'} · Address saved: ${d.capture.address?'Yes':'No'}</div><div class="muted" style="margin-top:7px"><strong>${fileStatus}</strong></div><details style="margin-top:10px"><summary>Technical file details</summary><div class="muted" style="margin-top:7px">SHA-256 file ID</div><div style="font-family:monospace;word-break:break-all;margin-top:5px">${esc(hash||'Not available for this older photo')}</div><div class="muted" style="margin-top:7px">Original backup: ${d.original_preserved?'Preserved':'Not currently needed'}</div></details></div><h3 style="font-size:16px">Changes</h3>${d.history.length?`<div>${d.history.map(h=>`<div style="border-bottom:1px solid var(--pn-border-ddd,#ddd);padding:8px 0"><strong>${esc(labels[h.action]||h.action)}</strong><div class="muted">${fEvidenceDate(h.created_at)}${h.detail&&Array.isArray(h.detail.fields)&&h.detail.fields.length?' · '+esc(h.detail.fields.join(', ')):''}</div></div>`).join('')}</div>`:'<p class="helper">No change history is available for this older photo.</p>'}</section>`;
     modal.querySelector('.brand').textContent='Photo Details & History';
+    window.PhotoNotesCustomFields?.details(d.capture,modal.querySelector('section'),{edition:selectedEdition(),toast});
     modal.querySelector('.card').insertAdjacentHTML('afterbegin',photoMarkerControls(d.capture));wirePhotoMarkers(modal);
     const photoSizeRow=[...modal.querySelectorAll('.card .muted')].find(row=>row.textContent.startsWith('Photo size:'));
     if(photoSizeRow){const formatRow=document.createElement('div');formatRow.className='muted';formatRow.textContent=`Current file format: ${d.current_file_format||'Unknown'}`;photoSizeRow.insertAdjacentElement('afterend',formatRow);}
@@ -2556,7 +2562,7 @@ function pairCardHtml(before, after, pair={}) {
       ${measurementOn() && state.view === 'edit' && c.photo_path ? `<button class="btn secondary slim editdims" data-id="${c.id}">Measurements</button>` : ''}
       ${photoMarkerControls(c)}
       <button class="btn secondary slim evidencebtn" data-id="${c.id}">Photo Details &amp; History</button>
-      <div class="photo-notes-panel"><div class="photo-notes-heading">Notes</div><div class="photo-notes-box">${esc(c.note || 'No notes added.')}</div></div>
+      <div class="photo-notes-panel"><div class="photo-notes-heading">Notes</div><div class="photo-notes-box">${esc(c.note || 'No notes added.')}</div></div>${window.PhotoNotesCustomFields?.html(c)||''}
       ${state.view === 'organize' ? `<button class="btn secondary slim organize-delete-capture" data-delete-organize="${c.id}" type="button">Delete Photo Note</button>` : ''}
     </div>`;
   };
@@ -4172,7 +4178,7 @@ function layoutFromControls(){return{cover_page:document.getElementById('documen
 function renderDocumentPreviewFromControls(){renderDocumentPreview(layoutFromControls());}
 async function saveDocumentLayout(){const layout=layoutFromControls(),r=await api(`/api/groups/${currentGroup.id}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({layout})});if(r.ok){currentGroup.layout=layout;toast('Layout saved');renderDocumentPreview(layout);}else toast('Layout could not be saved');}
 function documentPreviewItems(){return currentGroupItems;}
-function renderDocumentPreview(layoutOverride){const box=document.getElementById('documentPreview');if(!box)return;if(currentDocumentSettings.template_ready&&window.PhotoNotesWordPreview){const target=document.createElement('div');box.replaceChildren(target);window.PhotoNotesWordPreview.render(target,currentGroup.id);return;}const l=layoutOverride||normalizedDocumentLayout(),b=currentDocumentSettings.branding||{},perPage=l.photo_layout==='two_per_page'?2:1,pages=[],previewItems=documentPreviewItems();for(let i=0;i<previewItems.length;i+=perPage)pages.push(previewItems.slice(i,i+perPage));let pageNo=0;const chrome=(content)=>{pageNo++;return `<article class="document-preview-page" style="font-family:${esc(l.font)}"><div class="document-preview-header">${l.header?esc(b.header_text||b.company_name||''):''}</div><div class="document-preview-content">${content}</div><div class="document-preview-footer">${l.footer?esc(b.footer_text||''):''}${l.page_numbers?`${l.footer&&b.footer_text?' · ':''}Page ${pageNo}`:''}</div></article>`;};let html='';if(l.cover_page)html+=chrome(`<div class="document-preview-cover">${currentDocumentSettings.logo_path?`<img src="${esc(currentDocumentSettings.logo_path)}" alt="Company logo">`:''}<div class="document-preview-company" style="color:${esc(l.accent)}">${esc(b.company_name||'')}</div><h2>${esc(currentGroup.title||'Untitled Document')}</h2><p>${esc(currentGroup.description||'')}</p></div>`);if(!pages.length)html+=chrome(`<div class="document-preview-empty">Add photos from Organize to preview the document.</div>`);for(const page of pages)html+=chrome(`<div class="document-preview-photos ${perPage===2?'two-up':''}">${page.map(c=>`<section><h3>${esc(c.photo_title||'Untitled Photo')}</h3>${c.photo_path?`<img src="${capturePhotoSrc(c)}" alt="${esc(c.photo_title||'Photo')}">`:''}${photoLocationHtml(c)}<div>${esc(new Date(c.created_at).toLocaleString(uiLocale()))}</div><div>${esc((c.area_tags||[]).join(', '))}</div><p>${esc(c.note||'No notes')}</p></section>`).join('')}</div>`);box.innerHTML=html;}
+function renderDocumentPreview(layoutOverride){const box=document.getElementById('documentPreview');if(!box)return;if(currentDocumentSettings.template_ready&&window.PhotoNotesWordPreview){const target=document.createElement('div');box.replaceChildren(target);window.PhotoNotesWordPreview.render(target,currentGroup.id);return;}const l=layoutOverride||normalizedDocumentLayout(),b=currentDocumentSettings.branding||{},perPage=l.photo_layout==='two_per_page'?2:1,pages=[],previewItems=documentPreviewItems();for(let i=0;i<previewItems.length;i+=perPage)pages.push(previewItems.slice(i,i+perPage));let pageNo=0;const chrome=(content)=>{pageNo++;return `<article class="document-preview-page" style="font-family:${esc(l.font)}"><div class="document-preview-header">${l.header?esc(b.header_text||b.company_name||''):''}</div><div class="document-preview-content">${content}</div><div class="document-preview-footer">${l.footer?esc(b.footer_text||''):''}${l.page_numbers?`${l.footer&&b.footer_text?' · ':''}Page ${pageNo}`:''}</div></article>`;};let html='';if(l.cover_page)html+=chrome(`<div class="document-preview-cover">${currentDocumentSettings.logo_path?`<img src="${esc(currentDocumentSettings.logo_path)}" alt="Company logo">`:''}<div class="document-preview-company" style="color:${esc(l.accent)}">${esc(b.company_name||'')}</div><h2>${esc(currentGroup.title||'Untitled Document')}</h2><p>${esc(currentGroup.description||'')}</p></div>`);if(!pages.length)html+=chrome(`<div class="document-preview-empty">Add photos from Organize to preview the document.</div>`);for(const page of pages)html+=chrome(`<div class="document-preview-photos ${perPage===2?'two-up':''}">${page.map(c=>`<section><h3>${esc(c.photo_title||'Untitled Photo')}</h3>${c.photo_path?`<img src="${capturePhotoSrc(c)}" alt="${esc(c.photo_title||'Photo')}">`:''}${photoLocationHtml(c)}<div>${esc(new Date(c.created_at).toLocaleString(uiLocale()))}</div><div>${esc((c.area_tags||[]).join(', '))}</div><p>${esc(c.note||'No notes')}</p>${window.PhotoNotesCustomFields?.html(c)||''}</section>`).join('')}</div>`);box.innerHTML=html;}
 
 function renderTitleView() {
   const box = document.getElementById('titleview');
