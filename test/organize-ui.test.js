@@ -28,7 +28,7 @@ test('Organize hierarchy remains distinct and collapses to one column on phones'
 });
 
 test('Organize cards allow an individually confirmed Photo Note deletion', () => {
-  assert.match(app, /state\.view === 'organize' \? `<button class="btn secondary slim organize-delete-capture" data-delete-organize="\$\{c\.id\}"[^>]*>Delete Photo Note<\/button>`/);
+  assert.match(app, /\['organize','photo-library'\]\.includes\(state\.view\) \? `<button class="btn secondary slim organize-delete-capture" data-delete-organize="\$\{c\.id\}"[^>]*>Delete Photo Note<\/button>`/);
   assert.match(app, /querySelectorAll\('\[data-delete-organize\]'\)/);
   assert.match(app, /async function deleteOrganizePhotoNote\(id, button\)/);
   assert.match(app, /Delete this Photo Note\? This can't be undone\./);
