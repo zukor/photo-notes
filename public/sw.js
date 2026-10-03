@@ -29,5 +29,5 @@ self.addEventListener('push',event=>{let url='/?issues=1';try{if(event.data.json
 self.addEventListener('notificationclick',event=>{event.notification.close();const url=event.notification.data?.url==='/admin'?'/admin':'/?issues=1';event.waitUntil(self.clients.openWindow(url));});
 
 // Context reuse shares the shell with a separate cache generation.
-const DUPLICATE_CACHE = CACHE + '-duplicate-1';
+const DUPLICATE_CACHE = CACHE + '-duplicate-2';
 SHELL.push('/duplicate-context.js?v=1');
