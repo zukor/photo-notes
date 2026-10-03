@@ -648,7 +648,7 @@ function duplicatePhotoNote(source) {
     stopCaptureDictation();captureLocationGeneration++;
     if(state._previewUrl)URL.revokeObjectURL(state._previewUrl);
     state._previewUrl=null;state.photoFile=null;state.location=null;state.address=null;state._locationPromise=null;state._qualityPromise=null;state._qualityResult=null;state._captureShareSave=null;
-    state._dims=freshDims();state._measure=null;state.urgency='standard';state._note=context.note;state.area=context.topics[0]||'';state.jobId=context.jobId;state._concreteCapture=context.concrete||null;state._pavingReason='proposal';state._captureTemplateName='';state._duplicateContext=context;
+    state._dims=freshDims();state._measure=null;state.urgency='standard';state._note=context.note;state.area=context.topics[0]||'';state.jobId=context.jobId;state._concreteCapture=context.concrete||null;state._pavingReason='proposal';state._captureTemplateName='';state._duplicateContext=context;window.PhotoNotesCustomFields?.clear();
     if(state.area&&!state.areas.includes(state.area))state.areas=[...state.areas,state.area];
     if(context.property)state.communityId=context.property.communityId;
     dialog.close();state.view='capture';renderApp();
