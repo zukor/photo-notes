@@ -1,6 +1,6 @@
 (function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else root.PhotoNotesQueue=api;})(typeof globalThis!=='undefined'?globalThis:this,function(){
   'use strict';
-  const editions=['basic','issue','pro','contractor','roads','paving','hoa','concrete','roofer'];
+  const editions=['basic','issue','pro','contractor','roads','paving','hoa','property','concrete','roofer'];
   async function accountKey(email){
     const bytes=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(String(email||'').trim().toLowerCase()));
     return Array.from(new Uint8Array(bytes),b=>b.toString(16).padStart(2,'0')).join('');
