@@ -1,5 +1,5 @@
 // Photo Notes add-on (loaded after app.js):
-//  1. Send/Share durably saves the capture, then offers a fresh Share tap.
+//  1. Send/Share durably saves the capture, then opens sharing directly.
 //     Desktop browsers without Web Share use email and a photo download.
 //  2. Moves the Zukor AI corner logo to the far left and shrinks it.
 // Shipped as a separate file so it can deploy without rebuilding app.js.
@@ -55,7 +55,7 @@
         return;
       }
       if (navigator.share) { await navigator.share({ text: text, title: tr('Photo Note') }); return; }
-    } catch (e) { if (e && e.name === 'AbortError') return; }
+    } catch (e) { if (e && e.name === 'AbortError') return; throw e; }
     // Fallback: download the photo (to attach) and open a pre-filled email.
     if (file) {
       try {
@@ -71,28 +71,28 @@
   }
 
   var sending = false;
-  function showSavedShare(file, text) {
-    document.getElementById('captureShareDialog')?.remove();
-    var modal = document.createElement('div');modal.id='captureShareDialog';modal.className='export-share-modal';
-    modal.innerHTML='<section class="export-share-dialog" role="dialog" aria-modal="true" aria-labelledby="captureShareTitle"><h2 id="captureShareTitle">'+tr('Saved in Photo Notes')+'</h2><p>'+tr('Your photo and notes are saved in Photo Notes. Pending uploads are stored in this browser on this device. Find them in the account menu under Pending Photos.')+'</p><p>'+tr('This does not automatically save a copy to Photos/Gallery or Files.')+'</p><p>'+tr('Tap Share to choose where to send or save a copy.')+'</p><button class="btn" data-share>'+tr('Share')+'</button><button class="btn secondary" data-close>'+tr('Close')+'</button></section>';
-    var close=function(){modal.remove();q('send')?.focus();};
-    modal.querySelector('[data-close]').onclick=close;
-    modal.querySelector('[data-share]').onclick=async function(){this.disabled=true;try{await share(file,text);}finally{this.disabled=false;}};
-    modal.onkeydown=function(e){if(e.key==='Escape')close();if(e.key==='Tab'){var buttons=modal.querySelectorAll('button');if(e.shiftKey&&document.activeElement===buttons[0]){e.preventDefault();buttons[1].focus();}else if(!e.shiftKey&&document.activeElement===buttons[1]){e.preventDefault();buttons[0].focus();}}};
-    document.body.appendChild(modal);modal.querySelector('[data-share]').focus();
-  }
+  // Reuse the prepared share on a fresh tap if a browser requires user activation.
+  var readyShare=null;
+  function shareKey(){return JSON.stringify([noteVal(),q('addr')?.textContent,q('gps')?.textContent,typeof state==='undefined'?null:state.me?.email,typeof state==='undefined'?null:state.proType,locale()]);}
   async function onSend() {
     if(sending)return;
     var f=typeof state!=='undefined'?state.photoFile:lastFile,t=caption();
     if (!f && !noteVal()) { toast('Take a photo or add a note first'); return; }
     sending=true;var button=q('send'),save=q('save');if(button)button.disabled=true;if(save)save.disabled=true;
     try {
-      var saved=await saveCapture({requireDurable:true,preserveDraft:true});
-      if(!saved)return;
-      if(f&&window.PhotoNotesShareImage){try{f=await window.PhotoNotesShareImage.withDetails(f,t);}catch(e){toast(e.message);}}
-      if(typeof state!=='undefined'&&state.view&&state.view!=='capture')return;
-      showSavedShare(f,t);
-    } catch(e){toast('Could not save this photo. Your draft is still here.');}
+      var key=shareKey();
+      if(!readyShare||readyShare.original!==f||readyShare.key!==key||readyShare.receipt!==(typeof state==='undefined'?null:state._captureShareSave)){
+        var saved=await saveCapture({requireDurable:true,preserveDraft:true});
+        if(!saved)return;
+        t=caption();key=shareKey();
+        var original=f;
+        if(f&&window.PhotoNotesShareImage)f=await window.PhotoNotesShareImage.withDetails(f,t);
+        if(typeof state!=='undefined'&&state.view&&state.view!=='capture')return;
+        if(shareKey()!==key||(typeof state!=='undefined'&&state.photoFile!==original)){toast('Photo or notes changed. Tap Send/Share again.');return;}
+        readyShare={original:original,key:key,file:f,text:t,receipt:typeof state==='undefined'?null:state._captureShareSave};
+      }
+      await share(readyShare.file,readyShare.text);
+    } catch(e){toast(e&&e.name==='NotAllowedError'?'Ready to share. Tap Send/Share again.':'Could not share. Your photo and notes are still here.');}
     finally{sending=false;if(q('send'))q('send').disabled=false;if(q('save'))q('save').disabled=false;}
   }
   function injectButtons() {

@@ -664,7 +664,7 @@ body:has(.issue-fab) { padding-bottom:calc(80px + env(safe-area-inset-bottom)); 
 .tester-alert[hidden]{display:none}
 
 /* Keep the paired Capture actions close together. */
-#save + #send { margin-top:9px; }
+
 
 /* Report fields, screenshot, annotation tools, then submit in reading order. */
 .issue-report-layout { display:block; overflow:auto; }
@@ -819,3 +819,5 @@ body:has(.issue-fab) { padding-bottom:calc(80px + env(safe-area-inset-bottom)); 
 .shortcut-footer { display:flex; gap:10px; margin-top:10px; }
 .shortcut-footer .btn { flex:1; margin:0; }
 .shortcuts-dialog input, .shortcuts-dialog input::placeholder { color:#000; opacity:1; }
+
+.capture-actions{display:flex;gap:12px;width:100%;margin-top:12px}.capture-actions>.btn{flex:1 1 0;min-width:0;width:0;margin:0;min-height:52px;white-space:normal}

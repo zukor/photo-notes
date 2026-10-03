@@ -1,6 +1,9 @@
 (function () {
   const STORAGE_KEY = 'photo-notes-language';
   const ES = {
+    "Photo or notes changed. Tap Send/Share again.": "La foto o las notas cambiaron. Toque Enviar/Compartir de nuevo.",
+    "Ready to share. Tap Send/Share again.": "Listo para compartir. Toque Enviar/Compartir de nuevo.",
+    "Could not share. Your photo and notes are still here.": "No se pudo compartir. Su foto y sus notas siguen aquí.",
     "Saved in Photo Notes": "Guardado en Photo Notes",
     "Your photo and notes are saved in Photo Notes. Pending uploads are stored in this browser on this device. Find them in the account menu under Pending Photos.": "Su foto y sus notas están guardadas en Photo Notes. Las cargas pendientes se guardan en el navegador de este dispositivo. Encuéntrelas en el menú de cuenta, en Fotos pendientes.",
     "This does not automatically save a copy to Photos/Gallery or Files.": "Esto no guarda automáticamente una copia en Fotos/Galería ni en Archivos.",
