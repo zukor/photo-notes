@@ -144,6 +144,7 @@ require('./capture-templates').register(app,{pool,requireAuth});
 function isPro(user) { return !!(user && user.plan === 'pro'); }
 
 registerEditionRoutes(app,{pool,requireAuth,requireAdmin,setSession,logEvent});
+require('./qr-codes').registerQrCodes(app,{pool,requireAuth,currentProduct});
 const cleanupDeletedUserFiles=registerUserDeletion(app,{pool,requireAdmin,uploadDir:UPLOAD_DIR});
 
 // ---- Pro dimension helpers ----
