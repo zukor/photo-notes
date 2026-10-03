@@ -12,3 +12,11 @@ test('Saved Views retain the existing authorized photo search and maintenance en
  assert.match(search,/requireAuth/);assert.match(search,/c\.user_id=\$1/);
  const module=fs.readFileSync('public/saved-views.js','utf8');assert.doesNotMatch(module,/\/api\/captures|\/api\/hoa\/items/);assert.match(module,/s\.run\(\)/);
 });
+test('an earlier maintenance request cannot replace a newly applied view',async()=>{
+ const vm=require('node:vm'),src=fs.readFileSync('public/app.js','utf8');let resolveOld;
+ const box={innerHTML:'',querySelectorAll:()=>[]},nodes={hoaItems:box};
+ const c={document:{getElementById:id=>nodes[id]},URLSearchParams,PhotoNotesSavedViews:{refresh(){},blocked:()=>false,empty:()=>null},api:()=>new Promise(r=>resolveOld=r)};vm.createContext(c);
+ vm.runInContext(src.slice(src.indexOf('let savedViewHoaRequest='),src.indexOf('function hoaItemCard')),c);
+ const old=c.loadHoaItems();c.api=async()=>({ok:true,json:async()=>[]});await c.loadHoaItems();const current=box.innerHTML;
+ resolveOld({ok:false});await old;assert.equal(box.innerHTML,current);assert.match(current,/No maintenance items match/);
+});
