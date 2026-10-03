@@ -3,6 +3,11 @@
 'use strict';
 const rules=[];
 const add=(keys,text,terms=[])=>rules.push({keys:keys.split('|'),text,terms});
+add('data-photo-marker','Tap the star to mark or remove Favorite for long-term access. Tap the distinct flag to mark or remove Flagged for personal attention. The pressed state shows the saved designation. A connection is required. These internal markers do not change urgency, topics, maintenance status, priority, assignee or target date, create reminders, or appear on exported photos or customer documents. Toggling is not added to evidence history.',['Favorite','Flagged']);
+add('markerPhotoLibrary','Open the shared saved Photo Notes library to find, select, favorite and flag your photographs. Property visit controls remain available from Organize.',['Favorite','Flagged']);
+add('markerFavorites|markerFlagged','Show only Favorites or Flagged Photo Notes in Organize. Combine with topic, job, text, date and missing-address filters. Selecting both shows photos with both markers. Clear resets these filters.',['Favorite','Flagged']);
+add('batchMarker|applyMarkers','Select saved photographs, choose Mark as Favorite, Remove Favorite, Flag or Remove Flag, then Apply Markers. This saves only that marker for every selected photo, including selections retained across filters. No selection means no change. Connection required; an unavailable photo prevents the whole batch.',['Favorite','Flagged']);
+
 add('takephoto|photoCam|readerTake|readerCam|ticketTake|ticketCam|ewrTake|ewrCam','Open the camera and photograph the subject clearly. Keep the important evidence in frame, check the preview, and retake if blurred or incomplete. Camera permission is required. Taking a photo does not by itself save or send it.',['Capture','Permission']);
 add('choosephoto|photoLib|readerChoose|readerLib|ticketChoose|ticketLib|alignChoose|alignLib|ewrChoose|ewrLib','Choose an image from this device. Review the imported image before continuing. Imported photos may not contain usable GPS information, so check the displayed location. This selects a photo; use the relevant Save or Send action to complete the task.',['GPS','Capture']);
 add('retakePhoto|alignRetake','Replace the current draft photo with another camera shot. Check the replacement preview and location. Retaking does not delete photographs already saved in your library.',['Draft']);
@@ -285,6 +290,8 @@ add('data-testing-manager','Give this user access to create and publish testing 
 add('data-close','Close this panel or editor. Review unfinished work and use its Save or Submit action before closing if you want to retain changes. Closing a sharing panel does not deliver a file, and closing an assignment editor does not publish it.',['Draft']);
 add('data-share','Open the device sharing choices for the prepared photo or file. Check the destination, recipients, and attachments, then complete the sharing action. Closing or canceling the sheet does not deliver anything. Keep the local capture until its upload status is confirmed.',['Share sheet','Local save']);
 const terms={
+ 'Favorite':'A persistent internal star marker for easy access over time, until you remove it. Separate from topics and urgency.',
+ 'Flagged':'A persistent internal attention marker, until you remove it. Creates no task, reminder, due date, priority or assignment.',
 'Before/after':'Two linked photographs showing an earlier condition and a later condition. Compare matching viewpoints and confirm their dates before drawing conclusions.',
  'Capture':'A photograph and its supporting note, location, and other details recorded in PhotoNotes.',
  'Photo note':'The words attached to a photo explaining what it shows and why it matters.',
