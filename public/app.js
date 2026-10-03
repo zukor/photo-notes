@@ -2429,6 +2429,7 @@ function captureCardHtml(c) {
     ${c.job_name?`<div class="badge">${esc(c.job_number?c.job_number+' — '+c.job_name:c.job_name)}</div>`:''}
     <div class="rotaterow">${rotateButtons(c.id)}</div>
     ${photoLocationHtml(c)}
+    ${isProClient()&&c.photo_path?`<button class="btn secondary slim relatedOpen" data-related-id="${c.id}">Related Photos</button>`:''}
     ${state.view === 'edit' ? `<button class="editlink editaddress" data-id="${c.id}" style="padding-left:0">Edit Address</button>` : ''}
     <div class="topicwrap" data-id="${c.id}"><div class="meta">${kind}${tags||'<span class="badge">No Topic</span>'}</div>${topicAction}</div>
     ${c.paving_photo_reason==='proposal'?'<div class="paving-photo-reason-label">Proposal Photo</div>':''}
@@ -2459,7 +2460,7 @@ async function exportConcreteReport(format){const p=new URLSearchParams({doc:for
 async function showEvidence(id){
   try{
     const r=await api(`/api/captures/${id}/evidence`);if(!r.ok)throw new Error();const d=await r.json();
-    const labels={captured:'Original capture saved',details_updated:'Details updated',photo_rotated:'Photo rotated',photo_flipped:'Photo flipped',photo_cropped:'Photo cropped',original_restored:'Original photo restored'};
+    const labels={photo_linked:'Photo linked',photo_relationship_changed:'Relationship changed',photo_unlinked:'Photo unlinked',captured:'Original capture saved',details_updated:'Details updated',photo_rotated:'Photo rotated',photo_flipped:'Photo flipped',photo_cropped:'Photo cropped',original_restored:'Original photo restored'};
     const hash=d.evidence&&d.evidence.original_sha256||'';
     const modal=document.createElement('div');modal.className='evidence-modal';modal.setAttribute('role','dialog');modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.58);z-index:80;padding:18px;overflow:auto';
     const fileStatus=d.fingerprint_verified===true?'Original photo matches':d.fingerprint_verified===false?'Original photo does not match':'File check unavailable';
