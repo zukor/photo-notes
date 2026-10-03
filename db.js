@@ -821,6 +821,7 @@ async function init() {
   await pool.query(require('./related-photos').SCHEMA);
   await pool.query(require('./photo-comments').SCHEMA);
   await require('./testing-hub').initTestingHub(pool);
+  await pool.query(require('./visual-analysis').SCHEMA);
   await pool.query(require('fs').readFileSync(require('path').join(__dirname,'qr-codes-schema.sql'),'utf8'));
   console.log('[db] schema ready');
 }
