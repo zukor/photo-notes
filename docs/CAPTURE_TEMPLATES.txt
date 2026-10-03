@@ -1,0 +1,23 @@
+Saved Capture Templates
+
+Implemented optional Capture actions: Use Template, Save as Template, Manage Templates, and Last Used Template. Management supports create, edit/rename, duplicate and delete. A template name appears after application. Defaults stay editable; no template applies automatically.
+
+Enabled editions: Photo Notes Pro, Paving Pro, Concrete Pro, Property Manager Pro, HOA Maintenance Pro, General Contractor Pro and Roofer Pro. Basic, Issue Reporter and Road Issue Reporter do not expose templates.
+
+General fields: existing user Topic where the edition exposes it, and Standard/Urgent urgency. Property and HOA use Maintenance Category instead of a general Topic.
+
+Specialty fields:
+- Paving: Proposal Photo reason only. Other reasons launch scanner, reader or alignment workflows and are intentionally excluded.
+- Concrete: project phase, compatible photo purpose and project type/element.
+- Property and HOA: record type, Maintenance Category and priority.
+- General Contractor and Roofer: general fields; extension points support future existing specialty fields.
+
+Excluded: photograph, full note, title, GPS, acquired/corrected address, fixed date/time, location description, jobs/projects, properties/communities, assets/Areas, condition, severity, mix/specification, measurement and AI output. These require fresh photographic evidence or carry a wrong-site/factual reuse risk. Annotation Templates and Photo Sets have no dependency on Capture Templates.
+
+Storage: additive capture_templates table, composite (user_id,id) key, edition, required name, optional description, allowlisted JSON defaults, deletion tombstone and update time. Queries and writes use authenticated user IDs. No team sharing. A future company scope can be added separately. Capture urgency is stored with each new capture; existing rows retain Standard through an additive column default. No existing Photo Note content is copied into templates.
+
+Offline: localStorage cache is scoped by account email and edition. Save/edit/delete queue local pending changes and PUT them after reconnection or a later Capture render. Server GET refreshes the cache. Already available offline Capture can use/create/manage cached templates without network access. A fresh offline sign-in remains subject to the existing application sign-in limitations. Clearing browser storage loses unsynced changes. Concurrent device edits use last successful server write; no conflict-resolution interface.
+
+Integration files: capture-templates.js, public/capture-templates.js, db.js, server.js, public/app.js, public/index.html, public/sw.js, public/help-catalog.js. Verification: test/capture-templates.test.js, scripts/test-capture-templates.cjs and scripts/test-complete-help.cjs. The Help dynamic-control probe now uses a unique ID rather than the new real Urgency control.
+
+Release is built from current origin/main in an isolated worktree. Uncommitted concurrent feature changes in the original workspace were preserved and excluded from this release.
