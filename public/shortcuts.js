@@ -23,8 +23,17 @@
     const close=()=>{modal.remove();document.getElementById('sendshortcuts')?.focus();};
     q('shortcutClose').onclick=()=>q('shortcutForm').hidden?close():showSetup(false);modal.onclick=e=>{if(e.target===modal)close();};
     modal.onkeydown=e=>{if(e.key==='Escape')close();if(e.key==='Tab'){const els=[...modal.querySelectorAll('button,input,select,a')].filter(x=>!x.hidden&&!x.disabled&&x.getClientRects().length),first=els[0],last=els.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}}};
-    function help(){const type=q('shortcutType').value;q('shortcutTarget').hidden=type==='ramo';q('shortcutTarget').required=type!=='ramo';q('shortcutTargetLabel').hidden=type==='ramo';q('shortcutTargetLabel').textContent=type==='email'?t('Email address','Dirección de correo'):type==='sms'?t('Phone number','Número de teléfono'):t('Website page address','Dirección de la página web');q('shortcutHelp').textContent=type==='ramo'?t('Opens the existing group review. Ramo assigns the project and change order.','Abre la revisión del grupo. Ramo asigna el proyecto y la orden de cambio.'):type==='website'?t('Enter the address of the page where you upload files. This shortcut opens that page. Your PhotoNotes will be uploaded there.','Ingrese la dirección de la página donde carga archivos. Este atajo abre esa página. Sus PhotoNotes se cargarán allí.'):t('Send opens an addressed message with a PhotoNotes link valid for 7 days.','Enviar abre un mensaje al destinatario con un enlace de PhotoNotes válido por 7 días.');}
-    let savedRows=[];
+    function help(){const type=q('shortcutType').value;q('shortcutTarget').hidden=type==='ramo';q('shortcutTarget').required=type!=='ramo';q('shortcutTargetLabel').hidden=type==='ramo';q('shortcutTargetLabel').textContent=type==='email'?t('Email address','Dirección de correo'):type==='sms'?t('Phone number','Número de teléfono'):t('Website page address','Dirección de la página web');q('shortcutHelp').textContent=type==='ramo'?t('Opens the existing group review. Ramo assigns the project and change order.','Abre la revisión del grupo. Ramo asigna el proyecto y la orden de cambio.'):type==='website'?t('Downloads your PhotoNotes file and opens the website. Upload the downloaded file there.','Descarga su archivo de PhotoNotes y abre el sitio web. Cargue allí el archivo descargado.'):t('Send opens an addressed message with a PhotoNotes link valid for 7 days.','Enviar abre un mensaje al destinatario con un enlace de PhotoNotes válido por 7 días.');}
+    function actionLink(parent,label,href,newTab=false){
+      const link=document.createElement('a');link.className='btn secondary';link.textContent=label;link.href=href;
+      if(newTab){link.target='_blank';link.rel='noopener noreferrer';}parent.append(link);return link;
+    }
+    function copyLink(parent,url){
+      const input=document.createElement('input');input.readOnly=true;input.value=url;input.setAttribute('aria-label',t('Document download link','Enlace de descarga del documento'));parent.append(input);
+      const copy=document.createElement('button');copy.type='button';copy.className='btn secondary';copy.textContent=t('Copy link','Copiar enlace');
+      copy.onclick=async()=>{try{await navigator.clipboard.writeText(url);status(t('Link copied. Paste it in your email or message.','Enlace copiado. Péguelo en su correo o mensaje.'));}catch{input.focus();input.select();status(t('Select and copy the link, then paste it in your message.','Seleccione y copie el enlace, luego péguelo en su mensaje.'));}};parent.append(copy);
+    }
+    let savedRows=[],selectionGeneration=0;
     function showSetup(setup){
       q('shortcutChooser').hidden=setup;q('shortcutForm').hidden=!setup;q('shortcutSave').hidden=!setup;
       q('shortcutsTitle').textContent=setup?t('Create New Shortcut','Crear nuevo atajo'):t('Select Shortcut','Seleccionar atajo');
@@ -40,6 +49,8 @@
       select.value=String(selected);select.disabled=!savedRows.length;q('shortcutEmpty').hidden=!!savedRows.length;
     }
     function selection(){
+      const generation=++selectionGeneration;
+      const current=()=>modal.isConnected&&generation===selectionGeneration&&(state.me?.id||state.me?.email)===owner;
       status('');q('shortcutReady').replaceChildren();
       const row=savedRows.find(row=>String(row.id)===q('shortcutSelect').value),selected=!!row;
       q('shortcutSelectHelp').hidden=selected;q('shortcutCreate').hidden=selected;q('shortcutClose').hidden=selected;q('shortcutDelete').hidden=true;
@@ -53,18 +64,29 @@
         send.disabled=true;
         try{
           if(row.type==='website'){
+            // Open during the tap, before export preparation can consume activation.
+            const ready=q('shortcutReady');ready.replaceChildren(send);
+            const openWebsite=actionLink(ready,t('Open website','Abrir sitio web'),row.target,true);
+            openWebsite.click();
+            if(!window.PhotoNotesNative)actionLink(ready,t('Download file','Descargar archivo'),exportDownloadUrl(row.format,null));
+            status(t('Upload the downloaded file on the website. If it did not open, choose Open website.','Cargue el archivo descargado en el sitio web. Si no se abrió, elija Abrir sitio web.'));
             if(window.PhotoNotesNative){const blob=await exportBlob(row.format,null);await window.PhotoNotesNative.share(blob,safeSharedFileName(row.format,null,row.format==='bundle'?'zip':row.format));}
             else await deliverExport(row.format,null,'download');
-            const link=document.createElement('a');link.href=row.target;link.target='_blank';link.rel='noopener noreferrer';document.body.appendChild(link);link.click();link.remove();return;
+            if(current())send.remove();return;
           }
           const blob=await exportBlob(row.format,null),name=safeSharedFileName(row.format,null,row.format==='bundle'?'zip':row.format);
+          if(!current())return;
           const response=await api('/api/document-links?'+new URLSearchParams({format:row.format,name}),{method:'POST',headers:{'Content-Type':'application/octet-stream','X-Photo-Notes-Share':'1'},body:blob});
           const data=await response.json();if(!response.ok||!data.path)throw Error('Could not prepare document');
-          if((state.me?.id||state.me?.email)!==owner)return;
+          if(!current())return;
           const url=new URL(data.path,window.PhotoNotesNative?'https://photonotesapp.com':location.origin).href;
           const body='PhotoNotes: '+url;
-          const link=document.createElement('a');link.href=row.type==='email'?`mailto:${row.target}?subject=PhotoNotes&body=${encodeURIComponent(body)}`:`sms:${row.target.replace(/[ ()-]/g,'')}?body=${encodeURIComponent(body)}`;
-          document.body.appendChild(link);link.click();link.remove();
+          const href=row.type==='email'?`mailto:${row.target}?subject=PhotoNotes&body=${encodeURIComponent(body)}`:`sms:${row.target.replace(/[ ()-]/g,'')}?body=${encodeURIComponent(body)}`;
+          const ready=q('shortcutReady');send.remove();
+          const link=actionLink(ready,row.type==='email'?t('Open email','Abrir correo'):t('Open text message','Abrir mensaje de texto'),href);
+          copyLink(ready,url);
+          status(t('If no app opens, copy the link and paste it into your email or messaging app. The link expires in 7 days.','Si no se abre ninguna aplicación, copie el enlace y péguelo en su correo o aplicación de mensajes. El enlace vence en 7 días.'));
+          link.click();
         }catch{status(t('Could not prepare the send. Please try again.','No se pudo preparar el envío. Inténtelo de nuevo.'));}finally{send.disabled=false;}
       };
       q('shortcutReady').append(send);

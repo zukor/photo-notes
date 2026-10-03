@@ -649,6 +649,7 @@ function renderCapture() {
 
     <label>Notes</label>
     <button type="button" class="btn" id="dictate" style="margin-bottom:8px">Record Notes</button>
+    ${isIOS()?'<button type="button" class="btn secondary" id="keyboardDictation">Use keyboard microphone</button>':''}
     <div class="status" id="dictationStatus" aria-live="polite"></div>
     <textarea id="note" placeholder="Your recorded notes will appear here as words."></textarea>
     ${isConcreteClient()?concreteCaptureDetailsMarkup():''}
@@ -690,6 +691,8 @@ function renderCapture() {
 
   const dictateBtn = document.getElementById('dictate');
   if (dictateBtn) dictateBtn.onclick = toggleDictation;
+  const keyboardDictation=document.getElementById('keyboardDictation');
+  if(keyboardDictation)keyboardDictation.onclick=()=>{stopCaptureDictation();document.getElementById('note').focus();document.getElementById('dictationStatus').textContent='Tap the microphone on your iPhone keyboard and speak. If it is missing, enable Dictation in Settings > General > Keyboard.';};
 
   // preserve any typed note across re-renders
   if (state._note) document.getElementById('note').value = state._note;
@@ -1187,14 +1190,16 @@ async function toggleDictation() {
   dictationBase = noteEl ? noteEl.value.trim() : '';
   if (dictationBase) dictationBase += ' ';
   if (btn) { btn.textContent = 'Recording... tap to stop'; btn.classList.add('on'); }
-  const status=document.getElementById('dictationStatus');if(status)status.textContent=isIOS()?'Listening. On iPhone, words may appear after you pause.':'Listening...';
+  const status=document.getElementById('dictationStatus');if(status)status.textContent='Starting microphone...';
   startDictationSession(SR);
 }
 
 function startDictationSession(SR) {
   if (!dictationActive) return;
   const noteEl = document.getElementById('note');
-  const session = new SR(), generation=++dictationGeneration, photoForSession=state.photoFile, ios=isIOS();
+  let session;
+  try{session=new SR();}catch(error){cleanupDictation();const status=document.getElementById('dictationStatus');if(status)status.textContent='Speech could not start. Use the keyboard microphone to dictate your notes.';return;}
+  const generation=++dictationGeneration, photoForSession=state.photoFile, ios=isIOS();
   recognizer = session;
   session.lang = uiSpeechLanguage();
   session.continuous = !ios;
@@ -1206,6 +1211,7 @@ function startDictationSession(SR) {
   // Permission prompts can outlast ten seconds. Once speech starts, do not
   // interrupt a long phrase while Safari is preparing the transcript.
   waitForSpeech(30000);
+  session.onstart=()=>{if(current()){const status=document.getElementById('dictationStatus');if(status)status.textContent=ios?'Listening. On iPhone, words may appear after you pause.':'Listening...';}};
   session.onaudiostart=()=>{if(current()&&dictationActive)waitForSpeech(15000);};
   session.onspeechstart=()=>{if(current())clearWatchdog();};
 
@@ -1247,6 +1253,9 @@ function startDictationSession(SR) {
       toast('Recording stopped unexpectedly. Tap Record Notes to try again');
       dictationActive=false;
     }
+    // Some speech services report an error without onend. Release the controls
+    // immediately for terminal errors; keep aborted sessions valid for late words.
+    if(!['no-speech','aborted'].includes(err))stopCaptureDictation();
   };
   session.onend = () => {
     if(generation!==dictationGeneration)return;
@@ -1263,7 +1272,7 @@ function startDictationSession(SR) {
     } else {cleanupDictation();const status=document.getElementById('dictationStatus');if(status&&sessionText)status.textContent='Notes recorded. Tap Record Notes to add more.';else if(status&&!sessionError)status.textContent='No words received. Tap Record Notes to try again, or use the keyboard microphone.';}
   };
   try { session.start(); }
-  catch (e) { cleanupDictation(); toast('Recording could not start. Tap Record Notes to try again'); }
+  catch (e) { cleanupDictation(); const status=document.getElementById('dictationStatus');if(status)status.textContent='Speech could not start. Use the keyboard microphone to dictate your notes.';toast('Recording could not start. Tap Record Notes to try again'); }
 }
 
 // ================= Pro dimension fields =================
@@ -3255,7 +3264,7 @@ async function renderSend() {
   const body = document.getElementById('body');
   body.className = 'workflow-send';
   body.innerHTML = `
-    <div class="workflow-intro"><strong>Send your finished work</strong><span>Share the original photos, or download a PDF, Word document, or AI-ready package.</span></div>
+    <div class="workflow-intro"><strong>Send your finished work</strong><span>Share or download the selected file format, or share original photos below.</span></div>
     <div class="formhead">Share or Download Selected Captures</div>
     ${isMacClient() ? `<div class="share-requirement"><strong>Texting an Android phone from this Mac?</strong><span>Your iPhone must have Settings → Apps → Messages → Text Message Forwarding enabled for this Mac, plus MMS or RCS messaging.</span></div>` : ''}
     <div class="send-selection-bar">
@@ -3266,12 +3275,13 @@ async function renderSend() {
       </div>
     </div>
     <div class="delivery-actions delivery-actions-shortcuts">
-      <select id="sendformat" aria-label="Download format"><option value="pdf">PDF</option><option value="docx">Word</option><option value="bundle">Markdown + Photos</option></select>
+      <select id="sendformat" aria-label="File format"><option value="pdf">PDF</option><option value="docx">Word</option><option value="bundle">Markdown + Photos</option></select>
       <button class="btn" id="sharephotos">Share</button>
       <button class="btn secondary" id="sendshortcuts" type="button">Shortcuts</button>
       <button class="btn secondary" id="senddocument">Download</button>
     </div>
     ${isConcreteClient()&&state.me.ramo_intake_access?'<div class="ramo-send-action"><button class="btn secondary" id="sendToRamo" type="button">Send to Ramo Optimizer</button></div>':''}
+    <button class="btn secondary" id="shareOriginalPhotos" type="button">Share original photos</button>
     <div class="share-action-status" id="shareActionStatus" role="status" aria-live="polite"></div>
     <div id="sendCaptures" class="send-capture-list"></div>
     <section class="send-feature-panel" aria-labelledby="customerApprovalHeading">
@@ -3285,7 +3295,8 @@ async function renderSend() {
     <details id="sharedDocumentLinks"><summary>Shared document links</summary><div id="sharedDocumentLinksList"></div></details>
     <div id="billingOffers"></div>`;
   document.getElementById('sharedDocumentLinks').ontoggle = event => { if(event.target.open) window.PhotoNotesDocumentLinks?.manage(document.getElementById('sharedDocumentLinksList')); };
-  document.getElementById('sharephotos').onclick = shareSelectedPhotos;
+  document.getElementById('sharephotos').onclick = () => deliverExport(document.getElementById('sendformat').value, null, 'share');
+  document.getElementById('shareOriginalPhotos').onclick = shareSelectedPhotos;
   document.getElementById('sendshortcuts').onclick=()=>window.PhotoNotesShortcuts.open();
   document.getElementById('senddocument').onclick = () => deliverExport(document.getElementById('sendformat').value, null, 'download');
   document.getElementById('selectAllSendCaptures').onclick = selectAllSendCaptures;
@@ -3519,7 +3530,7 @@ async function shareSelectedPhotos() {
   const rows = (window._sendCaptures || []).filter(c => state.selectedIds.has(String(c.id)));
   const photoRows = rows.filter(c => c.photo_path);
   const status = document.getElementById('shareActionStatus');
-  const button = document.getElementById('sharephotos');
+  const button = document.getElementById('shareOriginalPhotos');
   const setStatus = (message, isError = false) => {
     if (!status) return;
     status.textContent = message;

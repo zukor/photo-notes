@@ -46,7 +46,7 @@
   }
   function mount(parent, file, format) {
     const section = element('section', null, parent); section.className = 'document-link-panel';
-    element('strong', 'Send Word or ZIP without downloading first', section);
+    element('strong', 'Send a document link', section);
     element('p', 'Create a link to this file and send it in Teams, WhatsApp, or email. Anyone with the link can download it for 7 days. Revoke it from Shared document links in Send.', section);
     const status = element('p', null, section); status.setAttribute('role','status');
     const create = button('Create share link', section, async () => {
