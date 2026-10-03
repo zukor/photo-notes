@@ -1,0 +1,17 @@
+.photo-request-public{font-family:Arial,Helvetica,sans-serif;color:#000;text-align:left;margin:0;padding:20px;background:#fff}
+.photo-request-public main{max-width:720px;margin:auto}
+.photo-requests,.photo-requests p,.photo-requests label,.photo-requests span,.photo-requests small,.photo-request-public p,.photo-request-public label,.photo-request-public span{color:#000;text-align:left}
+.photo-requests{font-family:Arial,Helvetica,sans-serif}
+.photo-requests label,.photo-request-public label{display:block;margin:12px 0 5px}
+.photo-requests input,.photo-requests textarea,.photo-requests select,.photo-request-public input,.photo-request-public textarea,.photo-request-public button{box-sizing:border-box;width:100%;font:inherit;color:#000;background:#fff;padding:12px;border:1px solid #000;border-radius:6px;min-width:0}
+.photo-request-public button{margin:12px 0;font-weight:bold;cursor:pointer}
+.pr-card{border:1px solid #000;padding:16px;border-radius:8px;margin:16px 0;overflow-wrap:anywhere}
+.pr-card img{max-width:100%;max-height:320px;object-fit:contain;display:block}
+.pr-actions{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
+.pr-actions .btn{white-space:normal}
+.pr-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.pr-instructions{white-space:pre-wrap}
+.photo-requests input[type=checkbox]{width:auto}
+@media(max-width:700px){.pr-grid{grid-template-columns:1fr}.photo-request-public{padding:14px}.pr-card{padding:12px}}
+.photo-requests .btn{background:#fff;color:#000;border:1px solid #000}
+.photo-requests .btn:not(.secondary){background:#ffe047;color:#000}
