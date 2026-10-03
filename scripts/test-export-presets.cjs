@@ -5,6 +5,7 @@ const app=express();app.use(express.json());register(app,{pool,requireAuth:(req,
 const server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));const base=`http://127.0.0.1:${server.address().port}`;
 const req=async(path,method='GET',body,user=1,edition='general',plan='pro')=>{const r=await fetch(base+'/api/export-presets'+path,{method,headers:{'Content-Type':'application/json','X-Photo-Notes-Presets':'1','X-User':String(user),'X-Edition':edition,'X-Plan':plan},...(body?{body:JSON.stringify(body)}:{})});return {status:r.status,data:await r.json()};};
 try{
+const optional=await req('','POST',{name:'No description',config:{}});assert.equal(optional.status,201);assert.equal(optional.data.description,'');await req('/'+optional.data.id,'DELETE');
 const a=await req('','POST',{name:'Completion',description:'Reusable',config:{format:'docx',resolution:'print',layout:{photo_layout:'two_per_page'}},is_default:true});assert.equal(a.status,201);
 assert.equal((await req('','GET',null,2)).data.length,0);assert.equal((await req('/'+a.data.id,'PUT',{name:'Stolen',description:'',config:{}},2)).status,404);assert.equal((await req('/'+a.data.id,'DELETE',null,2)).status,404);
 const b=await req('','POST',{name:'Second',description:'',config:{},is_default:true});assert.equal((await req('')).data.filter(x=>x.is_default).length,1);

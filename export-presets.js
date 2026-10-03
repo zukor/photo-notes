@@ -9,7 +9,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS export_presets_default ON export_presets(user_
 const supported=user=>user?.plan==='pro'&&['general','paving','asphalt','concrete','property','hoa','contractor','roofer'].includes(user.pro_type);
 function normalize(value){
  const v=value&&typeof value==='object'?value:{},warnings=[],config={version:1};
- if(v.version&&v.version!==1)warnings.push('This preset uses a newer configuration version. Supported settings were applied.');
+ if(v.version!=null&&v.version!==1)warnings.push('This preset uses a newer configuration version. Supported settings were applied.');
  if(Array.isArray(value))warnings.push('Invalid preset configuration was replaced with defaults.');
  const choices={format:['pdf','docx','bundle'],resolution:['standard','print','web'],font:['Arial','Aptos','Calibri','Georgia','Times New Roman'],photo_layout:['one_per_page','two_per_page']};
  config.format=choices.format.includes(v.format)?v.format:'pdf';config.resolution=choices.resolution.includes(v.resolution)?v.resolution:'standard';
@@ -28,13 +28,13 @@ function register(app,{pool,requireAuth}){
  app.use('/api/export-presets',requireAuth,(req,res,next)=>{res.set('Cache-Control','no-store');supported(req.user)?next():res.status(403).json({error:'Export Presets require an applicable Pro edition.'});});
  app.get('/api/export-presets',async(req,res)=>{try{const result=await pool.query('SELECT id,name,description,config,is_default FROM export_presets WHERE user_id=$1 ORDER BY name,id',[req.user.id]);res.json(result.rows.map(row=>({...row,...normalize(row.config)})));}catch{res.status(503).json({error:'Presets are unavailable. Try again.'});}});
  const save=async(req,res)=>{
- const b=req.body||{},name=typeof b.name==='string'?b.name.trim():'';
- if(!name||name.length>80||typeof b.description!=='string'||b.description.length>500||!b.config||typeof b.config!=='object')return res.status(400).json({error:'Enter a preset name (up to 80 characters) and valid settings.'});
+ const b=req.body||{},name=typeof b.name==='string'?b.name.trim():'',description=b.description==null?'':b.description;
+ if(!name||name.length>80||typeof description!=='string'||description.length>500||!b.config||typeof b.config!=='object')return res.status(400).json({error:'Enter a preset name (up to 80 characters) and valid settings.'});
  if(req.params.id&&!/^\d{1,9}$/.test(req.params.id))return res.status(404).json({error:'Preset not found.'});
  let client;try{client=await pool.connect();await client.query('BEGIN');await client.query('SELECT id FROM users WHERE id=$1 FOR UPDATE',[req.user.id]);
  if(req.params.id&&!(await client.query('SELECT id FROM export_presets WHERE id=$1 AND user_id=$2',[req.params.id,req.user.id])).rows.length){await client.query('ROLLBACK');return res.status(404).json({error:'Preset not found.'});}
  if(b.is_default===true)await client.query('UPDATE export_presets SET is_default=false WHERE user_id=$1',[req.user.id]);
- const {config,warnings}=normalize(b.config),args=[name,b.description,JSON.stringify(config),b.is_default===true,req.user.id];
+ const {config,warnings}=normalize(b.config),args=[name,description,JSON.stringify(config),b.is_default===true,req.user.id];
  const result=req.params.id?await client.query('UPDATE export_presets SET name=$1,description=$2,config=$3,is_default=$4 WHERE user_id=$5 AND id=$6 RETURNING *',[...args,req.params.id]):await client.query('INSERT INTO export_presets(name,description,config,is_default,user_id) VALUES($1,$2,$3,$4,$5) RETURNING *',args);
  await client.query('COMMIT');res.status(req.params.id?200:201).json({...result.rows[0],warnings});
  }catch{if(client)await client.query('ROLLBACK');res.status(503).json({error:'Could not save preset. Try again.'});}finally{client?.release();}
