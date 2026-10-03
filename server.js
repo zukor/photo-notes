@@ -145,6 +145,7 @@ require('./export-presets').register(app,{pool,requireAuth});
 function isPro(user) { return !!(user && user.plan === 'pro'); }
 
 registerEditionRoutes(app,{pool,requireAuth,requireAdmin,setSession,logEvent});
+require('./qr-codes').registerQrCodes(app,{pool,requireAuth,currentProduct});
 const cleanupDeletedUserFiles=registerUserDeletion(app,{pool,requireAdmin,uploadDir:UPLOAD_DIR});
 
 // ---- Pro dimension helpers ----
@@ -587,7 +588,7 @@ async function currentFeatureAccess(userId) {
     const edition = row.pro_type === 'asphalt' ? 'paving' : row.pro_type;
     if (!['general','paving','concrete','property','hoa','contractor','roofer'].includes(edition)) return {};
     const saved = row.feature_access && typeof row.feature_access === 'object' ? row.feature_access : {};
-    return Object.fromEntries(MANAGED_FEATURES.map(k => [k, k === 'camera_readers' ? saved[k] !== false : edition === 'concrete' ? ['before_after','measurements'].includes(k) : edition === 'paving' && saved[k] !== false]));
+    return Object.fromEntries(MANAGED_FEATURES.map(k => [k, ['camera_readers','before_after'].includes(k) ? saved[k] !== false : edition === 'concrete' ? k === 'measurements' : edition === 'paving' && saved[k] !== false]));
   } catch { return {}; }
 }
 async function featureAllowed(userId, feature) {
@@ -742,6 +743,8 @@ app.post('/api/captures', requireAuth, validateCaptureAccount, upload.single('ph
     const db=receipt.db;
     const b = req.body || {};
     if(!req.file&&!String(b.note||'').trim())throw Object.assign(new Error('Take a photo or add a note first'),{status:400});
+    const contextSourceId=Number(b.context_source_id);
+    if(b.context_source_id&&!req.file)throw Object.assign(new Error('A new photo is required when reusing Photo Note context'),{status:400});
     const lat = b.latitude ? parseFloat(b.latitude) : null;
     const lng = b.longitude ? parseFloat(b.longitude) : null;
     // Address geocoding is kept OFF the save path so the record commits
@@ -839,6 +842,10 @@ app.post('/api/captures', requireAuth, validateCaptureAccount, upload.single('ph
       } catch (e) { console.error('[evidence.fingerprint]',e&&e.message); }
     }
     await recordCaptureHistory(req.user.id,saved.id,'captured',{photo:!!req.file,gps:lat!=null&&lng!=null,address:!!address},db);
+    if(Number.isInteger(contextSourceId)&&contextSourceId>0&&['general','paving','concrete','property','hoa','contractor','roofer'].includes(captureProduct)){
+      const source=(await db.query('SELECT id FROM captures WHERE id=$1 AND user_id=$2',[contextSourceId,req.user.id])).rows[0];
+      if(source)await recordCaptureHistory(req.user.id,saved.id,'context_reused',{source_capture_id:source.id},db);
+    }
     let maintenance_item=null;
     if(['hoa','property'].includes(await currentProduct(req.user.id,db))&&b.hoa_community_id){
       const company=await hoaCompanyForUser(req.user.id,false,db),communityId=Number(b.hoa_community_id);
@@ -884,9 +891,9 @@ app.get('/api/captures', requireAuth, async (req, res) => {
     let rows;
     if (area) {
       ({ rows } = await pool.query(
-        `SELECT c.*,j.name job_name,j.job_number FROM captures c LEFT JOIN jobs j ON j.id=c.job_id WHERE c.user_id = $1 AND $2 = ANY(c.area_tags) ORDER BY c.created_at DESC`, [req.user.id, area]));
+        `SELECT c.*,(SELECT community_id FROM hoa_maintenance_items WHERE capture_id=c.id LIMIT 1) duplicate_community_id,(SELECT area FROM hoa_maintenance_items WHERE capture_id=c.id LIMIT 1) duplicate_category,(SELECT item_type FROM hoa_maintenance_items WHERE capture_id=c.id LIMIT 1) duplicate_record_type,j.name job_name,j.job_number FROM captures c LEFT JOIN jobs j ON j.id=c.job_id WHERE c.user_id = $1 AND $2 = ANY(c.area_tags) ORDER BY c.created_at DESC`, [req.user.id, area]));
     } else {
-      ({ rows } = await pool.query(`SELECT c.*,j.name job_name,j.job_number FROM captures c LEFT JOIN jobs j ON j.id=c.job_id WHERE c.user_id = $1 ORDER BY c.created_at DESC`, [req.user.id]));
+      ({ rows } = await pool.query(`SELECT c.*,(SELECT community_id FROM hoa_maintenance_items WHERE capture_id=c.id LIMIT 1) duplicate_community_id,(SELECT area FROM hoa_maintenance_items WHERE capture_id=c.id LIMIT 1) duplicate_category,(SELECT item_type FROM hoa_maintenance_items WHERE capture_id=c.id LIMIT 1) duplicate_record_type,j.name job_name,j.job_number FROM captures c LEFT JOIN jobs j ON j.id=c.job_id WHERE c.user_id = $1 ORDER BY c.created_at DESC`, [req.user.id]));
     }
     res.json(rows);
   } catch (err) {
@@ -919,12 +926,13 @@ const ramoIntake=require('./ramo-intake').registerRamoIntake(app,{pool,requireAu
 require('./related-photos').register(app,{pool,requireAuth,currentProduct});
 require('./photo-comments').register(app,{pool,requireAuth,currentProduct});
 registerConcreteFootprints(app,{pool,requireAuth,requireConcrete,computeZone});
+require('./visual-analysis').registerVisualAnalysis(app,{pool,requireAuth,requireConcrete,localPhoto,visionJSON});
 require('./location-intelligence').registerLocationIntelligence(app,{pool,requireAuth,currentProduct});
 
 app.get('/api/concrete/report',requireAuth,requireConcrete,async(req,res)=>{try{
   const vals=[req.user.id],where=['c.user_id=$1','c.photo_path IS NOT NULL'];
   if(Number.isInteger(Number(req.query.job_id))){vals.push(Number(req.query.job_id));where.push(`c.job_id=$${vals.length}`);}
-  const rows=(await pool.query(`SELECT c.*,j.name job_name,j.job_number FROM captures c LEFT JOIN jobs j ON j.id=c.job_id WHERE ${where.join(' AND ')} AND COALESCE(c.concrete_stage,'')<>'batch_ticket' ORDER BY c.created_at DESC LIMIT 500`,vals)).rows;
+  const rows=(await pool.query(`SELECT c.*,(SELECT community_id FROM hoa_maintenance_items WHERE capture_id=c.id LIMIT 1) duplicate_community_id,(SELECT area FROM hoa_maintenance_items WHERE capture_id=c.id LIMIT 1) duplicate_category,(SELECT item_type FROM hoa_maintenance_items WHERE capture_id=c.id LIMIT 1) duplicate_record_type,j.name job_name,j.job_number FROM captures c LEFT JOIN jobs j ON j.id=c.job_id WHERE ${where.join(' AND ')} AND COALESCE(c.concrete_stage,'')<>'batch_ticket' ORDER BY c.created_at DESC LIMIT 500`,vals)).rows;
   const ids=rows.map(r=>r.id),links=ids.length?(await pool.query(`SELECT l.placement_capture_id,l.reference_type,c.* FROM concrete_ticket_links l JOIN captures c ON c.id=l.ticket_capture_id WHERE l.user_id=$1 AND l.placement_capture_id=ANY($2::int[]) ORDER BY l.created_at`,[req.user.id,ids])).rows:[];
   for(const row of rows)row.supporting_photos=links.filter(link=>link.placement_capture_id===row.id);
   const footprints=ids.length?(await pool.query('SELECT * FROM concrete_footprints WHERE user_id=$1 AND capture_id=ANY($2::int[]) ORDER BY created_at',[req.user.id,ids])).rows:[];
@@ -936,15 +944,15 @@ app.get('/api/concrete/report',requireAuth,requireConcrete,async(req,res)=>{try{
   const format=req.query.doc==='docx'?'docx':'pdf',job=Number.isInteger(Number(req.query.job_id))?(await pool.query(`SELECT * FROM jobs WHERE id=$1 AND user_id=$2`,[Number(req.query.job_id),req.user.id])).rows[0]:null,pairs=buildRenderUnits(rows,await userPairs(req.user.id)),summary=`${rows.length} placement/condition photos | ${links.length} linked batch-ticket or specification photos | ${counts.defects} defects | ${counts.verification} verification photos`;
   logEvent(req.user.id,'concrete_photo_report',{format,photos:rows.length,supporting_photos:links.length,job_id:job&&job.id});
   if(format==='pdf'){res.setHeader('Content-Type','application/pdf');res.setHeader('Content-Disposition','attachment; filename="concrete-photo-evidence-report.pdf"');const pdf=new PDFDocument({size:'LETTER',margin:48});pdf.pipe(res);pdf.fontSize(19).text('Concrete Pro - Photo Evidence Report',{align:'center'});if(job)pdf.fontSize(14).text(job.name,{align:'center'});pdf.fontSize(10).text(summary,{align:'center'});
-    for(const unit of pairs){const captures=unit.pair?[unit.pair.before,unit.pair.after]:[unit.single];for(const capture of captures){pdf.addPage();pdf.fontSize(14).text(`${String(capture.concrete_element||'Concrete').replaceAll('_',' ')} - ${ConcreteCapture.summary(capture)||String(capture.concrete_stage||'Photo').replaceAll('_',' ')}`).fontSize(9).text([capture.concrete_location,capture.concrete_mix&&`Mix/spec: ${capture.concrete_mix}`,capture.note,...(capture.footprints||[]).map(footprintSummary)].filter(Boolean).join(' | '));const image=localPhoto(capture.photo_path);if(image){const rendered=await renderForEmbedStamped(image,'standard','jpeg',capture);if(rendered)try{pdf.image(rendered.buffer,48,pdf.y+10,{fit:[500,330]});}catch(e){}}pdf.y+=350;for(const ticket of capture.supporting_photos||[]){pdf.fontSize(10).text(ticket.reference_type==='specification'?'LINKED SPECIFICATION PHOTO':'LINKED BATCH TICKET PHOTO');const ti=localPhoto(ticket.photo_path);if(ti){const rendered=await renderForEmbedStamped(ti,'standard','jpeg',ticket);if(rendered)try{pdf.image(rendered.buffer,48,pdf.y+8,{fit:[500,250]});}catch(e){}}pdf.y+=270;}}}pdf.end();return;}
-  const children=[new Paragraph({heading:HeadingLevel.HEADING_1,children:[new TextRun({text:'Concrete Pro - Photo Evidence Report',bold:true,font:'Arial'})]}),new Paragraph({children:[new TextRun({text:job?job.name:summary,bold:!!job,font:'Arial'})]}),...(job?[new Paragraph({children:[new TextRun({text:summary,font:'Arial'})]})]:[])];for(const row of rows){children.push(new Paragraph({heading:HeadingLevel.HEADING_2,children:[new TextRun({text:`${String(row.concrete_element||'Concrete').replaceAll('_',' ')} - ${ConcreteCapture.summary(row)||String(row.concrete_stage||'Photo').replaceAll('_',' ')}`,bold:true,font:'Arial'})]}));const image=localPhoto(row.photo_path);if(image){const rendered=await renderForEmbedStamped(image,'standard','jpeg',row);if(rendered)children.push(new Paragraph({children:[new ImageRun({type:rendered.ext==='.png'?'png':'jpg',data:rendered.buffer,transformation:await fittedWordImage(rendered.buffer,480,320)})]}));}children.push(new Paragraph({children:[new TextRun({text:[row.concrete_location,row.concrete_mix&&`Mix/spec: ${row.concrete_mix}`,row.note,...(row.footprints||[]).map(footprintSummary)].filter(Boolean).join(' | '),font:'Arial'})]}));for(const ticket of row.supporting_photos||[]){children.push(new Paragraph({children:[new TextRun({text:ticket.reference_type==='specification'?'LINKED SPECIFICATION PHOTO':'LINKED BATCH TICKET PHOTO',bold:true,font:'Arial'})]}));const ti=localPhoto(ticket.photo_path);if(ti){const rendered=await renderForEmbedStamped(ti,'standard','jpeg',ticket);if(rendered)children.push(new Paragraph({children:[new ImageRun({type:rendered.ext==='.png'?'png':'jpg',data:rendered.buffer,transformation:await fittedWordImage(rendered.buffer,400,260)})]}));}}}const buffer=await Packer.toBuffer(new Document({sections:[{children}]}));res.setHeader('Content-Type','application/vnd.openxmlformats-officedocument.wordprocessingml.document');res.setHeader('Content-Disposition','attachment; filename="concrete-photo-evidence-report.docx"');res.send(buffer);
+    for(const unit of pairs){const captures=unit.pair?[unit.pair.before,unit.pair.after]:[unit.single];for(const capture of captures){pdf.addPage();pdf.fontSize(14).text(`${String(capture.concrete_element||'Concrete').replaceAll('_',' ')} - ${ConcreteCapture.summary(capture)||String(capture.concrete_stage||'Photo').replaceAll('_',' ')}`).fontSize(9).text([capture.concrete_location,capture.concrete_mix&&`Mix/spec: ${capture.concrete_mix}`,capture.note,capture.concrete_reviewed_observation&&`User Reviewed visual observation: ${capture.concrete_reviewed_observation}`,...(capture.footprints||[]).map(footprintSummary)].filter(Boolean).join(' | '));const image=localPhoto(capture.photo_path);if(image){const rendered=await renderForEmbedStamped(image,'standard','jpeg',capture);if(rendered)try{pdf.image(rendered.buffer,48,pdf.y+10,{fit:[500,330]});}catch(e){}}pdf.y+=350;for(const ticket of capture.supporting_photos||[]){pdf.fontSize(10).text(ticket.reference_type==='specification'?'LINKED SPECIFICATION PHOTO':'LINKED BATCH TICKET PHOTO');const ti=localPhoto(ticket.photo_path);if(ti){const rendered=await renderForEmbedStamped(ti,'standard','jpeg',ticket);if(rendered)try{pdf.image(rendered.buffer,48,pdf.y+8,{fit:[500,250]});}catch(e){}}pdf.y+=270;}}}pdf.end();return;}
+  const children=[new Paragraph({heading:HeadingLevel.HEADING_1,children:[new TextRun({text:'Concrete Pro - Photo Evidence Report',bold:true,font:'Arial'})]}),new Paragraph({children:[new TextRun({text:job?job.name:summary,bold:!!job,font:'Arial'})]}),...(job?[new Paragraph({children:[new TextRun({text:summary,font:'Arial'})]})]:[])];for(const row of rows){children.push(new Paragraph({heading:HeadingLevel.HEADING_2,children:[new TextRun({text:`${String(row.concrete_element||'Concrete').replaceAll('_',' ')} - ${ConcreteCapture.summary(row)||String(row.concrete_stage||'Photo').replaceAll('_',' ')}`,bold:true,font:'Arial'})]}));const image=localPhoto(row.photo_path);if(image){const rendered=await renderForEmbedStamped(image,'standard','jpeg',row);if(rendered)children.push(new Paragraph({children:[new ImageRun({type:rendered.ext==='.png'?'png':'jpg',data:rendered.buffer,transformation:await fittedWordImage(rendered.buffer,480,320)})]}));}children.push(new Paragraph({children:[new TextRun({text:[row.concrete_location,row.concrete_mix&&`Mix/spec: ${row.concrete_mix}`,row.note,row.concrete_reviewed_observation&&`User Reviewed visual observation: ${row.concrete_reviewed_observation}`,...(row.footprints||[]).map(footprintSummary)].filter(Boolean).join(' | '),font:'Arial'})]}));for(const ticket of row.supporting_photos||[]){children.push(new Paragraph({children:[new TextRun({text:ticket.reference_type==='specification'?'LINKED SPECIFICATION PHOTO':'LINKED BATCH TICKET PHOTO',bold:true,font:'Arial'})]}));const ti=localPhoto(ticket.photo_path);if(ti){const rendered=await renderForEmbedStamped(ti,'standard','jpeg',ticket);if(rendered)children.push(new Paragraph({children:[new ImageRun({type:rendered.ext==='.png'?'png':'jpg',data:rendered.buffer,transformation:await fittedWordImage(rendered.buffer,400,260)})]}));}}}const buffer=await Packer.toBuffer(new Document({sections:[{children}]}));res.setHeader('Content-Type','application/vnd.openxmlformats-officedocument.wordprocessingml.document');res.setHeader('Content-Disposition','attachment; filename="concrete-photo-evidence-report.docx"');res.send(buffer);
 }catch(e){console.error('[concrete.report]',e);res.status(500).json({error:'concrete report failed'});}});
 
 app.get('/api/captures/search', requireAuth, async (req,res)=>{
   try{
     const q=String(req.query.q||'').trim();
     const vals=[req.user.id],where=['c.user_id=$1'];
-    if(q){vals.push(`%${q}%`);const n=vals.length;where.push(`(COALESCE(c.photo_title,'') ILIKE $${n} OR COALESCE(c.note,'') ILIKE $${n} OR COALESCE(c.address,'') ILIKE $${n} OR COALESCE(c.captured_by,'') ILIKE $${n} OR COALESCE(array_to_string(c.area_tags,' '),'') ILIKE $${n} OR COALESCE(c.defect_type,'') ILIKE $${n} OR COALESCE(j.name,'') ILIKE $${n} OR COALESCE(j.job_number,'') ILIKE $${n} OR COALESCE(j.customer,'') ILIKE $${n} OR to_char(c.created_at,'MM/DD/YYYY HH12:MI AM') ILIKE $${n})`);}
+    if(q){vals.push(`%${q}%`);const n=vals.length;where.push(`(COALESCE(c.photo_title,'') ILIKE $${n} OR COALESCE(c.note,'') ILIKE $${n} OR COALESCE(c.concrete_reviewed_observation,'') ILIKE $${n} OR COALESCE(c.address,'') ILIKE $${n} OR COALESCE(c.captured_by,'') ILIKE $${n} OR COALESCE(array_to_string(c.area_tags,' '),'') ILIKE $${n} OR COALESCE(c.defect_type,'') ILIKE $${n} OR COALESCE(j.name,'') ILIKE $${n} OR COALESCE(j.job_number,'') ILIKE $${n} OR COALESCE(j.customer,'') ILIKE $${n} OR to_char(c.created_at,'MM/DD/YYYY HH12:MI AM') ILIKE $${n})`);}
     if(Number.isInteger(Number(req.query.job_id))){vals.push(Number(req.query.job_id));where.push(`c.job_id=$${vals.length}`);}
     const timestamp=value=>typeof value==='string'&&/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)&&Number.isFinite(Date.parse(value));
     if((req.query.from_at&&!timestamp(req.query.from_at))||(req.query.to_before&&!timestamp(req.query.to_before)))return res.status(400).json({error:'invalid date range'});
@@ -955,7 +963,7 @@ app.get('/api/captures/search', requireAuth, async (req,res)=>{
     if(req.query.missing_address==='1')where.push(`COALESCE(c.address,'')=''`);
     for(const marker of ['favorite','flagged'])if(req.query[marker]==='1')where.push(`c.${marker}=true`);
     if(req.query.has_photo==='1')where.push(`c.photo_path IS NOT NULL`);
-    const rows=(await pool.query(`SELECT c.*,j.name job_name,j.job_number FROM captures c LEFT JOIN jobs j ON j.id=c.job_id WHERE ${where.join(' AND ')} ORDER BY c.created_at DESC LIMIT 500`,vals)).rows;
+    const rows=(await pool.query(`SELECT c.*,(SELECT community_id FROM hoa_maintenance_items WHERE capture_id=c.id LIMIT 1) duplicate_community_id,(SELECT area FROM hoa_maintenance_items WHERE capture_id=c.id LIMIT 1) duplicate_category,(SELECT item_type FROM hoa_maintenance_items WHERE capture_id=c.id LIMIT 1) duplicate_record_type,j.name job_name,j.job_number FROM captures c LEFT JOIN jobs j ON j.id=c.job_id WHERE ${where.join(' AND ')} ORDER BY c.created_at DESC LIMIT 500`,vals)).rows;
     res.json(rows);
   }catch(err){console.error('[captures.search]',err);res.status(500).json({error:'search failed'});}
 });
@@ -2242,6 +2250,18 @@ app.post('/api/pairs', requireAuth, async (req, res) => {
     if(assigned&&unassigned)await client.query('UPDATE captures SET job_id=$1 WHERE id=$2 AND user_id=$3 AND job_id IS NULL',[assigned.job_id,unassigned.id,req.user.id]);
     await client.query('COMMIT');logEvent(req.user.id,'pair_create',{});res.json({ok:true,pair:row});
   }catch(err){if(client)await client.query('ROLLBACK');if(err?.code==='23505')return res.status(409).json({error:'already paired'});console.error('[pairs.create]',err.message);res.status(500).json({error:'pair failed'});}finally{client?.release();}
+});
+
+// Focused preference update, original evidence and pair membership are unchanged.
+app.patch('/api/pairs/:id', requireAuth, async (req,res) => {
+  try {
+    if (!(await featureAllowed(req.user.id,'before_after'))) return res.status(403).json({error:'feature unavailable'});
+    const id=Number(req.params.id), opacity=req.body?.comparison_opacity;
+    if(!Number.isInteger(id)||id<1||typeof opacity!=='number'||!Number.isFinite(opacity)||opacity<0||opacity>1)return res.status(400).json({error:'Opacity must be between 0 and 1'});
+    const pair=(await pool.query('UPDATE capture_pairs SET comparison_opacity=$1 WHERE id=$2 AND user_id=$3 RETURNING *',[opacity,id,req.user.id])).rows[0];
+    if(!pair)return res.status(404).json({error:'Pair not found'});
+    res.json({ok:true,pair});
+  }catch(e){console.error('[pairs.update]',e.message);res.status(500).json({error:'Pair could not be updated'});}
 });
 
 app.post('/api/pairs/unpair', requireAuth, async (req, res) => {

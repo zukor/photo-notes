@@ -28,9 +28,9 @@ function editionSwitcherOptions() {
 }
 function selectedEdition(){return isIssueReporterClient()?'issue':isBasicClient()?'basic':isRoadIssuesClient()?'roads':isGeneralProClient()?'pro':state.proType;}
 function issueFabLabel(){return 'Report Issue';}
-function featureOn(name) { return (name === 'camera_readers' ? isProClient() && ['general','paving','asphalt','concrete','property','hoa','contractor','roofer'].includes(state.proType) : isPavingClient()) && (!state.me || !state.me.feature_access || state.me.feature_access[name] !== false); }
+function featureOn(name) { return (['camera_readers','before_after'].includes(name) ? isProClient() && ['general','paving','asphalt','concrete','property','hoa','contractor','roofer'].includes(state.proType) : isPavingClient()) && (!state.me || !state.me.feature_access || state.me.feature_access[name] !== false); }
 function measurementOn(){return isConcreteClient()||featureOn('measurements');}
-function beforeAfterOn(){return isConcreteClient()||featureOn('before_after');}
+function beforeAfterOn(){return featureOn('before_after');}
 function isMacClient() { return /Macintosh|MacIntel/.test(navigator.userAgent + ' ' + navigator.platform) && !isIOS(); }
 let recognizer = null;
 let dictationActive = false;
@@ -291,6 +291,7 @@ async function doLogin() {
 
 
 function renderApp() {
+  window.PhotoNotesMatchCamera?.stop();
   document.getElementById('captureShareDialog')?.remove();
   el.innerHTML = `
     <div class="wrap">
@@ -361,7 +362,7 @@ function renderApp() {
       const r=await api('/api/switch-edition',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({edition})});
       if(!r.ok)throw new Error();
       stopCaptureDictation();
-      state.view=edition==='roads'?'road-report':(edition==='basic'||edition==='issue')?'capture':(IS_HANDHELD?'capture':'organize');state._captureShareSave=null;state.photoFile=null;state._note='';state._captureTemplateName='';state._concreteCapture=null;state._pavingReason=null;
+      state.view=edition==='roads'?'road-report':(edition==='basic'||edition==='issue')?'capture':(IS_HANDHELD?'capture':'organize');state._captureShareSave=null;state.photoFile=null;state._note='';state._captureTemplateName='';state._concreteCapture=null;state._pavingReason=null;state._duplicateContext=null;
       await boot();toast('Version switched');
     }catch(e){toast('Version could not be switched. Please try again.');}
     finally{editionSwitcher.disabled=false;editionSwitcher.value=selectedEdition();}
@@ -390,6 +391,7 @@ function renderApp() {
     picker.addEventListener('keydown',event=>{if(event.key==='Escape'){event.preventDefault();event.stopPropagation();picker.open=false;heading.focus();}});
     editionSwitcher.hidden=true;editionSwitcher.after(picker);
   }
+  void window.PhotoNotesQR?.resume({api,state,renderApp,toast});
   refreshIssueAttention();
   const updates=document.getElementById('issueUpdates');if(updates)updates.onclick=e=>{e.preventDefault();state.view='my-issues';renderApp();};
   const issueFab = document.getElementById('issueFab'); if (issueFab) issueFab.onclick = openIssueReporter;
@@ -418,7 +420,7 @@ function renderApp() {
   else if (state.view === 'hoa-visits') renderHoaVisits();
   else if (state.view === 'hoa-visit') renderHoaVisit(state.hoaVisitId);
   else if (state.view === 'hoa-assets') renderHoaAssets();
-  else if (state.view === 'hoa-asset') renderHoaAsset(state.hoaAssetId);
+  else if (state.view === 'hoa-asset') {const id=state.hoaAssetId;renderHoaAsset(id).then(()=>{if(state.view==='hoa-asset'&&state.hoaAssetId===id)window.PhotoNotesQR?.mountAsset({id,edition:selectedEdition(),api,esc,toast});});}
   else if (state.view === 'hoa-inspections') renderHoaInspections();
   else if (state.view === 'hoa-communities') renderHoaCommunities();
   else if (state.view === 'hoa-dashboard') renderHoaDashboard();
@@ -634,6 +636,44 @@ function renderPavingToolCapture(){
   else{cameraReaderType=reason.id;renderCameraReader();}
 }
 
+function duplicatePhotoNote(source) {
+  if(captureSavePending||!PhotoNotesDuplicate.editions.includes(selectedEdition()))return;
+  const dialog=document.createElement('dialog');dialog.id='duplicatePhotoDialog';dialog.style.cssText='color:#000;text-align:left;max-width:480px';
+  dialog.innerHTML='<h2>Duplicate for New Photo</h2><p>Start a new Photo Note using reusable context. Take or select a new photo, review the context, and enter new details. The original photo, location, evidence and relationships stay separate.</p><label for="duplicateCopyNotes"><input id="duplicateCopyNotes" type="checkbox"> Copy Notes</label><p>Notes may describe the original photograph. Review any copied notes before saving.</p><button class="btn" id="duplicateStart">Start New Capture</button><button class="btn secondary" id="duplicateCancel">Cancel</button>';
+  document.body.append(dialog);dialog.addEventListener('close',()=>dialog.remove());dialog.querySelector('#duplicateCancel').onclick=()=>dialog.close();
+  dialog.querySelector('#duplicateStart').onclick=()=>{
+    if((state.photoFile||state._note)&&!confirm('Discard the current unsaved Capture and start from this Photo Note?'))return;
+    if(window.PhotoNotesIncidents?.active()){toast('Return to Ordinary Capture in the incident workflow before starting a new Photo Note.');return;}
+    const context=PhotoNotesDuplicate.context(source,selectedEdition(),dialog.querySelector('#duplicateCopyNotes').checked);
+    stopCaptureDictation();captureLocationGeneration++;
+    if(state._previewUrl)URL.revokeObjectURL(state._previewUrl);
+    state._previewUrl=null;state.photoFile=null;state.location=null;state.address=null;state._locationPromise=null;state._qualityPromise=null;state._qualityResult=null;state._captureShareSave=null;
+    state._dims=freshDims();state._measure=null;state.urgency='standard';state._note=context.note;state.area=context.topics[0]||'';state.jobId=context.jobId;state._concreteCapture=context.concrete||null;state._pavingReason='proposal';state._captureTemplateName='';state._duplicateContext=context;
+    if(state.area&&!state.areas.includes(state.area))state.areas=[...state.areas,state.area];
+    if(context.property)state.communityId=context.property.communityId;
+    dialog.close();state.view='capture';renderApp();
+  };dialog.showModal();
+}
+function duplicateAction(c){return PhotoNotesDuplicate.editions.includes(selectedEdition())&&['organize','edit'].includes(state.view)?`<button type="button" class="btn secondary slim duplicate-photo-note" data-id="${c.id}">Duplicate for New Photo</button>`:'';}
+function mountDuplicateContext(){
+  const d=state._duplicateContext;if(!d)return;
+  const body=document.getElementById('body'),box=document.createElement('section');box.id='duplicateCaptureContext';box.style.cssText='color:#000;text-align:left';
+  box.innerHTML='<p><strong>Started from existing Photo Note</strong>. Review the copied context and take or select a new photograph.</p>';
+  if(!isHoaClient())box.innerHTML+=`<p id="duplicateTopicSummary">Topic: ${esc(state.area||'No Topic')}</p>`;
+  if(!isHoaClient()&&!isConcreteClient()){
+    box.innerHTML+=`<label for="duplicateJob">Job / project</label><select id="duplicateJob"><option value="">No job selected</option>${state.jobs.map(j=>`<option value="${j.id}" ${String(j.id)===String(state.jobId)?'selected':''}>${esc(j.job_number?j.job_number+' - '+j.name:j.name)}</option>`).join('')}</select>`;
+    box.querySelector('select').onchange=e=>state.jobId=e.target.value;
+  }
+  body.prepend(box);
+  if(d.property){
+    const category=document.getElementById('hoaArea'),type=document.getElementById('hoaType');
+    if(category&&[...category.options].some(o=>o.value===d.property.category))category.value=d.property.category;
+    if(type&&[...type.options].some(o=>o.value===d.property.recordType))type.value=d.property.recordType;
+    if(category)category.onchange=()=>d.property.category=category.value;
+    if(type)type.addEventListener('change',()=>d.property.recordType=type.value);
+  }
+}
+
 function renderCapture() {
   if(isPavingClient()&&pavingPhotoReason().id!=='proposal'){renderPavingToolCapture();return;}
   const body = document.getElementById('body');
@@ -644,7 +684,7 @@ function renderCapture() {
     <label>Photo</label>
     <button type="button" class="btn" id="takephoto">Take Photo</button>
     <button type="button" class="btn secondary" id="choosephoto" style="margin-top:8px">Choose from library or files</button>
-    ${featureOn('camera_readers') && !isPavingClient() ? `<button type="button" class="btn secondary" id="openCameraTools" style="margin-top:8px">Camera Tools</button>` : ''}
+    ${(featureOn('camera_readers') || beforeAfterOn()) && !isPavingClient() ? `<button type="button" class="btn secondary" id="openCameraTools" style="margin-top:8px">Camera Tools</button>` : ''}
     <input type="file" accept="image/*" capture="environment" id="photoCam" style="display:none" />
     <input type="file" accept="image/*" id="photoLib" style="display:none" />
     <div class="photo-box capture-preview" id="previewBox" style="display:none;margin-top:12px"><img id="preview" alt="Selected photo preview" style="display:block" /><div class="capture-preview-actions"><button type="button" class="btn secondary" id="retakePhoto">Retake Photo</button><button type="button" class="btn secondary" id="cancelPhoto">Cancel Photo</button></div></div>
@@ -732,6 +772,7 @@ function renderCapture() {
       acquireLocation();
     }
   }
+  mountDuplicateContext();
 }
 
 // ================= Paving Pro camera tools =================
@@ -861,17 +902,53 @@ async function loadCameraReadings() {
   }catch(e){box.innerHTML='<p class="status">Saved records could not be loaded.</p>';}
 }
 
+let alignmentDirectReference=null, alignmentSavedAfter=null, alignmentUploadId=null, alignmentUploadForm=null, alignmentPreviewUrl=null;
+function matchingPhotoAction(c){return beforeAfterOn()&&c.photo_path?`<button type="button" class="btn secondary slim" data-match-photo="${c.id}">Take Matching Photo</button>`:'';}
+function startMatchingPhoto(c){if(!beforeAfterOn()||!c?.photo_path)return;alignmentDirectReference=c;state.view='alignment';renderApp();}
 let alignmentBefore=null, alignmentAfterFile=null, alignmentCaptures=[], alignmentPairedIds=new Set();
 async function renderAlignmentTool() {
+  if(!beforeAfterOn()){state.view='capture';renderApp();return;}
+  const direct=alignmentDirectReference;alignmentDirectReference=null;alignmentSavedAfter=null;alignmentUploadId=null;alignmentUploadForm=null;
+  if(alignmentPreviewUrl){URL.revokeObjectURL(alignmentPreviewUrl);alignmentPreviewUrl=null;}
   const body=pavingToolMount(),embedded=pavingToolEmbedded(); body.className='workflow-camera-tools'; alignmentBefore=null; alignmentAfterFile=null;
-  body.innerHTML=`${embedded?'':'<button class="backlink" id="alignBack">‹ Back to Camera Tools</button>'}<div class="workflow-intro"><strong>Before &amp; After Alignment</strong><span>Select the original photo, use it as your framing reference, then compare the new photo before saving the pair.</span></div><section class="alignment-step"><div class="formhead">1. Choose the Before Photo</div><div id="alignBeforeList"><p class="status">Loading your photos...</p></div></section><section class="alignment-step" id="alignTakeStep" hidden><div class="formhead">2. Match the Framing</div><p class="status">Stand in the same location. Match the camera height, direction, horizon, and visible landmarks shown below.</p><img class="alignment-reference" id="alignReference" alt="Before-photo framing reference"><button class="btn" id="alignTake">Take After Photo</button><button class="btn secondary" id="alignChoose">Choose Existing Photo</button><input type="file" accept="image/*" capture="environment" id="alignCam" style="display:none"><input type="file" accept="image/*" id="alignLib" style="display:none"></section><section class="alignment-step" id="alignCompareStep" hidden><div class="formhead">3. Check the Alignment</div><div class="alignment-overlay"><img id="alignBeforeImage" alt="Before"><img id="alignAfterImage" alt="After"></div><label for="alignOpacity">Comparison Overlay</label><input id="alignOpacity" class="blue-range" type="range" min="0" max="100" value="50"><p class="status">Move the slider. Fixed objects should remain in the same position. Retake the after photo if they shift substantially.</p><label for="alignNote">After Photo Note</label><textarea id="alignNote" placeholder="Describe the completed work..."></textarea><div class="row"><button class="btn secondary" id="alignRetake">Retake</button><button class="btn" id="alignSave">Save Matched Pair</button></div></section>`;
+  body.innerHTML=`${embedded?'':'<button class="backlink" id="alignBack">‹ Back to Camera Tools</button>'}<div class="workflow-intro"><strong>Before &amp; After Alignment</strong><span>Select the original photo, use it as your framing reference, then compare the new photo before saving the pair.</span></div><section class="alignment-step"><div class="formhead">1. Choose the Before Photo</div><div id="alignBeforeList"><p class="status">Loading your photos...</p></div></section><section class="alignment-step" id="alignTakeStep" hidden><div class="formhead">2. Match the Framing</div><p class="status">Stand in the same location. Match the camera height, direction, horizon, and visible landmarks shown below.</p><img class="alignment-reference" id="alignReference" alt="Before-photo framing reference"><p class="status">The native camera opens separately. The reference overlay appears after you return with a photograph.</p>${isConcreteClient()?`<label for="alignPhase">New Photo Phase</label><select id="alignPhase"><option value="">Choose phase</option>${ConcreteCapture.phases.map(p=>`<option value="${p.id}">${esc(p.label)}</option>`).join('')}</select><label for="alignPurpose">New Photo Purpose</label><select id="alignPurpose"><option value="">Choose purpose</option></select>`:''}<button class="btn" id="alignTake">Take After Photo</button>${window.PhotoNotesMatchCamera?.available()?'<button class="btn secondary" id="alignMatchCamera">Match Camera</button>':''}<button class="btn secondary" id="alignChoose">Choose Existing Photo</button><input type="file" accept="image/*" capture="environment" id="alignCam" style="display:none"><input type="file" accept="image/*" id="alignLib" style="display:none"></section><section class="alignment-step" id="alignCompareStep" hidden><div class="formhead">3. Check the Alignment</div><div class="alignment-overlay"><img id="alignBeforeImage" alt="Before"><img id="alignAfterImage" alt="After"></div><label for="alignOpacity">Comparison Overlay</label><input id="alignOpacity" class="blue-range" type="range" min="0" max="100" value="50"><p class="status">Move the slider. Fixed objects should remain in the same position. Retake the after photo if they shift substantially.</p><label for="alignNote">After Photo Note</label><textarea id="alignNote" placeholder="Describe the completed work..."></textarea><div class="row"><button class="btn secondary" id="alignRetake">Retake</button><button class="btn" id="alignSave">Save Matched Pair</button></div><p class="status" id="alignSaveStatus" role="status"></p></section>`;
   if(!embedded)document.getElementById('alignBack').onclick=()=>{state.view='camera-tools';renderApp();};
-  const list=document.getElementById('alignBeforeList');try{const [r,p]=await Promise.all([api('/api/captures'),api('/api/pairs')]);const captures=r.ok?await r.json():[];const pairs=p.ok?await p.json():[];if(document.getElementById('alignBeforeList')!==list)return;alignmentCaptures=captures;alignmentPairedIds=new Set();pairs.forEach(x=>{alignmentPairedIds.add(Number(x.before_id));alignmentPairedIds.add(Number(x.after_id));});renderAlignmentChoices();}catch(e){if(document.getElementById('alignBeforeList')!==list)return;list.innerHTML='<p class="status">Photos could not be loaded.</p>';}
+  const list=document.getElementById('alignBeforeList');try{const [r,p]=await Promise.all([api('/api/captures'),api('/api/pairs')]);const captures=r.ok?await r.json():[];const pairs=p.ok?await p.json():[];if(document.getElementById('alignBeforeList')!==list)return;alignmentCaptures=captures;alignmentPairedIds=new Set();pairs.forEach(x=>{alignmentPairedIds.add(Number(x.before_id));alignmentPairedIds.add(Number(x.after_id));});renderAlignmentChoices();if(direct){if(alignmentPairedIds.has(Number(direct.id))){toast('This photo already belongs to a pair. Unpair it before creating another pair.');}else{if(!alignmentCaptures.some(c=>c.id===direct.id))alignmentCaptures.push(direct);chooseAlignmentBefore(direct.id);}}}catch(e){if(document.getElementById('alignBeforeList')!==list)return;list.innerHTML='<p class="status">Photos could not be loaded.</p>';}
 }
 function renderAlignmentChoices(){const box=document.getElementById('alignBeforeList');if(!box)return;const photos=alignmentCaptures.filter(c=>c.photo_path&&!alignmentPairedIds.has(Number(c.id))).slice(0,30);box.innerHTML=photos.length?`<div class="alignment-choice-grid">${photos.map(c=>`<button class="alignment-choice" data-id="${c.id}"><span class="photo-title">${esc(c.photo_title||'Untitled photo')}</span><img src="${capturePhotoSrc(c)}" alt=""><span><strong>GPS</strong><br>${esc(formatGpsClient(c))}<br><strong>Address</strong><br>${esc(c.address||'No address')}</span></button>`).join('')}</div>`:'<p class="empty">There are no unpaired project photos available. Save a new project photo first, then return here.</p>';box.querySelectorAll('.alignment-choice').forEach(b=>b.onclick=()=>chooseAlignmentBefore(Number(b.dataset.id)));}
-function chooseAlignmentBefore(id){alignmentBefore=alignmentCaptures.find(c=>c.id===id);document.querySelectorAll('.alignment-choice').forEach(b=>b.classList.toggle('selected',Number(b.dataset.id)===id));document.getElementById('alignReference').src=photoSrc(alignmentBefore.photo_path);document.getElementById('alignTakeStep').hidden=false;document.getElementById('alignTake').onclick=()=>document.getElementById('alignCam').click();document.getElementById('alignChoose').onclick=()=>document.getElementById('alignLib').click();const pick=e=>{const f=e.target.files&&e.target.files[0];if(!f)return;alignmentAfterFile=f;showAlignmentComparison();e.target.value='';};document.getElementById('alignCam').onchange=pick;document.getElementById('alignLib').onchange=pick;document.getElementById('alignTakeStep').scrollIntoView({behavior:'smooth'});}
-function showAlignmentComparison(){document.getElementById('alignBeforeImage').src=photoSrc(alignmentBefore.photo_path);document.getElementById('alignAfterImage').src=URL.createObjectURL(alignmentAfterFile);document.getElementById('alignCompareStep').hidden=false;const range=document.getElementById('alignOpacity'),after=document.getElementById('alignAfterImage');range.oninput=()=>after.style.opacity=String(Number(range.value)/100);after.style.opacity='.5';document.getElementById('alignRetake').onclick=()=>document.getElementById('alignCam').click();document.getElementById('alignSave').onclick=saveAlignedPair;document.getElementById('alignCompareStep').scrollIntoView({behavior:'smooth'});}
-async function saveAlignedPair(){if(!alignmentBefore||!alignmentAfterFile)return;const before=alignmentBefore,file=alignmentAfterFile,embedded=pavingToolEmbedded(),btn=document.getElementById('alignSave');setPavingToolBusy(['alignTake','alignChoose','alignRetake'],true);btn.disabled=true;btn.textContent='Saving...';try{const fd=new FormData();fd.append('photo',file);fd.append('note',document.getElementById('alignNote').value.trim());fd.append('kind','note');fd.append('area_tags',JSON.stringify(before.area_tags||[]));if(before.job_id)fd.append('job_id',String(before.job_id));const loc=await getLocationOnce();if(loc){fd.append('latitude',loc.lat);fd.append('longitude',loc.lng);}const cr=await api('/api/captures',{method:'POST',body:fd});if(!cr.ok)throw new Error();const after=await cr.json();const pr=await api('/api/pairs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({before_id:before.id,after_id:after.id})});if(!pr.ok)throw new Error();if(document.getElementById('alignSave')!==btn)return;toast('Before and after pair saved');setPavingToolBusy([],false);if(embedded)renderAlignmentTool();else{state.view='organize';renderApp();}}catch(e){if(document.getElementById('alignSave')!==btn)return;toast('Matched pair could not be saved');btn.disabled=false;btn.textContent='Save Matched Pair';}finally{if(document.getElementById('alignSave')===btn)setPavingToolBusy(['alignTake','alignChoose','alignRetake'],false);}}
+function chooseAlignmentBefore(id){if(alignmentSavedAfter)return toast('Retry pairing the saved photo, or return to the library.');alignmentBefore=alignmentCaptures.find(c=>c.id===id);if(!alignmentBefore)return;alignmentAfterFile=null;document.getElementById('alignCompareStep').hidden=true;if(isConcreteClient()){const phase=document.getElementById('alignPhase'),purpose=document.getElementById('alignPurpose');phase.value=alignmentBefore.concrete_phase||'';const paint=()=>{purpose.innerHTML='<option value="">Choose purpose</option>'+(ConcreteCapture.phase(phase.value)?.purposes||[]).map(p=>`<option value="${p[0]}">${esc(p[1])}</option>`).join('');};paint();purpose.value=alignmentBefore.concrete_purpose||'';phase.onchange=paint;}document.querySelectorAll('.alignment-choice').forEach(b=>b.classList.toggle('selected',Number(b.dataset.id)===id));document.getElementById('alignReference').src=photoSrc(alignmentBefore.photo_path);document.getElementById('alignTakeStep').hidden=false;document.getElementById('alignTake').onclick=()=>document.getElementById('alignCam').click();const live=document.getElementById('alignMatchCamera');if(live)live.onclick=()=>window.PhotoNotesMatchCamera.open(capturePhotoSrc(alignmentBefore),f=>{alignmentAfterFile=f;alignmentUploadForm=null;alignmentUploadId=crypto.randomUUID();showAlignmentComparison();},native=>{if(!document.getElementById('alignTake'))return;if(native)document.getElementById('alignCam').click();else{toast('Live preview unavailable. Use Take After Photo, then compare and retake.');document.getElementById('alignTake').focus();}});document.getElementById('alignChoose').onclick=()=>document.getElementById('alignLib').click();const pick=e=>{const f=e.target.files&&e.target.files[0];if(!f)return;alignmentAfterFile=f;alignmentSavedAfter=null;alignmentUploadForm=null;alignmentUploadId=crypto.randomUUID();showAlignmentComparison();e.target.value='';};document.getElementById('alignCam').onchange=pick;document.getElementById('alignLib').onchange=pick;document.getElementById('alignTakeStep').scrollIntoView({behavior:'smooth'});}
+function showAlignmentComparison(){document.getElementById('alignBeforeImage').src=photoSrc(alignmentBefore.photo_path);if(alignmentPreviewUrl)URL.revokeObjectURL(alignmentPreviewUrl);alignmentPreviewUrl=URL.createObjectURL(alignmentAfterFile);document.getElementById('alignAfterImage').src=alignmentPreviewUrl;document.getElementById('alignCompareStep').hidden=false;const range=document.getElementById('alignOpacity'),after=document.getElementById('alignAfterImage');range.oninput=()=>after.style.opacity=String(Number(range.value)/100);after.style.opacity=String(Number(range.value)/100);document.getElementById('alignRetake').onclick=()=>document.getElementById('alignCam').click();document.getElementById('alignSave').onclick=saveAlignedPair;document.getElementById('alignCompareStep').scrollIntoView({behavior:'smooth'});}
+async function saveAlignedPair(){
+  if(!alignmentBefore||!alignmentAfterFile)return;
+  const before=alignmentBefore,file=alignmentAfterFile,embedded=pavingToolEmbedded(),btn=document.getElementById('alignSave'),status=document.getElementById('alignSaveStatus'),opacity=Number(document.getElementById('alignOpacity').value)/100,edition=selectedEdition(),email=state.me.email;
+  let savedAfter=alignmentSavedAfter;const requestId=alignmentUploadId||crypto.randomUUID();alignmentUploadId=requestId;
+  const busy=['alignTake','alignChoose','alignRetake','alignMatchCamera','alignPhase','alignPurpose'];setPavingToolBusy(busy,true);document.querySelectorAll('.alignment-choice').forEach(b=>b.disabled=true);btn.disabled=true;btn.textContent='Saving...';
+  try{
+    if(!savedAfter){
+      let fd=alignmentUploadForm;if(!fd){fd=new FormData();fd.append('photo',file);fd.append('note',document.getElementById('alignNote').value.trim());fd.append('kind','note');fd.append('area_tags',JSON.stringify(before.area_tags||[]));if(before.job_id)fd.append('job_id',String(before.job_id));
+      if(isConcreteClient()){
+        const context=ConcreteCapture.normalize({concrete_phase:document.getElementById('alignPhase').value,concrete_purpose:document.getElementById('alignPurpose').value});
+        for(const key of ['concrete_phase','concrete_purpose','concrete_stage'])if(context[key])fd.append(key,context[key]);
+        for(const key of ['concrete_element','concrete_location'])if(before[key])fd.append(key,before[key]);
+        fd.append('concrete_condition','not_assessed');fd.append('concrete_severity','none');
+      }
+      const loc=await getLocationOnce();if(loc){fd.append('latitude',loc.lat);fd.append('longitude',loc.lng);}
+      if(document.getElementById('alignSave')===btn)alignmentUploadForm=fd;}
+      const headers=PhotoNotesQueue.headers({requestId,edition,account:await PhotoNotesQueue.accountKey(email)});
+      const cr=await api('/api/captures',{method:'POST',headers,body:fd});if(!cr.ok)throw Error('Photo could not be saved. Try again.');savedAfter=await cr.json();if(document.getElementById('alignSave')===btn)alignmentSavedAfter=savedAfter;
+    }
+    const after=savedAfter;
+    const pr=await api('/api/pairs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({before_id:before.id,after_id:after.id,comparison_opacity:opacity})});
+    if(!pr.ok){const pairsResponse=await api('/api/pairs');const pairs=pairsResponse.ok?await pairsResponse.json():[];if(!pairs.some(p=>Number(p.before_id)===before.id&&Number(p.after_id)===after.id))throw Error('Pairing failed');}
+    toast('Before and after pair saved');if(document.getElementById('alignSave')!==btn)return;setPavingToolBusy([],false);if(embedded)renderAlignmentTool();else{state.view=isHoaClient()?'photo-library':'organize';renderApp();}
+  }catch(e){
+    if(document.getElementById('alignSave')!==btn)return;
+    const message=alignmentSavedAfter?'Photo saved, but Before/After pairing could not be completed. Retry Pairing uses the saved photo. You can also find both photos in the Photo Library.':e.message;
+    status.textContent=message;toast(message);btn.disabled=false;btn.textContent=alignmentSavedAfter?'Retry Pairing':'Save Matched Pair';
+    if(alignmentSavedAfter){document.getElementById('alignNote').disabled=true;document.querySelectorAll('.alignment-choice').forEach(b=>b.disabled=true);}
+  }finally{if(document.getElementById('alignSave')===btn&&!alignmentSavedAfter){setPavingToolBusy(busy,false);document.querySelectorAll('.alignment-choice').forEach(b=>b.disabled=false);}}
+}
+
 
 // ================= Paving Pro ticket scanner =================
 let ticketPhotoFile = null, ticketDraft = null;
@@ -1761,7 +1838,7 @@ async function showPendingPhotos(){
   const retry=document.createElement('button');retry.className='btn';retry.textContent='Retry Current Version';retry.onclick=async()=>{dialog.close();await restoreOfflineQueue();};
   const close=document.createElement('button');close.className='btn secondary';close.textContent='Close';close.onclick=()=>dialog.close();dialog.append(retry,close);dialog.addEventListener('close',()=>dialog.remove());document.body.append(dialog);dialog.showModal();
 }
-function payloadFormData(p){const fd=new FormData();if(p.photo)fd.append('photo',p.photo,p.photoName||'offline-photo.jpg');fd.append('note',p.note||'');fd.append('area_tags',p.area_tags||'[]');fd.append('kind',p.kind||'note');if(p.job_id)fd.append('job_id',p.job_id);for(const k of ['urgency','paving_photo_reason','concrete_phase','concrete_purpose','concrete_element','concrete_stage','concrete_condition','concrete_severity','concrete_location','concrete_mix','hoa_community_id','hoa_title','hoa_item_type','hoa_priority','hoa_area','hoa_directed_to','hoa_budget_source','hoa_photo_stage','hoa_target_date'])if(p[k])fd.append(k,p[k]);if(p.latitude!=null)fd.append('latitude',p.latitude);if(p.longitude!=null)fd.append('longitude',p.longitude);if(p.address)fd.append('address',p.address);return fd;}
+function payloadFormData(p){const fd=new FormData();if(p.photo)fd.append('photo',p.photo,p.photoName||'offline-photo.jpg');fd.append('note',p.note||'');fd.append('area_tags',p.area_tags||'[]');fd.append('kind',p.kind||'note');if(p.context_source_id)fd.append('context_source_id',p.context_source_id);if(p.job_id)fd.append('job_id',p.job_id);for(const k of ['urgency','paving_photo_reason','concrete_phase','concrete_purpose','concrete_element','concrete_stage','concrete_condition','concrete_severity','concrete_location','concrete_mix','hoa_community_id','hoa_title','hoa_item_type','hoa_priority','hoa_area','hoa_directed_to','hoa_budget_source','hoa_photo_stage','hoa_target_date'])if(p[k])fd.append(k,p[k]);if(p.latitude!=null)fd.append('latitude',p.latitude);if(p.longitude!=null)fd.append('longitude',p.longitude);if(p.address)fd.append('address',p.address);return fd;}
 
 function bgIndicator() {
   let box=document.getElementById('bgstatus');
@@ -1828,12 +1905,14 @@ async function saveCaptureDurably(options = {}) {
   await finishCaptureDictation();
   stopCaptureDictation();
   const note = document.getElementById('note').value.trim();
+  if(state._duplicateContext&&!state.photoFile){toast('Take or select a new photo before saving this Photo Note.');return false;}
   if (!state.photoFile && !note) { toast('Take a photo or add a note first'); return; }
   if(isHoaClient()&&!state.communityId){toast('Select an HOA or community');return;}
   if(isHoaClient()&&!document.getElementById('hoaTitle').value.trim()&&!note){toast('Enter an issue title or note');return;}
   if (!(await confirmPhotoQuality())) { toast('Photo kept for retaking'); return; }
   // Build the payload from the CURRENT state before we clear the form.
   const payload={photo:state.photoFile||null,photoName:state.photoFile&&state.photoFile.name||'offline-photo.jpg',note,area_tags:JSON.stringify(isHoaClient()?[document.getElementById('hoaArea').value]:(state.area?[state.area]:[])),kind:'note'};
+  if(state._duplicateContext){payload.context_source_id=state._duplicateContext.sourceId;if(state.jobId)payload.job_id=state.jobId;}
   if(document.getElementById('captureUrgency'))payload.urgency=state.urgency==='urgent'?'urgent':'standard';
   if(isHoaClient()){Object.assign(payload,{hoa_community_id:state.communityId,hoa_title:document.getElementById('hoaTitle').value.trim(),hoa_item_type:document.getElementById('hoaType').value,hoa_priority:document.getElementById('hoaPriority').value,hoa_area:document.getElementById('hoaArea').value,hoa_directed_to:(document.getElementById('hoaDirected')||{}).value||'',hoa_budget_source:'unassigned',hoa_photo_stage:'initial'});}
   if(isConcreteClient())Object.assign(payload,concreteCapturePayload());
@@ -1854,7 +1933,7 @@ async function saveCaptureDurably(options = {}) {
     state._captureShareSave={photo:payload.photo,signature,account:state.me?.email,edition:selectedEdition()};
     return true;
   }
-  state._captureShareSave=null;
+  state._captureShareSave=null;state._duplicateContext=null;
   // Only an explicit Save clears the saved draft and hands upload to the background.
   captureLocationGeneration++;
   state._captureTemplateName=''; state.urgency='standard'; state.photoFile = null; state._note = ''; state.location = null; state.address = null; state._locationPromise = null;
@@ -1888,7 +1967,7 @@ async function loadHoaItems(){const box=document.getElementById('hoaItems');if(!
 function hoaItemCard(i){const priority=i.priority||'routine';return `<article class="card" style="border-left:6px solid ${priority==='emergency'?'#b3261e':priority==='high'?'#e18a00':priority==='monitor'?'#6b7280':'#2455d9'}">${i.photo_path?`<img src="${photoSrc(i.photo_path)}" alt="Maintenance issue">`:''}<div class="row"><div><strong>${esc(i.title)}</strong><div class="meta">${esc(i.community_name)} · ${esc(i.area)}</div></div><span class="badge">${HOA_PRIORITY_LABELS[priority]}</span></div><div class="meta">${HOA_TYPE_LABELS[i.item_type]||i.item_type} · ${HOA_STATUS_LABELS[i.status]||i.status}${i.target_date?' · Due '+new Date(i.target_date+'T12:00:00').toLocaleDateString(uiLocale()):''}</div><div>${esc(i.description||'')}</div><div class="meta">${i.primary_assignee?'Assigned to '+esc(i.primary_assignee):'Not yet assigned'} · ${String(i.budget_source||'unassigned').replace('_',' ')}</div><button class="btn secondary slim" data-hoa-item="${i.id}">Open Maintenance Record</button></article>`;}
 async function renderHoaItem(id){const r=await api(`/api/hoa/items/${id}`);if(!r.ok){toast('Maintenance record could not be loaded');return;}const d=await r.json(),i=d.item,body=document.getElementById('body');body.innerHTML=`<button class="backlink" id="hoaItemBack">← Back to Maintenance</button><div class="workflow-intro"><strong>${esc(i.title)}</strong><span>${esc(i.community_name)} · Reported ${new Date(i.created_at).toLocaleString(uiLocale())}</span></div>${i.photo_path?`<div class="photo-box"><img src="${photoSrc(i.photo_path)}" alt="Maintenance issue" style="display:block"></div>`:''}<div class="organize-form-grid"><section class="organize-panel"><label>Title</label><input id="hiTitle" value="${esc(i.title)}"><label>Description</label><textarea id="hiDescription">${esc(i.description||'')}</textarea><label>Category</label><select id="hiArea">${HOA_AREAS.map(a=>`<option ${a===i.area?'selected':''}>${esc(a)}</option>`).join('')}</select><label>Primary Assignee</label><input id="hiAssignee" value="${esc(i.primary_assignee||'')}"><label>Directed To</label><input id="hiDirected" value="${esc(i.directed_to||'')}"></section><section class="organize-panel"><label>Status</label><select id="hiStatus">${optsFrom(HOA_STATUS_LABELS,i.status)}</select><label>Priority</label><select id="hiPriority">${optsFrom(HOA_PRIORITY_LABELS,i.priority)}</select><label>Target Completion Date</label><input id="hiTarget" type="date" value="${i.target_date?String(i.target_date).slice(0,10):''}"><label>Budget Source</label><select id="hiBudget"><option value="unassigned">Unassigned</option><option value="operating" ${i.budget_source==='operating'?'selected':''}>Operating Budget</option><option value="reserve" ${i.budget_source==='reserve'?'selected':''}>Reserve Budget</option><option value="board_determination" ${i.budget_source==='board_determination'?'selected':''}>Board Determination Needed</option></select><div class="row compact"><div><label>Estimated Cost</label><input id="hiEstimated" type="number" step="0.01" value="${i.estimated_cost||''}"></div><div><label>Actual Cost</label><input id="hiActual" type="number" step="0.01" value="${i.actual_cost||''}"></div></div><label>Board Approval</label><select id="hiApproval"><option value="not_required">Not Required</option><option value="requested">Requested</option><option value="agenda">On Meeting Agenda</option><option value="approved">Approved</option><option value="rejected">Rejected</option><option value="deferred">Deferred</option><option value="more_information">More Information Requested</option></select><label>Vendor or Completed By</label><input id="hiCompletedBy" value="${esc(i.completed_by||'')}" placeholder="Required before completion"><label>Completion Date</label><input id="hiCompletion" type="date" value="${i.completion_date?String(i.completion_date).slice(0,10):''}"></section></div><button class="btn" id="hoaItemSave">Save Maintenance Record</button><div class="formhead">Activity History</div><div>${d.history.map(h=>`<div style="border-bottom:1px solid var(--pn-border-ddd,#ddd);padding:8px 0"><strong>${esc(h.action==='created'?'Created':'Updated')}</strong><div class="meta">${esc(h.user_name||'System')} · ${new Date(h.created_at).toLocaleString(uiLocale())}${h.detail&&h.detail.fields?' · '+esc(h.detail.fields.join(', ')):''}</div></div>`).join('')}</div>`;document.getElementById('hiApproval').value=i.board_approval;document.getElementById('hoaItemBack').onclick=renderHoaMaintenance;document.getElementById('hoaItemSave').onclick=()=>saveHoaItem(id);}
 const renderHoaItemCore=renderHoaItem;
-renderHoaItem=async function(id){await renderHoaItemCore(id);const r=await api(`/api/hoa/items/${id}`);if(!r.ok)return;const d=await r.json(),body=document.getElementById('body'),oldPhoto=body.querySelector('.photo-box');if(oldPhoto)oldPhoto.remove();const intro=body.querySelector('.workflow-intro');if(!intro)return;const photos=d.photos||[],before=photos.find(p=>['initial','inspection'].includes(p.photo_stage))||photos[0],after=[...photos].reverse().find(p=>['completed_work','final_verification'].includes(p.photo_stage)),comparison=before&&after&&before.id!==after.id?`<div class="formhead">Before & After Maintenance Evidence</div><div class="evidence-comparison"><article class="card"><strong>Original Condition</strong><img src="${capturePhotoSrc(before)}" alt="Original maintenance condition">${photoLocationHtml(before)}${before.note?`<div>${esc(before.note)}</div>`:''}</article><article class="card"><strong>Completed / Verified</strong><img src="${capturePhotoSrc(after)}" alt="Completed maintenance work">${photoLocationHtml(after)}${after.note?`<div>${esc(after.note)}</div>`:''}</article></div>`:'';intro.insertAdjacentHTML('afterend',`${comparison}<div class="formhead">Photo Documentation Timeline</div><div class="organize-form-grid">${photos.map(p=>`<article class="card"><strong>${esc(String(p.photo_stage||'photo').replaceAll('_',' '))}</strong>${p.photo_path?`<img src="${photoSrc(p.photo_path)}" alt="Maintenance documentation">`:''}${window.PhotoComments?.enabled()?`<button class="btn secondary slim" data-html2canvas-ignore="true" data-comments-id="${p.id}">Comments</button>`:''}${photoLocationHtml(p)}<div class="meta">${new Date(p.created_at).toLocaleString(uiLocale())}</div>${p.note?`<div>${esc(p.note)}</div>`:''}</article>`).join('')}</div><details class="pair-builder"><summary><span>Add Documentation Photo</span></summary><label>Photo Stage</label><select id="hoaPhotoStage"><option value="inspection">Inspection</option><option value="work_in_progress">Work In Progress</option><option value="completed_work">Completed Work</option><option value="final_verification">Final Verification</option><option value="follow_up">Follow-Up Monitoring</option></select><input id="hoaItemPhoto" type="file" accept="image/*" capture="environment"><label>Photo Note</label><textarea id="hoaItemPhotoNote"></textarea><button class="btn" id="hoaAddPhoto">Add Photo to Timeline</button></details><details class="pair-builder"><summary><span>Request Completion Photos</span></summary><p class="status">Create a private 14-day link. A contractor or other outside person can photograph the completed work without receiving access to Photo Notes.</p><label>Recipient Name</label><input id="hoaCompletionName" placeholder="Person completing the work"><button class="btn" id="hoaCompletionCreate">Create Photo Submission Link</button><div id="hoaCompletionResult"></div></details>`);document.getElementById('hoaAddPhoto').onclick=()=>addHoaItemPhoto(id);document.getElementById('hoaCompletionCreate').onclick=()=>createHoaCompletionRequest(id);};
+renderHoaItem=async function(id){await renderHoaItemCore(id);const r=await api(`/api/hoa/items/${id}`);if(!r.ok)return;const d=await r.json(),body=document.getElementById('body'),oldPhoto=body.querySelector('.photo-box');if(oldPhoto)oldPhoto.remove();const intro=body.querySelector('.workflow-intro');if(!intro)return;const photos=d.photos||[],before=photos.find(p=>['initial','inspection'].includes(p.photo_stage))||photos[0],after=[...photos].reverse().find(p=>['completed_work','final_verification'].includes(p.photo_stage)),comparison=before&&after&&before.id!==after.id?`<div class="formhead">Before & After Maintenance Evidence</div>${beforeAfterOn()?'<button type="button" class="btn secondary" id="hoaCompareEvidence">Compare Maintenance Photos</button>':''}<div class="evidence-comparison"><article class="card"><strong>Original Condition</strong><img src="${capturePhotoSrc(before)}" alt="Original maintenance condition">${photoLocationHtml(before)}${before.note?`<div>${esc(before.note)}</div>`:''}</article><article class="card"><strong>Completed / Verified</strong><img src="${capturePhotoSrc(after)}" alt="Completed maintenance work">${photoLocationHtml(after)}${after.note?`<div>${esc(after.note)}</div>`:''}</article></div>`:'';intro.insertAdjacentHTML('afterend',`${comparison}<div class="formhead">Photo Documentation Timeline</div><div class="organize-form-grid">${photos.map(p=>`<article class="card"><strong>${esc(String(p.photo_stage||'photo').replaceAll('_',' '))}</strong>${p.photo_path?`<img src="${photoSrc(p.photo_path)}" alt="Maintenance documentation">`:''}${window.PhotoComments?.enabled()?`<button class="btn secondary slim" data-html2canvas-ignore="true" data-comments-id="${p.id}">Comments</button>`:''}${photoLocationHtml(p)}<div class="meta">${new Date(p.created_at).toLocaleString(uiLocale())}</div>${p.note?`<div>${esc(p.note)}</div>`:''}</article>`).join('')}</div><details class="pair-builder"><summary><span>Add Documentation Photo</span></summary><label>Photo Stage</label><select id="hoaPhotoStage"><option value="inspection">Inspection</option><option value="work_in_progress">Work In Progress</option><option value="completed_work">Completed Work</option><option value="final_verification">Final Verification</option><option value="follow_up">Follow-Up Monitoring</option></select><input id="hoaItemPhoto" type="file" accept="image/*" capture="environment"><label>Photo Note</label><textarea id="hoaItemPhotoNote"></textarea><button class="btn" id="hoaAddPhoto">Add Photo to Timeline</button></details><details class="pair-builder"><summary><span>Request Completion Photos</span></summary><p class="status">Create a private 14-day link. A contractor or other outside person can photograph the completed work without receiving access to Photo Notes.</p><label>Recipient Name</label><input id="hoaCompletionName" placeholder="Person completing the work"><button class="btn" id="hoaCompletionCreate">Create Photo Submission Link</button><div id="hoaCompletionResult"></div></details>`);const compare=document.getElementById('hoaCompareEvidence');if(compare)compare.onclick=()=>openPhotoComparison(before,after);document.getElementById('hoaAddPhoto').onclick=()=>addHoaItemPhoto(id);document.getElementById('hoaCompletionCreate').onclick=()=>createHoaCompletionRequest(id);};
 async function createHoaCompletionRequest(id){const r=await api(`/api/hoa/items/${id}/completion-request`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({recipient_name:document.getElementById('hoaCompletionName').value.trim()})}),d=await r.json().catch(()=>({}));if(!r.ok)return toast('Photo request link could not be created');const box=document.getElementById('hoaCompletionResult');box.innerHTML=`<label>Private Photo Link</label><div class="row compact"><input id="hoaCompletionUrl" readonly value="${esc(d.url)}"><button class="btn secondary" id="hoaCompletionCopy">Copy Link</button></div><p class="status">Send this link to the person who will photograph the completed work.</p>`;document.getElementById('hoaCompletionCopy').onclick=async()=>{await navigator.clipboard.writeText(d.url);toast('Photo link copied');};}
 async function addHoaItemPhoto(id){const file=document.getElementById('hoaItemPhoto').files[0];if(!file){toast('Choose a photo first');return;}const fd=new FormData();fd.append('photo',file);fd.append('photo_stage',document.getElementById('hoaPhotoStage').value);fd.append('note',document.getElementById('hoaItemPhotoNote').value.trim());const btn=document.getElementById('hoaAddPhoto');btn.disabled=true;btn.textContent='Uploading...';const r=await api(`/api/hoa/items/${id}/photos`,{method:'POST',body:fd});if(r.ok){toast('Documentation photo added');renderHoaItem(id);}else{toast('Photo could not be added');btn.disabled=false;btn.textContent='Add Photo to Timeline';}}
 async function saveHoaItem(id){const v=x=>document.getElementById(x).value,body={title:v('hiTitle'),description:v('hiDescription'),area:v('hiArea'),primary_assignee:v('hiAssignee'),directed_to:v('hiDirected'),status:v('hiStatus'),priority:v('hiPriority'),target_date:v('hiTarget'),budget_source:v('hiBudget'),estimated_cost:v('hiEstimated'),actual_cost:v('hiActual'),board_approval:v('hiApproval'),completed_by:v('hiCompletedBy'),completion_date:v('hiCompletion')};const r=await api(`/api/hoa/items/${id}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),d=await r.json().catch(()=>({}));if(!r.ok){toast(d.error==='completed by required'?'Enter Vendor or Completed By before completing':'Maintenance record could not be saved');return;}toast('Maintenance record saved');renderHoaItem(id);}
@@ -1978,7 +2057,7 @@ async function renderList() {
         <div class="organize-action-row"><button class="btn secondary" id="selall">Select All</button><button class="btn secondary" id="selnone">Clear Selection</button><button class="btn secondary" id="compareSelected">Compare 2 Photos</button>${window.PhotoNotesBulkMetadata?.enabled(state)?`<button type="button" class="btn secondary" id="editSelected">Edit Selected</button>`:''}${featureOn('measurements') ? `<button class="btn secondary" id="classifybatch">Classify Selected (AI)</button>` : ''}</div>
       </div>
       ${isConcreteClient()&&state.me.ramo_intake_access?`<div class="organize-action-row"><button class="btn secondary" id="ramoIntakeSend">Send to Ramo Optimizer</button><button class="btn secondary" id="ramoIntakeHistory">Ramo Submission History</button></div>`:''}
-    ${beforeAfterOn() ? `<div class="status" id="classifyprog"></div><details class="pair-builder"><summary><span>Before &amp; After Photos</span><span class="pair-expand">Create a comparison</span></summary><p>When work is complete, select one photo from before the job and one photo from after the job. The older photo will be marked Before by default.</p><button class="btn secondary slim" id="pairbtn">Create Pair From 2 Selected Photos</button></details>` : ''}
+    ${beforeAfterOn() ? `<div class="status" id="classifyprog"></div><details class="pair-builder"><summary><span>Before &amp; After Photos</span><span class="pair-expand">Create a comparison</span></summary><p>When work is complete, select one photo from before the job and one photo from after the job. The older photo will be marked Before by default.</p><button class="btn secondary slim" id="pairbtn">Create Before &amp; After</button></details>` : ''}
 
     <div class="organize-form-grid organize-batch-grid">
       <section class="organize-panel">
@@ -2088,7 +2167,8 @@ async function runBatchChanges(){
  }catch(e){toast(e.message);}finally{button.disabled=false;}
 }
 
-function compareSelectedPhotos(){const ids=selectedCaptureIds();if(ids.length!==2){toast('Select exactly two photos to compare');return;}const rows=window._lastCards||[],a=rows.find(x=>x.id===ids[0]),b=rows.find(x=>x.id===ids[1]);if(!a?.photo_path||!b?.photo_path){toast('Both selections must have photos');return;}const m=document.createElement('div');m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:90;padding:16px;overflow:auto';m.innerHTML=`<section style="max-width:900px;margin:auto;background:var(--pn-bg-fff,#fff);border-radius:12px;padding:16px"><div class="row"><strong>Photo Comparison &amp; Alignment</strong><button class="iconbtn" id="cmpClose">×</button></div><p class="status">Use side-by-side view for details or the overlay slider to check whether fixed objects line up.</p><div id="cmpSide" class="row" style="align-items:flex-start"><img src="${photoSrc(a.photo_path)}" style="width:50%;max-height:65vh;object-fit:contain"><img src="${photoSrc(b.photo_path)}" style="width:50%;max-height:65vh;object-fit:contain"></div><div id="cmpOverlay" style="display:none;position:relative;max-width:700px;margin:auto"><img src="${photoSrc(a.photo_path)}" style="width:100%;display:block"><img id="cmpTop" src="${photoSrc(b.photo_path)}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;opacity:.5"></div><label>View</label><div class="row"><button class="btn secondary" id="cmpSideBtn">Side by Side</button><button class="btn secondary" id="cmpOverlayBtn">Overlay</button></div><label>Overlay Opacity</label><input id="cmpOpacity" type="range" min="0" max="100" value="50"></section>`;document.body.appendChild(m);m.querySelector('#cmpClose').onclick=()=>m.remove();m.onclick=e=>{if(e.target===m)m.remove();};m.querySelector('#cmpSideBtn').onclick=()=>{m.querySelector('#cmpSide').style.display='flex';m.querySelector('#cmpOverlay').style.display='none';};m.querySelector('#cmpOverlayBtn').onclick=()=>{m.querySelector('#cmpSide').style.display='none';m.querySelector('#cmpOverlay').style.display='block';};m.querySelector('#cmpOpacity').oninput=e=>m.querySelector('#cmpTop').style.opacity=Number(e.target.value)/100;}
+function compareSelectedPhotos(){const ids=selectedCaptureIds();if(ids.length!==2){toast('Select exactly two photos to compare');return;}const rows=window._lastCards||[],a=rows.find(x=>x.id===ids[0]),b=rows.find(x=>x.id===ids[1]);if(!a?.photo_path||!b?.photo_path){toast('Both selections must have photos');return;}openPhotoComparison(a,b);}
+function openPhotoComparison(a,b,pair=null){const m=document.createElement('div');m.setAttribute('role','dialog');m.setAttribute('aria-modal','true');m.setAttribute('aria-label',pair?'Saved Before and After':'Temporary Photo Comparison');m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:90;padding:16px;overflow:auto;color:#000;text-align:left';m.innerHTML=`<section style="max-width:900px;margin:auto;background:var(--pn-bg-fff,#fff);border-radius:12px;padding:16px"><div class="row"><strong>${pair?'Saved Before &amp; After':'Temporary Photo Comparison'}</strong><button class="iconbtn" id="cmpClose" aria-label="Close comparison">×</button></div><p class="status">Use side-by-side view for details or the overlay slider to check whether fixed objects line up.</p><div id="cmpSide" class="row" style="align-items:flex-start"><img src="${photoSrc(a.photo_path)}" style="width:50%;max-height:65vh;object-fit:contain"><img src="${photoSrc(b.photo_path)}" style="width:50%;max-height:65vh;object-fit:contain"></div><div id="cmpOverlay" style="display:none;position:relative;max-width:700px;margin:auto"><img src="${photoSrc(a.photo_path)}" style="width:100%;display:block"><img id="cmpTop" src="${photoSrc(b.photo_path)}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;opacity:.5"></div><label>View</label><div class="row"><button class="btn secondary" id="cmpSideBtn">Side by Side</button><button class="btn secondary" id="cmpOverlayBtn">Overlay</button></div><label for="cmpOpacity">Overlay Opacity, After photograph</label><input id="cmpOpacity" type="range" min="0" max="100" value="${Math.round(Number(pair?.comparison_opacity??.5)*100)}">${pair?'<button class="btn" id="cmpSaveOpacity">Save Comparison Opacity</button>':''}</section>`;document.body.appendChild(m);m.querySelector('#cmpClose').onclick=()=>m.remove();m.onclick=e=>{if(e.target===m)m.remove();};m.querySelector('#cmpSideBtn').onclick=()=>{m.querySelector('#cmpSide').style.display='flex';m.querySelector('#cmpOverlay').style.display='none';};m.querySelector('#cmpOverlayBtn').onclick=()=>{m.querySelector('#cmpSide').style.display='none';m.querySelector('#cmpOverlay').style.display='block';};m.querySelector('#cmpTop').style.opacity=Number(m.querySelector('#cmpOpacity').value)/100;if(pair)m.querySelector('#cmpSaveOpacity').onclick=async()=>{const btn=m.querySelector('#cmpSaveOpacity');btn.disabled=true;try{const r=await api(`/api/pairs/${pair.id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({comparison_opacity:Number(m.querySelector('#cmpOpacity').value)/100})});if(!r.ok)throw new Error();state.imgv++;toast('Comparison opacity saved');loadCards(document.getElementById('filter')?.value||'');}catch(e){toast('Comparison opacity could not be saved');}finally{btn.disabled=false;}};m.querySelector('#cmpOpacity').oninput=e=>m.querySelector('#cmpTop').style.opacity=Number(e.target.value)/100;}
 
 async function createOrganizeTopic() {
   const input = document.getElementById('organizenewtopic');
@@ -2148,22 +2228,17 @@ async function renderEdit() {
 }
 
 async function pairSelected() {
-  const ids = Array.from(document.querySelectorAll('.capchk:checked')).map(x => parseInt(x.value, 10));
-  if (ids.length !== 2) { toast('Select exactly two captures to pair'); return; }
-  const rows = window._lastCards || [];
-  const a = rows.find(r => r.id === ids[0]) || { id: ids[0] };
-  const b = rows.find(r => r.id === ids[1]) || { id: ids[1] };
-  // older capture defaults to Before
-  const at = new Date(a.created_at || 0).getTime(), bt = new Date(b.created_at || 0).getTime();
-  let before = at <= bt ? a : b, after = at <= bt ? b : a;
-  const swap = confirm(uiT(`Before = capture #${before.id} (older), After = capture #${after.id}.\n\nOK to keep this order, or Cancel to swap Before/After.`));
-  if (!swap) { const t = before; before = after; after = t; }
-  const r = await api('/api/pairs', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ before_id: before.id, after_id: after.id }),
-  });
-  if (r.ok) { toast('Paired'); loadCards(document.getElementById('filter').value || ''); }
-  else { const d = await r.json().catch(() => ({})); toast(d.error || 'Pairing failed'); }
+  const ids=selectedCaptureIds(),rows=window._lastCards||[];
+  if(ids.length!==2)return toast('Select exactly two Photo Notes');
+  const photos=ids.map(id=>rows.find(c=>c.id===id));
+  if(photos.some(c=>!c?.photo_path))return toast('Both selections must have photos');
+  let [before,after]=photos.sort((a,b)=>new Date(a.created_at)-new Date(b.created_at));
+  const m=document.createElement('div');m.className='comparison-dialog';m.setAttribute('role','dialog');m.setAttribute('aria-modal','true');m.setAttribute('aria-label','Create Before and After');
+  m.innerHTML='<section><strong>Create Before &amp; After</strong><p>Dates suggest the order. Confirm Before and After, or swap them.</p><div id="pairOrder"></div><div class="row"><button class="btn secondary" id="pairSwap">Swap Before / After</button><button class="btn" id="pairConfirm">Save Before &amp; After</button><button class="btn secondary" id="pairCancel">Cancel</button></div></section>';
+  document.body.appendChild(m);
+  const paint=()=>m.querySelector('#pairOrder').innerHTML=`<div class="row"><div style="flex:1;min-width:0"><strong>Before</strong><img src="${capturePhotoSrc(before)}" alt="Before"><p>${esc(before.photo_title||'Untitled photo')}<br>${esc(new Date(before.created_at).toLocaleString(uiLocale()))}</p></div><div style="flex:1;min-width:0"><strong>After</strong><img src="${capturePhotoSrc(after)}" alt="After"><p>${esc(after.photo_title||'Untitled photo')}<br>${esc(new Date(after.created_at).toLocaleString(uiLocale()))}</p></div></div>`;
+  paint();m.querySelector('#pairSwap').onclick=()=>{[before,after]=[after,before];paint();};m.querySelector('#pairCancel').onclick=()=>m.remove();
+  m.querySelector('#pairConfirm').onclick=async()=>{const btn=m.querySelector('#pairConfirm');btn.disabled=true;try{const r=await api('/api/pairs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({before_id:before.id,after_id:after.id})});if(!r.ok){const d=await r.json();throw Error(d.error||'Pairing failed');}toast('Before and after pair saved');m.remove();loadCards(document.getElementById('filter')?.value||'');}catch(e){toast(e.message);}finally{btn.disabled=false;}};
 }
 
 async function unpair(captureId) {
@@ -2397,7 +2472,7 @@ async function loadCards(area, query = '', filters = {}) {
   // Pro: pull only pairs the user deliberately created so we can render them
   // as combined before/after cards. Never suggest pairs automatically.
   let pairs = [];
-  if (isIndustryProClient() && state.view === 'organize') {
+  if (beforeAfterOn() && ['organize','photo-library'].includes(state.view)) {
     try { const pr = await api('/api/pairs'); if (pr.ok) pairs = await pr.json(); } catch (e) {}
   }
   if(request!==cardsRequest||document.getElementById('cards')!==cards)return;
@@ -2470,19 +2545,21 @@ function captureCardHtml(c) {
     ${isConcreteClient()&&c.photo_path?`<button class="btn secondary slim concrete-area-button" data-id="${c.id}">Measure Patio / Foundation Area</button>`:''}
     ${(c.footprints||[]).map(f=>`<div class="concrete-evidence"><strong>${esc(f.name)}</strong><p>${esc(concreteAreaText(f))}</p>${f.notes?`<p>${esc(f.notes)}</p>`:''}</div>`).join('')}
     ${state.view === 'organize' && measurementOn() && c.defect_type ? `<div class="meta saved-classification"><strong>Classification:</strong> ${esc(defectLabelClient(c.defect_type))}${c.defect_type !== 'none' && c.defect_severity ? ' - ' + esc(c.defect_severity) : ''}</div>` : ''}
+    ${isConcreteClient()&&c.photo_path?`<button class="btn secondary slim" data-visual-analysis="${c.id}">Analyze Photo</button>`:''}
+    ${c.concrete_reviewed_observation&&isConcreteClient()?`<p><strong>User Reviewed visual observation:</strong> ${esc(c.concrete_reviewed_observation)}</p>`:''}
     ${classifyRow}
     ${dims ? `<div class="meta"><strong>Dimensions:</strong> ${esc(dims)}</div>` : ''}
     ${measureRow}
     ${c.photo_path ? `<button class="btn secondary slim stampbtn" data-id="${c.id}">Mark Up Photo${(c.overlays && c.overlays.length) ? ' (' + c.overlays.length + ')' : ''}</button>` : ''}
     ${c.photo_path ? `<button class="btn secondary slim cropbtn" data-id="${c.id}">Crop Photo</button>` : ''}
-    <button class="btn secondary slim evidencebtn" data-id="${c.id}">Photo Details &amp; History</button>
+    ${matchingPhotoAction(c)}${duplicateAction(c)}<button class="btn secondary slim evidencebtn" data-id="${c.id}">Photo Details &amp; History</button>
     ${c.photo_original_path ? `<button class="btn secondary slim restorebtn" data-id="${c.id}">Restore Original Photo</button>` : ''}
     <div class="notewrap photo-notes-panel" data-id="${c.id}">
       <div class="photo-notes-heading">Notes</div>
       <div class="notetext photo-notes-box">${esc(c.note || 'No notes added.')}</div>
       <button class="btn secondary editnote" data-id="${c.id}" style="margin-top:6px">Edit Note</button>
     </div>
-    ${state.view === 'organize' ? `<button class="btn secondary slim organize-delete-capture" data-delete-organize="${c.id}" type="button">Delete Photo Note</button>` : ''}
+    ${['organize','photo-library'].includes(state.view) ? `<button class="btn secondary slim organize-delete-capture" data-delete-organize="${c.id}" type="button">Delete Photo Note</button>` : ''}
   </div>`;
 }
 
@@ -2494,6 +2571,7 @@ async function showEvidence(id){
   try{
     const r=await api(`/api/captures/${id}/evidence`);if(!r.ok)throw new Error();const d=await r.json();
     const labels={subject_location_updated:'Subject Location updated',photo_linked:'Photo linked',photo_relationship_changed:'Relationship changed',photo_unlinked:'Photo unlinked',captured:'Original capture saved',details_updated:'Details updated',photo_rotated:'Photo rotated',photo_flipped:'Photo flipped',photo_cropped:'Photo cropped',original_restored:'Original photo restored'};
+    labels.context_reused='Started using context from an earlier Photo Note';
     const hash=d.evidence&&d.evidence.original_sha256||'';
     const modal=document.createElement('div');modal.className='evidence-modal';modal.setAttribute('role','dialog');modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.58);z-index:80;padding:18px;overflow:auto';
     const fileStatus=d.fingerprint_verified===true?'Original photo matches':d.fingerprint_verified===false?'Original photo does not match':'File check unavailable';
@@ -2558,23 +2636,29 @@ function pairCardHtml(before, after, pair={}) {
       ${dims ? `<div class="meta"><strong>Dimensions:</strong> ${esc(dims)}</div>` : ''}
       ${measurementOn() && state.view === 'edit' && c.photo_path ? `<button class="btn secondary slim editdims" data-id="${c.id}">Measurements</button>` : ''}
       ${photoMarkerControls(c)}
-      <button class="btn secondary slim evidencebtn" data-id="${c.id}">Photo Details &amp; History</button>
+      ${matchingPhotoAction(c)}${duplicateAction(c)}<button class="btn secondary slim evidencebtn" data-id="${c.id}">Photo Details &amp; History</button>
       <div class="photo-notes-panel"><div class="photo-notes-heading">Notes</div><div class="photo-notes-box">${esc(c.note || 'No notes added.')}</div></div>
-      ${state.view === 'organize' ? `<button class="btn secondary slim organize-delete-capture" data-delete-organize="${c.id}" type="button">Delete Photo Note</button>` : ''}
+      ${['organize','photo-library'].includes(state.view) ? `<button class="btn secondary slim organize-delete-capture" data-delete-organize="${c.id}" type="button">Delete Photo Note</button>` : ''}
     </div>`;
   };
   return `<div class="card">
     <div style="font-weight:bold;margin-bottom:6px">${esc(before.address || after.address || 'No location')} <span class="badge">Before / After</span></div>
     <div class="row" style="gap:12px;align-items:flex-start">${side(before, 'BEFORE')}${side(after, 'AFTER')}</div>
+    <button class="btn secondary slim" data-view-pair="${pair.id}" data-before="${before.id}" data-after="${after.id}" data-opacity="${pair.comparison_opacity??''}">View Before &amp; After</button>
     <button class="btn secondary slim unpairbtn" data-id="${before.id}" style="margin-top:8px">Unpair</button>
   </div>`;
 }
 
 function wireCards(cards, rows) {
+  cards.querySelectorAll('[data-match-photo]').forEach(b=>b.onclick=()=>startMatchingPhoto(rows.find(c=>String(c.id)===b.dataset.matchPhoto)));
+  cards.querySelectorAll('[data-view-pair]').forEach(b=>b.onclick=()=>{const before=rows.find(c=>String(c.id)===b.dataset.before),after=rows.find(c=>String(c.id)===b.dataset.after);if(before&&after)openPhotoComparison(before,after,{id:Number(b.dataset.viewPair),comparison_opacity:b.dataset.opacity===''?null:Number(b.dataset.opacity)});});
+  window.PhotoNotesQR?.wireSavedCards(cards,rows,selectedEdition(),{api,esc,toast});
   wirePhotoMarkers(cards);
   cards.querySelectorAll('.concrete-area-button').forEach(b=>b.onclick=()=>openConcreteFootprints(Number(b.dataset.id)));
   cards.querySelectorAll('.capchk').forEach(c => c.onchange = () => { if (c.checked) state.selectedIds.add(String(c.value)); else state.selectedIds.delete(String(c.value)); });
+  cards.querySelectorAll('[data-visual-analysis]').forEach(b=>b.onclick=()=>window.PhotoNotesVisualAnalysis.open(Number(b.dataset.visualAnalysis),()=>loadCards(document.getElementById('filter')?.value||'')));
   wireRotate(cards);
+  cards.querySelectorAll('.duplicate-photo-note').forEach(b=>b.onclick=()=>{const source=rows.find(c=>String(c.id)===b.dataset.id);if(source)duplicatePhotoNote(source);});
   cards.querySelectorAll('.edittitle').forEach(b => b.onclick = () => startEditPhotoTitle(parseInt(b.getAttribute('data-id'), 10), rows));
   cards.querySelectorAll('.edittopics').forEach(b => b.onclick = () => startEditTopics(parseInt(b.getAttribute('data-id'), 10), rows));
   cards.querySelectorAll('.editnote').forEach(b => b.onclick = () => startEditNote(parseInt(b.getAttribute('data-id'), 10), rows));
