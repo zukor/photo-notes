@@ -28,3 +28,10 @@ test('offline queue preserves occurrence identity and serializes it after reopen
  const restored=(await queue.all()).find(r=>r.id===saved.id);assert.equal(restored.payload.follow_up_occurrence_id,'123');assert.equal(await restored.payload.photo.text(),'new evidence');assert.equal(restored.requestId,saved.requestId);
  const source=fs.readFileSync('public/app.js','utf8'),serializer=source.match(/function payloadFormData\(p\)\{[^\n]+\}/)[0],sandbox={FormData};vm.runInNewContext(serializer,sandbox);const fd=sandbox.payloadFormData(restored.payload);assert.equal(fd.get('follow_up_occurrence_id'),'123');assert.equal(fd.get('latitude'),'41');assert.equal(fd.get('longitude'),'-91');assert(queue.eligible(restored,account,'concrete'));assert(!queue.eligible(restored,account,'pro'));await queue.remove(saved.id);
 });
+test('PostgreSQL DATE objects keep calendar dates on servers east and west of UTC',()=>{
+ const {execFileSync}=require('node:child_process');
+ for(const TZ of ['UTC','America/Los_Angeles','Pacific/Kiritimati']){
+  const result=execFileSync(process.execPath,['-e',"const f=require('./photo-follow-ups');const d=new Date(2026,0,31);process.stdout.write(f.dateString(d)+' '+f.recurrenceDate(d,{unit:'month',interval:1},1));"],{cwd:require('node:path').resolve(__dirname,'..'),env:{...process.env,TZ},encoding:'utf8'});
+  assert.equal(result,'2026-01-31 2026-02-28',TZ);
+ }
+});
