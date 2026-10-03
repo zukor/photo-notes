@@ -31,7 +31,7 @@ function registerVisualAnalysis(app,{pool,requireAuth,requireConcrete,localPhoto
  app.post('/api/visual-analysis/concrete/:id/review/:run',...guards,async(req,res)=>{
  let result,apply=req.body.apply||[];const reject=req.body.reject===true;
  try{if(!reject)result=concrete.normalize(req.body.result,{review:true});if(!Array.isArray(apply)||apply.some(k=>!['element','condition','severity'].includes(k)))throw Error();}catch{return res.status(400).json({error:'Check the review fields'});}
- const client=await pool.connect();try{
+ let client;try{client=await pool.connect();
  await client.query('BEGIN');
  const photo=(await client.query('SELECT * FROM captures WHERE id=$1 AND user_id=$2 FOR UPDATE',[req.params.id,req.user.id])).rows[0];
  const run=(await client.query("SELECT * FROM visual_analysis_runs WHERE id=$1 AND capture_id=$2 AND user_id=$3 AND domain='concrete' FOR UPDATE",[req.params.run,req.params.id,req.user.id])).rows[0];
@@ -44,7 +44,7 @@ function registerVisualAnalysis(app,{pool,requireAuth,requireConcrete,localPhoto
  const status=reject?'rejected':JSON.stringify(result)===JSON.stringify(run.structured_result)?'reviewed':'corrected';
  await client.query('UPDATE visual_analysis_runs SET review_status=$1,reviewed_result=$2,reviewed_at=now() WHERE id=$3 AND user_id=$4',[status,reject?null:JSON.stringify(result),run.id,req.user.id]);
  await client.query('COMMIT');res.json({ok:true,status});
- }catch{await client.query('ROLLBACK');res.status(500).json({error:'Review could not be saved. Your photo and manual fields remain available.'});}finally{client.release();}
+ }catch{if(client)await client.query('ROLLBACK').catch(()=>{});res.status(500).json({error:'Review could not be saved. Your photo and manual fields remain available.'});}finally{client?.release();}
  });
 }
 module.exports={SCHEMA,registerVisualAnalysis};
