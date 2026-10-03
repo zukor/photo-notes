@@ -54,6 +54,7 @@ function data(url){const p=url.pathname;
   await page.goto(base);await page.waitForFunction(()=>typeof state!=='undefined'&&state.me&&document.getElementById('body'));
   async function check(name){
    await page.waitForFunction(()=>typeof PhotoNotesHelp!=='undefined');
+   await page.evaluate(()=>PhotoNotesHelp.refresh());
    await page.locator('.pn-help-fab').click();assert.equal(await page.locator('.pn-help-fab').getAttribute('aria-expanded'),'true');
    // Compare the current page controls and current Help in one task. Saved records can arrive while opening Help.
    const {items,titles}=await page.evaluate(()=>{PhotoNotesHelp.refresh();return {items:PhotoNotesHelp.inspect(),titles:[...document.querySelectorAll('.pn-help-article summary')].map(n=>n.textContent)};});assert(items.length>0,name+' has features');
