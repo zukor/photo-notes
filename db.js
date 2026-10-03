@@ -30,6 +30,17 @@ CREATE TABLE IF NOT EXISTS users (
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
   last_login_at TIMESTAMPTZ
 );
+CREATE TABLE IF NOT EXISTS capture_templates (
+ user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ id UUID NOT NULL,
+ edition TEXT NOT NULL,
+ name TEXT NOT NULL,
+ description TEXT NOT NULL DEFAULT '',
+ defaults JSONB NOT NULL DEFAULT '{}'::jsonb,
+ deleted BOOLEAN NOT NULL DEFAULT false,
+ updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+ PRIMARY KEY(user_id,id)
+);
 CREATE TABLE IF NOT EXISTS captures (
   id           SERIAL PRIMARY KEY,
   created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -571,6 +582,7 @@ async function init() {
   await pool.query(SCHEMA);
   await pool.query(require('./photo-markers').SCHEMA);
 
+  await pool.query("ALTER TABLE captures ADD COLUMN IF NOT EXISTS urgency TEXT NOT NULL DEFAULT 'standard'");
   await pool.query(require('./send-shortcuts').SCHEMA);
 
   // Seeded topics remain available to industry editions. Basic only offers
