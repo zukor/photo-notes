@@ -59,7 +59,7 @@ function data(url){const p=url.pathname;
    const titles=await page.locator('.pn-help-article summary').allTextContents();assert.deepEqual(titles,items.map((i,k)=>`${k+1}. ${i.title}`),name+' Help follows page order');
    const h=await page.locator('.pn-help-fab').boundingBox();assert(h.x>width/2);const report=page.locator('#issueFab');if(await report.count()){const b=await report.boundingBox();assert(b.x<width/2&&b.x+b.width<h.x);}
    const drawer=await page.locator('.pn-help-drawer').boundingBox();assert(drawer.x>=-1&&drawer.x+drawer.width<=width+1);if(width>=1100)assert(drawer.width/width>=.25&&drawer.width/width<=.3);
-   const terms=page.locator('[data-term]');if(await terms.count()){await terms.first().click();assert(await terms.first().locator('xpath=following-sibling::*').isVisible());}
+   const terms=page.locator('[data-term]');if(await terms.count()){await terms.first().click();await page.evaluate(()=>PhotoNotesHelp.refresh());assert.equal(await terms.first().getAttribute('aria-expanded'),'true');assert(await terms.first().locator('xpath=following-sibling::*').isVisible());}
    await page.locator('#pnHelpSearch').fill('impossible-no-match');assert.equal(await page.locator('.pn-help-article').count(),0);await page.locator('#pnHelpClear').click();
    await page.locator('#pnHelpClose').click();assert.equal(await page.locator('.pn-help-fab').getAttribute('aria-expanded'),'false');cases++;
   }

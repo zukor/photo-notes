@@ -100,19 +100,22 @@ function render(){
  const found=items.filter(i=>words.every(w=>(i.title+' '+i.text+' '+i.choices?.join(' ')+' '+i.terms.map(t=>t+' '+catalog.terms[t]).join(' ')).toLowerCase().includes(w)));
  const sig=JSON.stringify([pageTitle(),context.edition,query,scope,items.map(i=>[i.title,i.text,i.choices])]);if(sig===signature)return;signature=sig;
  const expanded=new Set([...root.querySelectorAll('details[open]')].map(n=>n.dataset.helpTitle));
+ const openTerms=new Set([...root.querySelectorAll('[data-term][aria-expanded="true"]')].map(n=>n.dataset.term));
+ const focusedTerm=document.activeElement?.closest('#photoNotesHelp [data-term]')?.dataset.term;
  root.querySelector('#pnHelpPage').textContent=`${context.name} · ${pageTitle()}`;
  root.querySelector('#pnHelpCount').textContent=scope==='page'?`${items.length} page features, in page order${query?` · ${found.length} matches`:''}`:'PhotoNotes guidance';
  root.querySelector('#pnHelpResults').innerHTML=found.length?found.map((i,k)=>`<details class="pn-help-article" data-help-title="${esc(i.title)}" ${expanded.has(i.title)?'open':''}><summary>${scope==='page'?items.indexOf(i)+1+'. ':''}${esc(i.title)}</summary><p>${esc(i.text)}</p>${i.choices?.length?`<p><strong>Current choices:</strong> ${i.choices.map(esc).join('; ')}.</p>`:''}</details>`).join(''):'<p>No matching features. Try fewer words or clear the search.</p>';
  const terms=relevantTerms(items);
- root.querySelector('#pnHelpTermsList').innerHTML=terms.map((name,k)=>`<div class="pn-help-term"><button type="button" data-term="${esc(name)}" aria-expanded="false" aria-describedby="pnTerm${k}">${esc(name)}</button><span id="pnTerm${k}" role="tooltip">${esc(catalog.terms[name])}</span></div>`).join('');
+ root.querySelector('#pnHelpTermsList').innerHTML=terms.map((name,k)=>`<div class="pn-help-term"><button type="button" data-term="${esc(name)}" aria-expanded="${openTerms.has(name)}" aria-describedby="pnTerm${k}">${esc(name)}</button><span id="pnTerm${k}" role="tooltip">${esc(catalog.terms[name])}</span></div>`).join('');
+ if(focusedTerm)[...root.querySelectorAll('[data-term]')].find(n=>n.dataset.term===focusedTerm)?.focus();
  root.querySelectorAll('[data-pn-help-scope]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.pnHelpScope===scope)));
  root.querySelector('#pnHelpReport').hidden=!context.reportIssue&&!document.getElementById('issueFab');
 }
 function open(){opened=true;document.body.classList.add('pn-help-open');const root=shell();root.querySelector('aside').inert=false;root.querySelector('aside').setAttribute('aria-hidden','false');root.querySelector('.pn-help-fab').setAttribute('aria-expanded','true');signature='';render();root.querySelector('#pnHelpSearch').focus();}
-function close(focus=true){opened=false;document.body.classList.remove('pn-help-open');const root=shell();root.querySelector('aside').inert=true;root.querySelector('aside').setAttribute('aria-hidden','true');root.querySelector('.pn-help-fab').setAttribute('aria-expanded','false');if(focus)root.querySelector('.pn-help-fab').focus();}
+function close(focus=true){opened=false;document.body.classList.remove('pn-help-open');const root=shell();root.querySelectorAll('[data-term]').forEach(n=>n.setAttribute('aria-expanded','false'));root.querySelector('aside').inert=true;root.querySelector('aside').setAttribute('aria-hidden','true');root.querySelector('.pn-help-fab').setAttribute('aria-expanded','false');if(focus)root.querySelector('.pn-help-fab').focus();}
 function mount(next){context={...context,...next};signature='';render();}
 function reset(){context={edition:'public',page:'login',name:'Sign in'};query='';scope='page';if(opened)close(false);signature='';}
-function schedule(){clearTimeout(timer);timer=setTimeout(()=>{if(opened||!document.getElementById('photoNotesHelp')){signature='';render();}},80);}
+function schedule(){clearTimeout(timer);timer=setTimeout(()=>{if(opened||!document.getElementById('photoNotesHelp')){render();}},80);}
 const observer=new MutationObserver(changes=>{if(changes.some(c=>!(c.target instanceof Element?c.target:c.target.parentElement)?.closest('#photoNotesHelp')))schedule();});
 function start(){
  const standalone=location.pathname.includes('admin')?'Administration':location.pathname.includes('install')?'Installation':location.pathname.startsWith('/review/')?'Customer review':location.pathname.startsWith('/completion-photos/')?'Completion photos':null;
