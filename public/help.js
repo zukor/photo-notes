@@ -76,7 +76,6 @@ function shell(){
  root.querySelector('#pnHelpClose').onclick=()=>close();
  root.querySelector('#pnHelpSearch').oninput=e=>{query=e.target.value;render();};
  root.querySelector('#pnHelpClear').onclick=()=>{query='';root.querySelector('#pnHelpSearch').value='';render();root.querySelector('#pnHelpSearch').focus();};
- if(focusedTerm)[...root.querySelectorAll('[data-term]')].find(n=>n.dataset.term===focusedTerm)?.focus();
  root.querySelectorAll('[data-pn-help-scope]').forEach(b=>b.onclick=()=>{scope=b.dataset.pnHelpScope;query='';root.querySelector('#pnHelpSearch').value='';signature='';render();});
  root.querySelector('#pnHelpReport').onclick=()=>{close(false);if(context.reportIssue)context.reportIssue();else document.getElementById('issueFab')?.click();};
  root.querySelector('#pnHelpTermsList').addEventListener('click',e=>{const b=e.target.closest('[data-term]');if(!b)return;const expanded=b.getAttribute('aria-expanded')==='true';root.querySelectorAll('[data-term]').forEach(x=>x.setAttribute('aria-expanded','false'));b.setAttribute('aria-expanded',String(!expanded));});
