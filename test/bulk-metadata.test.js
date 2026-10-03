@@ -3,7 +3,7 @@ const {EDITIONS,fieldsFor,validate,snapshot,createHandler}=require('../bulk-meta
 test('only Pro editions expose safe registry',()=>{
  for(const e of ['general','pro','paving','concrete','property','hoa','contractor','roofer'])assert(EDITIONS.has(e));
  for(const e of ['basic','issue','roads'])assert(!EDITIONS.has(e));
- for(const e of EDITIONS){assert.deepEqual(Object.keys(fieldsFor(e)).slice(0,3),['area_tags','job_id','urgency']);for(const key of ['note','address','latitude','captured_at','concrete_condition','severity','approval','property_area_id','favorite'])assert(!fieldsFor(e)[key]);}
+ for(const e of EDITIONS){assert.deepEqual(Object.keys(fieldsFor(e)).slice(0,3),['area_tags','job_id','urgency']);for(const key of ['note','address','latitude','captured_at','concrete_condition','severity','approval','property_area_id'])assert(!fieldsFor(e)[key]);}
  assert(fieldsFor('paving').paving_photo_reason);assert(!fieldsFor('concrete').paving_photo_reason);
 });
 test('explicit changes, strict IDs, clears and no silent truncation',()=>{
@@ -12,6 +12,7 @@ test('explicit changes, strict IDs, clears and no silent truncation',()=>{
  assert.equal(validate({ids:[1],metadata:{paving_photo_reason:null}},'paving').metadata.paving_photo_reason,null);
  assert.throws(()=>validate({ids:[1],metadata:{paving_photo_reason:'proposal'}},'hoa'));
 });
+test('integrated markers require explicit booleans',()=>{assert.equal(validate({ids:[1],metadata:{favorite:false,flagged:true}},'property').metadata.favorite,false);assert.throws(()=>validate({ids:[1],metadata:{favorite:'false'}},'general'));});
 test('preview conflict detection ignores unrelated fields but detects selected fields',()=>{
  const rows=[{id:1,urgency:'standard',note:'original'}],m={urgency:'urgent'};
  assert.equal(snapshot(rows,m),snapshot([{...rows[0],note:'new'}],m));assert.notEqual(snapshot(rows,m),snapshot([{...rows[0],urgency:'urgent'}],m));
