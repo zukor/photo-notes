@@ -53,6 +53,7 @@ function data(url){const p=url.pathname;
   await page.route('**/*',r=>{const u=new URL(r.request().url());if(u.origin!==new URL(base).origin)return r.abort();if(u.pathname.startsWith('/api/'))return r.fulfill({json:data(u)});return r.continue();});
   await page.goto(base);await page.waitForFunction(()=>typeof state!=='undefined'&&state.me&&document.getElementById('body'));
   async function check(name){
+   await page.waitForFunction(()=>typeof PhotoNotesHelp!=='undefined');
    await page.evaluate(()=>PhotoNotesHelp.refresh());const items=await page.evaluate(()=>PhotoNotesHelp.inspect());assert(items.length>0,name+' has features');
    for(const i of items){seen.add(i.key+'|'+i.title);if(!i.authored)missing.set(i.key+'|'+i.title,{name,...i});}
    await page.locator('.pn-help-fab').click();assert.equal(await page.locator('.pn-help-fab').getAttribute('aria-expanded'),'true');
@@ -92,7 +93,7 @@ function data(url){const p=url.pathname;
   await page.evaluate(()=>{state.proType='general';state.view='capture';renderApp();});await page.locator('.pn-help-fab').click();
   await page.screenshot({path:`/tmp/pn-complete-help-${engine.name()}-${width}.png`});await page.locator('#pnHelpClose').click();
   // Feature insertion/removal must synchronize without a navigation or manual Help refresh.
-  await page.locator('.pn-help-fab').click();await page.evaluate(()=>{const b=document.createElement('button');b.id='captureUrgency';b.textContent='Urgency';document.getElementById('body').append(b);});await page.waitForFunction(()=>document.getElementById('pnHelpResults').textContent.includes('Urgency'));await page.evaluate(()=>document.getElementById('captureUrgency').remove());await page.waitForFunction(()=>!document.getElementById('pnHelpResults').textContent.includes('Urgency'));await page.locator('#pnHelpClose').click();
+  await page.locator('.pn-help-fab').click();await page.evaluate(()=>{const b=document.createElement('button');b.id='dynamicUrgencyProbe';b.textContent='Temporary Urgency Probe';document.getElementById('body').append(b);});await page.waitForFunction(()=>document.getElementById('pnHelpResults').textContent.includes('Temporary Urgency Probe'));await page.evaluate(()=>document.getElementById('dynamicUrgencyProbe').remove());await page.waitForFunction(()=>!document.getElementById('pnHelpResults').textContent.includes('Temporary Urgency Probe'));await page.locator('#pnHelpClose').click();
   await page.evaluate(()=>{localStorage.removeItem('pn_first_use_v1:'+encodeURIComponent(state.me.email));PhotoNotesFirstUse.offer(state.me);});await page.waitForTimeout(150);await check('First-use permissions');await page.locator('#firstUseNext').click();await check('First-use camera');await page.locator('#firstUseNext').click();
   await page.goto(base+'/completion-photos/help-fixture');await check('Public completion form');await page.goto(base+'/review/help-fixture');await check('Public customer review');
   await page.goto(base+'/install.html');await check('Installation guide');
