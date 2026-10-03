@@ -569,6 +569,8 @@ async function seedUserAreas(userId) {
 async function init() {
   await pool.query(SCHEMA);
   await pool.query(require('fs').readFileSync(require('path').join(__dirname,'qr-codes-schema.sql'),'utf8'));
+  await pool.query(require('./photo-markers').SCHEMA);
+
   await pool.query(require('./send-shortcuts').SCHEMA);
 
   // Seeded topics remain available to industry editions. Basic only offers
