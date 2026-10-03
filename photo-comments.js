@@ -55,8 +55,11 @@ function register(app,{pool,requireAuth,currentProduct}){
  if(!comment||comment.deleted_at){await db.query('ROLLBACK');return res.status(404).json({error:'Comment not found'});}
  if(comment.author_id!==req.user.id&&!(method==='delete'&&a.moderate)){await db.query('ROLLBACK');return res.status(403).json({error:'You can only change your own comments'});}
  await db.query('INSERT INTO photo_comment_history(comment_id,actor_id,previous_text,action) VALUES($1,$2,$3,$4)',[cid,req.user.id,comment.text,method]);
- if(method==='patch')await db.query('UPDATE photo_comments SET text=$1,edited_at=now() WHERE id=$2',[text.trim(),cid]);
- else await db.query('UPDATE photo_comments SET deleted_at=now(),deleted_by=$1 WHERE id=$2',[req.user.id,cid]);
+ if(method==='patch'){
+ await db.query('UPDATE photo_comments SET text=$1,edited_at=now() WHERE id=$2',[text.trim(),cid]);
+ for(const member of await recipients(db,a,req.user.id))if(member.name&&text.toLowerCase().includes('@'+member.name.toLowerCase())&&!comment.text.toLowerCase().includes('@'+member.name.toLowerCase()))
+ await db.query('INSERT INTO hoa_notifications(user_id,item_id,capture_id,message) VALUES($1,$2,$3,$4)',[member.id,a.contexts.find(c=>c.item_id)?.item_id||null,req.commentCapture,'You were mentioned in a Photo Note comment.']);
+ }else await db.query('UPDATE photo_comments SET deleted_at=now(),deleted_by=$1 WHERE id=$2',[req.user.id,cid]);
  }
  await db.query('COMMIT');res.status(method==='post'?201:200).json({ok:true,id:comment.id});
  }catch(e){if(db)await db.query('ROLLBACK');console.error('[photo-comments]',e.message);res.status(503).json({error:'Comment could not save. Keep your draft and retry when connected.'});}finally{db?.release();}

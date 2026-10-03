@@ -2427,7 +2427,7 @@ function formatGpsClient(c){
   return c&&c.latitude!=null&&c.longitude!=null?`${Number(c.latitude).toFixed(5)}, ${Number(c.longitude).toFixed(5)}`:'Not available';
 }
 function photoLocationHtml(c,addressFallback='No address'){
-  return `<div class="photo-location"><div class="photo-location-label">GPS</div><div class="photo-gps">${esc(formatGpsClient(c))}</div><div class="photo-location-label">Address</div><div class="addr">${esc(c&&c.address||addressFallback)}</div></div>`;
+  return `<div class="photo-location"><div class="photo-location-label">GPS</div><div class="photo-gps">${esc(formatGpsClient(c))}</div><div class="photo-location-label">Address</div><div class="addr">${esc(c&&c.address||addressFallback)}</div>${locationIntelligenceEnabled()&&c&&c.id?`<button class="btn secondary slim locationView" data-location-id="${c.id}">View Location</button>`:''}</div>`;
 }
 function captureCardHtml(c) {
   const when = new Date(c.created_at).toLocaleString(uiLocale(), { year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' });
@@ -2495,7 +2495,7 @@ async function exportConcreteReport(format){const p=new URLSearchParams({doc:for
 async function showEvidence(id){
   try{
     const r=await api(`/api/captures/${id}/evidence`);if(!r.ok)throw new Error();const d=await r.json();
-    const labels={photo_linked:'Photo linked',photo_relationship_changed:'Relationship changed',photo_unlinked:'Photo unlinked',captured:'Original capture saved',details_updated:'Details updated',photo_rotated:'Photo rotated',photo_flipped:'Photo flipped',photo_cropped:'Photo cropped',original_restored:'Original photo restored'};
+    const labels={subject_location_updated:'Subject Location updated',photo_linked:'Photo linked',photo_relationship_changed:'Relationship changed',photo_unlinked:'Photo unlinked',captured:'Original capture saved',details_updated:'Details updated',photo_rotated:'Photo rotated',photo_flipped:'Photo flipped',photo_cropped:'Photo cropped',original_restored:'Original photo restored'};
     const hash=d.evidence&&d.evidence.original_sha256||'';
     const modal=document.createElement('div');modal.className='evidence-modal';modal.setAttribute('role','dialog');modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.58);z-index:80;padding:18px;overflow:auto';
     const fileStatus=d.fingerprint_verified===true?'Original photo matches':d.fingerprint_verified===false?'Original photo does not match':'File check unavailable';
@@ -3124,11 +3124,7 @@ async function renderMap() {
   try { const gr = await api('/api/groups'); if (gr.ok) { const gs = await gr.json(); gsel.innerHTML = '<option value="">All Documents</option>' + gs.map(g => `<option value="${g.id}">${esc(g.title || 'Untitled')}</option>`).join(''); } } catch (e) {}
   const div = document.getElementById('mapdiv');
   mapObj = L.map(div).setView([29.5, -98.5], 12);
-  if (cfg.mapbox_token) {
-    L.tileLayer(`https://api.mapbox.com/styles/v1/mapbox/satellite-v9/tiles/512/{z}/{x}/{y}@2x?access_token=${cfg.mapbox_token}`, { tileSize: 512, zoomOffset: -1, maxZoom: 22, maxNativeZoom: 19, attribution: '&copy; Mapbox &copy; Maxar' }).addTo(mapObj);
-  } else {
-    installMapTileFallback(L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}?blankTile=false', { maxZoom: 22, maxNativeZoom: 19, attribution: 'Tiles &copy; Esri, Maxar, Earthstar Geographics' }),mapObj).addTo(mapObj);
-  }
+  sharedSatelliteLayer(cfg,mapObj).addTo(mapObj);
   mapObj.on('popupopen', (e) => {
     const btn = e.popup.getElement().querySelector('.mapopen');
     if (btn) btn.onclick = () => openCaptureInLibrary(parseInt(btn.getAttribute('data-id'), 10));
