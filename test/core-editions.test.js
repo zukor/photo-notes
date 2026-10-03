@@ -5,7 +5,7 @@ test('Basic is capture-only while general Pro owns the complete workflow',()=>{
   assert.match(app,/function isGeneralProClient\(\)/);
   assert.match(app,/isRoadIssuesClient\(\)\|\|isBasicClient\(\)\?'':`<nav class="tabs workflow-tabs/);
   assert.match(app,/else if \(isBasicClient\(\)\) \{ state\.view='capture'; renderCapture\(\); \}/);
-  assert.match(app,/edition==='basic'\?'capture'/);
+  assert.match(app,/edition==='basic'\|\|edition==='issue'/);
   assert.match(server,/pro:\{plan:'pro',pro_type:'general',label:'Photo Notes Pro'\}/);
 });
 test('general Pro retains the former Basic help, issue, and assignment workflows',()=>{
@@ -18,7 +18,7 @@ test('general Pro retains the former Basic help, issue, and assignment workflows
 test('administrators can create, assign, and switch to general Pro',()=>{
   assert.match(admin,/pro:'Photo Notes Pro'/);
   assert.match(admin,/versionChecks/);
-  assert.match(server,/\['roads','general','contractor','paving','hoa','property','concrete','roofer'\]/);
+  assert.match(server,/\['issue','roads','general','contractor','paving','hoa','property','concrete','roofer'\]/);
   assert.doesNotMatch(db,/SET plan='pro',pro_type='general' FROM testing_assignments/);
 });
 test('final Pro branding uses the shared lockup',()=>{

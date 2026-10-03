@@ -36,11 +36,11 @@ const core = {
     ['Mac-to-Android messaging notice', 'Texting from a Mac to an Android phone may require Text Message Forwarding from your iPhone. The notice appears when that setup may affect delivery.']
   ]
 };
-const all = ['basic','pro','contractor','roads','paving','hoa','property','concrete','roofer'];
+const all = ['basic','issue','pro','contractor','roads','paving','hoa','property','concrete','roofer'];
 const pro = ['pro','contractor','paving','concrete','roofer'];
 const articles = [];
 function add(category, editions, page, title, text) { articles.push({id:articles.length,category,editions,page,title,text}); }
-Object.entries(core).forEach(([page, topics]) => topics.forEach(([title,text]) => add(page[0].toUpperCase()+page.slice(1),page==='capture'?(title==='Location, topics, and jobs'?all.filter(e=>!['basic','roads'].includes(e)):all.filter(e=>e!=='roads')):pro,page,title,text)));
+Object.entries(core).forEach(([page, topics]) => topics.forEach(([title,text]) => add(page[0].toUpperCase()+page.slice(1),page==='capture'?(title==='Location, topics, and jobs'?all.filter(e=>!['basic','issue','roads'].includes(e)):all.filter(e=>e!=='roads')):pro,page,title,text)));
 add('Getting started',all,'','Start with a photo','The photo is your evidence. Take or choose a clear photo, add a title and a note explaining what matters, check its location, then save. Review the save status before leaving the page. Use the topics below for the tools available in your current version.');
 add('Getting started',all,'','Versions and account access','The version selector at the top of the page lists the versions enabled for your account. Finish saving your current photo before switching. Basic focuses on capture and sending the current photo. Pro adds Organize, Edit, Create, and Send. Industry versions add their own photo workflows. Contact your administrator if a version is missing.');
 add('Getting started',all,'','Use this help panel','Search by a task, tool, or problem, or choose a category. Open a question to read its answer. This page shows guidance for your current workspace. All topics shows everything available for this version. You can keep working with help open. Close help with the × button, the yellow question mark, or Escape. Help is available in desktop windows at least 1,100 pixels wide with a mouse or trackpad.');
