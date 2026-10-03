@@ -89,6 +89,7 @@ CREATE TABLE IF NOT EXISTS captures (
   concrete_phase TEXT,
   concrete_purpose TEXT,
   paving_photo_reason TEXT,
+  urgency TEXT NOT NULL DEFAULT 'standard',
   concrete_element TEXT,
   concrete_stage TEXT,
   concrete_condition TEXT,
@@ -667,12 +668,14 @@ async function init() {
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS concrete_phase TEXT`);
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS concrete_purpose TEXT`);
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS paving_photo_reason TEXT`);
+  await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS urgency TEXT NOT NULL DEFAULT 'standard'`);
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS concrete_element TEXT`);
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS concrete_stage TEXT`);
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS concrete_condition TEXT`);
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS concrete_severity TEXT`);
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS concrete_mix TEXT`);
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS concrete_location TEXT`);
+  await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS subject_latitude DOUBLE PRECISION, ADD COLUMN IF NOT EXISTS subject_longitude DOUBLE PRECISION, ADD COLUMN IF NOT EXISTS location_description TEXT, ADD COLUMN IF NOT EXISTS camera_direction DOUBLE PRECISION, ADD COLUMN IF NOT EXISTS camera_direction_source TEXT`);
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS overlays JSONB`);
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS job_id INTEGER REFERENCES jobs(id) ON DELETE SET NULL`);
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS perceptual_hash TEXT`);
@@ -817,6 +820,7 @@ async function init() {
   await pool.query(require('./related-photos').SCHEMA);
   await pool.query(require('./photo-comments').SCHEMA);
   await require('./testing-hub').initTestingHub(pool);
+  await pool.query(require('fs').readFileSync(require('path').join(__dirname,'qr-codes-schema.sql'),'utf8'));
   console.log('[db] schema ready');
 }
 
