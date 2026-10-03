@@ -12,7 +12,7 @@ const styles = fs.readFileSync(path.join(root, 'public', 'styles.css'), 'utf8');
 test('core editions keep help and issue reporting while shared camera readers retain Pro gating', () => {
   assert.match(app, /<button class="issue-fab \$\{isRoadIssuesClient\(\)\?'road-issue-fab':''\}"/);
   assert.match(app, /window\.PhotoNotesHelp\.mount/);
-  assert.match(app, /featureOn\('camera_readers'\) && !isPavingClient\(\)/);
+  assert.match(app, /\(featureOn\('camera_readers'\) \|\| beforeAfterOn\(\)\) && !isPavingClient\(\)/);
   assert.doesNotMatch(server, /error:'core Photo Notes editions only'/);
 });
 
