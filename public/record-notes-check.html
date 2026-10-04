@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Record Notes Microphone Check</title>
+<link rel="stylesheet" href="/help.css?v=339"><script src="/help-catalog.js?v=347" defer></script><script src="/help.js?v=342" defer></script>
+<style>body{font:17px Arial,Helvetica,sans-serif;color:#000;background:#fff;margin:0;text-align:left}main{max-width:760px;padding:24px 20px 100px;margin:auto}button,input{font:inherit;color:#000}button{padding:12px;margin:6px 6px 6px 0;background:#ffdf00;border:2px solid #000;border-radius:6px}button:disabled{background:#fff;border-style:dashed}input{display:block;width:100%;box-sizing:border-box;padding:10px}audio{width:100%}li{margin:12px 0}#micCheckStatus{font-weight:bold}a{color:#000}fieldset{margin:20px 0;border:2px solid #000}table{border-collapse:collapse;width:100%}td,th{padding:10px;border:1px solid #000;text-align:left}</style></head>
+<body><main><h1>Record Notes Microphone Check</h1>
+<p>This tester check uses the microphone directly, without speech recognition. Audio stays in this page on this device. It is never uploaded or transcribed. Closing or reloading the page deletes the recordings.</p>
+<p>Close other microphone, camera and speech sessions first. Use harmless test words. Run ten recordings in a row. For each one, say its number, stop, play it and mark whether you heard your voice. Audio file size alone does not prove that sound was captured.</p>
+<label for="micCheckDevice">Phone model, operating system version, and Safari or Home Screen</label><input id="micCheckDevice" maxlength="200" placeholder="Example: iPhone 15, iOS version, Safari">
+<p id="micCheckStatus" role="status" aria-live="polite">Ready. Allow microphone access when asked.</p>
+<button id="micCheckStart">Start microphone check</button><button id="micCheckStop" disabled>Stop</button>
+<section id="micCheckReview" hidden><h2>Listen to this recording</h2><audio id="micCheckPlayback" controls></audio><p>After playback, choose what you heard.</p><button id="micCheckHeard">I heard my voice</button><button id="micCheckSilent">Silent or missing audio</button></section>
+<h2>Results</h2><ol id="micCheckResults"></ol>
+<button id="micCheckDownload">Download diagnostic metadata</button><button id="micCheckReset">Clear this check</button>
+<p>The download contains event times, audio format and size, microphone state, playback judgments, browser information and the device description you enter. It excludes audio and spoken words. Share it with your existing Record Notes issue report. A working microphone check does not prove Record Notes is fixed.</p>
+<p><a id="micCheckHome" href="/">Return to Photo Notes</a></p>
+</main><script src="/record-notes-check.js?v=1" defer></script></body></html>

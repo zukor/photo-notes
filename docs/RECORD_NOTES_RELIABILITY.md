@@ -32,3 +32,9 @@ Record Notes and Take Photo are Photo Notes' two core features. Repeated recordi
 ## If Web Speech remains unreliable
 
 Evaluate a durable audio capture and retryable transcription path, rather than continuing to add blind recognition restarts. It requires explicit handling of audio retention, offline persistence, transcription provider cost/activation, ownership, cancellation, and user review. Do not activate a paid provider or upload users' audio as a diagnostic experiment. Compare it against real failure evidence before choosing an architecture.
+
+## Direct microphone isolation
+
+Open `/record-notes-check.html` on the failing phone after closing other microphone and camera sessions. This diagnostic page is separate from customer Capture. It uses direct microphone audio capture, never SpeechRecognition, and keeps audio only in page memory on that device. It makes no audio upload or provider calls.
+
+Run ten recordings, say the cycle number, stop, play and mark voice heard or silent. Download the metadata and attach it to the existing issue report. Repeat in the mode that fails, Safari or Home Screen. A successful local playback is evidence of microphone capture only, not proof of working Record Notes. Closing or reloading discards the local audio. An unresolved permission request is canceled safely and a later permission grant is released. Backgrounding ends the check and releases the microphone.
