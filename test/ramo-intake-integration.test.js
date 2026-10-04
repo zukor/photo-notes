@@ -5,7 +5,7 @@ const fs=require('fs/promises');
 const path=require('path');
 const database=process.env.PN_RAMO_TEST_DATABASE_URL;
 test('Ramo sender persists groups, scopes ownership, and resumes exact manifest after failure',{skip:!database,timeout:60000},async()=>{
- assert.equal(database,'postgresql://postgres@127.0.0.1:55496/pn_ramo_test');
+ if(process.env.PN_AUTOMATION_DATA_DIR)require('./support/isolated-database.cjs').assertIsolated(database);else assert.equal(database,'postgresql://postgres@127.0.0.1:55496/pn_ramo_test');
  Object.assign(process.env,{DATABASE_URL:database,PGSSL:'disable',ADMIN_EMAIL:'ramo-test@example.invalid',ADMIN_PASSWORD:'local-testing-only',RAMO_INTAKE_TOKEN:'local-test-token',SESSION_SECRET:'local-ramo-testing-secret'});
  const {pool,init}=require('../db');await init();
  const id=(await pool.query('SELECT id FROM users WHERE email=$1',[process.env.ADMIN_EMAIL])).rows[0].id;

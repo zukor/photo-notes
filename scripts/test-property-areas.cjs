@@ -1,7 +1,7 @@
 // Isolated local PostgreSQL schema and browser fixtures. Never uses .env or production.
 const assert=require('node:assert/strict'),express=require('express'),{Client}=require('pg'),{chromium,webkit}=require('playwright'),{SCHEMA,register,validate}=require('../property-areas');
 (async()=>{
- const db=new Client({host:'/tmp',database:'postgres',user:require('node:os').userInfo().username});await db.connect();const schema='area_test_'+process.pid;let server;
+ const db=new Client(process.env.PN_ISOLATED_DATABASE_URL?{connectionString:process.env.PN_ISOLATED_DATABASE_URL}:{host:'/tmp',database:'postgres',user:require('node:os').userInfo().username});await db.connect();const schema='area_test_'+process.pid;let server;
  try{
  await db.query(`CREATE SCHEMA ${schema}`);await db.query(`SET search_path TO ${schema}`);
  await db.query(`CREATE TABLE hoa_management_companies(id integer primary key);CREATE TABLE hoa_communities(id integer primary key,company_id integer,name text,active boolean default true);CREATE TABLE captures(id integer primary key,user_id integer);CREATE TABLE hoa_assets(id integer primary key,company_id integer,community_id integer);CREATE TABLE hoa_maintenance_items(id integer primary key,company_id integer,community_id integer);CREATE TABLE hoa_inspection_stops(id integer primary key);CREATE TABLE hoa_visit_stops(id integer primary key);INSERT INTO hoa_communities VALUES(1,1,'Property A',true),(2,1,'Property B',true),(3,2,'Other Company',true);INSERT INTO hoa_assets VALUES(1,1,1);INSERT INTO captures VALUES(1,1);`);

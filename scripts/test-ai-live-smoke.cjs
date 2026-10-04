@@ -1,0 +1,6 @@
+'use strict';
+// Deliberate opt-in only. Never called by fast/full/CI.
+if(!process.argv.includes('--allow-paid'))throw Error('This smoke test makes one paid AI request. Run with --allow-paid only when deliberately authorized.');
+if(!process.env.ANTHROPIC_API_KEY)throw Error('Configure ANTHROPIC_API_KEY explicitly; .env is not loaded.');
+const fs=require('node:fs/promises'),os=require('node:os'),path=require('node:path');
+(async()=>{const dir=await fs.mkdtemp(path.join(os.tmpdir(),'pn-ai-smoke-'));try{const fixture=path.join(dir,'plate.png');await fs.writeFile(fixture,await require('../test/support/golden-images.cjs').image('equipment-plate'));console.log('Making one paid request using a synthetic equipment plate.');const reader=require('../vision').createVisionReader();const result=await reader(fixture,'Return JSON with model and serial_number visible on this synthetic equipment plate. Do not infer invisible values.');if(!result.data)throw Error('AI smoke failed: '+result.error);require('node:assert/strict').equal(result.data.model,'TEST-42');require('node:assert/strict').equal(String(result.data.serial_number),'000123');console.log('PASS synthetic plate provider smoke. This does not establish field accuracy.');}finally{await fs.rm(dir,{recursive:true,force:true});}})().catch(e=>{console.error(e.message);process.exitCode=1;});

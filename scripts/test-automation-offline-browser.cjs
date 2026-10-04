@@ -1,0 +1,7 @@
+'use strict';
+const {spawn}=require('node:child_process'),fs=require('node:fs/promises'),os=require('node:os'),path=require('node:path');
+(async()=>{const upload=await fs.mkdtemp(path.join(os.tmpdir(),'pn-browser-upload-'));let server;
+ try{const base=await new Promise((resolve,reject)=>{server=spawn(process.execPath,['scripts/web-test-server.cjs'],{env:{...process.env,PN_WEB_TEST_PORT:'0',PN_BROWSER_UPLOAD_DIR:upload},stdio:['ignore','pipe','pipe']});let text='';const timer=setTimeout(()=>reject(Error('Disposable browser server failed to start')),30000);server.stderr.pipe(process.stderr);server.stdout.on('data',chunk=>{process.stdout.write(chunk);text+=chunk;const match=text.match(/Disposable web test API: (http:\/\/127\.0\.0\.1:\d+)/);if(match){clearTimeout(timer);resolve(match[1]);}});server.on('exit',code=>{clearTimeout(timer);reject(Error('Browser server exited '+code));});});
+ const code=await new Promise(resolve=>spawn(process.execPath,['scripts/test-web-browser.cjs'],{env:{...process.env,PN_WEB_TEST_BASE_URL:base,...(process.env.PN_BROWSER_DEVICE?{PN_WEB_TEST_SINGLE:process.env.PN_BROWSER_DEVICE}:{})},stdio:'inherit'}).on('close',resolve));if(code!==0)throw Error('Real offline browser workflow failed: '+code);
+ }finally{if(server&&server.exitCode===null){await new Promise(resolve=>{server.on('exit',resolve);server.kill('SIGTERM');setTimeout(()=>{if(server.exitCode===null)server.kill('SIGKILL');},5000).unref();});}await fs.rm(upload,{recursive:true,force:true});}
+})().catch(e=>{console.error(e);process.exitCode=1;});

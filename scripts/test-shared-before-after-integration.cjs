@@ -1,7 +1,7 @@
 // Dedicated disposable local database only. No production requests or paid services.
 const assert=require('node:assert/strict'),fs=require('node:fs'),os=require('node:os'),path=require('node:path');
 (async()=>{
-process.env.DATABASE_URL='postgresql:///pn_shared_pairs_test?host=/tmp';process.env.PGSSL='disable';process.env.SESSION_SECRET='shared-pairs-local-test';process.env.UPLOAD_DIR=fs.mkdtempSync(path.join(os.tmpdir(),'pn-shared-pairs-'));delete process.env.ANTHROPIC_API_KEY;
+process.env.DATABASE_URL=process.env.DATABASE_URL||'postgresql:///pn_shared_pairs_test?host=/tmp';process.env.PGSSL='disable';process.env.SESSION_SECRET='shared-pairs-local-test';process.env.UPLOAD_DIR=fs.mkdtempSync(path.join(os.tmpdir(),'pn-shared-pairs-'));delete process.env.ANTHROPIC_API_KEY;
 const {pool,init}=require('../db');assert.equal((await pool.query('SELECT current_database() AS name')).rows[0].name,'pn_shared_pairs_test');await init();const {app}=require('../server'),jwt=require('jsonwebtoken'),sharp=require('sharp'),Zip=require('pizzip');
 const server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));const users=[];
 try{

@@ -1,0 +1,11 @@
+'use strict';
+// Original synthetic graphics only. They are encoding/workflow fixtures, not AI accuracy evidence.
+const sharp=require('sharp');
+const categories=['pavement','concrete','building','equipment-plate','material-label','gauge','plan','property-condition','before','after'];
+async function image(category,{width=640,height=480,variant='normal'}={}){
+ if(!categories.includes(category))throw Error('Unknown golden image category');
+ const marks={pavement:'<path d="M20 50L120 130 95 220 220 300" fill="none" stroke="black" stroke-width="8"/>',concrete:'<path d="M40 40L210 180 180 280" stroke="black" stroke-width="3" fill="none"/>',building:'<rect x="60" y="50" width="210" height="260" fill="white" stroke="black"/><rect x="130" y="200" width="55" height="110" fill="blue"/>','equipment-plate':'<rect x="20" y="50" width="300" height="200" fill="white" stroke="black"/><text x="35" y="100">MODEL TEST-42</text><text x="35" y="160">SERIAL 000123</text>','material-label':'<rect x="20" y="50" width="300" height="200" fill="white" stroke="black"/><text x="35" y="100">TEST MATERIAL</text><text x="35" y="160">LOT 2026-001</text>',gauge:'<circle cx="180" cy="180" r="100" fill="white" stroke="black"/><path d="M180 180L230 120" stroke="black" stroke-width="6"/>',plan:'<path d="M40 70H280V300H40ZM160 70V300M40 180H280" fill="none" stroke="black" stroke-width="3"/>','property-condition':'<rect x="150" y="70" width="20" height="260" fill="black"/><circle cx="160" cy="65" r="30" fill="yellow"/>',before:'<path d="M40 80L160 190 110 300" stroke="black" stroke-width="8" fill="none"/>',after:'<rect x="60" y="60" width="200" height="250" fill="white" stroke="black"/>'};
+ const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 640 480"><rect width="640" height="480" fill="#d8c9ae"/><g font-family="Arial" font-size="22" fill="black">${marks[category]}<text x="20" y="420">SYNTHETIC TEST: ${category}</text></g></svg>`;
+ let pipeline=sharp(Buffer.from(svg));if(variant==='blur')pipeline=pipeline.blur(8);if(variant==='low-light')pipeline=pipeline.modulate({brightness:.15});if(variant==='overexposure')pipeline=pipeline.modulate({brightness:4});return pipeline.png().toBuffer();
+}
+module.exports={categories,image};
