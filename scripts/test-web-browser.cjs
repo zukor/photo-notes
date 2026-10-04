@@ -18,7 +18,7 @@ async function saveThroughUI(page){await page.locator('#save').click();}
   try{
    await page.goto(base,{waitUntil:'domcontentloaded'});
    await page.locator('#email').fill('ios-integration@example.invalid');await page.locator('#pw').fill('local-test-only');await page.locator('#loginBtn').click();
-   await page.locator('#profileButton').waitFor();await page.locator('#profileButton').click();await page.locator('.version-picker > summary').click();await page.locator('.version-choices button[data-edition="pro"]').click();await page.waitForFunction(()=>selectedEdition()==='pro');
+   await page.locator('#profileButton').waitFor();await page.locator('#profileButton').click();await page.locator('.version-picker > summary').click();await page.locator('.version-choices button[data-edition="pro"]').click();await page.waitForFunction(()=>selectedEdition()==='pro'&&document.getElementById('editionSwitcher')?.disabled===false);
    await page.evaluate(()=>{const original=queueStore;queueStore=async(...args)=>{try{return await original(...args);}catch(e){console.error('Local save:',e.name,e.message);throw e;}};});
    await page.evaluate(()=>{localStorage.setItem('pn_install_prompt_dismissed_v1','dismissed');document.getElementById('installPrompt')?.remove();});
    if(await page.locator('#tabCapture').isVisible())await page.locator('#tabCapture').click();
