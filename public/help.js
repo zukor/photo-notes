@@ -5,6 +5,7 @@ const catalog=window.PhotoNotesHelpCatalog;
 if(!catalog)throw new Error('PhotoNotes Help catalog must load before Help.');
 let context={edition:'public',page:'login',name:'PhotoNotes AI'},opened=false,query='',scope='page',timer,signature='';
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const maintenanceText=s=>window.PhotoNotesMaintenanceTerminology?.text(s,context.edition)??s;
 const clean=s=>String(s||'').replace(/\s+/g,' ').trim();
 function hidden(n){
  for(let p=n;p&&p!==document.body;p=p.parentElement){if(p.hidden||p.getAttribute('aria-hidden')==='true'||p.style.display==='none'||getComputedStyle(p).display==='none'||p.id==='desktopHelp'||p.id==='photoNotesHelp')return true;}
@@ -26,10 +27,10 @@ function matches(key,value){return key.endsWith('*')?value.startsWith(key.slice(
 function guide(n,title){
  const keys=[n.id,n.name,...Object.keys(n.dataset).filter(k=>k!=='add'||n.closest('#stampAdd')).map(k=>`data-${k.replace(/[A-Z]/g,m=>'-'+m.toLowerCase())}`),...n.classList,n.tagName.toLowerCase()].filter(Boolean);
  const rule=keys.map(v=>catalog.rules.find(r=>r.keys.some(k=>matches(k,v)))).find(Boolean);
- if(rule)return {text:rule.text,terms:rule.terms,authored:true};
+ if(rule)return {text:maintenanceText(rule.text),terms:rule.terms,authored:true};
  const words=title.toLowerCase();
  const textRule=catalog.textRules.find(r=>new RegExp(r.match,'i').test(title));
- if(textRule)return {text:textRule.text,terms:textRule.terms||[],authored:true};
+ if(textRule)return {text:maintenanceText(textRule.text),terms:textRule.terms||[],authored:true};
  // New fields get current labels/options immediately; the release check flags unmapped controls.
  if(n.tagName==='SELECT')return {text:`Choose ${title.toLowerCase()} using the options listed on this page. Review the surrounding record before saving or applying the selection. Changing a filter changes the view rather than deleting records.`,terms:['Selection'],authored:false};
  if(n.tagName==='TEXTAREA')return {text:`Enter ${title.toLowerCase()} for the current record. Use specific facts supported by the photos, then review the text and use the form’s save/submit action.`,terms:['Photo note'],authored:false};
@@ -95,9 +96,10 @@ const general=[
  {title:'Report and retest an application problem',text:'Use Report Issue for a software problem, with the exact page, steps, expected result, actual result, and screenshot. Follow My Issue Reports or Testing Hub for repair requests. A retest is complete only when you repeat the requested steps and record what happened on your device.',terms:['App issue','Retest','Testing assignment']}
 ];
 function render(){
- const root=shell(),items=scope==='page'?controls():general;
+ const root=shell();let items=scope==='page'?controls():general;
+ items=items.map(i=>({...i,text:maintenanceText(i.text),terms:i.terms}));
  const words=query.toLowerCase().trim().split(/\s+/).filter(Boolean);
- const found=items.filter(i=>words.every(w=>(i.title+' '+i.text+' '+i.choices?.join(' ')+' '+i.terms.map(t=>t+' '+catalog.terms[t]).join(' ')).toLowerCase().includes(w)));
+ const found=items.filter(i=>words.every(w=>(i.title+' '+i.text+' '+i.choices?.join(' ')+' '+i.terms.map(t=>maintenanceText(t)+' '+maintenanceText(catalog.terms[t])).join(' ')).toLowerCase().includes(w)));
  const sig=JSON.stringify([pageTitle(),context.edition,query,scope,items.map(i=>[i.title,i.text,i.choices])]);if(sig===signature)return;signature=sig;
  const expanded=new Set([...root.querySelectorAll('details[open]')].map(n=>n.dataset.helpTitle));
  const openTerms=new Set([...root.querySelectorAll('[data-term][aria-expanded="true"]')].map(n=>n.dataset.term));
@@ -106,7 +108,7 @@ function render(){
  root.querySelector('#pnHelpCount').textContent=scope==='page'?`${items.length} page features, in page order${query?` · ${found.length} matches`:''}`:'PhotoNotes guidance';
  root.querySelector('#pnHelpResults').innerHTML=found.length?found.map((i,k)=>`<details class="pn-help-article" data-help-title="${esc(i.title)}" ${expanded.has(i.title)?'open':''}><summary>${scope==='page'?items.indexOf(i)+1+'. ':''}${esc(i.title)}</summary><p>${esc(i.text)}</p>${i.choices?.length?`<p><strong>Current choices:</strong> ${i.choices.map(esc).join('; ')}.</p>`:''}</details>`).join(''):'<p>No matching features. Try fewer words or clear the search.</p>';
  const terms=relevantTerms(items);
- root.querySelector('#pnHelpTermsList').innerHTML=terms.map((name,k)=>`<div class="pn-help-term"><button type="button" data-term="${esc(name)}" aria-expanded="${openTerms.has(name)}" aria-describedby="pnTerm${k}">${esc(name)}</button><span id="pnTerm${k}" role="tooltip">${esc(catalog.terms[name])}</span></div>`).join('');
+ root.querySelector('#pnHelpTermsList').innerHTML=terms.map((name,k)=>`<div class="pn-help-term"><button type="button" data-term="${esc(name)}" aria-expanded="${openTerms.has(name)}" aria-describedby="pnTerm${k}">${esc(maintenanceText(name))}</button><span id="pnTerm${k}" role="tooltip">${esc(maintenanceText(catalog.terms[name]))}</span></div>`).join('');
  if(focusedTerm)[...root.querySelectorAll('[data-term]')].find(n=>n.dataset.term===focusedTerm)?.focus();
  root.querySelectorAll('[data-pn-help-scope]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.pnHelpScope===scope)));
  root.querySelector('#pnHelpReport').hidden=!context.reportIssue&&!document.getElementById('issueFab');
