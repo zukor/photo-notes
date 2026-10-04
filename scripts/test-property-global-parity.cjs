@@ -24,7 +24,7 @@ const {chromium,webkit}=require('playwright');
      await page.evaluate(({edition,section})=>{state.plan='pro';state.proType=edition;state.view=section;state.groupId=null;state.ewrId=null;state.me.ramo_intake_access=true;renderApp();},{edition,section});
      await page.locator(section==='organize'?'#photoSearch':section==='edit'?'#delbtn':section==='create'?'#gcreate':'#sharephotos').waitFor();
      // Export Presets mounts after its API request; inspect the completed shared UI.
-     if(section==='send')await page.locator('#epChoose').waitFor();
+     if(['send','organize'].includes(section))await page.locator('#epChoose').waitFor({state:'attached'});
      const controls=await page.locator('#body button[id],#body input[id],#body select[id],#body textarea[id]').evaluateAll(nodes=>nodes.map(n=>{const s=getComputedStyle(n);return {id:n.id,label:n.tagName==='BUTTON'?n.textContent.trim():n.getAttribute('placeholder'),font:s.fontFamily,size:s.fontSize,color:s.color,background:s.backgroundColor,radius:s.borderRadius};}));
      if(!reference)reference=controls;
      else for(const expected of reference)assert.deepEqual(controls.find(c=>c.id===expected.id),expected,`${edition} ${section} ${expected.id} matches Pro`);
