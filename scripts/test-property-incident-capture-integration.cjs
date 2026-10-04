@@ -1,0 +1,25 @@
+'use strict';
+// Fresh local database only. Synthetic uploads never call a paid provider.
+const assert=require('node:assert/strict'),crypto=require('node:crypto'),jwt=require('jsonwebtoken'),sharp=require('sharp'),Zip=require('pizzip');
+const target=new URL(process.env.DATABASE_URL||'');
+assert(['127.0.0.1','localhost'].includes(target.hostname));assert.equal(target.pathname,'/pn_property_incident_capture_test');
+(async()=>{const {pool,init}=require('../db');await init();let server;try{
+ const {app}=require('../server');server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));const base='http://127.0.0.1:'+server.address().port;
+ const user=(await pool.query("INSERT INTO users(email,name,password_hash,plan,pro_type,edition_access) VALUES('area-owner@example.invalid','Fixture','unused','pro','property',ARRAY['property']) RETURNING *")).rows[0];
+ const cookie='pn_token='+jwt.sign({id:user.id},process.env.SESSION_SECRET);
+ const api=async(url,body,method)=>{const r=await fetch(base+url,{method:method||(body?'POST':'GET'),headers:{Cookie:cookie,'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});return {status:r.status,data:await r.json()};};
+ await api('/api/hoa/company');const community=(await api('/api/hoa/communities',{name:'Fixture property'})).data;
+ const area=(await api('/api/property/areas',{community_id:community.id,name:'AREA_REPORT_SENTINEL'})).data;assert(area.id);
+ const photo=await sharp({create:{width:120,height:90,channels:3,background:'#124'}}).jpeg().toBuffer();
+ const incident=(await api('/api/property/incidents',{community_id:community.id,property_area_id:area.id,title:'Incident fixture',incident_type:'Vehicle Impact',observed_at:new Date().toISOString()})).data;assert(incident.id);
+ const upload=async(identity,id=incident.id,extra={})=>{const fd=new FormData();fd.append('photo',new Blob([photo],{type:'image/jpeg'}),'fixture.jpg');fd.append('note','Incident evidence');fd.append('latitude','40');fd.append('longitude','-90');fd.append('incident_id',String(id));fd.append('incident_view','Damage');for(const [k,v] of Object.entries(extra))fd.append(k,String(v));const r=await fetch(base+'/api/captures',{method:'POST',headers:{Cookie:cookie,'X-Photo-Notes-Capture-Id':identity,'X-Photo-Notes-Edition':'property','X-Photo-Notes-Account':crypto.createHash('sha256').update(user.email).digest('hex')},body:fd});return {status:r.status,data:await r.json()};};
+ const identity=crypto.randomUUID(),saved=await upload(identity,incident.id,{hoa_community_id:community.id});assert.equal(saved.status,200,JSON.stringify(saved.data));assert.equal(saved.data.property_area_id,area.id);assert.equal(saved.data.property_community_id,community.id);assert.equal(saved.data.latitude,40);
+ const replay=await upload(identity,incident.id,{hoa_community_id:community.id});assert.equal(replay.status,200,JSON.stringify(replay.data));assert.equal(replay.data.id,saved.data.id);assert.equal(replay.data.property_area_id,area.id);assert.equal((await pool.query('SELECT count(*)::int n FROM property_incident_photos WHERE incident_id=$1',[incident.id])).rows[0].n,1);assert.equal((await pool.query('SELECT count(*)::int n FROM hoa_maintenance_items WHERE created_by=$1',[user.id])).rows[0].n,0);
+ assert.equal((await pool.query('SELECT original_sha256 FROM capture_evidence WHERE capture_id=$1',[saved.data.id])).rows[0].original_sha256,crypto.createHash('sha256').update(photo).digest('hex'));
+ assert.equal((await upload(crypto.randomUUID(),2147483647)).status,404);assert.equal((await upload(crypto.randomUUID(),incident.id,{follow_up_occurrence_id:1})).status,400);assert.equal((await pool.query('SELECT count(*)::int n FROM captures WHERE user_id=$1',[user.id])).rows[0].n,1);
+ const other=(await pool.query("INSERT INTO users(email,name,password_hash,plan,pro_type,edition_access) VALUES('other-incident@example.invalid','Other','unused','pro','property',ARRAY['property']) RETURNING id")).rows[0];const otherCookie='pn_token='+jwt.sign({id:other.id},process.env.SESSION_SECRET);const denied=await fetch(base+'/api/property/incidents/'+incident.id,{headers:{Cookie:otherCookie}});assert([403,404].includes(denied.status));
+ await pool.query("INSERT INTO photo_comments(capture_id,author_id,author_name,text) VALUES($1,$2,'Fixture','internal-comment-secret')",[saved.data.id,user.id]);
+ for(const format of ['pdf','docx']){const r=await fetch(base+'/api/property/incidents/'+incident.id+'/report?doc='+format,{headers:{Cookie:cookie}});assert.equal(r.status,200);const b=Buffer.from(await r.arrayBuffer());assert(b.length>1500);if(format==='docx'){const xml=new Zip(b).file('word/document.xml').asText();assert(xml.includes('AREA_REPORT_SENTINEL'));assert(xml.includes('Incident evidence'));assert(!xml.includes('internal-comment-secret'));}}
+ console.log('PASS: real incident upload/receipt/Area/Property/GPS/fingerprint, no maintenance duplication, invalid rollback, overlapping-workflow rejection, ownership and PDF/Word');
+ }finally{await new Promise(r=>server?.close(r)||r());await pool.end();}
+})().catch(e=>{console.error(e);process.exitCode=1;});

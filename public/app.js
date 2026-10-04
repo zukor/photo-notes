@@ -780,6 +780,7 @@ function renderCapture() {
       acquireLocation();
     }
   }
+  window.PhotoNotesIncidents?.mount({state,body,api,esc,toast,renderCapture,photoSrc,downloadBlob,toggleDictation,finishCaptureDictation,stopCaptureDictation,addZoom:installPhotoViewerButtons,openPhoto:id=>{state.view='edit';state.editTopic='';state._focusCapture=id;state.selectedIds=new Set([String(id)]);renderApp();}});
   mountDuplicateContext();
 }
 
@@ -1846,7 +1847,7 @@ async function showPendingPhotos(){
   const retry=document.createElement('button');retry.className='btn';retry.textContent='Retry Current Version';retry.onclick=async()=>{dialog.close();await restoreOfflineQueue();};
   const close=document.createElement('button');close.className='btn secondary';close.textContent='Close';close.onclick=()=>dialog.close();dialog.append(retry,close);dialog.addEventListener('close',()=>dialog.remove());document.body.append(dialog);dialog.showModal();
 }
-function payloadFormData(p){const fd=new FormData();if(p.photo)fd.append('photo',p.photo,p.photoName||'offline-photo.jpg');fd.append('note',p.note||'');fd.append('area_tags',p.area_tags||'[]');fd.append('kind',p.kind||'note');if(p.custom_fields)fd.append('custom_fields',p.custom_fields);if(p.context_source_id)fd.append('context_source_id',p.context_source_id);if(p.job_id)fd.append('job_id',p.job_id);if(p.follow_up_occurrence_id)fd.append('follow_up_occurrence_id',p.follow_up_occurrence_id);for(const k of ['urgency','paving_photo_reason','concrete_phase','concrete_purpose','concrete_element','concrete_stage','concrete_condition','concrete_severity','concrete_location','concrete_mix','hoa_community_id','hoa_title','hoa_item_type','hoa_priority','hoa_area','hoa_directed_to','hoa_budget_source','hoa_photo_stage','hoa_target_date','property_area_id'])if(p[k])fd.append(k,p[k]);if(p.latitude!=null)fd.append('latitude',p.latitude);if(p.longitude!=null)fd.append('longitude',p.longitude);if(p.address)fd.append('address',p.address);return fd;}
+function payloadFormData(p){const fd=new FormData();if(p.photo)fd.append('photo',p.photo,p.photoName||'offline-photo.jpg');fd.append('note',p.note||'');fd.append('area_tags',p.area_tags||'[]');fd.append('kind',p.kind||'note');if(p.custom_fields)fd.append('custom_fields',p.custom_fields);if(p.context_source_id)fd.append('context_source_id',p.context_source_id);if(p.job_id)fd.append('job_id',p.job_id);if(p.follow_up_occurrence_id)fd.append('follow_up_occurrence_id',p.follow_up_occurrence_id);for(const k of ['urgency','paving_photo_reason','concrete_phase','concrete_purpose','concrete_element','concrete_stage','concrete_condition','concrete_severity','concrete_location','concrete_mix','hoa_community_id','hoa_title','hoa_item_type','hoa_priority','hoa_area','hoa_directed_to','hoa_budget_source','hoa_photo_stage','hoa_target_date','property_area_id','incident_id','incident_view'])if(p[k])fd.append(k,p[k]);if(p.latitude!=null)fd.append('latitude',p.latitude);if(p.longitude!=null)fd.append('longitude',p.longitude);if(p.address)fd.append('address',p.address);return fd;}
 
 function bgIndicator() {
   let box=document.getElementById('bgstatus');
@@ -1915,8 +1916,8 @@ async function saveCaptureDurably(options = {}) {
   const note = document.getElementById('note').value.trim();
   if(state._duplicateContext&&!state.photoFile){toast('Take or select a new photo before saving this Photo Note.');return false;}
   if (!state.photoFile && !note) { toast('Take a photo or add a note first'); return; }
-  if(isHoaClient()&&!state.communityId){toast(hoaText('Select an HOA or community'));return;}
-  if(isHoaClient()&&!document.getElementById('hoaTitle').value.trim()&&!note){toast('Enter an issue title or note');return;}
+  if(isHoaClient()&&!globalThis.PhotoNotesIncidents?.active()&&!state.communityId){toast(hoaText('Select an HOA or community'));return;}
+  if(isHoaClient()&&!globalThis.PhotoNotesIncidents?.active()&&!document.getElementById('hoaTitle').value.trim()&&!note){toast('Enter an issue title or note');return;}
   if (!(await confirmPhotoQuality())) { toast('Photo kept for retaking'); return; }
   // Build the payload from the CURRENT state before we clear the form.
   const payload={photo:state.photoFile||null,photoName:state.photoFile&&state.photoFile.name||'offline-photo.jpg',note,area_tags:JSON.stringify(isHoaClient()?[document.getElementById('hoaArea').value]:(state.area?[state.area]:[])),kind:'note'};
@@ -1927,6 +1928,7 @@ async function saveCaptureDurably(options = {}) {
   if(state.proType==='property')payload.property_area_id=document.getElementById('paCaptureArea')?.value||'';
   if(isConcreteClient())Object.assign(payload,concreteCapturePayload());
   if(isPavingClient()){payload.paving_photo_reason='proposal';if(state.jobId)payload.job_id=state.jobId;}
+  try{globalThis.PhotoNotesIncidents?.payload(payload);}catch(e){toast(e.message);return false;}
   try{globalThis.PhotoNotesFollowUps?.payload(payload);}catch(e){toast(e.message);return false;}
   const hadCoords = !!state.location;
   if (state.location) { payload.latitude=state.location.lat;payload.longitude=state.location.lng; }
@@ -1947,6 +1949,7 @@ async function saveCaptureDurably(options = {}) {
   state._captureShareSave=null;state._duplicateContext=null;state._followUp=null;
   // Only an explicit Save clears the saved draft and hands upload to the background.
   captureLocationGeneration++;
+  globalThis.PhotoNotesIncidents?.advance();
   globalThis.PhotoNotesCustomFields?.clear();
   state._captureTemplateName=''; state.urgency='standard'; state.photoFile = null; state._note = ''; state.location = null; state.address = null; state._locationPromise = null;
   state._dims = freshDims(); state._measure = null;

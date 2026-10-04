@@ -1,0 +1,29 @@
+const express=require('express'),assert=require('node:assert/strict'),{chromium,webkit}=require('playwright'),path=require('node:path');
+(async()=>{const app=express();app.use(express.static(path.join(__dirname,'../public')));const server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));try{for(const engine of [chromium,webkit]){const browser=await engine.launch();try{for(const width of [390,1440]){
+ const page=await browser.newPage({viewport:{width,height:900},serviceWorkers:'block'}),errors=[];page.on('pageerror',e=>errors.push(e.message));let incident=null;const uploads=[],photos=[];
+ await page.addInitScript(()=>{localStorage.setItem('pn_install_prompt_dismissed_v1','dismissed');localStorage.setItem('pn_first_use_v1:incident%40example.test','done');});
+ await page.route('**/api/**',async r=>{const url=new URL(r.request().url()),p=url.pathname;let d=[];
+ if(p==='/api/me')d={id:1,email:'incident@example.test',name:'Tester',role:'user',plan:'pro',pro_type:'property',edition_access:['property','hoa','pro']};
+ else if(p==='/api/billing/config')d={checkout_enabled:false};
+ else if(p==='/api/hoa/company')d={id:1,name:'Management'};
+ else if(p==='/api/hoa/communities')d=[{id:1,name:'Example Shopping Center'}];
+ else if(p==='/api/hoa/assets')d=[{id:7,community_id:1,name:'Light Pole #7'}];
+ else if(p==='/api/property/areas')d=[{id:3,community_id:1,name:'North Parking Lot',active:true}];
+ else if(p==='/api/property/incidents'&&r.request().method()==='POST'){incident={...r.request().postDataJSON(),id:1,property_name:'Example Shopping Center',asset_name:'Light Pole #7',area_name:'North Parking Lot'};d=incident;}
+ else if(p==='/api/property/incidents')d=incident?[{...incident,photo_count:photos.length}]:[];
+ else if(p==='/api/property/incidents/1'&&r.request().method()==='POST'){incident={...incident,...r.request().postDataJSON()};d=incident;}
+ else if(p==='/api/property/incidents/1')d={incident,photos};
+ else if(p==='/api/captures'&&r.request().method()==='POST'){const raw=r.request().postDataBuffer().toString();uploads.push(raw);const id=photos.length+1;d={id,note:'Observed damaged pole',photo_path:'/logo.svg',created_at:new Date().toISOString(),view_name:raw.match(/name="incident_view"\r\n\r\n([^\r]+)/)?.[1]};photos.push(d);}
+ else if(p==='/api/captures')d=photos;
+ return r.fulfill({json:d,headers:p==='/api/me'?{'X-Photo-Notes-Upload-Receipts':'1'}:{}});
+ });
+ await page.goto(`http://127.0.0.1:${server.address().port}`);await page.waitForFunction(()=>state.me&&(document.getElementById('hvNew')||document.getElementById('diStart')));await page.locator('#tabCapture').click();await page.locator('#diStart').waitFor();await page.locator('#diStart').click();await page.locator('#di-property').selectOption('1');await page.locator('#di-asset_id option[value="7"]').waitFor({state:'attached'});await page.locator('#di-title').fill('Vehicle Damage to Light Pole');await page.locator('#di-asset_id').selectOption('7');await page.locator('#di-property_area_id').selectOption('3');await page.locator('#note').fill('Pole visibly bent.');await page.locator('#di-reported_by').fill('Site manager');await page.locator('#di-reference_numbers').fill('Internal: INC-007');
+ await page.locator('#pnHelpFab').count();await page.locator('.pn-help-fab').click();await page.locator('#pnHelpSearch').fill('incident');assert(await page.locator('.pn-help-article').count()>0);await page.locator('#pnHelpClose').click();
+ await page.screenshot({path:`/tmp/incidents-context-${engine.name()}-${width}.png`,fullPage:true});await page.locator('#diSave').click();await page.locator('#diView').waitFor();assert.equal(await page.locator('#hoaCommunity').isVisible(),false);
+ const sharp=require('sharp'),image=await sharp({create:{width:600,height:400,channels:3,background:'#3456ab'}}).jpeg().toBuffer();
+ await page.locator('#photoLib').setInputFiles({name:'incident.jpg',mimeType:'image/jpeg',buffer:image});await page.locator('#note').fill('Observed damaged pole');await page.evaluate(()=>{state._quality=null;confirmPhotoQuality=async()=>true;});assert.equal(await page.evaluate(()=>saveCapture()),true);await page.waitForFunction(()=>document.querySelector('#diView')?.value==='Damage');await page.waitForTimeout(300);assert.equal(uploads.length,1);assert(uploads[0].includes('name="incident_id"'));assert(!uploads[0].includes('name="hoa_community_id"'));
+ await page.locator('#diView').selectOption('Identification');await page.locator('#diSkipReason').fill('No identifier on damaged pole');await page.locator('#diSkip').click();await page.waitForFunction(()=>document.querySelector('#diView')?.value==='Additional Photos');
+ await page.locator('#diReview').click();await page.locator('#diContinue').waitFor();assert.equal(await page.locator('[data-di-photo]').count(),1);assert(await page.locator('.photo-viewer-button').count()>0);await page.screenshot({path:`/tmp/incidents-detail-${engine.name()}-${width}.png`,fullPage:true});assert(await page.locator('#diPdf').isVisible());await page.locator('[data-di-photo]').click();await page.locator('#cards').waitFor();
+ await page.evaluate(()=>{state.proType='hoa';state.view='capture';renderApp();});assert.equal(await page.locator('#diStart').count(),0);assert(await page.locator('#hoaCommunity').isVisible());await page.evaluate(()=>{state.proType='general';state.view='capture';renderApp();});assert.equal(await page.locator('#diStart').count(),0);
+ assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true);assert.deepEqual(errors,[]);console.log(`${engine.name()} ${width}: incident context, Help, guided Save, durable association, skip, detail, Edit/zoom and edition isolation PASS`);await page.close();
+ }}finally{await browser.close();}}}finally{server.close();}})().catch(e=>{console.error(e);process.exitCode=1;});
