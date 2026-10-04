@@ -8,12 +8,17 @@
     "postinstall": "node scripts/help-coverage.cjs && node scripts/gen-icons.js",
     "dev": "node --env-file=.env server.js",
     "start": "node server.js",
-    "test": "node --test test/*.test.js",
+    "test": "node scripts/test-system.cjs fast",
     "test:mobile": "node --test test/mobile-regression.test.js",
     "test:web-browser": "node scripts/test-web-browser.cjs",
     "help:check": "node scripts/help-coverage.cjs",
     "test:help": "node scripts/test-complete-help.cjs && node scripts/test-admin-help.cjs",
-    "prestart": "node scripts/help-coverage.cjs"
+    "prestart": "node scripts/help-coverage.cjs",
+    "test:fast": "node scripts/test-system.cjs fast",
+    "test:full": "node scripts/test-system.cjs full",
+    "test:release": "npm run test:full",
+    "test:ai:live": "node scripts/test-ai-live-smoke.cjs",
+    "test:visual": "node scripts/compare-visual-baselines.cjs"
   },
   "engines": {
     "node": ">=20"

@@ -6,7 +6,7 @@ const os=require('node:os');
 const path=require('node:path');
 const database=process.env.PN_WEB_TEST_DATABASE_URL;
 test('Web capture retries, transaction rollback, and edition/account boundaries against PostgreSQL',{skip:!database,timeout:120000},async t=>{
- const url=new URL(database);assert.equal(url.hostname,'127.0.0.1');assert.equal(url.port,'55487');assert.equal(url.pathname,'/pn_ios_test');
+ const url=new URL(database);assert.equal(url.hostname,'127.0.0.1');if(!process.env.PN_AUTOMATION_DATA_DIR)assert.equal(url.port,'55487');assert.equal(url.pathname,'/pn_ios_test');
  const guard=new (require('pg').Client)({connectionString:database});await guard.connect();const actual=(await guard.query('SHOW data_directory')).rows[0].data_directory;assert.equal(await fs.realpath(actual),await fs.realpath(process.env.PN_WEB_TEST_DATA_DIR));await guard.end();
  process.env.DATABASE_URL=database;process.env.PGSSL='disable';process.env.ADMIN_EMAIL='ios-integration@example.invalid';process.env.ADMIN_PASSWORD='local-test-only';
  process.env.UPLOAD_DIR=await fs.mkdtemp(path.join(os.tmpdir(),'pn-ios-uploads-'));

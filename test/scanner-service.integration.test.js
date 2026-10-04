@@ -1,10 +1,10 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),os=require('node:os');
 test('scanner routes retain photos, extract fields, save reviews and report service outages',{skip:process.env.PN_SCANNER_RETEST!=='1',timeout:60000},async()=>{
- process.env.DATABASE_URL='postgresql://127.0.0.1:55489/pn_pro_retest';
+ process.env.DATABASE_URL=process.env.PN_LEGACY_TEST_DATABASE_URL||'postgresql://127.0.0.1:55489/pn_pro_retest';
  process.env.SESSION_SECRET='scanner-retest-local-session-secret';
  process.env.UPLOAD_DIR=fs.mkdtempSync(path.join(os.tmpdir(),'pn-scanner-retest-'));
  delete process.env.ANTHROPIC_API_KEY;
- const {pool,init}=require('../db');assert.equal((await pool.query('SHOW data_directory')).rows[0].data_directory,'/tmp/pn-pro-retest/db');await init();
+ const {pool,init}=require('../db');assert.equal((await pool.query('SHOW data_directory')).rows[0].data_directory,process.env.PN_AUTOMATION_DATA_DIR||'/tmp/pn-pro-retest/db');await init();
  const {app}=require('../server'),jwt=require('jsonwebtoken'),sharp=require('sharp');
  const server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));
  const base='http://127.0.0.1:'+server.address().port,nativeFetch=global.fetch;let user,providerCalls=0,providerStatus=200,extracted={};

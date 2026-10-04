@@ -4,7 +4,7 @@ const sub={endpoint:'https://fcm.googleapis.com/fcm/send/test',keys:{p256dh:'a'.
 test('push endpoints reject arbitrary and internal hosts',()=>{assert.ok(validSubscription(sub));for(const endpoint of ['http://fcm.googleapis.com/test','https://127.0.0.1/test','https://evil.com/test','https://fcm.googleapis.com.evil.com/test','https://fcm.googleapis.com:8443/test'])assert.equal(validSubscription({...sub,endpoint}),false);});
 test('push subscription rejects malformed keys',()=>{assert.equal(validSubscription({...sub,keys:{}}),false);assert.equal(validSubscription(null),false);});
 test('durable notification worker respects ownership, retries, and idempotence',{skip:!process.env.PN_CLOUD_TEST_DB},async()=>{
-  const url=process.env.PN_CLOUD_TEST_DB;if(!url.startsWith('postgres://postgres@127.0.0.1:55473/'))throw new Error('Disposable database required');
+  const url=process.env.PN_CLOUD_TEST_DB;if(process.env.PN_AUTOMATION_DATA_DIR)require('./support/isolated-database.cjs').assertIsolated(url);else if(!url.startsWith('postgres://postgres@127.0.0.1:55473/'))throw new Error('Disposable database required');
   const {Pool}=require('pg'),pool=new Pool({connectionString:url});
   try{
     await pool.query(`CREATE TABLE users(id integer PRIMARY KEY,role text);CREATE TABLE issue_reports(id integer PRIMARY KEY,user_id integer,issue_type text DEFAULT 'bug_problem',review_decision text,reviewed_by integer,implementation_instructions text,management_status text,repair_lease_until timestamptz,created_at timestamptz DEFAULT now(),updated_at timestamptz DEFAULT now());INSERT INTO users VALUES(1,'admin'),(2,'user'),(3,'user');`);
