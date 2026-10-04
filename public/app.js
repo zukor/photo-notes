@@ -46,8 +46,8 @@ function recordDictationEvent(event, detail = '') {
   try {
     const key='photoNotesSpeechDiagnostics';
     const history=JSON.parse(localStorage.getItem(key)||'[]');
-    history.push({at:new Date().toISOString(),event,detail,online:navigator.onLine,visibility:document.visibilityState});
-    localStorage.setItem(key,JSON.stringify(history.slice(-60)));
+    history.push({at:new Date().toISOString(),version:345,event,detail,generation:dictationGeneration,active:dictationActive,pending:dictationPending,finishing:!!dictationFinish,language:uiSpeechLanguage(),edition:state.proType||state.plan,mode:navigator.standalone||window.matchMedia?.('(display-mode: standalone)').matches?'installed':'browser',online:navigator.onLine,visibility:document.visibilityState});
+    localStorage.setItem(key,JSON.stringify(history.slice(-200)));
   } catch(e) {}
 }
 let currentGroupItems = [];
@@ -1224,6 +1224,7 @@ function acquireLocation(force=false) {
 }
 
 function cleanupDictation() {
+  dictationGeneration++;
   dictationPending=false;
   if(dictationFinish){clearTimeout(dictationFinish.timer);const done=dictationFinish.resolve;dictationFinish=null;done();}
   if (dictationRestartTimer) clearTimeout(dictationRestartTimer);
@@ -1243,7 +1244,9 @@ function stopCaptureDictation(){
   if(dictationRestartTimer)clearTimeout(dictationRestartTimer);
   if(dictationWatchdog)clearTimeout(dictationWatchdog);
   dictationRestartTimer=null;dictationWatchdog=null;dictationActive=false;
-  const current=recognizer;recognizer=null;if(current)try{current.stop();}catch(e){}
+  // Hard cancellation must release the browser engine, even when stop never
+  // delivers onend. Graceful Stop/Save still waits for final words above.
+  const current=recognizer;recognizer=null;if(current)try{current.abort();recordDictationEvent('abort');}catch(e){try{current.stop();}catch(ignore){}}
   const btn=document.getElementById('dictate');if(btn){btn.disabled=false;btn.textContent='Record Notes';btn.classList.remove('on');}
 }
 
@@ -1259,7 +1262,7 @@ function finishCaptureDictation(){
   const btn=document.getElementById('dictate');if(btn){btn.disabled=true;btn.textContent='Finishing Notes...';}
   let resolve;const promise=new Promise(done=>resolve=done);
   dictationFinish={promise,resolve,timer:setTimeout(()=>{recordDictationEvent('stop-timeout');stopCaptureDictation();const status=document.getElementById('dictationStatus');if(status)status.textContent='Recording ended. Check your notes before saving.';},8000)};
-  try{recognizer.stop();}catch(e){cleanupDictation();}
+  try{recognizer.stop();}catch(e){recordDictationEvent('stop-error',e.name);stopCaptureDictation();}
   return promise;
 }
 
@@ -1339,9 +1342,12 @@ function startDictationSession(SR) {
       const status=document.getElementById('dictationStatus');if(status)status.textContent='No words were received. Tap Record Notes to try again. Your existing note is kept.';
     },delay);
   };
-  session.onstart=()=>{if(generation!==dictationGeneration)return;recordDictationEvent('started');const status=document.getElementById('dictationStatus');if(status)status.textContent=ios?'Listening. On iPhone, words may appear after you pause.':'Listening...';const btn=document.getElementById('dictate');if(btn&&dictationActive)btn.textContent='Recording... tap to stop';};
+  session.onstart=()=>{if(generation!==dictationGeneration)return;recordDictationEvent('started');if(!dictationActive)return;const status=document.getElementById('dictationStatus');if(status)status.textContent=ios?'Listening. On iPhone, words may appear after you pause.':'Listening...';const btn=document.getElementById('dictate');if(btn)btn.textContent='Recording... tap to stop';};
   session.onaudiostart=()=>{if(generation!==dictationGeneration||!dictationActive)return;recordDictationEvent('audio-start');armWatchdog();};
   session.onspeechstart=()=>{if(generation!==dictationGeneration||!dictationActive)return;recordDictationEvent('speech-start');armWatchdog(120000);};
+  session.onspeechend=()=>{if(generation!==dictationGeneration)return;recordDictationEvent('speech-end');if(dictationActive)armWatchdog();};
+  session.onaudioend=()=>{if(generation!==dictationGeneration)return;recordDictationEvent('audio-end');};
+  session.onnomatch=()=>{if(generation!==dictationGeneration)return;recordDictationEvent('no-match');};
   armWatchdog();
   session.onresult = (ev) => {
     if(generation!==dictationGeneration||state.photoFile!==photoForSession||document.getElementById('note')!==noteEl)return;
@@ -1352,8 +1358,8 @@ function startDictationSession(SR) {
     const parts=[];
     for (let i=0;i<ev.results.length;i++) parts.push(ev.results[i][0].transcript.trim());
     sessionText=combineSpeechResults(parts);
-    recordDictationEvent('result');
-    if(dictationActive)armWatchdog();
+    recordDictationEvent('result',Array.from(ev.results,result=>result.isFinal?'final':'interim').join(','));
+    if(dictationActive)armWatchdog(120000);
     if (noteEl) { noteEl.value=mergeSpeechTranscript(dictationBase,sessionText); state._note=noteEl.value; }
     const status=document.getElementById('dictationStatus');if(status&&sessionText)status.textContent='Speech received.';
     if (isIndustryProClient()) applyExtraction(dictationBase+sessionText);
@@ -1405,7 +1411,7 @@ function startDictationSession(SR) {
     } else cleanupDictation();
   };
   try { session.start(); }
-  catch (e) { cleanupDictation(); const status=document.getElementById('dictationStatus');if(status)status.textContent='Speech could not start. Use the keyboard microphone to dictate your notes.';toast('Recording could not start. Tap Record Notes to try again'); }
+  catch (e) { recordDictationEvent('start-error',e.name);stopCaptureDictation(); const status=document.getElementById('dictationStatus');if(status)status.textContent='Speech could not start. Use the keyboard microphone to dictate your notes.';toast('Recording could not start. Tap Record Notes to try again'); }
 }
 
 // ================= Pro dimension fields =================

@@ -1,8 +1,8 @@
 const test=require('node:test'),assert=require('node:assert/strict'),vm=require('node:vm'),fs=require('node:fs');
 const source=fs.readFileSync('public/app.js','utf8');
-function harness({ios=true,pending=false}={}){
- const elements={},sessions=[],timers=new Map(),logs={};let next=0,permission,tracksStopped=0;
- class Speech{constructor(){sessions.push(this);}start(){}stop(){this.stopped=true;}abort(){this.aborted=true;}}
+function harness({ios=true,pending=false,exclusive=false}={}){
+ const elements={},sessions=[],timers=new Map(),logs={};let next=0,permission,tracksStopped=0,owner;
+ class Speech{constructor(){sessions.push(this);}start(){if(exclusive&&owner)throw new Error('Microphone still owned');owner=this;}stop(){this.stopped=true;}abort(){this.aborted=true;if(owner===this)owner=null;}set onend(handler){this.end=()=>{if(owner===this)owner=null;handler();};}get onend(){return this.end;}}
  const stream={getTracks:()=>[{stop:()=>tracksStopped++}]};
  const context=vm.createContext({Date,Promise,JSON,navigator:{userAgent:ios?'iPhone':'Android',onLine:true,mediaDevices:{getUserMedia:()=>pending?new Promise(r=>permission=r):Promise.resolve(stream)}},window:{SpeechRecognition:Speech},document:{visibilityState:'visible',getElementById:id=>elements[id]||=( {value:'',textContent:'',focus(){},classList:{add(){},remove(){}}})},localStorage:{getItem:k=>logs[k],setItem:(k,v)=>logs[k]=v},state:{photoFile:{}},uiSpeechLanguage:()=> 'en-US',isIndustryProClient:()=>false,toast(){},setTimeout:(fn,ms)=>{timers.set(++next,{fn,ms});return next;},clearTimeout:id=>timers.delete(id)});
  vm.runInContext("let recognizer=null,dictationActive=false,dictationRestartTimer=null,dictationWatchdog=null,dictationGeneration=0,dictationBase='',dictationFinish=null;"+source.slice(source.indexOf('let dictationEmptySessions'),source.indexOf('let currentGroupItems'))+"function combineSpeechResults(parts){return parts.join(' ');}function mergeSpeechTranscript(a,b){return (a+' '+b).trim();}"+source.slice(source.indexOf('function cleanupDictation()'),source.indexOf('// ================= Pro dimension fields')),context);
@@ -17,7 +17,26 @@ test('silent browser without end callback resets and permits retry',async()=>{
  const h=harness();await h.run('toggleDictation()');h.fire(30000);assert.equal(h.run('dictationActive'),false);assert.equal(h.elements.dictate.textContent,'Record Notes');assert.ok(h.sessions[0].aborted);await h.run('toggleDictation()');assert.equal(h.sessions.length,2);
 });
 test('Stop missing end callback finishes within eight seconds',async()=>{
- const h=harness();await h.run('toggleDictation()');const finish=h.run('finishCaptureDictation()');h.fire(8000);await finish;assert.equal(h.elements.dictate.textContent,'Record Notes');
+ const h=harness({exclusive:true});await h.run('toggleDictation()');const finish=h.run('finishCaptureDictation()');h.fire(8000);await finish;assert.equal(h.elements.dictate.textContent,'Record Notes');assert.ok(h.sessions[0].aborted);
+ await h.run('toggleDictation()');assert.equal(h.run('dictationActive'),true);h.sessions[1].onresult({results:[[{transcript:'Second recording'}]]});assert.equal(h.elements.note.value,'Second recording');
+});
+test('forty iPhone recordings preserve successive notes and release microphone ownership',async()=>{
+ const h=harness({exclusive:true});
+ for(let i=0;i<40;i++){
+  await h.run('toggleDictation()');assert.equal(h.run('dictationActive'),true);
+  const s=h.sessions[i];const finishing=h.run('toggleDictation()');
+  s.onresult({results:[[{transcript:`Phrase${i}`}]]});s.onend();await finishing;
+  s.onresult({results:[[{transcript:'STALE WORDS'}]]});s.onend();s.onerror({error:'network'});
+ }
+ assert.equal(h.elements.note.value.replace(/\s+/g,' '),Array.from({length:40},(_,i)=>`Phrase${i}`).join(' '));assert.equal(h.timers.size,0);
+});
+test('late start callback cannot overwrite finishing status',async()=>{
+ const h=harness();await h.run('toggleDictation()');const finishing=h.run('toggleDictation()');
+ const status=h.elements.dictationStatus.textContent;h.sessions[0].onstart();assert.equal(h.elements.dictationStatus.textContent,status);assert.equal(h.elements.dictate.textContent,'Finishing Notes...');h.sessions[0].onend();await finishing;
+});
+test('interim results keep long speech alive, then speech end arms bounded completion',async()=>{
+ const h=harness();await h.run('toggleDictation()');h.sessions[0].onspeechstart();h.sessions[0].onresult({results:[[{transcript:'Long speech',isFinal:false}]]});
+ h.fire(30000);assert.equal(h.run('dictationActive'),true);h.sessions[0].onspeechend();h.fire(30000);assert.equal(h.run('dictationActive'),false);assert.ok(h.sessions[0].aborted);assert.equal(h.elements.note.value,'Long speech');
 });
 test('cancel pending microphone permission discards eventual stream',async()=>{
  const h=harness({ios:false,pending:true});const starting=h.run('toggleDictation()');await h.run('toggleDictation()');h.resolve();await starting;assert.equal(h.sessions.length,0);assert.equal(h.tracksStopped(),1);
