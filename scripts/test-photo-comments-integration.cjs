@@ -1,6 +1,6 @@
 'use strict';
 const {Client}=require('pg'),express=require('express'),assert=require('node:assert/strict'),feature=require('../photo-comments');
-(async()=>{const db=new Client({host:'/tmp',database:'postgres'});await db.connect();let server;const schema='comments_test_'+Date.now();try{
+(async()=>{const db=new Client(process.env.PN_ISOLATED_DATABASE_URL?{connectionString:process.env.PN_ISOLATED_DATABASE_URL}:{host:'/tmp',database:'postgres'});await db.connect();let server;const schema='comments_test_'+Date.now();try{
 await db.query(`CREATE SCHEMA ${schema}`);await db.query(`SET search_path TO ${schema}`);
 await db.query(`CREATE TABLE users(id INTEGER PRIMARY KEY,name TEXT,active BOOLEAN,plan TEXT,pro_type TEXT);
 CREATE TABLE captures(id INTEGER PRIMARY KEY,user_id INTEGER,photo_path TEXT,photo_title TEXT,created_at TIMESTAMPTZ DEFAULT now(),job_id INTEGER,address TEXT);
