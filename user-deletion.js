@@ -19,6 +19,7 @@ async function deletionPreview(db,id,actorId){
     (SELECT count(*)::int FROM issue_reports WHERE user_id=$1) AS issue_reports,
     (SELECT count(*)::int FROM testing_assignments WHERE user_id=$1) AS assignments`,[id])).rows[0];
   const shared=(await db.query(`SELECT
+    (SELECT count(*) FROM property_incidents WHERE created_by=$1)+
     (SELECT count(*) FROM hoa_maintenance_items WHERE created_by=$1)+
     (SELECT count(*) FROM hoa_property_visits WHERE created_by=$1)+
     (SELECT count(*) FROM hoa_completion_photo_requests WHERE created_by=$1)+
@@ -33,7 +34,7 @@ async function deletionPreview(db,id,actorId){
       EXISTS(SELECT 1 FROM group_items gi JOIN groups g ON g.id=gi.group_id WHERE gi.capture_id=c.id AND g.user_id<>$1)
     )) AS count`,[id])).rows[0];
   let blocked=id===actorId?'You cannot delete the account you are currently signed in with.':null;
-  if(!blocked&&Number(shared.count)>0)blocked='Shared HOA or document records still depend on this user. Transfer those records and company responsibilities before deleting the account.';
+  if(!blocked&&Number(shared.count)>0)blocked='Shared property, HOA or document records still depend on this user. Transfer those records and company responsibilities before deleting the account.';
   if(!blocked&&user.role==='admin'){
     const {rows}=await db.query("SELECT count(*)::int AS count FROM users WHERE role='admin' AND active=true AND id<>$1",[id]);
     if(!rows[0].count)blocked='Keep at least one active administrator.';
