@@ -19,7 +19,7 @@ jobs:
       - name: Install PostgreSQL and PDF inspection tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y postgresql poppler-utils
+          sudo apt-get install -y postgresql poppler-utils libreoffice-writer
           echo "/usr/lib/postgresql/$(ls /usr/lib/postgresql | sort -V | tail -1)/bin" >> "$GITHUB_PATH"
       - run: npm ci
       - run: npx playwright install --with-deps chromium webkit
