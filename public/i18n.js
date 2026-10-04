@@ -714,6 +714,39 @@
     'Clubhouse and Buildings': 'Casa club y edificios', 'Mailboxes': 'Buzones', 'Trees': 'Árboles', 'Utilities': 'Servicios públicos', 'General Appearance': 'Aspecto general'
   };
 
+  // Property Manager display vocabulary, without changing HOA translations.
+  Object.assign(ES, {
+  "Properties": "Propiedades",
+  "Property": "Propiedad",
+  "Select Property": "Seleccionar propiedad",
+  "Create your first property under Assets before saving a maintenance record.": "Cree su primera propiedad en Activos antes de guardar un registro de mantenimiento.",
+  "Select a property": "Seleccione propiedad",
+  "All Properties": "Todas las propiedades",
+  "Search titles, notes, properties, or categories": "Buscar títulos, notas, propiedades o categorías",
+  "Approval Needed": "Aprobación necesaria",
+  "Waiting for Approval": "En espera de aprobación",
+  "Operating / Maintenance": "Operación / Mantenimiento",
+  "Capital": "Capital",
+  "Approval": "Aprobación",
+  "Approval Requested": "Aprobación solicitada",
+  "Add a Property": "Agregar una propiedad",
+  "Property Name": "Nombre de la propiedad",
+  "Property Manager": "Administrador de la propiedad",
+  "Add Property": "Agregar propiedad",
+  "No properties have been added yet.": "Todavía no se han agregado propiedades.",
+  "Enter a property name": "Ingrese el nombre de la propiedad",
+  "Property added": "Propiedad agregada",
+  "Property could not be added": "No se pudo agregar la propiedad",
+  "Urgent work and accountability across every property.": "Trabajo urgente y responsabilidad en todas las propiedades.",
+  "Properties organize asset photos and inspection routes. Each property keeps its own photo evidence and records.": "Las propiedades organizan fotos de activos y rutas de inspección. Cada propiedad conserva sus propias pruebas fotográficas y registros.",
+  "Create a visual record of the things the property maintains, then add condition, damage, repair, and verification photos over time.": "Cree un registro visual de los elementos que mantiene la propiedad y agregue fotos de condición, daños, reparación y verificación con el tiempo.",
+  "Property Maintenance Report PDF": "Informe de mantenimiento de la propiedad PDF",
+  "Property Maintenance Report Word": "Informe de mantenimiento de la propiedad Word",
+  "Property maintenance report ready": "Informe de mantenimiento de la propiedad listo",
+  "Property maintenance report could not be created": "No se pudo crear el informe de mantenimiento de la propiedad",
+  "Manage the properties served by": "Administre las propiedades atendidas por",
+  "Maintenance Documentation Photo": "Foto de documentación de mantenimiento"
+});
   const ES_TO_EN = Object.fromEntries(Object.entries(ES).map(([en, es]) => [es, en]));
   const ATTRS = ['placeholder', 'aria-label', 'title'];
   let language = localStorage.getItem(STORAGE_KEY) === 'es' ? 'es' : 'en';
