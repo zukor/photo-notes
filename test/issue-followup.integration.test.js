@@ -1,7 +1,7 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 test('bug follow-up is transactional, bounded, owner-safe and keeps tester evidence',{skip:process.env.PN_ISSUE_FLOW_TEST!=='1',timeout:60000},async()=>{
- process.env.DATABASE_URL='postgresql://127.0.0.1:55519/pn_issue_flow';process.env.PGSSL='disable';process.env.SESSION_SECRET='issue-flow-local-test';process.env.TESTER_QUEUE_TOKEN='local-fixture-queue';process.env.ISSUE_CLOUD_RUNNER_ENABLED='false';delete process.env.RESEND_API_KEY;
- const {pool,init}=require('../db');assert.equal((await pool.query('SHOW data_directory')).rows[0].data_directory,'/tmp/pn-issue-flow/db');await init();await require('../issue-cloud').initCloud(pool);
+ process.env.DATABASE_URL=process.env.PN_LEGACY_TEST_DATABASE_URL||'postgresql://127.0.0.1:55519/pn_issue_flow';process.env.PGSSL='disable';process.env.SESSION_SECRET='issue-flow-local-test';process.env.TESTER_QUEUE_TOKEN='local-fixture-queue';process.env.ISSUE_CLOUD_RUNNER_ENABLED='false';delete process.env.RESEND_API_KEY;
+ const {pool,init}=require('../db');assert.equal((await pool.query('SHOW data_directory')).rows[0].data_directory,process.env.PN_AUTOMATION_DATA_DIR||'/tmp/pn-issue-flow/db');await init();await require('../issue-cloud').initCloud(pool);
  const {app}=require('../server'),server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));const base='http://127.0.0.1:'+server.address().port;
  const user=(await pool.query("INSERT INTO users(email,password_hash,role,plan) VALUES($1,'none','user','pro') RETURNING id",['flow-'+Date.now()+'@example.invalid'])).rows[0].id;
  const cookie='pn_token='+require('jsonwebtoken').sign({id:user},process.env.SESSION_SECRET);const ids=[];

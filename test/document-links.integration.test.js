@@ -1,10 +1,10 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),os=require('node:os'),path=require('node:path');
 test('document snapshots: exact exports, owner isolation, expiry, revoke and browser link sharing',{skip:process.env.PN_DOCUMENT_LINKS!=='1',timeout:120000},async()=>{
-  process.env.DATABASE_URL='postgresql://127.0.0.1:55489/pn_pro_retest';
+  process.env.DATABASE_URL=process.env.PN_LEGACY_TEST_DATABASE_URL||'postgresql://127.0.0.1:55489/pn_pro_retest';
   process.env.SESSION_SECRET='document-links-local-test-secret-12345678';
   process.env.UPLOAD_DIR=fs.mkdtempSync(path.join(os.tmpdir(),'pn-link-test-'));
   const {pool,init}=require('../db');
-  assert.equal((await pool.query('SHOW data_directory')).rows[0].data_directory,'/tmp/pn-pro-retest/db');
+  assert.equal((await pool.query('SHOW data_directory')).rows[0].data_directory,process.env.PN_AUTOMATION_DATA_DIR||'/tmp/pn-pro-retest/db');
   await init();
   const {app}=require('../server'),jwt=require('jsonwebtoken');
   const server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));

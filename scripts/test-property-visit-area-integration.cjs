@@ -7,7 +7,7 @@ const fs=require('node:fs'),assert=require('node:assert/strict'),{Client}=requir
  const handler=source.slice(start,source.indexOf('\n',start));
  const query=handler.match(/pool\.query\(`(SELECT s\.\*[\s\S]*?)`,\[stopId,visitId,req\.hoaCompany\.id\]/)?.[1];
  assert(query,'Visit handler query must be found');
- const db=new Client({host:'/tmp',database:'postgres'});
+ const db=new Client(process.env.PN_ISOLATED_DATABASE_URL?{connectionString:process.env.PN_ISOLATED_DATABASE_URL}:{host:'/tmp',database:'postgres'});
  await db.connect();
  try{
   await db.query('BEGIN');

@@ -1,8 +1,8 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 test('first retests are automatic, durable, and return first failed bug results to repair',{skip:process.env.PN_AUTO_RETEST_TEST!=='1',timeout:60000},async()=>{
- process.env.DATABASE_URL='postgresql://127.0.0.1:55489/pn_pro_retest';process.env.PGSSL='disable';process.env.SESSION_SECRET='auto-retest-local';process.env.ISSUE_CLOUD_RUNNER_ENABLED='false';
+ process.env.DATABASE_URL=process.env.PN_LEGACY_TEST_DATABASE_URL||'postgresql://127.0.0.1:55489/pn_pro_retest';process.env.PGSSL='disable';process.env.SESSION_SECRET='auto-retest-local';process.env.ISSUE_CLOUD_RUNNER_ENABLED='false';
  const {pool,init}=require('../db');
- assert.equal((await pool.query('SHOW data_directory')).rows[0].data_directory,'/tmp/pn-pro-retest/db');await init();
+ assert.equal((await pool.query('SHOW data_directory')).rows[0].data_directory,process.env.PN_AUTOMATION_DATA_DIR||'/tmp/pn-pro-retest/db');await init();
  await require('../issue-cloud').initCloud(pool);
  const {requestFirstRetests}=require('../issue-auto-retest');
  const user=(await pool.query("INSERT INTO users(email,password_hash,role,plan) VALUES($1,'none','user','pro') RETURNING id",['auto-retest-'+Date.now()+'@example.invalid'])).rows[0].id;

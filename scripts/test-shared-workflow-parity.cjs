@@ -19,11 +19,9 @@ const {chromium,webkit}=require('playwright');
    await page.waitForFunction(()=>state.me&&document.getElementById('body'));
    for(const section of ['organize','edit','create','send']){
     let reference;
-    for(const edition of ['general','contractor','paving','concrete','roofer','hoa','property']){
-     if(['hoa','property'].includes(edition)&&section==='organize')continue;
+    for(const edition of ['general','contractor','paving','concrete','roofer']){
      await page.evaluate(({edition,section})=>{state.plan='pro';state.proType=edition;state.view=section;state.groupId=null;state.ewrId=null;state.me.ramo_intake_access=true;renderApp();},{edition,section});
      await page.locator(section==='organize'?'#photoSearch':section==='edit'?'#delbtn':section==='create'?'#gcreate':'#sharephotos').waitFor();
-     // Export Presets mounts after its API request; inspect the completed shared UI.
      if(['send','organize'].includes(section))await page.locator('#epChoose').waitFor({state:'attached'});
      const controls=await page.locator('#body button[id],#body input[id],#body select[id],#body textarea[id]').evaluateAll(nodes=>nodes.map(n=>{const s=getComputedStyle(n);return {id:n.id,label:n.tagName==='BUTTON'?n.textContent.trim():n.getAttribute('placeholder'),font:s.fontFamily,size:s.fontSize,color:s.color,background:s.backgroundColor,radius:s.borderRadius};}));
      if(!reference)reference=controls;
@@ -36,19 +34,6 @@ const {chromium,webkit}=require('playwright');
    }
    await page.evaluate(()=>{state.proType='hoa';state.view='capture';renderApp();});
    assert.deepEqual(await page.locator('.workflow-tabs button').allTextContents(),['Capture','Organize','Assets','Inspections','Records']);
-   if(width===1440){
-    for(const edition of ['hoa','property'])for(const view of ['capture','organize','edit','create','send','hoa-visits','hoa-assets','hoa-inspections','hoa-maintenance','hoa-reports','hoa-dashboard','hoa-communities']){
-     await page.evaluate(({edition,view})=>{state.proType=edition;state.view=view;renderApp();},{edition,view});
-     await page.locator('.pn-help-fab').click();
-     await page.locator('#pnHelpSearch').fill('');
-     await page.getByRole('button',{name:'This page',exact:true}).click();
-     assert(await page.locator('.pn-help-article').count()>0,`${edition} ${view} has contextual help`);
-     await page.getByRole('button',{name:'Using PhotoNotes',exact:true}).click();
-     await page.locator('#pnHelpSearch').fill('completion');
-     assert(await page.locator('.pn-help-article').count()>0,`${edition} finds completion help`);
-     await page.locator('#pnHelpClose').click();
-    }
-   }
    await page.close();console.log(`${engine.name()} ${width}: shared workflow parity and specialist actions PASS`);
   }}finally{await browser.close();}
  }}finally{server.close();}

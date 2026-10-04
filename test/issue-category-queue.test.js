@@ -1,7 +1,7 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 const {registerIssueRepair,digest}=require('../issue-repair');
 test('database queue, claims, and stale worker updates exclude all idea categories',{skip:!process.env.PN_CATEGORY_TEST_DB},async()=>{
- const url=process.env.PN_CATEGORY_TEST_DB;if(!url.startsWith('postgres://postgres@127.0.0.1:55473/'))throw Error('Disposable database required');
+ const url=process.env.PN_CATEGORY_TEST_DB;if(process.env.PN_AUTOMATION_DATA_DIR)require('./support/isolated-database.cjs').assertIsolated(url);else if(!url.startsWith('postgres://postgres@127.0.0.1:55473/'))throw Error('Disposable database required');
  const {Pool}=require('pg'),pool=new Pool({connectionString:url}),express=require('express'),app=express();app.use(express.json());
  let server;
  try{

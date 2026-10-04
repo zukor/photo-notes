@@ -5,9 +5,10 @@ const {chromium,webkit}=require('playwright');const {editionIds,user}=require('.
  const output=path.join(__dirname,'../output/automated-testing/screenshots');await fs.mkdir(output,{recursive:true});const audit=[];
  try{for(const [device,engine,viewport] of [['iphone',webkit,{width:390,height:844}],['android',chromium,{width:412,height:915}],['tablet',chromium,{width:768,height:1024}],['desktop',chromium,{width:1440,height:1000}]]){
   const browser=await engine.launch();try{for(const edition of editionIds){const context=await browser.newContext({viewport,serviceWorkers:'block',reducedMotion:'reduce'}),page=await context.newPage();const errors=[];
+   const fixture=user(edition);
    page.on('pageerror',e=>errors.push(e.message));page.on('dialog',d=>d.dismiss());
-   await page.route('**/*',route=>{const url=new URL(route.request().url());if(!['localhost','127.0.0.1'].includes(url.hostname))return route.abort();if(!url.pathname.startsWith('/api/'))return route.continue();const p=url.pathname;const data=p==='/api/me'?user(edition):p==='/api/config'?{}:p==='/api/billing/config'?{checkout_enabled:false}:p==='/api/hoa/context'?{communities:[],members:[]}:[];return route.fulfill({json:data});});
-   await page.addInitScript(()=>localStorage.setItem('pn_install_prompt_dismissed_v1','dismissed'));
+   await page.route('**/*',route=>{const url=new URL(route.request().url());if(!['localhost','127.0.0.1'].includes(url.hostname))return route.abort();if(!url.pathname.startsWith('/api/'))return route.continue();const p=url.pathname;const data=p==='/api/me'?fixture:p==='/api/config'?{}:p==='/api/billing/config'?{checkout_enabled:false}:p==='/api/hoa/context'?{communities:[],members:[]}:[];return route.fulfill({json:data});});
+   await page.addInitScript(email=>{localStorage.setItem('pn_install_prompt_dismissed_v1','dismissed');localStorage.setItem('pn_first_use_v1:'+encodeURIComponent(email),'done');},fixture.email);
    await page.goto('http://127.0.0.1:'+server.address().port);await page.waitForFunction(()=>typeof state!=='undefined'&&state.me&&document.getElementById('body'));
    if(edition==='basic'){for(const id of ['tabOrganize','tabEdit','tabCreate','tabSend'])assert.equal(await page.locator('#'+id+':visible').count(),0,device+' Basic excludes '+id);assert.equal(await page.locator('#photoLib').count(),1,device+' Basic photo input');}
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+2),false,edition+' '+device+' viewport fit');

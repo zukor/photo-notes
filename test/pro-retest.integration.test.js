@@ -1,8 +1,8 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),os=require('node:os'),{execFileSync}=require('node:child_process');
 const enabled=process.env.PN_PRO_RETEST==='1';
 test('Pro markup reopen, crop, template, export metadata and browser rendering',{skip:!enabled,timeout:120000},async()=>{
- process.env.DATABASE_URL='postgresql://127.0.0.1:55489/pn_pro_retest';process.env.PGSSL='disable';process.env.ADMIN_EMAIL='pro-retest@example.invalid';process.env.ADMIN_PASSWORD='local-only-test';process.env.UPLOAD_DIR=fs.mkdtempSync(path.join(os.tmpdir(),'pn-pro-retest-uploads-'));
- const {pool,init}=require('../db');const guard=await pool.query('SHOW data_directory');assert.equal(guard.rows[0].data_directory,'/tmp/pn-pro-retest/db');await init();
+ process.env.DATABASE_URL=process.env.PN_LEGACY_TEST_DATABASE_URL||'postgresql://127.0.0.1:55489/pn_pro_retest';process.env.PGSSL='disable';process.env.ADMIN_EMAIL='pro-retest@example.invalid';process.env.ADMIN_PASSWORD='local-only-test';process.env.UPLOAD_DIR=fs.mkdtempSync(path.join(os.tmpdir(),'pn-pro-retest-uploads-'));
+ const {pool,init}=require('../db');const guard=await pool.query('SHOW data_directory');assert.equal(guard.rows[0].data_directory,process.env.PN_AUTOMATION_DATA_DIR||'/tmp/pn-pro-retest/db');await init();
  const {app}=require('../server'),server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));const base='http://127.0.0.1:'+server.address().port;
  const sharp=require('sharp'),PizZip=require('pizzip'),{Document,Paragraph,TextRun,Packer}=require('docx');
  try{

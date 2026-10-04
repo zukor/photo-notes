@@ -1,7 +1,7 @@
 // Synthetic dependency preview, with temporary tables and transaction rollback.
 const assert=require('node:assert/strict'),{Client}=require('pg');
 const {deletionPreview}=require('../user-deletion');
-(async()=>{const db=new Client({host:'/tmp',database:'postgres'});await db.connect();try{
+(async()=>{const db=new Client(process.env.PN_ISOLATED_DATABASE_URL?{connectionString:process.env.PN_ISOLATED_DATABASE_URL}:{host:'/tmp',database:'postgres'});await db.connect();try{
  await db.query('BEGIN');
  await db.query(`CREATE TEMP TABLE users(id integer,name text,email text,role text,active boolean);
  CREATE TEMP TABLE captures(id integer,user_id integer);

@@ -1,7 +1,7 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),os=require('node:os'),path=require('node:path');
 test('real exports retain paired and instrument details with their photos',{skip:process.env.PN_EVIDENCE_EXPORT_TEST!=='1',timeout:120000},async()=>{
- process.env.DATABASE_URL='postgresql://127.0.0.1:55491/pn_evidence_retest';process.env.PGSSL='disable';process.env.SESSION_SECRET='local-evidence-test';process.env.UPLOAD_DIR=fs.mkdtempSync(path.join(os.tmpdir(),'pn-evidence-'));delete process.env.ANTHROPIC_API_KEY;
- const {pool,init}=require('../db');assert.equal((await pool.query('SHOW data_directory')).rows[0].data_directory,'/tmp/pn-evidence-retest/db');await init();
+ process.env.DATABASE_URL=process.env.PN_LEGACY_TEST_DATABASE_URL||'postgresql://127.0.0.1:55491/pn_evidence_retest';process.env.PGSSL='disable';process.env.SESSION_SECRET='local-evidence-test';process.env.UPLOAD_DIR=fs.mkdtempSync(path.join(os.tmpdir(),'pn-evidence-'));delete process.env.ANTHROPIC_API_KEY;
+ const {pool,init}=require('../db');assert.equal((await pool.query('SHOW data_directory')).rows[0].data_directory,process.env.PN_AUTOMATION_DATA_DIR||'/tmp/pn-evidence-retest/db');await init();
  const {app}=require('../server'),sharp=require('sharp'),jwt=require('jsonwebtoken'),Zip=require('pizzip');const server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));let owner;
  try{
  owner=(await pool.query("INSERT INTO users(email,password_hash,role,plan,pro_type,edition_access) VALUES($1,'none','admin','pro','paving',ARRAY['paving']) RETURNING id",['evidence-'+Date.now()+'@example.invalid'])).rows[0];const cookie='pn_token='+jwt.sign({id:owner.id},process.env.SESSION_SECRET);
