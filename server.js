@@ -91,6 +91,13 @@ app.get('/sw.js', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'sw.js'));
 });
 app.use('/vendor/leaflet',express.static(path.dirname(require.resolve('leaflet/dist/leaflet.js'))));
+// A stable additive build key refreshes preset consumers without changing shared edition asset counters.
+app.get(['/', '/index.html'], (req,res,next) => {
+  try {
+    const html=fs.readFileSync(path.join(__dirname,'public/index.html'),'utf8').replace(/\/(app|help-catalog)\.js\?v=[\w-]+/g,url=>url+'&export-presets=1');
+    res.set('Cache-Control','no-store').type('html').send(html);
+  } catch { next(); }
+});
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static(UPLOAD_DIR));
 
@@ -140,6 +147,7 @@ require('./photo-markers').registerPhotoMarkers(app,{pool,requireAuth,currentPro
 require('./saved-views').register(app,{pool,requireAuth,currentProduct});
 
 require('./capture-templates').register(app,{pool,requireAuth});
+require('./export-presets').register(app,{pool,requireAuth});
 // Single source of truth for Pro gating. Pro features must not render or store
 // for free users.
 function isPro(user) { return !!(user && user.plan === 'pro'); }
@@ -2938,7 +2946,7 @@ async function resolveExport(req) {
   const area = req.query.area || '';
   const ids = parseIds(req.query.ids);
   let groupId = req.query.group ? parseInt(req.query.group, 10) : null;
-  const imgRes = req.query.res || 'standard';
+  let imgRes = req.query.res || 'standard';
   const imgFmt = req.query.fmt || 'jpeg';
   let heading = area || '';
   let desc = '';
@@ -2964,7 +2972,14 @@ async function resolveExport(req) {
   const scope = groupId ? 'group' : (ids ? 'selection' : (area ? 'area' : 'all'));
   if(!groupId){layout.cover_page=false;heading=heading||(rows.length===1?rows[0].photo_title||'Photo Note':'Photo Notes');}
   const u=(await pool.query(`SELECT document_branding,document_logo_path FROM users WHERE id=$1`,[userId])).rows[0]||{};
-  return { imgRes, imgFmt, heading, desc, fnameBase, rows, scope, layout, branding:cleanDocumentBranding(groupId?u.document_branding:{}), logoPath:groupId?u.document_logo_path||null:null, templatePath };
+  let branding=cleanDocumentBranding(groupId?u.document_branding:{}),logoPath=groupId?u.document_logo_path||null:null;
+  if(req.query.packaging && require('./export-presets').supported(req.user)){
+    let input;try{input=JSON.parse(String(req.query.packaging).slice(0,6000));}catch{input={};}
+    const {config}=require('./export-presets').normalize(input);
+    layout=cleanDocumentLayout({...layout,...config.layout});branding=cleanDocumentBranding({...branding,...config.branding});
+    imgRes=config.resolution;logoPath=config.logo?u.document_logo_path||null:null;
+  }
+  return { imgRes, imgFmt, heading, desc, fnameBase, rows, scope, layout, branding, logoPath, templatePath };
 }
 
 const RES_PRESETS = {

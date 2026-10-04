@@ -588,6 +588,7 @@ async function init() {
 
   await pool.query("ALTER TABLE captures ADD COLUMN IF NOT EXISTS urgency TEXT NOT NULL DEFAULT 'standard'");
   await pool.query(require('./send-shortcuts').SCHEMA);
+  await pool.query(require('./export-presets').SCHEMA);
 
   // Seeded topics remain available to industry editions. Basic only offers
   // topics explicitly added by a user. Preserve historical custom names.

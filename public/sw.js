@@ -5,14 +5,15 @@ SHELL.push('/concrete-purpose-menu.js?v=286', '/ramo-intake.js?v=286', '/capture
 // Optional physical-context QR shell resources.
 SHELL.push('/qr-codes.js?v=2','/qr-codes.css?v=2');
 
+SHELL.push('/export-presets.js?v=1');
 SHELL.push('/photo-requests.js?v=1','/photo-requests.css?v=1');
 
 SHELL.push('/custom-fields.js?v=1','/custom-fields.css?v=1');
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(DUPLICATE_CACHE).then(c => c.addAll([...new Set(SHELL)])).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(EXPORT_PRESET_CACHE).then(c => c.addAll([...new Set(SHELL)].map(asset => new Request(new URL(/^\/(app|help-catalog)\.js/.test(asset) ? asset + '&export-presets=1' : asset, self.location.origin), { cache: /^\/(app|help-catalog)\.js/.test(asset) ? 'reload' : 'default' })))).then(() => self.skipWaiting()));
 });
 self.addEventListener('activate', (e) => {
-  e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== DUPLICATE_CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim()));
+  e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== EXPORT_PRESET_CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim()));
 });
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
@@ -33,3 +34,5 @@ self.addEventListener('notificationclick',event=>{event.notification.close();con
 // Context reuse shares the shell with a separate cache generation.
 const DUPLICATE_CACHE = CACHE + '-duplicate-2';
 SHELL.push('/duplicate-context.js?v=1');
+
+const EXPORT_PRESET_CACHE = DUPLICATE_CACHE + '-export-presets-1';

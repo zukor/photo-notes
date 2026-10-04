@@ -54,7 +54,7 @@ test('all offline shell assets exist and scripts are loaded before the main app'
 });
 
 test('offline installation caches each URL only once',async()=>{
- const handlers={};let installed,urls;const c={self:{addEventListener:(name,handler)=>handlers[name]=handler,skipWaiting(){}},caches:{open:async()=>({addAll:async values=>{urls=values;}})}};vm.createContext(c);vm.runInContext(fs.readFileSync('public/sw.js','utf8'),c);handlers.install({waitUntil:value=>installed=value});await installed;assert.equal(urls.length,new Set(urls).size);assert(urls.includes('/install.html'));
+ const handlers={};let installed,urls,requests;const c={URL,Request,self:{location:{origin:'https://cache-fixture.invalid'},addEventListener:(name,handler)=>handlers[name]=handler,skipWaiting(){}},caches:{open:async()=>({addAll:async values=>{requests=values;urls=values.map(r=>new URL(r.url).pathname+new URL(r.url).search);}})}};vm.createContext(c);vm.runInContext(fs.readFileSync('public/sw.js','utf8'),c);handlers.install({waitUntil:value=>installed=value});await installed;assert.equal(urls.length,new Set(urls).size);assert(urls.includes('/install.html'));assert(requests.filter(r=>/^\/(app|help-catalog)\.js/.test(new URL(r.url).pathname)).every(r=>r.cache==='reload'));
 });
 
 
