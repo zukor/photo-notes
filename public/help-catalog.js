@@ -357,6 +357,9 @@ add('duplicate-photo-note|duplicateStart|duplicateCancel|duplicatePhotoDialog','
 add('duplicateCopyNotes','Copy Notes is off by default. Select it deliberately to copy the original note text, then remove or correct any facts that describe the previous photograph before saving.',['Context reuse']);
 add('duplicateJob|duplicateCaptureContext','Review and change the copied Job / project before saving. No job address or photo location is copied. Capture acquires location normally for the new photograph. Only the first Topic is preselected, and it can be changed using the normal Topic controls. Concrete retains phase, purpose and project type. Property and HOA retain available community, category and record type; Property retains an available named Area.',['Context reuse','Evidence']);
 const terms={
+'Exact Location':'Specific human-readable details within an Area, such as third light pole from the entrance.',
+'Inactive Area':'An Area retained for historical references but unavailable for new assignments.',
+'Property Area':'A reusable named location within one Property, such as North Parking Lot. It is separate from a maintenance category, exact location description, and GPS.',
  'Web push':'Optional device notifications delivered by the browser or installed app after permission and explicit subscription.',
  'Photo follow-up':'A saved requirement to photograph the same subject again on a future date.',
  'Occurrence':'One dated photographic requirement within a one-time or recurring schedule. Missed occurrences stay in history.',
@@ -468,6 +471,10 @@ const terms={
  'Installation':'Adding an app icon through a supported browser. This does not provide offline support for every feature.'
 };
 terms['Context reuse']='One-time reuse of safe organizational fields from an earlier Photo Note. The new photograph has its own record and evidence trail; this creates no photo relationship or saved template.';
+add('paProperty|paName|paDescription|paCreate|paEditName|paEditDescription|paEditActive|paSave|data-property-area','Choose a Property, enter a required Area Name and optional Description, then Create Area. Edit an existing Area and Save Area to change its name, description or Active status. Inactive Areas remain on historical records but cannot be selected for new assignments. Areas belong only to their Property and do not require GPS.',['Property Area','Inactive Area','Exact Location']);
+add('paCaptureArea|paAssetArea|paRecordArea|paSaveAssociation|paStop|paStop*','Choose an optional named Area within the selected Property. No Area is valid even when Areas exist. Capture Save, Save Asset Photo Record and Create Photo Route save their Area choices with the record. On an existing record use Save Area separately from Save Maintenance Record. Exact Location describes a more precise position and remains separate from Area and geographic location.',['Property Area','Exact Location']);
+add('paItemFilter|paAssetFilter|paInspectionFilter|paVisitFilter|paAssetSearch|paAssetSearchButton','Filter this collection by a Property Area, including inactive Areas retained by historical records. All Areas removes this filter. Area names also participate in maintenance, asset and photo text search.',['Property Area','Inactive Area']);
+add('pavingPhotoReason','Choose why this paving photograph is being taken. The selection determines which supporting tools or details appear. Read the on-page description and choose the reason supported by the photo.',['Photo purpose']);
 const textRules=[
  {match:'^Light mode$|^Dark mode$',text:'Choose the app appearance. Changing the theme does not alter photo records, notes, or exported document content.'},
  {match:'Open the printable PDF version',text:'Prepare the printable PDF of this document, review the print preview, and choose the desired printer/settings. This does not send the document to a customer.',terms:['PDF','Document']},
