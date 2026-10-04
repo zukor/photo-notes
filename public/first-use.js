@@ -19,6 +19,7 @@
   q('firstUseYes').onclick=async()=>{
    if(busy||!current())return;
    if(steps[index]==='icon'){
+    q('firstUseTitle').textContent=t('Add Photo Notes to your Home Screen','Agregar Photo Notes a su pantalla de inicio');
     q('firstUseYes').hidden=true;q('firstUseNext').textContent=t('Done','Listo');
     const ios=/iPhone|iPad|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
     if(ios){q('firstUseStatus').textContent=t('In Safari: Share → Add to Home Screen → Add.','En Safari: Compartir → Agregar a pantalla de inicio → Agregar.');return;}
@@ -35,7 +36,7 @@
     stream.getTracks().forEach(track=>track.stop());
     if(!dialog.open||!current())return;
     if(steps[index]!==step)return;
-    q('firstUseStatus').textContent=step==='microphone'?t('Microphone enabled.','Micrófono activado.'):t('Camera enabled.','Cámara activada.');q('firstUseYes').hidden=true;q('firstUseNext').textContent=t('Continue','Continuar');q('firstUseNext').focus();
+    index++;show();
    }catch(error){if(!dialog.open||steps[index]!==step)return;q('firstUseStatus').textContent=error.name==='NotAllowedError'?t('Access was not allowed. You can allow it in your browser settings or continue.','Acceso no permitido. Puede permitirlo en los ajustes del navegador o continuar.'):t('Could not activate it. You can try again or continue.','No se pudo activar. Puede intentarlo de nuevo o continuar.');q('firstUseYes').textContent=t('Try Again','Intentar de nuevo');q('firstUseNext').textContent=t('Continue','Continuar');}
    finally{busy=false;q('firstUseYes').disabled=false;}
   };

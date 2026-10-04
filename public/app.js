@@ -46,7 +46,7 @@ function recordDictationEvent(event, detail = '') {
   try {
     const key='photoNotesSpeechDiagnostics';
     const history=JSON.parse(localStorage.getItem(key)||'[]');
-    history.push({at:new Date().toISOString(),version:345,event,detail,generation:dictationGeneration,active:dictationActive,pending:dictationPending,finishing:!!dictationFinish,language:uiSpeechLanguage(),edition:state.proType||state.plan,mode:navigator.standalone||window.matchMedia?.('(display-mode: standalone)').matches?'installed':'browser',online:navigator.onLine,visibility:document.visibilityState});
+    history.push({at:new Date().toISOString(),version:346,event,detail,generation:dictationGeneration,active:dictationActive,pending:dictationPending,finishing:!!dictationFinish,language:uiSpeechLanguage(),edition:state.proType||state.plan,mode:navigator.standalone||window.matchMedia?.('(display-mode: standalone)').matches?'installed':'browser',online:navigator.onLine,visibility:document.visibilityState});
     localStorage.setItem(key,JSON.stringify(history.slice(-200)));
   } catch(e) {}
 }
