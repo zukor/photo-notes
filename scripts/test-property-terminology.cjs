@@ -8,7 +8,8 @@ await page.route('**/api/**',r=>{const p=new URL(r.request().url()).pathname;ret
 await page.addInitScript(()=>localStorage.setItem('pn_install_prompt_dismissed_v1','dismissed'));await page.goto(`http://127.0.0.1:${server.address().port}`);await page.waitForFunction(()=>state.me);
 for(const edition of ['property','hoa']){await page.evaluate(edition=>{state.plan='pro';state.proType=edition},edition);
 for(const view of ['capture','hoa-communities','hoa-assets','hoa-inspections','hoa-visits','hoa-maintenance','hoa-dashboard','hoa-reports','record']){
-await page.evaluate(async view=>{await loadHoaContext();if(view==='record'){state.view='hoa-maintenance';await renderHoaItem(1);}else{state.view=view;renderApp();}},view);await page.waitForTimeout(180);
+// Keep the in-flight browser promise reachable while CDP awaits it.
+await page.evaluate(view=>{window.terminologyViewTask=(async()=>{await loadHoaContext();if(view==='record'){state.view='hoa-maintenance';await renderHoaItem(1);}else{state.view=view;renderApp();}})();return window.terminologyViewTask;},view);await page.evaluate(()=>{delete window.terminologyViewTask;});await page.waitForTimeout(180);
 const body=await page.locator('#body').innerText(),authored=body.replaceAll(property.name,'');
 if(edition==='property')assert(!/\bHOA\b|\bboard\b|\bcommunit(?:y|ies)\b|\breserve\b|meeting agenda/i.test(authored),view+': '+authored);
 if(view==='record'){for(const [id,value] of [['hiStatus','waiting_board'],['hiBudget','reserve'],['hiApproval','agenda']])assert.equal(await page.locator('#'+id).inputValue(),value);assert(body.includes(edition==='property'?'Waiting for Approval':'Waiting for Board'));assert(body.includes(edition==='property'?'Capital':'Reserve Budget'));assert(body.includes(edition==='property'?'Approval Requested':'On Meeting Agenda'));assert(body.includes(property.name));}
