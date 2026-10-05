@@ -77,7 +77,7 @@
           const blob=await exportBlob(row.format,null),name=safeSharedFileName(row.format,null,row.format==='bundle'?'zip':row.format);
           if(!current())return;
           const response=await api('/api/document-links?'+new URLSearchParams({format:row.format,name}),{method:'POST',headers:{'Content-Type':'application/octet-stream','X-Photo-Notes-Share':'1'},body:blob});
-          const data=await response.json();if(!response.ok||!data.path)throw Error('Could not prepare document');
+          const data=await response.json();if(!response.ok||!data.path){const error=Error(data.error||t('Could not prepare the send. Please try again.','No se pudo preparar el envío. Inténtelo de nuevo.'));error.status=response.status;throw error;}
           if(!current())return;
           const url=new URL(data.path,window.PhotoNotesNative?'https://photonotesapp.com':location.origin).href;
           const body='PhotoNotes: '+url;
@@ -87,7 +87,14 @@
           copyLink(ready,url);
           status(t('If no app opens, copy the link and paste it into your email or messaging app. The link expires in 7 days.','Si no se abre ninguna aplicación, copie el enlace y péguelo en su correo o aplicación de mensajes. El enlace vence en 7 días.'));
           link.click();
-        }catch{status(t('Could not prepare the send. Please try again.','No se pudo preparar el envío. Inténtelo de nuevo.'));}finally{send.disabled=false;}
+        }catch(error){if(current()){
+          q('shortcutClose').hidden=false;
+          status(error.message||t('Could not prepare the send. Please try again.','No se pudo preparar el envío. Inténtelo de nuevo.'));
+          if(error.status===409&&!q('shortcutManageLinks')){
+            const manage=document.createElement('button');manage.id='shortcutManageLinks';manage.type='button';manage.className='btn secondary';manage.textContent=t('Manage shared links','Administrar enlaces compartidos');
+            manage.onclick=()=>{manage.remove();const panel=document.createElement('div');q('shortcutReady').append(panel);window.PhotoNotesDocumentLinks?.manage(panel);};q('shortcutReady').append(manage);
+          }
+        }}finally{send.disabled=false;}
       };
       q('shortcutReady').append(send);
     }
