@@ -162,7 +162,7 @@
   </style>
   <link rel="stylesheet" href="/testing-hub.css?v=277">
   <script src="/testing-hub.js?v=350"></script>
-<link rel="stylesheet" href="/theme.css?v=277"><script src="/theme.js?v=277"></script><link rel="stylesheet" href="/help.css?v=339"><script src="/help-catalog.js?v=350" defer></script><script src="/help.js?v=350" defer></script></head>
+<link rel="stylesheet" href="/theme.css?v=277"><script src="/theme.js?v=277"></script><link rel="stylesheet" href="/help.css?v=339"><script src="/help-catalog.js?v=350-issue-navigation" defer></script><script src="/help.js?v=350" defer></script></head>
 <body>
   <div id="app"></div>
   <script src="/account-menu.js?v=277"></script>
@@ -474,13 +474,14 @@
           <details class="issue-help"><summary>How issue reports are handled</summary>
             <ul><li><strong>Bug/Problem:</strong> enters the automatic repair queue. Routine failures and tester replies return to the repair worker. Product decisions need Sam’s review. Repeated technical failures go to Developer Investigation.</li><li><strong>Ideas:</strong> UI improvements, feature improvement ideas, and new feature ideas require Sam’s approval before implementation.</li><li><strong>Tester updates:</strong> ready-to-test fixes and requests for details appear in the reporter’s app.</li></ul>
           </details>
-          <details class="issue-help" id="issueStatusDescriptions"><summary>Status Descriptions</summary><p>Needs My Decision is the default. Being Worked On includes queued repairs and active work. Developer Investigation holds technical blockers needing a developer. Waiting for Tester includes questions and retests. Ideas need approval before implementation. Failed bug retests return to repair automatically once; repeated failures go to Developer Investigation. Completed, Fixed and Verified requires a deployed fix and confirmation from the reporting tester. Closed Without Verified Fix includes reports closed without a repair or marked resolved without that evidence. Reports are ranked by impact, repeated failures, and age.</p>${issueStatusOrder.map(status=>`<p><strong>${esc(issueStatusLabels[status])}:</strong> ${esc(issueStatusDescriptions[status])}</p>`).join('')}</details>
-          <div id="issueSummary" class="issue-summary"></div>
+          <details class="issue-help" id="issueStatusDescriptions"><summary>Status Descriptions</summary><p>Open Issues is the default and counts only reports that remain open. Use the separate Closed Issues link to see the closed total and categories. Being Worked On includes queued repairs and active work. Developer Investigation holds technical blockers needing a developer. Waiting for Tester includes questions and retests. Ideas need approval before implementation. Failed bug retests return to repair automatically once; repeated failures go to Developer Investigation. Completed, Fixed and Verified requires a deployed fix and confirmation from the reporting tester. Closed Without Verified Fix includes reports closed without a repair or marked resolved without that evidence. Reports are ranked by impact, repeated failures, and age.</p>${issueStatusOrder.map(status=>`<p><strong>${esc(issueStatusLabels[status])}:</strong> ${esc(issueStatusDescriptions[status])}</p>`).join('')}</details>
+          <h3 id="issueViewHeading">Open Issues</h3><div id="issueSummary" class="issue-summary"></div>
+          <button type="button" id="issueArchiveLink" style="background:none;border:0;padding:8px 0;color:#000;text-decoration:underline;cursor:pointer">Closed Issues</button>
           <details class="issue-help" id="issueFilters"><summary>Filter and Sort</summary>
           <div class="issue-toolbar issue-primary">
             <label>Version<select id="issueVersionFilter"><option value="all">All Versions</option>${Object.entries(editionLabels).map(([key,label])=>`<option value="${key}">${esc(label)}</option>`).join('')}<option value="unknown">Unknown Version</option></select></label>
             <label>Issue Type<select id="issueTypeFilter"><option value="all" selected>All Report Types</option><option value="bug_problem">Bug/Problem</option><option value="ui_improvement">UI Improvement</option><option value="feature_improvement">Feature Improvement Idea</option><option value="new_feature">New Feature Idea</option></select></label>
-            <label>Work Queue<select id="issueStatusFilter"><option value="decision" selected>Needs My Decision</option><option value="working">Being Worked On</option><option value="waiting">Waiting for Tester</option><option value="ideas">Ideas</option><option value="developer">Developer Investigation</option><option value="completed">Completed, Fixed and Verified</option><option value="closed">Closed Without Verified Fix</option><option value="all">All Issues</option><option value="open">Open Issues</option>${issueOptions(issueStatusOrder,issueStatusLabels,'')}</select></label>
+            <label>Work Queue<select id="issueStatusFilter"><option value="open" selected>Open Issues</option><option value="decision">Needs My Decision</option><option value="working">Being Worked On</option><option value="waiting">Waiting for Tester</option><option value="ideas">Ideas</option><option value="developer">Developer Investigation</option><option value="completed">Completed, Fixed and Verified</option><option value="closed">Closed Without Verified Fix</option><option value="closed_all">All Closed Issues</option><option value="wont_fix">Closed Without a Fix</option><option value="closed_other">Closed Without Verified Repair</option>${issueOptions(issueStatusOrder,issueStatusLabels,'')}</select></label>
             <label>Priority<select id="issuePriorityFilter"><option value="all">All Priorities</option><option value="urgent">Urgent</option><option value="high">High</option><option value="normal">Normal</option><option value="low">Low</option></select></label>
             <label for="issueDateSort"><span>Date Reported</span><select id="issueDateSort" aria-label="Date Reported"><option value="newest">Newest first</option><option value="oldest" selected>Oldest first</option></select></label>
           </div>
@@ -546,12 +547,7 @@
       }
       if(currentUser?.is_super_admin){
       document.getElementById('issueVersionFilter').onchange = renderIssues;
-      document.getElementById('issueTypeFilter').onchange = ()=>{
-        const type=document.getElementById('issueTypeFilter').value;
-        const status=document.getElementById('issueStatusFilter');
-        if(['ui_improvement','feature_improvement','new_feature'].includes(type)&&status.value==='open')status.value='blocked';
-        renderIssues();
-      };
+      document.getElementById('issueTypeFilter').onchange = renderIssues;
       document.getElementById('issueStatusFilter').onchange = renderIssues;
       document.getElementById('issuePriorityFilter').onchange = renderIssues;
       document.getElementById('issueTesterFilter').onchange = renderIssues;
@@ -603,7 +599,7 @@
       const box=document.getElementById('issues'); if(!box)return;
       const version=(document.getElementById('issueVersionFilter')||{}).value||'all';
       const category=(document.getElementById('issueTypeFilter')||{}).value||'all';
-      const sf=(document.getElementById('issueStatusFilter')||{}).value||'decision';
+      const sf=(document.getElementById('issueStatusFilter')||{}).value||'open';
       const actionSelect=document.getElementById('issueRecommendedAction');
       const actionApplicable=category==='bug_problem'&&sf==='blocked';
       document.getElementById('issueRecommendedActionRow').hidden=!actionApplicable;
@@ -614,7 +610,7 @@
       const df=(document.getElementById('issueDeviceFilter')||{}).value||'all';
       const closed=new Set(['resolved','wont_fix','tester_confirmed']);
       const scope=allIssues.filter(i=>(recommendedAction==='all'||window.PhotoNotesReviewGuidance.explain(i).action===recommendedAction)&&(version==='all'||(Object.hasOwn(editionLabels,i.reported_edition)?i.reported_edition:'unknown')===version)&&matchesIssueType(i,category)&&(pf==='all'||(i.priority||'normal')===pf)&&(tf==='all'||String(i.user_id)===tf)&&(df==='all'||issueDevice(i).key===df));
-      const rows=scope.filter(i=>(['decision','working','waiting','ideas','developer','completed'].includes(sf)&&(PhotoNotesIssueRouting.disposition(i)===sf))||sf==='all'||(sf==='open'&&!closed.has(i.management_status||'new'))||(sf==='closed'&&PhotoNotesIssueRouting.disposition(i)==='closed')||(sf==='resolved'&&i.management_status==='tester_confirmed')||(sf==='blocked'&&['ui_improvement','feature_improvement','new_feature'].includes(i.issue_type)&&i.management_status==='new'&&!i.review_decision)||(i.management_status===sf&&!(sf==='blocked'&&['ui_improvement','feature_improvement','new_feature'].includes(i.issue_type)&&i.review_decision==='clarify')));
+      const rows=scope.filter(i=>(['decision','working','waiting','ideas','developer','completed'].includes(sf)&&(PhotoNotesIssueRouting.disposition(i)===sf))||(sf==='closed_all'&&closed.has(i.management_status))||(sf==='closed_other'&&PhotoNotesIssueRouting.disposition(i)==='closed'&&i.management_status!=='wont_fix')||(sf==='open'&&!closed.has(i.management_status||'new'))||(sf==='closed'&&PhotoNotesIssueRouting.disposition(i)==='closed')||(sf==='resolved'&&i.management_status==='tester_confirmed')||(sf==='blocked'&&['ui_improvement','feature_improvement','new_feature'].includes(i.issue_type)&&i.management_status==='new'&&!i.review_decision)||(i.management_status===sf&&!(sf==='blocked'&&['ui_improvement','feature_improvement','new_feature'].includes(i.issue_type)&&i.review_decision==='clarify')));
       const direction=document.getElementById('issueDateSort').value==='oldest'?1:-1;
       rows.sort((a,b)=>{
         const score=PhotoNotesIssueRouting.priority(b).score-PhotoNotesIssueRouting.priority(a).score;if(score)return score;const ad=Date.parse(a.created_at),bd=Date.parse(b.created_at);
@@ -623,11 +619,18 @@
       });
       const counts=issueCounts(scope);
       const lanes={decision:0,working:0,waiting:0,ideas:0,developer:0,completed:0,closed:0};for(const i of scope){const lane=PhotoNotesIssueRouting.disposition(i);lanes[lane]++;}
-      const queueLabels={decision:'Needs My Decision',working:'Being Worked On',waiting:'Waiting for Tester',ideas:'Ideas',developer:'Developer Investigation',completed:'Completed, Fixed and Verified',closed:'Closed Without Verified Fix',all:'All Issues'};
-      document.getElementById('issueSummary').innerHTML=Object.entries(queueLabels).map(([queue,label])=>'<button type="button" class="pill basic" data-issue-queue="'+queue+'" aria-pressed="'+(sf===queue)+'">'+(queue==='all'?scope.length:lanes[queue])+' '+label+'</button>').join('');
+      const closedView=['closed_all','completed','closed','closed_other','wont_fix','resolved','tester_confirmed'].includes(sf);
+      const openCount=scope.filter(i=>!closed.has(i.management_status)).length;
+      const closedCounts={closed_all:scope.length-openCount,completed:lanes.completed,wont_fix:scope.filter(i=>i.management_status==='wont_fix').length,closed_other:scope.filter(i=>PhotoNotesIssueRouting.disposition(i)==='closed'&&i.management_status!=='wont_fix').length};
+      const openLabels={open:'Open Issues',decision:'Needs My Decision',working:'Being Worked On',waiting:'Waiting for Tester',ideas:'Ideas',developer:'Developer Investigation'};
+      const closedLabels={closed_all:'All Closed Issues',completed:'Completed, Fixed and Verified',wont_fix:'Closed Without a Fix',closed_other:'Closed Without Verified Repair'};
+      const queueLabels=closedView?closedLabels:openLabels;
+      document.getElementById('issueViewHeading').textContent=closedView?'Closed Issues':'Open Issues';
+      document.getElementById('issueSummary').innerHTML=Object.entries(queueLabels).map(([queue,label])=>'<button type="button" class="pill basic" data-issue-queue="'+queue+'" aria-pressed="'+(sf===queue)+'">'+(closedView?closedCounts[queue]:queue==='open'?openCount:lanes[queue])+' '+label+'</button>').join('');
+      const archiveLink=document.getElementById('issueArchiveLink');archiveLink.textContent=closedView?'Open Issues':'Closed Issues';archiveLink.onclick=()=>{document.getElementById('issueStatusFilter').value=closedView?'open':'closed_all';renderIssues();};
       document.querySelectorAll('[data-issue-queue]').forEach(button=>button.onclick=()=>{document.getElementById('issueStatusFilter').value=button.dataset.issueQueue;renderIssues();});
       document.getElementById('issueQueueHeading').textContent=(queueLabels[sf]||issueStatusLabels[sf]||'Issues')+' · '+rows.length+' reports · highest impact first';
-      box.innerHTML=rows.length?rows.map(issueCard).join(''):'<p class="helper">No issues need action in this queue. Use All Issues to see the full record.</p>';
+      box.innerHTML=rows.length?rows.map(issueCard).join(''):'<p class="helper">No issues match this view. Broaden the filters to see more reports.</p>';
       for(const issue of rows.filter(i=>i.voice_path)){
         const save=box.querySelector(`[data-issue-save="${issue.id}"]`)||box.querySelector(`[data-ui-submit="${issue.id}"]`);if(!save)continue;
         const player=document.createElement('div');player.className='admin-panel';player.innerHTML=`<b>Voice description</b><audio controls preload="metadata" src="${esc(issue.voice_path)}" style="display:block;width:100%;margin-top:6px"></audio>`;save.closest('.issue-admin-card').querySelector('.issue-original-report').appendChild(player);
@@ -720,7 +723,7 @@
       const issue=allIssues.find(i=>Number(i.id)===id),result=document.getElementById(`ui-result-${id}`),instructions=document.getElementById(`ui-instructions-${id}`).value.trim(),decision=document.getElementById(`ui-decision-${id}`).value;
       const bug=issue.issue_type==='bug_problem';
       if(!instructions&&!(decision==='retest'||(bug&&decision==='implement'))){result.textContent='Enter your instructions, question, or reason before submitting.';return;}
-      button.disabled=true;try{const r=await api(`/api/admin/issues/${id}/${bug?'bug-review':'ui-review'}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({decision,instructions,expected_updated_at:issue.updated_at})});const d=await r.json();if(!r.ok)throw Error(d.error||'Decision could not be saved');if(Array.isArray(issue.progress_events))issue.progress_events.push({event:(bug?'bug_review_':'ui_review_')+decision,created_at:d.updated_at,detail:{decision,instructions:d.review_note||d.implementation_instructions}});Object.assign(issue,d);if(!bug)document.getElementById('issueStatusFilter').value='ideas';toast(decision==='retest'?'Retest requested in the tester’s app':decision==='implement'?(bug?'Repair queued':'Change approved and queued. It has left your review list; track it under Open Issues or All Issues.'):decision==='developer'?'Assigned to developer investigation':decision==='clarify'?'Clarification sent. Waiting for the tester’s reply.':(bug?'Report closed without a fix':'Suggestion closed with no change'));renderIssues();const card=document.querySelector(`[data-issue-card="${id}"]`);if(card)card.open=true;}catch(e){result.textContent=e.message;button.disabled=false;}
+      button.disabled=true;try{const r=await api(`/api/admin/issues/${id}/${bug?'bug-review':'ui-review'}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({decision,instructions,expected_updated_at:issue.updated_at})});const d=await r.json();if(!r.ok)throw Error(d.error||'Decision could not be saved');if(Array.isArray(issue.progress_events))issue.progress_events.push({event:(bug?'bug_review_':'ui_review_')+decision,created_at:d.updated_at,detail:{decision,instructions:d.review_note||d.implementation_instructions}});Object.assign(issue,d);if(!bug)document.getElementById('issueStatusFilter').value='ideas';toast(decision==='retest'?'Retest requested in the tester’s app':decision==='implement'?(bug?'Repair queued':'Change approved and queued. It has left your review list; track it under Open Issues.'):decision==='developer'?'Assigned to developer investigation':decision==='clarify'?'Clarification sent. Waiting for the tester’s reply.':(bug?'Report closed without a fix':'Suggestion closed with no change'));renderIssues();const card=document.querySelector(`[data-issue-card="${id}"]`);if(card)card.open=true;}catch(e){result.textContent=e.message;button.disabled=false;}
     }
 
     function issueHistoryDetail(detail){
