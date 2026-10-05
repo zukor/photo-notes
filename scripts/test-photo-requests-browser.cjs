@@ -23,7 +23,7 @@ const {chromium,webkit}=require('playwright');
   await page.locator('#prOpen').click();await page.locator('#prTitle').waitFor();
   await page.locator('#prTitle').fill('Equipment photos');await page.locator('#prInstructions').fill('Photograph the unit.');await page.locator('#prViews').fill('Overall\nEquipment Plate');
   await page.locator('#prCreate').click();await page.waitForFunction(()=>document.getElementById('prCreateStatus').textContent.includes('Request created'));
-  assert.equal(await page.locator('[data-pr-copy]').count()>0,true);
+  await page.locator('[data-pr-copy]').first().waitFor({state:'visible'});assert.equal(await page.locator('[data-pr-copy]').count()>0,true);
   const overflow=await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1);assert.equal(overflow,false,edition+' overflow '+width);
   await page.locator('.pn-help-fab').click();await page.locator('#pnHelpSearch').fill('Photo Request');assert(await page.locator('.pn-help-article').count()>0);await page.locator('#pnHelpClose').click();
   const missing=await page.evaluate(()=>window.PhotoNotesHelpCatalog.rules.filter(r=>r.keys.some(k=>k==='prCreate')).length);assert.equal(missing,1);
