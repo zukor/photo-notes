@@ -1,14 +1,15 @@
 (function(root,factory){if(typeof module==='object'&&module.exports)module.exports=factory();else root.PhotoNotesIssueRouting=factory();})(typeof window!=='undefined'?window:globalThis,function(){
  const closed=new Set(['resolved','tester_confirmed','wont_fix']);
  const ideas=new Set(['ui_improvement','feature_improvement','new_feature']);
+ function completed(i){return i.management_status==='tester_confirmed'&&i.tester_result==='fixed'&&!!(i.fix_summary&&i.fix_commit&&i.release_reference&&i.verification);}
  function failures(i){return Number(i.failed_attempts)||0;}
  function disposition(i){
-  if(closed.has(i.management_status))return 'closed';
+  if(closed.has(i.management_status))return completed(i)?'completed':'closed';
   if(i.review_decision==='clarify'||i.management_status==='retest_requested'||(i.management_status==='ready_to_test'&&i.release_reference&&i.verification))return 'waiting';
   if(ideas.has(i.issue_type)&&i.review_decision!=='implement')return 'ideas';
   if(i.management_status==='ready_to_test')return 'decision';
   if(i.management_status!=='blocked')return 'working';
-  if(i.blocked_kind==='developer')return 'developer';
+  if(['developer','repeated_failure','retry'].includes(i.blocked_kind))return 'developer';
   return 'decision';
  }
  function priority(i){
@@ -31,7 +32,8 @@
   let reply=latest?{text:latest.notes||'No written comments provided.',result:latest.result,date:latest.created_at}:i.tester_result?{text:i.tester_notes||'No written comments provided.',result:i.tester_result,date:i.tester_retested_at}:null;
   const clarification=(i.progress_events||[]).filter(e=>e.event==='reporter_details').at(-1);if(clarification&&(!reply||Date.parse(clarification.created_at)>Date.parse(reply.date||0)))reply={text:clarification.detail?.notes||i.reporter_details,result:'clarification',date:clarification.created_at};
   let actor='Repair worker',action='Investigate the report and record the next result.';
-  if(lane==='closed'){actor='No one';action=i.management_status==='wont_fix'?'Closed without a fix.':'Closed. Check the confirmation in the history.';}
+  if(lane==='completed'){actor='No one';action='Fix deployed and verified by the reporting tester.';}
+  else if(lane==='closed'){actor='No one';action=i.management_status==='wont_fix'?'Closed without a fix.':'Closed without a verified repair. Check the result and history.';}
   else if(lane==='waiting'){actor='Tester';action=i.review_decision==='clarify'?'Answer the question shown below.':'Repeat the supplied test steps and submit the result.';}
   else if(lane==='ideas'){actor='Sam';action='Decide whether to implement this idea or close it.';}
   else if(lane==='developer'){actor='Developer';action='Investigate the technical blocker. Another restricted cloud attempt will not resolve it.';}
@@ -40,5 +42,5 @@
   else action='Queued for investigation. No active worker lease is recorded.';
   return {lane,priority:p,attempt,deployed,reply,actor,action};
  }
- return {disposition,priority,summary,failures};
+ return {disposition,priority,summary,failures,completed};
 });
