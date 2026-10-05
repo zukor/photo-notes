@@ -2,6 +2,7 @@ const {eligibleIssueSql}=require('./issue-ui-review');
 const {clarificationDraft}=require('./public/issue-review-guidance');
 function kind(row){
  const reason=String(row.blocked_reason||'').toLowerCase();
+ if(row.blocked_kind==='repeated_failure')return 'developer';
  if(row.blocked_kind)return row.blocked_kind;
  if(/security|credentials|destructive|storage restriction|changes? storage behavior|product decision|conflicting|choose.*behavior/.test(reason))return 'decision';
  if(/outside the allowed|expanded file scope|allowed change files|allowed files/.test(reason))return 'developer';
@@ -31,13 +32,13 @@ async function followupIssues(pool){
    await c.query('DELETE FROM issue_cloud_dispatch WHERE issue_id=$1',[row.id]);
    await c.query("INSERT INTO issue_repair_events(issue_id,event,detail) VALUES($1,'automatic_followup',$2)",[row.id,JSON.stringify({previous_reason:row.blocked_reason,notes:row.tester_notes||row.reporter_details,action:'Repair queued with the latest tester evidence'})]);changed.push(row.id);
   }else if(route==='evidence'&&row.clarification_rounds>=2){
-   await c.query("UPDATE issue_reports SET blocked_kind='decision',blocked_reason='Two clarification exchanges have not established a reproducible case. Decide whether a developer should investigate the original evidence or close the report.',updated_at=now() WHERE id=$1",[row.id]);
+   await c.query("UPDATE issue_reports SET blocked_kind='developer',blocked_reason='Two clarification exchanges have not established a reproducible case. Developer investigation must review the original evidence and identify a focused reproduction or the exact missing information.',updated_at=now() WHERE id=$1",[row.id]);
   }else if(route==='evidence'){
    const question=clarificationDraft(row)||'Please send the original example, the exact steps, and the result you see so we can reproduce this problem.';
    await c.query("UPDATE issue_reports SET blocked_kind='evidence',review_decision='clarify',review_note=$2,blocked_reason=$2,tester_notification_status='in_app',tester_notified_at=now(),updated_at=now() WHERE id=$1",[row.id,question]);
    await c.query("INSERT INTO issue_repair_events(issue_id,event,detail) VALUES($1,'automatic_clarification',$2)",[row.id,JSON.stringify({instructions:question,previous_reason:row.blocked_reason})]);
    await c.query("INSERT INTO issue_cloud_events(issue_id,status) VALUES($1,'blocked')",[row.id]);changed.push(row.id);
-  }else if(!row.blocked_kind){await c.query('UPDATE issue_reports SET blocked_kind=$2,updated_at=now() WHERE id=$1',[row.id,route==='retry'?'repeated_failure':route]);}
+  }else if(!row.blocked_kind||row.blocked_kind==='repeated_failure'){await c.query('UPDATE issue_reports SET blocked_kind=$2,updated_at=now() WHERE id=$1',[row.id,route==='retry'?'developer':route]);}
  }
  await c.query('COMMIT');return changed;
  }catch(e){await c.query('ROLLBACK');throw e;}finally{c.release();}

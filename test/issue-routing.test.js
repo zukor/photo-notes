@@ -25,3 +25,17 @@ test('failed retest does not erase deployed evidence or claim confirmation',()=>
  assert(s.deployed);assert.equal(s.actor,'Repair worker');assert.equal(s.reply.text,'Still missing photo');assert.match(s.action,/Queued/);
  assert.match(summary({management_status:'blocked'}).attempt,/No repair attempt/);
 });
+
+test('verified repairs are distinct from successful no-fix retests and administrative closures',()=>{
+ const repaired={management_status:'tester_confirmed',tester_result:'fixed',fix_summary:'Corrected saving',fix_commit:'a'.repeat(40),release_reference:'b'.repeat(40),verification:'Passed'};
+ assert.equal(disposition(repaired),'completed');
+ for(const field of ['fix_summary','fix_commit','release_reference','verification','tester_result'])assert.equal(disposition({...repaired,[field]:null}),'closed');
+ assert.equal(disposition({...repaired,management_status:'resolved'}),'closed');
+ assert.equal(disposition({management_status:'wont_fix'}),'closed');
+});
+test('repeated failures belong to developer investigation and explicit product holds stay with Sam',()=>{
+ assert.equal(disposition({management_status:'blocked',blocked_kind:'repeated_failure'}),'developer');
+ assert.equal(kind({blocked_kind:'repeated_failure'}),'developer');
+ assert.equal(summary({management_status:'blocked',blocked_kind:'developer'}).actor,'Developer');
+ assert.equal(summary({management_status:'blocked',blocked_kind:'decision'}).actor,'Sam');
+});
