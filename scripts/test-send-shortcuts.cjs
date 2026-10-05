@@ -23,6 +23,11 @@ await ready(0);assert(!await page.locator('#shortcutForm').isVisible());
 await save('Email Susie','email','susie@example.invalid');await choose('Email Susie');
 assert.deepEqual(await page.locator('.shortcuts-dialog button:visible').allTextContents(),['Send']);assert(!await page.locator('#shortcutSelectHelp').isVisible());
 await page.locator('.shortcuts-dialog').screenshot({path:`output/shortcuts-trial/${engine.name()}-selected-email.png`});
+// An account at the shared-link limit gets the real reason and recovery action.
+await page.evaluate(()=>{window.successApi=window.api;window.api=(url,options)=>url.startsWith('/api/document-links?')?Promise.resolve(new Response(JSON.stringify({error:'Revoke an existing shared link before creating another. The limit is 20 links or 100 MB.'}),{status:409})):successApi(url,options);window.PhotoNotesDocumentLinks={manage:parent=>{parent.textContent='Existing links';window.managedLinks=true;}};});
+await page.locator('#shortcutReady button').click();await page.locator('#shortcutManageLinks').waitFor();assert.match(await page.locator('#shortcutStatus').textContent(),/20 links/);assert(await page.locator('#shortcutClose').isVisible());assert(!await page.locator('#shortcutReady button').first().isDisabled());
+await page.locator('#shortcutManageLinks').click();assert(await page.evaluate(()=>managedLinks));assert.equal(await page.evaluate(()=>sentLinks.length),0);
+await page.evaluate(()=>{window.api=successApi;});await reset();await choose('Email Susie');
 await page.locator('#shortcutReady button').click();await page.waitForFunction(()=>sentLinks.length===1);assert.match(await page.evaluate(()=>sentLinks[0]),/^mailto:susie@example.invalid\?subject=PhotoNotes&body=/);assert.match(decodeURIComponent(await page.evaluate(()=>sentLinks[0])),/shared-document\/test/);
 assert.equal(await page.locator('#shortcutReady a').textContent(),'Open email');
 await page.locator('#shortcutReady a').evaluate(a=>a.click());assert.equal(await page.evaluate(()=>sentLinks.length),2);await page.evaluate(()=>sentLinks.pop());

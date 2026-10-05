@@ -858,3 +858,11 @@ body:has(#desktopHelp) .issue-fab { left:max(14px,env(safe-area-inset-left)); ri
 .comparison-dialog{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:90;padding:16px;overflow:auto;color:#000;text-align:left}
 .comparison-dialog>section{max-width:900px;margin:auto;background:#fff;border-radius:12px;padding:16px}
 .comparison-dialog img{width:100%;max-height:55vh;object-fit:contain}
+
+/* Keep shared photo tools compact on desktop, preserving the mobile rows. */
+.shared-photo-tools{display:contents}
+@media(min-width:769px){
+  .shared-photo-tools{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
+  .shared-photo-tools .fu-actions,.shared-photo-tools .pr-actions{margin:0}
+  .shared-photo-tools .btn{width:auto;margin:0;padding:8px 16px}
+}

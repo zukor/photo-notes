@@ -328,8 +328,7 @@ function renderApp() {
         <button type="button" class="tab ${['create','hoa-inspections'].includes(state.view)?'on':''}" id="tabCreate" aria-current="${['create','hoa-inspections'].includes(state.view)?'page':'false'}">${isHoaClient()?'Inspections':'Create'}</button>
         <button type="button" class="tab ${['send','hoa-maintenance'].includes(state.view)?'on':''}" id="tabSend" aria-current="${['send','hoa-maintenance'].includes(state.view)?'page':'false'}">${isHoaClient()?'Records':'Send'}</button>
       </nav>`}
-      ${isProClient()&&['general','property','hoa','paving','concrete','contractor','roofer'].includes(state.proType)?'<div class="fu-actions"><button type="button" class="btn secondary" id="fuOpen">Photo Follow-Ups</button></div>':''}
-      ${isProClient()&&['general','property','hoa','paving','concrete','contractor','roofer'].includes(state.proType)?'<div class="pr-actions"><button type="button" class="btn secondary" id="prOpen">Request Photos</button></div>':''}
+      ${isProClient()&&['general','property','hoa','paving','concrete','contractor','roofer'].includes(state.proType)?'<div class="shared-photo-tools"><div class="fu-actions"><button type="button" class="btn secondary" id="fuOpen">Photo Follow-Ups</button></div><div class="pr-actions"><button type="button" class="btn secondary" id="prOpen">Request Photos</button></div></div>':''}
       <div id="body"></div>
       <div class="footer">&copy; ${new Date().getFullYear()} Zukor AI. All Rights Reserved.<br><a href="/install.html" target="_blank" rel="noopener">Install Photo Notes on your device</a></div>
     </div>
@@ -3610,7 +3609,10 @@ function downloadBlob(blob, name) {
 
 async function exportBlob(format, groupId) {
   const r = await api(exportDownloadUrl(format, groupId));
-  if (!r.ok) throw new Error('Could not build document');
+  if (!r.ok) {
+    const data = await r.json().catch(() => null);
+    throw new Error(data?.error || 'Could not build document');
+  }
   return r.blob();
 }
 
