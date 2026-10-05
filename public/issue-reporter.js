@@ -264,8 +264,8 @@ async function refreshIssueAttention(){
       if(badge)badge.hidden=!(d.ready_count||attention.new_count);
       profile.setAttribute('aria-label',typeof uiT==='function'?uiT(d.ready_count?'Account menu: issue ready to retest':'Account menu'):'Account menu');
       if(typeof state!=='undefined'&&state.me)state.me.is_tester=!!d.is_tester;
-      if(menu)menu.hidden=!!d.is_tester;
-      if(hub){hub.hidden=!(d.is_tester||attention.open_count||state.me?.is_testing_manager||state.me?.role==='admin');hub.textContent=(typeof uiT==='function'?uiT('Testing Hub'):'Testing Hub')+(attention.new_count?' ('+attention.new_count+')':'');}
+      if(menu)menu.hidden=!!d.is_tester||(typeof isTestingManager==='function'&&isTestingManager());
+      if(hub){hub.hidden=!(d.is_tester||attention.open_count||state.me?.is_testing_manager||state.me?.role==='admin');hub.textContent=(typeof uiT==='function'?uiT(typeof isTestingManager==='function'&&isTestingManager()?'My Testing Dashboard':'Testing Dashboard'):'Testing Dashboard')+(attention.new_count?' ('+attention.new_count+')':'');}
     }
     syncIssuePushNotifications();
     if(link){link.hidden=!d.count;link.textContent=`Issue updates (${d.count})`;link.setAttribute('aria-label',`${d.count} issue reports need your attention`);}

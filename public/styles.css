@@ -866,3 +866,8 @@ body:has(#desktopHelp) .issue-fab { left:max(14px,env(safe-area-inset-left)); ri
   .shared-photo-tools .fu-actions,.shared-photo-tools .pr-actions{margin:0}
   .shared-photo-tools .btn{width:auto;margin:0;padding:8px 16px}
 }
+
+/* Management pages use testing navigation rather than photo workflow controls. */
+.admin-testing-page .workflow-tabs,.admin-testing-page .shared-photo-tools{display:none}
+.testing-navigation{color:#000;text-align:left}
+.testing-navigation .testing-actions{display:flex;flex-wrap:wrap;gap:8px}
