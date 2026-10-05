@@ -28,7 +28,7 @@ test('first retests are automatic, durable, and return first failed bug results 
   for(const id of [clarify,repair,idea,owner,previous,leased,alreadyFailed])assert.equal((await pool.query('SELECT management_status FROM issue_reports WHERE id=$1',[id])).rows[0].management_status,'blocked');
   const {app}=require('../server');server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));
   const token=require('jsonwebtoken').sign({id:user},process.env.SESSION_SECRET);
-  for(const [id,result,status] of [[negative,'still_happening','new'],[positive,'fixed','tester_confirmed']]){
+  for(const [id,result,status] of [[negative,'still_happening','new'],[positive,'fixed','resolved']]){
    const response=await fetch('http://127.0.0.1:'+server.address().port+'/api/issues/'+id+'/retest',{method:'POST',headers:{'Content-Type':'application/json',Cookie:'pn_token='+token},body:JSON.stringify({result,notes:'Checked the original photo again.'})});
    assert.equal(response.status,200);assert.equal((await response.json()).status,status);
   }
