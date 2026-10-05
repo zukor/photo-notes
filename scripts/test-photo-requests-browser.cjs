@@ -23,7 +23,7 @@ const {chromium,webkit}=require('playwright');
   await page.locator('#prOpen').click();await page.locator('#prTitle').waitFor();
   await page.locator('#prTitle').fill('Equipment photos');await page.locator('#prInstructions').fill('Photograph the unit.');await page.locator('#prViews').fill('Overall\nEquipment Plate');
   await page.locator('#prCreate').click();await page.waitForFunction(()=>document.getElementById('prCreateStatus').textContent.includes('Request created'));
-  assert.equal(await page.locator('[data-pr-copy]').count()>0,true);
+  await page.locator('[data-pr-copy]').first().waitFor({state:'visible'});assert.equal(await page.locator('[data-pr-copy]').count()>0,true);
   const overflow=await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1);assert.equal(overflow,false,edition+' overflow '+width);
   await page.locator('.pn-help-fab').click();await page.locator('#pnHelpSearch').fill('Photo Request');assert(await page.locator('.pn-help-article').count()>0);await page.locator('#pnHelpClose').click();
   const missing=await page.evaluate(()=>window.PhotoNotesHelpCatalog.rules.filter(r=>r.keys.some(k=>k==='prCreate')).length);assert.equal(missing,1);
@@ -33,7 +33,7 @@ const {chromium,webkit}=require('playwright');
  for(const edition of ['general','issue','roads']){await page.evaluate(edition=>{state.plan='free';state.proType=edition;state.view='capture';renderApp();},edition);assert.equal(await page.locator('#prOpen').count(),0);}
  await page.goto(origin+'/photo-request/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');await page.locator('#prPublicForm').waitFor();
  const image=await require('sharp')({create:{width:30,height:20,channels:3,background:'#114477'}}).jpeg().toBuffer();
- await page.locator('#prChoose0').setInputFiles({name:'overall.jpg',mimeType:'image/jpeg',buffer:image});assert.equal(await page.locator('#prPreview0').isVisible(),true);
+ await page.locator('#prChoose0').setInputFiles({name:'overall.jpg',mimeType:'image/jpeg',buffer:image});await page.locator('#prPreview0').waitFor({state:'visible'});assert.equal(await page.locator('#prPreview0').isVisible(),true);
  await page.locator('#prPublicSubmit').click();assert((await page.locator('#prPublicStatus').innerText()).includes('every requested view'));
  await page.locator('#prCamera0').setInputFiles({name:'replacement.jpg',mimeType:'image/jpeg',buffer:image});await page.locator('#prChoose1').setInputFiles({name:'plate.jpg',mimeType:'image/jpeg',buffer:image});await page.locator('#prViewNote1').fill('Plate is readable');
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);

@@ -290,7 +290,14 @@ async function doLogin() {
 }
 
 
+function isTestingManager(){return !!(state.me?.is_testing_manager||state.me?.role==='admin'||state.me?.is_super_admin);}
+let testingReturnView=null;
+function enterTesting(view){if(!['my-assignment','my-issues','manage-testing'].includes(state.view))testingReturnView=state.view;state.view=view;renderApp();}
+function leaveTesting(){state.view=testingReturnView||(IS_HANDHELD?'capture':'organize');renderApp();}
+function testingNavigation(admin=false){return `<section class="testing-navigation"><button type="button" class="backlink" id="testingReturn">${uiT('Back to Photo Notes')}</button><h1>${uiT(admin?'Testing Administration':'My Testing Dashboard')}</h1><nav aria-label="${uiT('Testing sections')}" class="testing-actions">${admin?`${state.me?.is_super_admin?'<a id="testingAllIssues" class="btn secondary" href="/admin?view=super&tool=issues">'+uiT('Issues & Retests')+'</a>':''}<button type="button" class="btn secondary" id="testingAssignments">${uiT('Assignments & Results')}</button>`:`<button type="button" class="btn secondary" id="testingAssignments">${uiT('My Assignments')}</button><button type="button" class="btn secondary" id="testingIssues">${uiT('My Issue Reports')}</button>`}</nav></section>`;}
+function bindTestingNavigation(admin=false){document.getElementById('testingReturn').onclick=leaveTesting;document.getElementById('testingAssignments').onclick=()=>enterTesting(admin?'manage-testing':'my-assignment');const issues=document.getElementById('testingIssues');if(issues)issues.onclick=()=>enterTesting('my-issues');}
 function renderApp() {
+  document.body.classList.toggle('admin-testing-page',isTestingManager()&&['my-assignment','my-issues','manage-testing'].includes(state.view));
   window.PhotoNotesMatchCamera?.stop();
   document.getElementById('captureShareDialog')?.remove();
   el.innerHTML = `
@@ -309,11 +316,11 @@ function renderApp() {
               <div class="profile-email">${esc((state.me && state.me.email) || '')}</div>
               <div class="profile-plan">${isIssueReporterClient()?'Issue Reporter':isRoadIssuesClient()?'Road Issue Reporter':isGeneralProClient()?'Photo Notes Pro':isProClient()?esc(productName()):'Photo Notes Basic'}</div>
               ${state.me&&Array.isArray(state.me.edition_access)&&state.me.edition_access.length>1?`<div class="profile-version"><span>Photo Notes Version</span><select id="editionSwitcher" aria-label="Switch Photo Notes version">${editionSwitcherOptions()}</select></div>`:''}
-              <button type="button" id="manageTesting" ${state.me?.is_testing_manager||state.me?.role==='admin'?'':'hidden'}>${uiT('Manage Testing')}</button>
-              <button type="button" id="myAssignment" ${state.me?.is_tester||state.me?.is_testing_manager||state.me?.role==='admin'?'':'hidden'}>Testing Hub</button>
+              <button type="button" id="manageTesting" ${state.me?.is_testing_manager||state.me?.role==='admin'?'':'hidden'}>${uiT('Testing Administration')}</button>
+              <button type="button" id="myAssignment" ${state.me?.is_tester||state.me?.is_testing_manager||state.me?.role==='admin'?'':'hidden'}>${uiT(isTestingManager()?'My Testing Dashboard':'Testing Dashboard')}</button>
               <button type="button" id="installHelp">Install Photo Notes</button>
               <button type="button" id="pendingPhotos">Pending Photos</button>
-              <button type="button" id="myIssues" ${state.me?.is_tester?'hidden':''}>My Issue Reports</button>
+              <button type="button" id="myIssues" ${state.me?.is_tester||isTestingManager()?'hidden':''}>My Issue Reports</button>
               ${state.me?.is_super_admin ? '<a href="/admin?view=super">Super Admin Dashboard</a>' : ''}
               ${state.me && state.me.role === 'admin' ? '<a href="/admin?view=admin">Admin Dashboard</a>' : ''}
               <button type="button" id="signout">Sign Out</button>
@@ -351,9 +358,9 @@ function renderApp() {
   document.getElementById('signout').onclick = async () => { if(captureSavePending){toast('Please wait for this photo to finish saving locally.');return;}if(state.photoFile&&!confirm('Sign out and discard the photo that has not been saved?'))return;try{const r=await api('/api/logout',{method:'POST'});if(!r.ok)throw Error();queueAccount=null;bgQueue=[];clearTimeout(queueRetryTimer);stopCaptureDictation();location.reload();}catch(error){toast('Could not sign out. Check your connection and try again.');} };
   document.getElementById('installHelp').onclick=showInstallHelp;
   document.getElementById('pendingPhotos').onclick=showPendingPhotos;
-  const myIssues=document.getElementById('myIssues');if(myIssues)myIssues.onclick=()=>{state.view='my-issues';renderApp();};
-  const manageTesting=document.getElementById('manageTesting');if(manageTesting)manageTesting.onclick=()=>{state.view='manage-testing';renderApp();};
-  const myAssignment=document.getElementById('myAssignment');if(myAssignment)myAssignment.onclick=()=>{state.view='my-assignment';renderApp();};
+  const myIssues=document.getElementById('myIssues');if(myIssues)myIssues.onclick=()=>enterTesting('my-issues');
+  const manageTesting=document.getElementById('manageTesting');if(manageTesting)manageTesting.onclick=()=>enterTesting('manage-testing');
+  const myAssignment=document.getElementById('myAssignment');if(myAssignment)myAssignment.onclick=()=>enterTesting('my-assignment');
   const editionSwitcher=document.getElementById('editionSwitcher');if(editionSwitcher)editionSwitcher.onchange=async()=>{
     if(captureSavePending){editionSwitcher.value=selectedEdition();toast('Please wait for this photo to finish saving locally.');return;}
     const edition=editionSwitcher.value;
@@ -439,13 +446,14 @@ function renderApp() {
 
 const MY_ISSUE_STATUS={retest_requested:'Retest Requested',blocked:'Needs attention',new:'Received',reviewing:'Automatic Repair Review',fixing:'Working',testing:'Testing',ready_to_test:'Deployed - awaiting your confirmation',tester_confirmed:'Closed - you confirmed',resolved:'Closed - no verified fix',wont_fix:'Closed without a fix'};
 async function renderTestingManagement(){
-  const body=document.getElementById('body');body.innerHTML='<button class="backlink" id="testingManagementBack">'+uiT('Back')+'</button><h1>'+uiT('Manage Testing')+'</h1><div id="testingManagement"></div>';
-  document.getElementById('testingManagementBack').onclick=()=>{state.view='my-assignment';renderApp();};
+  const body=document.getElementById('body');body.innerHTML=testingNavigation(true)+'<h2>'+uiT('Assignments & Results')+'</h2><p>'+uiT('Create testing checklists, assign testers, and review submitted results.')+'</p><div id="testingManagement"></div>';
+  bindTestingNavigation(true);
   return PhotoNotesTesting.renderAdmin(document.getElementById('testingManagement'));
 }
 async function renderMyTestingAssignment(){
   return PhotoNotesTesting.renderTester(document.getElementById('body'),{
-    back:()=>{state.view=IS_HANDHELD?'capture':'organize';renderApp();},
+    back:isTestingManager()?leaveTesting:()=>{state.view=IS_HANDHELD?'capture':'organize';renderApp();},
+    dashboard:isTestingManager()?{header:testingNavigation(),bind:()=>bindTestingNavigation()}:null,
     openIssues:()=>{state.view='my-issues';renderApp();},
     reportIssue:context=>openIssueReporter(context)
   });
@@ -454,7 +462,8 @@ let myIssueFilter='open';
 async function renderMyIssueReports(){
   const body=document.getElementById('body');
   body.innerHTML='<button class="backlink" id="issuesBack">← Back</button><div class="workflow-intro"><strong>'+ 'My Issue Reports' +'</strong><span>See what you reported, whether it has been fixed, and what needs another test.</span></div><label for="myIssueFilter">'+uiT('Show issues')+'</label><select id="myIssueFilter"><option value="open">'+uiT('Open issues')+'</option><option value="closed">'+uiT('Closed issues')+'</option><option value="all">'+uiT('All issues')+'</option></select>'+issueNotificationControls()+'<div id="myIssueList"><p class="status">Loading your reports...</p></div>';
-  document.getElementById('issuesBack').onclick=()=>{state.view=state.me?.is_tester?'my-assignment':IS_HANDHELD?'capture':'organize';renderApp();};
+  if(isTestingManager()){body.querySelector('#issuesBack').remove();body.insertAdjacentHTML('afterbegin',testingNavigation());bindTestingNavigation();}
+  const issuesBack=document.getElementById('issuesBack');if(issuesBack)issuesBack.onclick=()=>{state.view=state.me?.is_tester?'my-assignment':IS_HANDHELD?'capture':'organize';renderApp();};
   const filter=document.getElementById('myIssueFilter'),box=document.getElementById('myIssueList');
   filter.value=myIssueFilter;
   filter.onchange=()=>{myIssueFilter=filter.value;};
