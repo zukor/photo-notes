@@ -452,7 +452,7 @@ async function renderTestingManagement(){
 }
 async function renderMyTestingAssignment(){
   return PhotoNotesTesting.renderTester(document.getElementById('body'),{
-    back:leaveTesting,
+    back:isTestingManager()?leaveTesting:()=>{state.view=IS_HANDHELD?'capture':'organize';renderApp();},
     dashboard:isTestingManager()?{header:testingNavigation(),bind:()=>bindTestingNavigation()}:null,
     openIssues:()=>{state.view='my-issues';renderApp();},
     reportIssue:context=>openIssueReporter(context)
