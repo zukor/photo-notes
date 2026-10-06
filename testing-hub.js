@@ -26,6 +26,9 @@ async function initTestingHub(pool){
  CREATE TABLE IF NOT EXISTS testing_submissions(id serial PRIMARY KEY,assignment_id integer NOT NULL REFERENCES testing_assignments(id) ON DELETE CASCADE,snapshot jsonb NOT NULL,created_at timestamptz DEFAULT now());
  ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS testing_assignment_id integer REFERENCES testing_assignments(id) ON DELETE SET NULL,ADD COLUMN IF NOT EXISTS testing_step_id text;
  CREATE INDEX IF NOT EXISTS issue_testing_assignment_idx ON issue_reports(testing_assignment_id);`);
+ // Owner authorized Ahsan Farooq as tester manager. Only a unique active identity receives this grant.
+ await pool.query("CREATE TABLE IF NOT EXISTS testing_manager_grants(identity text PRIMARY KEY,user_id integer REFERENCES users(id) ON DELETE SET NULL,granted_at timestamptz NOT NULL DEFAULT now())");
+ await pool.query("WITH granted AS (UPDATE users SET is_testing_manager=true WHERE active=true AND lower(trim(name))='ahsan farooq' AND (SELECT count(*) FROM users WHERE active=true AND lower(trim(name))='ahsan farooq')=1 AND NOT EXISTS(SELECT 1 FROM testing_manager_grants WHERE identity='ahsan-farooq-owner-2026-10-06') RETURNING id) INSERT INTO testing_manager_grants(identity,user_id) SELECT 'ahsan-farooq-owner-2026-10-06',id FROM granted ON CONFLICT DO NOTHING");
  const seed=require('./testing-road-draft.json');
  const users=(await pool.query('SELECT id,name FROM users WHERE active=true')).rows;
  const candidates=users.map(u=>({...u,first:(u.name||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().split(/\s+/)[0]}));

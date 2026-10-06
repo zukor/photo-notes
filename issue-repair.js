@@ -20,6 +20,13 @@ function registerIssueRepair(app,{pool,requireAuth,requireAdmin,requireTestingQu
     const history=issues.length?(await pool.query('SELECT issue_id,event,detail,created_at FROM issue_repair_events WHERE issue_id=ANY($1::int[]) ORDER BY created_at DESC LIMIT 500',[issues.map(i=>i.id)])).rows:[];
     res.json({issues,history});
   }catch(e){res.status(500).json({error:'queue unavailable'});}});
+  app.get('/api/automation/issues/:id/diagnostics',requireTestingQueueToken,async(req,res)=>{try{
+    const id=Number(req.params.id);if(!Number.isInteger(id)||id<1)return res.status(400).json({error:'Invalid issue'});
+    const row=(await pool.query('SELECT user_id FROM issue_reports WHERE id=$1',[id])).rows[0];if(!row)return res.status(404).json({error:'Issue not found'});
+    const markers=(await pool.query("SELECT count(*)::int AS total,count(*) FILTER(WHERE favorite)::int AS favorite,count(*) FILTER(WHERE flagged)::int AS flagged,count(*) FILTER(WHERE favorite AND flagged)::int AS both FROM captures WHERE user_id=$1",[row.user_id])).rows[0];
+    const links=(await pool.query("SELECT count(*)::int AS active_links,coalesce(sum(octet_length(content)),0)::bigint AS bytes FROM document_share_links WHERE user_id=$1 AND expires_at>now()",[row.user_id])).rows[0];
+    res.json({issue_id:id,markers,links});
+  }catch{res.status(503).json({error:'Diagnostics unavailable'});}});
   app.get('/api/automation/issues/:id/attachment/:kind',requireTestingQueueToken,async(req,res)=>{try{
     if(!['screenshot','voice'].includes(req.params.kind))return res.status(400).json({error:'Invalid attachment type'});
     const col=req.params.kind==='voice'?'voice_path':'screenshot_path';const row=(await pool.query(`SELECT ${col} AS file FROM issue_reports WHERE id=$1`,[req.params.id])).rows[0];
@@ -64,9 +71,9 @@ function registerIssueRepair(app,{pool,requireAuth,requireAdmin,requireTestingQu
     }catch(e){res.status(500).json({error:'Issue count unavailable'});}
   });
   app.get('/api/issues/:id/history',requireAuth,async(req,res)=>{try{
-    const own=await pool.query('SELECT id FROM issue_reports WHERE id=$1 AND (user_id=$2 OR $3)',[req.params.id,req.user.id,isSuperAdmin(req.user)]);if(!own.rowCount)return res.status(404).json({error:'Issue not found'});
+    const own=await pool.query('SELECT id FROM issue_reports WHERE id=$1 AND (user_id=$2 OR $3)',[req.params.id,req.user.id,(isSuperAdmin(req.user)||req.user.is_testing_manager===true)]);if(!own.rowCount)return res.status(404).json({error:'Issue not found'});
     // Private admin notes stay within the admin view.
-    const {rows}=await pool.query('SELECT event,detail,created_at FROM issue_repair_events WHERE issue_id=$1 ORDER BY created_at',[req.params.id]);res.json(isSuperAdmin(req.user)?rows:rows.map(r=>({event:r.event,created_at:r.created_at})));
+    const {rows}=await pool.query('SELECT event,detail,created_at FROM issue_repair_events WHERE issue_id=$1 ORDER BY created_at',[req.params.id]);res.json((isSuperAdmin(req.user)||req.user.is_testing_manager===true)?rows:rows.map(r=>({event:r.event,created_at:r.created_at})));
   }catch(e){res.status(500).json({error:'History unavailable'});}});
   app.post('/api/issues/:id/details',requireAuth,async(req,res)=>{const detail=String(req.body?.details||'').trim();if(!detail||detail.length>5000)return res.status(400).json({error:'Enter 1–5,000 characters'});let client;
     try{client=await pool.connect();await client.query('BEGIN');const {rows}=await client.query("UPDATE issue_reports SET reporter_details=$1,review_decision=NULL,reviewed_by=NULL,management_status='new',blocked_kind=NULL,blocked_reason=NULL,repair_claim_hash=NULL,repair_lease_until=NULL,updated_at=now() WHERE id=$2 AND user_id=$3 AND management_status='blocked' AND (issue_type<>'bug_problem' OR review_decision='clarify') RETURNING id",[detail,req.params.id,req.user.id]);if(!rows.length){await client.query('ROLLBACK');return res.status(404).json({error:'Issue is not waiting for details'});}

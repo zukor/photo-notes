@@ -60,6 +60,8 @@ test('document snapshots: exact exports, owner isolation, expiry, revoke and bro
           }});
           Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async value=>{window.copiedLink=value;}}});
         });
+        const fixtureEmail=(await pool.query('SELECT email FROM users WHERE id=$1',[users[0]])).rows[0].email;
+        await page.addInitScript(email=>localStorage.setItem('pn_first_use_v1:'+encodeURIComponent(email),'done'),fixtureEmail);
         await page.goto(base,{waitUntil:'domcontentloaded'});
         await page.waitForFunction(()=>typeof openPreparedExportShare==='function'&&!!window.PhotoNotesDocumentLinks);
         await page.evaluate(async({capture})=>{
