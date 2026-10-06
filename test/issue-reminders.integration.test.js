@@ -22,7 +22,7 @@ test('four-hour retest reminders persist, copy managers, retry and stop after re
   await pool.query("UPDATE issue_reports SET management_status='blocked',tester_retested_at=now() WHERE id=$1",[id]);await remindRetests(pool,{fetcher,env});assert.equal(sent.length,3);
   await pool.query("UPDATE issue_reports SET management_status='retest_requested',tester_retested_at=NULL,tester_notified_at=now()-interval '8 hours 1 minute' WHERE id=$1",[id]);await remindRetests(pool,{fetcher,env});assert.equal(sent.length,5);
   const {app}=require('../server');server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));
-  const call=async(user,path,method='GET')=>fetch(`http://127.0.0.1:${server.address().port}${path}`,{method,headers:{Cookie:'pn_token='+require('jsonwebtoken').sign({id:user},process.env.SESSION_SECRET),'Content-Type':'application/json'},...(method==='POST'?{body:'{}'}:{})});
+  const call=async(user,path,method='GET',body={},regular=false)=>fetch(`http://127.0.0.1:${server.address().port}${path}`,{method,headers:{Cookie:'pn_token='+require('jsonwebtoken').sign({id:user},process.env.SESSION_SECRET),'Content-Type':'application/json',...(regular?{'X-Photo-Notes-Admin-View':'regular'}:{})},...(method==='POST'?{body:JSON.stringify(body)}:{})});
   assert.equal((await call(manager,'/api/admin/issues')).status,200);assert.equal((await call(other,'/api/admin/issues')).status,403);
   assert.equal((await call(manager,`/api/issues/${id}/history`)).status,200);assert.equal((await call(other,`/api/issues/${id}/history`)).status,404);
   assert.equal((await call(manager,`/api/admin/issues/${id}`,'POST')).status,403);
@@ -39,6 +39,33 @@ test('four-hour retest reminders persist, copy managers, retry and stop after re
   await pool.query("UPDATE issue_request_notices SET sent_at=NULL,next_try=now() WHERE event_id IN (SELECT id FROM issue_repair_events WHERE issue_id=$1)",[clarification]);
   await pool.query("UPDATE issue_reports SET management_status='resolved',tester_retested_at=now() WHERE id=$1",[clarification]);
   await notifyRequests(pool,{fetcher:initialFetch,env});assert.equal(initial.length,4);
+
+  const owner=await makeUser(),admin=await makeUser();await pool.query("UPDATE users SET role='admin' WHERE id=ANY($1::int[])",[[owner,admin]]);process.env.SUPER_ADMIN_USER_IDS=String(owner);
+  const route='/api/admin/issues/notification-settings';
+  for(const u of [tester,manager,other,admin]){assert.equal((await call(u,route)).status,403);assert.equal((await call(u,route,'POST',{email_reminders_enabled:false,email_interval_minutes:60})).status,403);}
+  assert.equal((await call(owner,route,'GET',{},true)).status,403);
+  assert.equal((await (await call(owner,route)).json()).email_interval_minutes,240);
+  for(const minutes of [0,14,10081,1.5,'60'])assert.equal((await call(owner,route,'POST',{email_reminders_enabled:true,email_interval_minutes:minutes})).status,400);
+  const save=async(enabled,minutes)=>{const r=await call(owner,route,'POST',{email_reminders_enabled:enabled,email_interval_minutes:minutes});assert.equal(r.status,200);return r.json();};
+  const off=await save(false,240);assert.equal(off.email_reminders_enabled,false);
+  await pool.query("UPDATE issue_reports SET tester_notified_at=now()-interval '12 hours 1 minute' WHERE id=$1",[id]);
+  const before=sent.length;await remindRetests(pool,{fetcher,env});assert.equal(sent.length,before);
+  assert.equal((await pool.query("SELECT count(*)::int n FROM issue_cloud_events WHERE issue_id=$1 AND kind='retest_reminder'",[id])).rows[0].n,3);
+  // New request emails still send with repeat email reminders disabled.
+  await pool.query("UPDATE issue_reports SET management_status='blocked',review_decision='clarify',tester_retested_at=NULL WHERE id=$1",[clarification]);
+  await pool.query("INSERT INTO issue_repair_events(issue_id,event,detail) VALUES($1,'bug_review_clarify','{}')",[clarification]);
+  await notifyRequests(pool,{fetcher:initialFetch,env});assert.equal(initial.length,6);
+  await pool.query("UPDATE issue_reports SET management_status='resolved' WHERE id=$1",[clarification]);
+  const hourly=await save(true,60);assert.equal(hourly.email_interval_minutes,60);
+  const unchanged=await save(true,60);assert.equal(unchanged.schedule_version,hourly.schedule_version);assert.equal(unchanged.updated_at,hourly.updated_at);
+  await remindRetests(pool,{fetcher,env});assert.equal(sent.length,before,'changing settings must not send catch-up email');
+  await pool.query("UPDATE issue_notification_settings SET updated_at=now()-interval '61 minutes' WHERE id=1");
+  await remindRetests(pool,{fetcher,env});assert.equal(sent.length,before+2);assert(sent.slice(-2).every(n=>n.text.includes('every 1 hours')));
+  await remindRetests(pool,{fetcher,env});assert.equal(sent.length,before+2);
+  await save(true,720);await pool.query("UPDATE issue_notification_settings SET updated_at=now()-interval '5 hours' WHERE id=1");
+  await remindRetests(pool,{fetcher,env});assert.equal(sent.length,before+2);
+  await pool.query("UPDATE issue_notification_settings SET updated_at=now()-interval '12 hours 1 minute' WHERE id=1");
+  await remindRetests(pool,{fetcher,env});assert.equal(sent.length,before+4);
 
  }finally{if(server)await new Promise(r=>server.close(r));await pool.query('DELETE FROM users WHERE id=ANY($1::int[])',[users]);await pool.end();}
 });

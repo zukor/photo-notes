@@ -162,7 +162,7 @@
   </style>
   <link rel="stylesheet" href="/testing-hub.css?v=277">
   <script src="/testing-hub.js?v=350"></script>
-<link rel="stylesheet" href="/theme.css?v=277"><script src="/theme.js?v=277"></script><link rel="stylesheet" href="/help.css?v=339"><script src="/help-catalog.js?v=354" defer></script><script src="/help.js?v=350" defer></script></head>
+<link rel="stylesheet" href="/theme.css?v=277"><script src="/theme.js?v=277"></script><link rel="stylesheet" href="/help.css?v=339"><script src="/help-catalog.js?v=355" defer></script><script src="/help.js?v=350" defer></script></head>
 <body>
   <div id="app"></div>
   <script src="/account-menu.js?v=277"></script>
@@ -472,9 +472,20 @@
           </div></details>
 <details class="admin-section" data-admin-tool="issues"><summary>Issue Management Center</summary><div class="admin-section-body">
           <details class="issue-help"><summary>How issue reports are handled</summary>
-            <ul><li><strong>Bug/Problem:</strong> enters the automatic repair queue. Routine failures and tester replies return to the repair worker. Product decisions need Sam’s review. Repeated technical failures go to Developer Investigation.</li><li><strong>Ideas:</strong> UI improvements, feature improvement ideas, and new feature ideas require Sam’s approval before implementation.</li><li><strong>Tester updates:</strong> ready-to-test fixes and requests for details appear in the reporter’s app. Outstanding retests receive in-app reminders every four hours, copied to active testing managers. Enabled browser notifications also receive reminders. Email copies require a configured email service. A new retest or clarification request sends an immediate email to the tester and testing managers. Reminders stop when a retest is submitted. Testing managers can monitor every open and closed issue here.</li></ul>
+            <ul><li><strong>Bug/Problem:</strong> enters the automatic repair queue. Routine failures and tester replies return to the repair worker. Product decisions need Sam’s review. Repeated technical failures go to Developer Investigation.</li><li><strong>Ideas:</strong> UI improvements, feature improvement ideas, and new feature ideas require Sam’s approval before implementation.</li><li><strong>Tester updates:</strong> ready-to-test fixes and requests for details appear in the reporter’s app. Outstanding retests receive in-app reminders every four hours, copied to active testing managers. Enabled browser notifications also receive reminders. Email copies require a configured email service. A new retest or clarification request sends an immediate email to the tester and testing managers. Only Super Admin can enable or disable additional retest reminder emails and change their frequency in Email Notification Settings. Reminders stop when a retest is submitted. Testing managers can monitor every open and closed issue here.</li></ul>
           </details>
           <details class="issue-help" id="issueStatusDescriptions"><summary>Status Descriptions</summary><p>Open Issues is the default and counts only reports that remain open. Use the separate Closed Issues link to see the closed total and categories. Being Worked On includes queued repairs and active work. Developer Investigation holds technical blockers needing a developer. Waiting for Tester includes questions and retests. Ideas need approval before implementation. Failed bug retests return to repair automatically once; repeated failures go to Developer Investigation. Completed, Fixed and Verified requires a deployed fix and confirmation from the reporting tester. Closed Without Verified Fix includes reports closed without a repair or marked resolved without that evidence. Reports are ranked by impact, repeated failures, and age.</p>${issueStatusOrder.map(status=>`<p><strong>${esc(issueStatusLabels[status])}:</strong> ${esc(issueStatusDescriptions[status])}</p>`).join('')}</details>
+          ${currentUser?.is_super_admin?`<details class="issue-help" id="issueEmailSettings"><summary>Email Notification Settings</summary>
+            <p>New retest and clarification requests always send an immediate email to the tester and testing managers. These settings control additional retest reminder emails only. In-app and enabled browser reminders stay every four hours.</p>
+            <form id="issueEmailSettingsForm">
+              <label for="issueEmailRemindersEnabled"><input type="checkbox" id="issueEmailRemindersEnabled">Send additional retest reminder emails</label>
+              <label for="issueEmailReminderHours">Hours between reminder emails</label>
+              <input type="number" id="issueEmailReminderHours" min="0.25" max="168" step="0.25" value="4" style="max-width:160px" required>
+              <p>Choose 0.25 to 168 hours. Testers and testing managers receive the same schedule. A changed schedule starts a fresh countdown when saved. Resend's free daily limit can delay emails.</p>
+              <button type="submit" id="saveIssueEmailSettings" class="btn" disabled>Save Email Notification Settings</button>
+              <p id="issueEmailSettingsResult" role="status" aria-live="polite">Loading saved settings...</p>
+            </form>
+          </details>`:''}
           <h3 id="issueViewHeading">Open Issues</h3><div id="issueSummary" class="issue-summary"></div>
           <button type="button" id="issueArchiveLink" style="background:none;border:0;padding:8px 0;color:#000;text-decoration:underline;cursor:pointer">Closed Issues</button>
           <details class="issue-help" id="issueFilters"><summary>Filter and Sort</summary>
@@ -556,6 +567,7 @@
       document.getElementById('issueDateSort').onchange = renderIssues;
       document.getElementById('issueRecommendedAction').onchange = renderIssues;
       }
+      if(currentUser?.is_super_admin)document.getElementById('issueEmailSettingsForm').onsubmit=saveIssueEmailSettings;
       document.getElementById('refreshAssignments').onclick = loadAssignments;
       const toolLoaders={'system-status':loadIssueSystemStatus,health:loadHealth,billing:loadStripeBilling,activity:loadActivity,issues:loadIssues,testing:loadAssignments};
       document.querySelectorAll('[data-admin-tool]').forEach(panel=>panel.ontoggle=()=>{if(panel.open&&!panel.dataset.loaded){panel.dataset.loaded='true';const load=toolLoaders[panel.dataset.adminTool];if(load)load();}});
@@ -771,7 +783,22 @@
       notice.hidden=!attention&&!unavailable;
       notice.textContent=attention?'Automatic repairs or notifications need attention. See the checks below for details.':unavailable?'Some system checks are unavailable. See the checks below for details.':'';
     }
+    async function loadIssueEmailSettings(){
+      const form=document.getElementById('issueEmailSettingsForm');if(!form)return;
+      const result=document.getElementById('issueEmailSettingsResult'),save=document.getElementById('saveIssueEmailSettings');
+      try{const r=await api('/api/admin/issues/notification-settings');const d=await r.json();if(!r.ok)throw Error(d.error||'Settings could not be loaded');
+        document.getElementById('issueEmailRemindersEnabled').checked=d.email_reminders_enabled;
+        document.getElementById('issueEmailReminderHours').value=d.email_interval_minutes/60;save.disabled=false;result.textContent='Immediate request emails are always enabled.';
+      }catch(e){result.textContent=e.message;save.disabled=true;}
+    }
+    async function saveIssueEmailSettings(event){
+      event.preventDefault();const save=document.getElementById('saveIssueEmailSettings'),result=document.getElementById('issueEmailSettingsResult');save.disabled=true;
+      try{const r=await api('/api/admin/issues/notification-settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email_reminders_enabled:document.getElementById('issueEmailRemindersEnabled').checked,email_interval_minutes:Math.round(Number(document.getElementById('issueEmailReminderHours').value)*60)})});const d=await r.json();if(!r.ok)throw Error(d.error||'Settings could not be saved');
+        result.textContent=d.email_reminders_enabled?'Saved. Retest reminder emails are enabled every '+d.email_interval_minutes/60+' hours. A changed schedule starts from now.':'Saved. Additional retest reminder emails are off. Immediate request emails and in-app reminders continue.';
+      }catch(e){result.textContent=e.message;}finally{save.disabled=false;}
+    }
     async function loadIssues(){
+      if(currentUser?.is_super_admin)loadIssueEmailSettings();
       const box=document.getElementById('issues'); if(!box)return; box.innerHTML='<p class="status">Loading...</p>';
       try{const r=await api('/api/admin/issues');if(!r.ok)throw new Error();allIssues=await r.json();populateIssueFilters();renderIssues();}
       catch(e){box.innerHTML='<p class="status">Issue reports could not be loaded.</p>';}
