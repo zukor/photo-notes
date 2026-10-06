@@ -15,6 +15,7 @@ const route={id:1,name:'Monthly inspection',community_id:1,community_name:commun
 const assignment={id:1,user_id:99,edition:'pro',title:'Pro check',title_es:'Prueba Pro',summary:'Verify photo flow',status:'assigned',template_id:1,steps:[{id:'step1',title:'Take photo',instruction:'Take a photo',expected:'Preview visible'}],results:{},issues:[],photos:[]};
 const user={id:99,email:'help-test@example.invalid',name:'Help test',plan:'pro',pro_type:'general',role:'admin',is_super_admin:true,is_testing_manager:true,is_tester:true,edition_access:['basic','pro','contractor','roads','paving','hoa','concrete','roofer'],features:{measurements:true,extra_work:true,before_after:true},active:true};
 function data(url){const p=url.pathname;
+ if(p==='/api/admin/issues/notification-settings')return {email_reminders_enabled:true,email_interval_minutes:240};
  if(p==='/api/me')return user;if(p==='/api/areas')return ['Site'];if(p==='/api/jobs')return [job];
  if(p==='/api/captures'||p==='/api/captures/search')return [photo];if(p==='/api/groups')return [group];
  if(p==='/api/groups/1')return {group,items:[{...photo,id:1,capture_id:1,caption:'Condition',sort_order:0}],pairs:[],zones:{}};
