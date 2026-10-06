@@ -162,7 +162,7 @@
   </style>
   <link rel="stylesheet" href="/testing-hub.css?v=277">
   <script src="/testing-hub.js?v=350"></script>
-<link rel="stylesheet" href="/theme.css?v=277"><script src="/theme.js?v=277"></script><link rel="stylesheet" href="/help.css?v=339"><script src="/help-catalog.js?v=350-issue-navigation" defer></script><script src="/help.js?v=350" defer></script></head>
+<link rel="stylesheet" href="/theme.css?v=277"><script src="/theme.js?v=277"></script><link rel="stylesheet" href="/help.css?v=339"><script src="/help-catalog.js?v=352" defer></script><script src="/help.js?v=350" defer></script></head>
 <body>
   <div id="app"></div>
   <script src="/account-menu.js?v=277"></script>
@@ -250,6 +250,7 @@
       }
       const user=allUsers.find(u=>u.id===selectedUserId);if(!user){selectedUserId=null;return renderUserList();}
       box.innerHTML='<button class="backlink" type="button" id="backToUsers">← All Users</button>'+userCard(user);
+      for(const issue of rows){const body=box.querySelector(`[data-issue-card="${issue.id}"] .issue-detail-body`);if(body&&(issue.reminder_sent_at||issue.reminder_error)){const note=document.createElement('p');note.textContent=issue.reminder_error?'Retest reminder delivery needs attention: '+issue.reminder_error:'Last retest reminder emailed: '+fdatetime(issue.reminder_sent_at);body.prepend(note);}}
       if(!currentUser?.is_super_admin)box.querySelectorAll('[data-super-admin-only]').forEach(section=>section.remove());
       document.getElementById('backToUsers').onclick=()=>showUser(null);
       box.querySelectorAll('[data-save-versions]').forEach(b=>b.onclick=()=>saveVersions(Number(b.dataset.saveVersions),b));
@@ -379,7 +380,7 @@
       const r = await api('/api/me');
       if (!r.ok) return renderLogin();
       const me = await r.json();
-      if (me.role !== 'admin') return renderDenied();
+      if (me.role !== 'admin' && !me.is_testing_manager) return renderDenied();
       accountIsSuperAdmin=!!me.is_super_admin;
       currentUser = {...me,is_super_admin:accountIsSuperAdmin&&!regularAdminView};
       renderAdmin();
@@ -472,7 +473,7 @@
           </div></details>
 <details class="admin-section" data-admin-tool="issues"><summary>Issue Management Center</summary><div class="admin-section-body">
           <details class="issue-help"><summary>How issue reports are handled</summary>
-            <ul><li><strong>Bug/Problem:</strong> enters the automatic repair queue. Routine failures and tester replies return to the repair worker. Product decisions need Sam’s review. Repeated technical failures go to Developer Investigation.</li><li><strong>Ideas:</strong> UI improvements, feature improvement ideas, and new feature ideas require Sam’s approval before implementation.</li><li><strong>Tester updates:</strong> ready-to-test fixes and requests for details appear in the reporter’s app.</li></ul>
+            <ul><li><strong>Bug/Problem:</strong> enters the automatic repair queue. Routine failures and tester replies return to the repair worker. Product decisions need Sam’s review. Repeated technical failures go to Developer Investigation.</li><li><strong>Ideas:</strong> UI improvements, feature improvement ideas, and new feature ideas require Sam’s approval before implementation.</li><li><strong>Tester updates:</strong> ready-to-test fixes and requests for details appear in the reporter’s app. Outstanding retests receive email reminders every four hours, copied to active testing managers. Reminders stop when a retest is submitted. Testing managers can monitor every open and closed issue here.</li></ul>
           </details>
           <details class="issue-help" id="issueStatusDescriptions"><summary>Status Descriptions</summary><p>Open Issues is the default and counts only reports that remain open. Use the separate Closed Issues link to see the closed total and categories. Being Worked On includes queued repairs and active work. Developer Investigation holds technical blockers needing a developer. Waiting for Tester includes questions and retests. Ideas need approval before implementation. Failed bug retests return to repair automatically once; repeated failures go to Developer Investigation. Completed, Fixed and Verified requires a deployed fix and confirmation from the reporting tester. Closed Without Verified Fix includes reports closed without a repair or marked resolved without that evidence. Reports are ranked by impact, repeated failures, and age.</p>${issueStatusOrder.map(status=>`<p><strong>${esc(issueStatusLabels[status])}:</strong> ${esc(issueStatusDescriptions[status])}</p>`).join('')}</details>
           <h3 id="issueViewHeading">Open Issues</h3><div id="issueSummary" class="issue-summary"></div>
@@ -527,7 +528,8 @@
                   </div>
         <button class="issue-fab" id="issueFab" type="button" data-html2canvas-ignore="true">Report Issue</button>
         ${issueReporterMarkup()}`;
-      if(!currentUser?.is_super_admin)document.querySelectorAll('[data-admin-tool="issues"],[data-admin-tool="system-status"],[data-admin-tool="health"],[data-admin-tool="billing"],[data-admin-tool="activity"],.issue-diagnostics,#issueSystemNotice,#addUser,#createUserPanel,#userTotals').forEach(section=>section.remove());
+      if(!currentUser?.is_super_admin&&!currentUser?.is_testing_manager)document.querySelectorAll('[data-admin-tool="issues"],[data-admin-tool="system-status"],[data-admin-tool="health"],[data-admin-tool="billing"],[data-admin-tool="activity"],.issue-diagnostics,#issueSystemNotice,#addUser,#createUserPanel,#userTotals').forEach(section=>section.remove());
+      if(currentUser?.is_testing_manager&&!currentUser?.is_super_admin){document.querySelectorAll('[data-admin-tool]').forEach(section=>{if(!['issues','testing'].includes(section.dataset.adminTool))section.remove();});document.querySelector('.admin-page-title').textContent='Testing Management';document.querySelector('.admin-tools-heading').textContent='Issues and Testing';}
       window.PhotoNotesAccountMenu.sort();
       const tools=[...document.querySelectorAll('[data-admin-tool]')];
       tools.sort((a,b)=>a.querySelector('summary').textContent.trim().localeCompare(b.querySelector('summary').textContent.trim(),'en',{sensitivity:'base'}));
@@ -545,7 +547,7 @@
         document.getElementById('generatepass').onclick = generatePassword;
         document.getElementById('copypass').onclick = copyPassword;
       }
-      if(currentUser?.is_super_admin){
+      if(currentUser?.is_super_admin||currentUser?.is_testing_manager){
       document.getElementById('issueVersionFilter').onchange = renderIssues;
       document.getElementById('issueTypeFilter').onchange = renderIssues;
       document.getElementById('issueStatusFilter').onchange = renderIssues;
@@ -563,8 +565,7 @@
       add.onclick=()=>{createPanel.hidden=!createPanel.hidden;add.setAttribute('aria-expanded',String(!createPanel.hidden));if(!createPanel.hidden)document.getElementById('cname').focus();};
       document.getElementById('cancelCreate').onclick=()=>{createPanel.hidden=true;add.setAttribute('aria-expanded','false');add.focus();};
       }
-      document.getElementById('userSearch').oninput=renderUserList;
-      loadUsers();
+      if(document.getElementById('userSearch')){document.getElementById('userSearch').oninput=renderUserList;loadUsers();}
     }
 
     async function loadAssignments(){const box=document.getElementById('assignments');if(box)await PhotoNotesTesting.renderAdmin(box);}
@@ -631,9 +632,10 @@
       document.querySelectorAll('[data-issue-queue]').forEach(button=>button.onclick=()=>{document.getElementById('issueStatusFilter').value=button.dataset.issueQueue;renderIssues();});
       document.getElementById('issueQueueHeading').textContent=(queueLabels[sf]||issueStatusLabels[sf]||'Issues')+' · '+rows.length+' reports · highest impact first';
       box.innerHTML=rows.length?rows.map(issueCard).join(''):'<p class="helper">No issues match this view. Broaden the filters to see more reports.</p>';
+      for(const issue of rows){const body=box.querySelector(`[data-issue-card="${issue.id}"] .issue-detail-body`);if(body&&(issue.reminder_sent_at||issue.reminder_error)){const note=document.createElement('p');note.textContent=issue.reminder_error?'Retest reminder delivery needs attention: '+issue.reminder_error:'Last retest reminder emailed: '+fdatetime(issue.reminder_sent_at);body.prepend(note);}}
+      if(!currentUser?.is_super_admin)box.querySelectorAll('.issue-review-footer').forEach(e=>e.remove());
       for(const issue of rows.filter(i=>i.voice_path)){
-        const save=box.querySelector(`[data-issue-save="${issue.id}"]`)||box.querySelector(`[data-ui-submit="${issue.id}"]`);if(!save)continue;
-        const player=document.createElement('div');player.className='admin-panel';player.innerHTML=`<b>Voice description</b><audio controls preload="metadata" src="${esc(issue.voice_path)}" style="display:block;width:100%;margin-top:6px"></audio>`;save.closest('.issue-admin-card').querySelector('.issue-original-report').appendChild(player);
+        const player=document.createElement('div');player.className='admin-panel';player.innerHTML=`<b>Voice description</b><audio controls preload="metadata" src="${esc(issue.voice_path)}" style="display:block;width:100%;margin-top:6px"></audio>`;box.querySelector(`[data-issue-card="${issue.id}"] .issue-original-report`)?.appendChild(player);
       }
       for(const i of rows){const card=box.querySelector(`[data-issue-card="${i.id}"]`);if(!card)continue;const section=document.createElement('details');section.innerHTML=`<summary>${['ui_improvement','feature_improvement','new_feature'].includes(i.issue_type)?'Review History':'Technical Details And History'}</summary><p>Version: ${esc(i.reported_edition||'Legacy / unknown')} · App build: ${esc(i.app_version||'unknown')}</p>${i.blocked_reason?`<h4>Original Review Explanation</h4><p class="issue-description">${esc(i.blocked_reason)}</p>`:''}${i.admin_notes?`<h4>Repair Attempt Notes</h4><p class="issue-description">${esc(i.admin_notes)}</p>`:''}${i.verification?`<pre style="white-space:pre-wrap;overflow-wrap:anywhere">${esc(i.verification)}</pre>`:''}<div data-history>Open to load repair history.</div>`;section.ontoggle=async()=>{if(!section.open||section.dataset.loaded)return;const r=await api(`/api/issues/${i.id}/history`);if(r.ok){const history=await r.json();section.querySelector('[data-history]').innerHTML=history.length?history.map(h=>`<p><strong>${esc(h.event.replaceAll('_',' '))}</strong> · ${esc(fdatetime(h.created_at))}</p>${issueHistoryDetail(h.detail)}`).join(''):'No automated repair history yet.';section.dataset.loaded='true';}};section.className='issue-technical-history';section.querySelector('summary').textContent='Technical Details And History';card.querySelector('.issue-detail-body').append(section);}
       box.querySelectorAll('[data-issue-recommend]').forEach(button=>button.onclick=()=>{const id=Number(button.dataset.issueRecommend);document.getElementById('ui-decision-'+id).value=button.dataset.action;updateUiDecision(id);document.getElementById('ui-instructions-'+id).focus();});
@@ -739,7 +741,8 @@
       const checks=guide.showChecks?window.PhotoNotesRetestGuidance.checksFor(i):[];
       return `<section class="admin-panel"><h3>${i.review_decision==='clarify'?'Waiting For Tester Clarification':'Why This Needs Your Review'}</h3><p class="issue-description">${esc(guide.why)}</p></section><section class="admin-panel"><h3>Recommended Course of Action</h3><p class="issue-description">${esc(guide.recommendation)}</p>${checks.length?`<p><strong>Checks To Include:</strong></p><ul>${checks.map(check=>`<li>${esc(check)}</li>`).join('')}</ul>`:''}</section>`;
     }
-    function issueCard(i){return progressIssueCard(i);}
+    function issueCard(i){
+      return progressIssueCard(i);}
     function statusRows(rows){
       return '<dl class="issue-status-grid">'+rows.map(([label,value])=>`<dt>${esc(label)}</dt><dd>${esc(value)}</dd>`).join('')+'</dl>';
     }

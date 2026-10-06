@@ -117,8 +117,8 @@ async function notifyWorkerIncidents(client,keys,send){
     catch(e){if([404,410].includes(e.statusCode))await client.query('DELETE FROM issue_push_subscriptions WHERE id=$1',[d.subscription_id]);else await client.query("UPDATE issue_cloud_incident_delivery SET attempts=attempts+1,next_try=now()+interval '1 minute'*power(2,attempts) WHERE incident_id=$1 AND subscription_id=$2",[d.incident_id,d.subscription_id]);}}
 }
 async function startCloud(pool) {
-  const keys=await initCloud(pool);let running=false;
-  const tick=async()=>{if(running)return;running=true;try{await require('./issue-followup').followupIssues(pool);const retests=await require('./issue-auto-retest').requestFirstRetests(pool);if(retests.length)console.info('[issues] Automatic first retests requested:',retests.join(','));await tickCloud(pool,keys);}catch{await pool.query("INSERT INTO issue_cloud_state(id,last_tick,last_error) VALUES(1,now(),'Worker cycle failed') ON CONFLICT(id) DO UPDATE SET last_error='Worker cycle failed'").catch(()=>{});}finally{running=false;}};
+  const keys=await initCloud(pool);await require('./issue-reminders').initReminders(pool);let running=false,lastReminderCheck=0;
+  const tick=async()=>{if(running)return;running=true;try{await require('./issue-followup').followupIssues(pool);const retests=await require('./issue-auto-retest').requestFirstRetests(pool);if(retests.length)console.info('[issues] Automatic first retests requested:',retests.join(','));await tickCloud(pool,keys);if(Date.now()-lastReminderCheck>=60000){lastReminderCheck=Date.now();await require('./issue-reminders').remindRetests(pool);}}catch{await pool.query("INSERT INTO issue_cloud_state(id,last_tick,last_error) VALUES(1,now(),'Worker cycle failed') ON CONFLICT(id) DO UPDATE SET last_error='Worker cycle failed'").catch(()=>{});}finally{running=false;}};
   await tick();const timer=setInterval(tick,2000);timer.unref();return()=>clearInterval(timer);
 }
 module.exports={validSubscription,initCloud,registerCloud,tickCloud,startCloud,dispatchRepairs};

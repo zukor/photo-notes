@@ -52,6 +52,7 @@ const legacySuites = [
  ['ui-improvement-review.integration','PN_LEGACY_TEST_DATABASE_URL','pn_review_test','PN_UI_REVIEW_TEST'],
  ['scanner-service.integration','PN_LEGACY_TEST_DATABASE_URL','pn_scanner_test','PN_SCANNER_RETEST'],
  ['pro-retest.integration','PN_LEGACY_TEST_DATABASE_URL','pn_pro_test','PN_PRO_RETEST'],
+ ['issue-reminders.integration','PN_LEGACY_TEST_DATABASE_URL','pn_reminders_test','PN_REMINDER_TEST'],
  ['issue-auto-retest.integration','PN_LEGACY_TEST_DATABASE_URL','pn_auto_test','PN_AUTO_RETEST_TEST'],
  ['web-capture-integration','PN_WEB_TEST_DATABASE_URL','pn_ios_test'],
  ['ramo-intake-integration','PN_RAMO_TEST_DATABASE_URL','pn_ramo_test'],
