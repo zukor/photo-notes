@@ -26,5 +26,19 @@ test('four-hour retest reminders persist, copy managers, retry and stop after re
   assert.equal((await call(manager,'/api/admin/issues')).status,200);assert.equal((await call(other,'/api/admin/issues')).status,403);
   assert.equal((await call(manager,`/api/issues/${id}/history`)).status,200);assert.equal((await call(other,`/api/issues/${id}/history`)).status,404);
   assert.equal((await call(manager,`/api/admin/issues/${id}`,'POST')).status,403);
+  const {notifyRequests}=require('../issue-request-notices');
+  const clarification=(await pool.query("INSERT INTO issue_reports(user_id,description,management_status,review_decision,review_note) VALUES($1,'Fixture clarification','blocked','clarify','Please identify the original photo') RETURNING id",[tester])).rows[0].id;
+  await pool.query("INSERT INTO issue_repair_events(issue_id,event,detail) VALUES($1,'bug_review_clarify','{}')",[clarification]);
+  const initial=[],initialFetch=async(url,options)=>{initial.push(JSON.parse(options.body));return {ok:true};};
+  await notifyRequests(pool,{fetcher:initialFetch,env});assert.equal(initial.length,2);assert(initial.every(n=>n.subject.includes('clarification')&&n.text.includes('original photo')));
+  await notifyRequests(pool,{fetcher:initialFetch,env});assert.equal(initial.length,2);
+  await pool.query("UPDATE issue_reports SET management_status='retest_requested',review_decision='retest',retest_instructions='Repeat the original capture',tester_retested_at=NULL WHERE id=$1",[clarification]);
+  await pool.query("INSERT INTO issue_repair_events(issue_id,event,detail) VALUES($1,'bug_review_retest','{}')",[clarification]);
+  await notifyRequests(pool,{fetcher:initialFetch,env});assert.equal(initial.length,4);assert(initial.slice(2).every(n=>n.subject.includes('retest')&&n.text.includes('original capture')));
+  await notifyRequests(pool,{fetcher:initialFetch,env});assert.equal(initial.length,4);
+  await pool.query("UPDATE issue_request_notices SET sent_at=NULL,next_try=now() WHERE event_id IN (SELECT id FROM issue_repair_events WHERE issue_id=$1)",[clarification]);
+  await pool.query("UPDATE issue_reports SET management_status='resolved',tester_retested_at=now() WHERE id=$1",[clarification]);
+  await notifyRequests(pool,{fetcher:initialFetch,env});assert.equal(initial.length,4);
+
  }finally{if(server)await new Promise(r=>server.close(r));await pool.query('DELETE FROM users WHERE id=ANY($1::int[])',[users]);await pool.end();}
 });
