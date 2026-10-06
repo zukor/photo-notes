@@ -5,9 +5,13 @@ async function initReminders(pool){
  id bigserial PRIMARY KEY,issue_id integer NOT NULL REFERENCES issue_reports(id) ON DELETE CASCADE,
  user_id integer NOT NULL REFERENCES users(id) ON DELETE CASCADE,request_at timestamptz NOT NULL,cycle integer NOT NULL,
  sent_at timestamptz,attempts integer NOT NULL DEFAULT 0,next_try timestamptz NOT NULL DEFAULT now(),error text,
- UNIQUE(issue_id,user_id,request_at,cycle));`);
+ UNIQUE(issue_id,user_id,request_at,cycle));
+ ALTER TABLE issue_retest_reminders ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now();
+ CREATE TABLE IF NOT EXISTS issue_retest_reminder_cycles(issue_id integer NOT NULL REFERENCES issue_reports(id) ON DELETE CASCADE,request_at timestamptz NOT NULL,cycle integer NOT NULL,PRIMARY KEY(issue_id,request_at,cycle));
+ UPDATE issue_retest_reminders SET error=NULL WHERE error='Email delivery is not configured';
+ UPDATE issue_repair_events SET event='developer_investigation' WHERE event='blocked' AND detail LIKE '%"blocked_reason":"Developer investigation recorded October 6, 2026.%';`);
 }
-const waitingSql=`(i.management_status='retest_requested' OR (i.management_status='ready_to_test' AND i.release_reference IS NOT NULL AND i.verification IS NOT NULL))`;
+const waitingSql=`(i.management_status='retest_requested' OR (i.management_status='ready_to_test' AND coalesce(i.release_reference,'')<>'' AND coalesce(i.verification,'')<>''))`;
 async function remindRetests(pool,{fetcher=fetch,env=process.env}={}){
  const c=await pool.connect();let locked=false;
  try{
@@ -19,6 +23,15 @@ async function remindRetests(pool,{fetcher=fetch,env=process.env}={}){
    WHERE ${waitingSql} AND r.request_at<=now()-interval '4 hours'
    AND (i.tester_retested_at IS NULL OR i.tester_retested_at<r.request_at)
    ON CONFLICT DO NOTHING`);
+  await c.query(`WITH due AS (
+   INSERT INTO issue_retest_reminder_cycles(issue_id,request_at,cycle)
+   SELECT DISTINCT d.issue_id,d.request_at,d.cycle FROM issue_retest_reminders d JOIN issue_reports i ON i.id=d.issue_id
+   WHERE ${waitingSql} AND NOT EXISTS(SELECT 1 FROM issue_repair_events e WHERE e.issue_id=i.id AND e.created_at>d.request_at AND e.event IN ('ready_to_test','automatic_retest_requested','bug_review_retest','ui_review_retest')) AND d.cycle=floor(extract(epoch FROM (now()-d.request_at))/14400)::int
+   AND (i.tester_retested_at IS NULL OR i.tester_retested_at<d.request_at)
+   ON CONFLICT DO NOTHING RETURNING issue_id)
+   INSERT INTO issue_cloud_events(issue_id,status,kind) SELECT i.id,i.management_status,'retest_reminder' FROM due JOIN issue_reports i ON i.id=due.issue_id`);
+  // In-app and browser reminders work independently of optional email delivery.
+  if(!env.RESEND_API_KEY)return;
   const rows=(await c.query(`SELECT d.*,u.email,u.is_testing_manager,i.user_id AS reporter_id,i.retest_instructions,i.fix_summary,i.management_status
    FROM issue_retest_reminders d JOIN issue_reports i ON i.id=d.issue_id JOIN users u ON u.id=d.user_id
    WHERE d.sent_at IS NULL AND d.next_try<=now() AND u.active=true AND (u.id=i.user_id OR u.is_testing_manager=true)
