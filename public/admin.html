@@ -250,7 +250,6 @@
       }
       const user=allUsers.find(u=>u.id===selectedUserId);if(!user){selectedUserId=null;return renderUserList();}
       box.innerHTML='<button class="backlink" type="button" id="backToUsers">← All Users</button>'+userCard(user);
-      for(const issue of rows){const body=box.querySelector(`[data-issue-card="${issue.id}"] .issue-detail-body`);if(body&&(issue.reminder_sent_at||issue.reminder_error)){const note=document.createElement('p');note.textContent=issue.reminder_error?'Retest reminder delivery needs attention: '+issue.reminder_error:'Last retest reminder emailed: '+fdatetime(issue.reminder_sent_at);body.prepend(note);}}
       if(!currentUser?.is_super_admin)box.querySelectorAll('[data-super-admin-only]').forEach(section=>section.remove());
       document.getElementById('backToUsers').onclick=()=>showUser(null);
       box.querySelectorAll('[data-save-versions]').forEach(b=>b.onclick=()=>saveVersions(Number(b.dataset.saveVersions),b));
