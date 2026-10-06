@@ -5,6 +5,7 @@ const digest=value=>crypto.createHash('sha256').update(String(value||'')).digest
 const sha=value=>typeof value==='string'&&/^[a-f0-9]{40}$/.test(value);
 function validateRepairUpdate(body){
   if(!['reviewing','fixing','testing','blocked','ready_to_test'].includes(body.management_status))throw new Error('Worker may review, fix, block, or request retesting; only a person confirms resolution');
+  if(body.investigation_review!==undefined&&(body.investigation_review!==true||body.management_status!=='blocked'||body.blocked_kind!=='developer'))throw new Error('Investigation reviews must record a developer hold');
   const fields={};if(body.blocked_kind!==undefined){if(!['decision','developer','evidence','retry'].includes(body.blocked_kind))throw new Error('Invalid blocker type');fields.blocked_kind=body.blocked_kind;}for(const [k,max] of Object.entries({fix_summary:5000,retest_instructions:5000,verification:10000,blocked_reason:3000,admin_notes:10000}))if(body[k]!==undefined){if(typeof body[k]!=='string'||body[k].length>max)throw new Error('Invalid '+k);fields[k]=body[k].trim();}
   if(body.management_status==='blocked'&&!fields.blocked_reason)throw new Error('A blocked issue needs a concrete explanation or question');
   if(body.management_status==='ready_to_test'){
@@ -57,7 +58,7 @@ function registerIssueRepair(app,{pool,requireAuth,requireAdmin,requireTestingQu
       const {rows}=await client.query(`UPDATE issue_reports SET ${sets.join(',')} WHERE id=$${vals.length-1} AND ${eligibleIssueSql()} AND repair_claim_hash=$${vals.length} AND repair_lease_until>now() AND management_status IN ('reviewing','fixing','testing') RETURNING id,management_status,release_reference`,vals);
       if(!rows.length){await client.query('ROLLBACK');return res.status(409).json({error:'Claim expired or issue changed; reload the queue'});}
       const detail=JSON.stringify({status:req.body.management_status,...fields});
-      await client.query("INSERT INTO issue_repair_events(issue_id,event,detail) VALUES($1,$2,$3)",[id,req.body.management_status,detail]);await client.query('COMMIT');res.json({ok:true,...rows[0]});
+      await client.query("INSERT INTO issue_repair_events(issue_id,event,detail) VALUES($1,$2,$3)",[id,req.body.investigation_review===true?'developer_investigation':req.body.management_status,detail]);await client.query('COMMIT');res.json({ok:true,...rows[0]});
     }catch(e){if(client)await client.query('ROLLBACK');res.status(500).json({error:'Repair update failed'});}finally{client?.release();}
   });
   app.get('/api/admin/repair-status',requireAdmin,async(req,res)=>{try{const row=(await pool.query('SELECT last_checked FROM issue_worker_state WHERE id=1')).rows[0];res.json({queue_configured:!!process.env.TESTER_QUEUE_TOKEN,email_configured:!!process.env.RESEND_API_KEY,last_checked:row?.last_checked||null});}catch(e){res.status(500).json({error:'Worker status unavailable'});}});

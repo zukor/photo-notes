@@ -22,6 +22,7 @@ async function initCloud(pool) {
     END; $$ LANGUAGE plpgsql;
     DROP TRIGGER IF EXISTS issue_cloud_change ON issue_reports;
     CREATE TRIGGER issue_cloud_change AFTER INSERT OR UPDATE OF management_status ON issue_reports FOR EACH ROW EXECUTE FUNCTION issue_cloud_changed();`);
+  await pool.query("ALTER TABLE issue_cloud_events ADD COLUMN IF NOT EXISTS kind text NOT NULL DEFAULT 'update'");
   await pool.query('ALTER TABLE issue_cloud_state ADD COLUMN IF NOT EXISTS last_runner_tick timestamptz, ADD COLUMN IF NOT EXISTS runner_configured boolean, ADD COLUMN IF NOT EXISTS runner_url text');
   await pool.query('ALTER TABLE issue_cloud_state ADD COLUMN IF NOT EXISTS last_dispatch_check timestamptz, ADD COLUMN IF NOT EXISTS dispatch_error text');
   await pool.query(`CREATE TABLE IF NOT EXISTS issue_cloud_incidents(id bigserial PRIMARY KEY,reason text NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),resolved_at timestamptz);
@@ -49,12 +50,13 @@ async function tickCloud(pool,keys,{send=webpush.sendNotification,fetcher=fetch,
     await client.query(`INSERT INTO issue_push_delivery(event_id,subscription_id)
       SELECT e.id,s.id FROM issue_cloud_events e JOIN issue_reports i ON i.id=e.issue_id
       JOIN issue_push_subscriptions s ON s.created_at<=e.created_at JOIN users u ON u.id=s.user_id
-      WHERE e.created_at>now()-interval '7 days' AND e.status IN ('ready_to_test','blocked','retest_requested') AND ((u.role='admin') OR i.user_id=s.user_id)
+      WHERE e.created_at>now()-interval '7 days' AND e.status IN ('ready_to_test','blocked','retest_requested') AND ((u.role='admin') OR u.is_testing_manager=true OR i.user_id=s.user_id)
       ON CONFLICT DO NOTHING`);
-    const deliveries=(await client.query(`SELECT d.event_id,d.subscription_id,d.attempts,s.subscription,u.role,e.status,e.issue_id
+    const deliveries=(await client.query(`SELECT d.event_id,d.subscription_id,d.attempts,s.subscription,u.role,u.is_testing_manager,e.status,e.kind,e.issue_id
       FROM issue_push_delivery d JOIN issue_cloud_events e ON e.id=d.event_id JOIN issue_reports i ON i.id=e.issue_id
       JOIN issue_push_subscriptions s ON s.id=d.subscription_id JOIN users u ON u.id=s.user_id
       WHERE d.sent_at IS NULL AND d.attempts<5 AND d.next_try<=now() AND e.status=i.management_status
+      AND (e.kind<>'retest_reminder' OR ((i.tester_retested_at IS NULL OR i.tester_retested_at<e.created_at) AND (i.tester_notified_at IS NULL OR i.tester_notified_at<=e.created_at)))
       AND e.status IN ('ready_to_test','blocked','retest_requested') AND (e.status IN ('blocked','retest_requested') OR NOT EXISTS (
         SELECT 1 FROM issue_push_delivery pending JOIN issue_cloud_events recent ON recent.id=pending.event_id
         JOIN issue_reports current_issue ON current_issue.id=recent.issue_id
@@ -64,10 +66,10 @@ async function tickCloud(pool,keys,{send=webpush.sendNotification,fetcher=fetch,
       ORDER BY d.event_id LIMIT 100`)).rows;
     // One notification per device and outcome per cycle, with a short completion
     // buffer so related repairs arrive as one message rather than five alerts.
-    const groups=new Map();for(const d of deliveries){const key=d.subscription_id+':'+d.status;if(!groups.has(key))groups.set(key,[]);groups.get(key).push(d);}
+    const groups=new Map();for(const d of deliveries){const key=d.subscription_id+':'+d.status+':'+(d.kind||'update');if(!groups.has(key))groups.set(key,[]);groups.get(key).push(d);}
     for(const rows of groups.values()) {
       const d=rows[0],ids=rows.map(r=>r.event_id),count=new Set(rows.map(r=>r.issue_id)).size;
-      try {await send(d.subscription,JSON.stringify({title:'Photo Notes',body:d.status==='ready_to_test'?`${count} issue repair${count===1?' is':'s are'} deployed and ready for your test.`:d.status==='retest_requested'?'Please test your reported issue again and see if it is still happening. No fix is being claimed.':'An issue needs attention. Open its record for the reason and next step.',url:d.role==='admin'?'/admin':'/?issues=1',tag:'photo-notes-issues-'+d.status}),{vapidDetails:{subject:'https://photonotesapp.com',publicKey:keys.public_key,privateKey:keys.private_key},TTL:86400,timeout:10000});await client.query('UPDATE issue_push_delivery SET sent_at=now(),error=NULL WHERE event_id=ANY($1::bigint[]) AND subscription_id=$2',[ids,d.subscription_id]);}
+      try {await send(d.subscription,JSON.stringify({title:d.kind==='retest_reminder'?'Photo Notes retest reminder':'Photo Notes',body:d.kind==='retest_reminder'?`${count} issue${count===1?' still needs':'s still need'} a tester retest. Open the original reports and submit the results.`:d.status==='ready_to_test'?`${count} issue repair${count===1?' is':'s are'} deployed and ready for your test.`:d.status==='retest_requested'?'Please test your reported issue again and see if it is still happening. No fix is being claimed.':'An issue needs attention. Open its record for the reason and next step.',url:d.role==='admin'||d.is_testing_manager?'/admin?tool=issues':'/?issues=1',tag:'photo-notes-issues-'+d.status}),{vapidDetails:{subject:'https://photonotesapp.com',publicKey:keys.public_key,privateKey:keys.private_key},TTL:86400,timeout:10000});await client.query('UPDATE issue_push_delivery SET sent_at=now(),error=NULL WHERE event_id=ANY($1::bigint[]) AND subscription_id=$2',[ids,d.subscription_id]);}
       catch(e){if([404,410].includes(e.statusCode))await client.query('DELETE FROM issue_push_subscriptions WHERE id=$1',[d.subscription_id]);else await client.query("UPDATE issue_push_delivery SET attempts=attempts+1,next_try=now()+interval '1 minute'*power(2,attempts),error=$3 WHERE event_id=ANY($1::bigint[]) AND subscription_id=$2",[ids,d.subscription_id,`Push delivery failed (${Number(e.statusCode)||0})`]);}
     }
     await dispatchRepairs(client,{fetcher,env});

@@ -18,3 +18,7 @@ test('ready client verifies deployment, commit ancestry, and actual live assets'
  for(const required of ["latest?.status!=='SUCCESS'","merge-base","--is-ancestor","/api/health","Live app does not match the deployed commit"])assert.ok(source.includes(required));
  assert.match(source,/Use ready to verify deployment/);
 });
+test('developer investigation reviews remain holds rather than fabricated repair results',()=>{
+ assert.doesNotThrow(()=>validateRepairUpdate({management_status:'blocked',blocked_kind:'developer',blocked_reason:'Investigation needs original-device evidence',investigation_review:true}));
+ for(const management_status of ['ready_to_test','reviewing','fixing'])assert.throws(()=>validateRepairUpdate({management_status,blocked_kind:'developer',blocked_reason:'Review',investigation_review:true}));
+});
