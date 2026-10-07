@@ -3930,6 +3930,20 @@ async function shareSelectedPhotos() {
 let preparedPhotoShare = { signature: '', files: [], text: '' };
 
 // ---- Create (ordered documents, stored as groups) ----
+let documentCreationPending=false;
+let documentSource={select:null,loading:false,ids:new Set(),request:0};
+function updateDocumentCreateButton(){const button=document.getElementById('gcreate'),title=document.getElementById('gtitle');if(button&&title)button.disabled=documentCreationPending||!title.value.trim()||documentSource.loading||(documentSource.select?.isConnected&&documentSource.select.value!==''&&!documentSource.ids.size);}
+async function reviewDocumentSource(){
+ const select=document.getElementById('documentPhotoSource'),box=document.getElementById('documentSourcePhotos'),status=document.getElementById('documentSourceStatus'),value=select.value,request=++documentSource.request,owner=state.me?.id;
+ documentSource={select,loading:!!value,ids:new Set(),request};document.getElementById('documentOrganizeSelection').hidden=!!value;box.replaceChildren();status.textContent=value?'Loading matching photos...':'';updateDocumentCreateButton();if(!value)return;
+ try{const r=await api('/api/captures');if(!r.ok)throw Error();const rows=await r.json();if(documentSource.request!==request||!select.isConnected||state.me?.id!==owner)return;
+ const photos=rows.filter(c=>c.photo_path&&(value.startsWith('job:')?String(c.job_id)===value.slice(4):(c.area_tags||[]).includes(value.slice(6))));documentSource.ids=new Set(photos.map(c=>String(c.id)));documentSource.loading=false;
+ box.innerHTML=photos.map(c=>`<label class="document-source-photo"><input type="checkbox" data-document-source-photo="${c.id}" checked><img loading="lazy" src="${capturePhotoSrc(c)}" alt="${esc(c.photo_title||'Photo')}"><span>${esc(c.photo_title||'Photo')}<br>${esc(c.address||'')}<br>${esc(new Date(c.created_at).toLocaleString(uiLocale()))}</span></label>`).join('');
+ const count=()=>{status.textContent=photos.length?uiT(documentSource.ids.size===1?'1 photo selected for this document.':'{count} photos selected for this document.').replace('{count}',documentSource.ids.size):uiT('No photos match this job or topic. Choose another source, or use the Organize selection to create an empty document.');updateDocumentCreateButton();};
+ box.querySelectorAll('[data-document-source-photo]').forEach(input=>input.onchange=()=>{if(input.checked)documentSource.ids.add(input.dataset.documentSourcePhoto);else documentSource.ids.delete(input.dataset.documentSourcePhoto);count();});count();
+ }catch{if(documentSource.request!==request||!select.isConnected)return;documentSource.loading=false;status.textContent=uiT('Photos could not be loaded. Choose the source again to retry.');updateDocumentCreateButton();}
+}
+
 async function renderGroups() {
   if (state.ewrId != null) { renderEwrDetail(); return; }
   if (state.groupId) { renderGroupDetail(state.groupId); return; }
@@ -3940,7 +3954,11 @@ async function renderGroups() {
     <div class="formhead">Start a New Document</div>
     <input id="gtitle" type="text" required aria-label="Document Title" aria-describedby="documentTitleRequirement" placeholder="Document Title" style="font-size:18px;font-weight:bold" />
     <textarea id="gdesc" placeholder="Subtitle or description (optional)" style="min-height:60px;margin-top:8px"></textarea>
-    <div class="status">${state.selectedIds.size ? `${state.selectedIds.size} selected capture${state.selectedIds.size === 1 ? '' : 's'} will be added.` : 'You can create an empty document, then add captures from Organize.'}</div>
+    <div class="status" id="documentOrganizeSelection">${state.selectedIds.size ? `${state.selectedIds.size} selected capture${state.selectedIds.size === 1 ? '' : 's'} will be added.` : 'You can create an empty document, then add captures from Organize.'}</div>
+    <label for="documentPhotoSource">Photos from Job or Topic (optional)</label>
+    <select id="documentPhotoSource"><option value="">Use current Organize selection</option>${state.jobs.length?`<optgroup label="${uiT('Jobs')}">${state.jobs.map(j=>`<option value="job:${j.id}">${esc(j.job_number?j.job_number+' - '+j.name:j.name)}</option>`).join('')}</optgroup>`:''}${state.areas.length?`<optgroup label="${uiT('Topics')}">${state.areas.map(topic=>`<option value="topic:${esc(topic)}">${esc(topic)}</option>`).join('')}</optgroup>`:''}</select>
+    <p>Choose a job or topic to review its photos here. Uncheck any photo you do not want included. This replaces the Organize selection for this document only.</p>
+    <p id="documentSourceStatus" role="status" aria-live="polite"></p><div id="documentSourcePhotos" class="document-source-photos"></div>
     <p id="documentTitleRequirement">Enter a document title to enable Create Document.</p>
     <button class="btn slim" id="gcreate" disabled>Create Document</button>
 
@@ -3948,30 +3966,38 @@ async function renderGroups() {
     <div id="glist"></div>`;
   document.getElementById('gcreate').onclick = createGroup;
   titleCaseInput(document.getElementById('gtitle'));
-  document.getElementById('gtitle').addEventListener('input', () => { document.getElementById('gcreate').disabled = !document.getElementById('gtitle').value.trim(); });
+  documentSource={select:document.getElementById('documentPhotoSource'),loading:false,ids:new Set(),request:documentSource.request+1};
+  documentSource.select.onchange=reviewDocumentSource;
+  document.getElementById('gtitle').addEventListener('input', updateDocumentCreateButton);
   loadGroups();
 }
 
 async function createGroup() {
+  if(documentCreationPending)return;
   const title = document.getElementById('gtitle').value.trim();
   if (!title) { toast('Enter a document title.'); document.getElementById('gtitle').focus(); return; }
+  const source=document.getElementById('documentPhotoSource');
+  if(source?.value&&(documentSource.loading||!documentSource.ids.size)){toast('Choose and review photos before creating the document.');return;}
+  const usesSource=!!source?.value;
+  const ids=usesSource?Array.from(documentSource.ids):Array.from(state.selectedIds);
   const description = document.getElementById('gdesc').value.trim();
   const btn = document.getElementById('gcreate');
+  documentCreationPending=true;
   btn.disabled = true;
   try {
     const r = await api('/api/groups', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title, description, ids: Array.from(state.selectedIds) }),
+      body: JSON.stringify({ title, description, ids }),
     });
     if (!r.ok) throw new Error('bad');
     const created = await r.json();
-    state.selectedIds.clear();
+    if(!usesSource)state.selectedIds.clear();
     state.groups = null;
     state.groupId = created.id;
     toast('Document created. Add or review its contents below.');
     await renderGroups();
   } catch (e) { toast('Could not create group'); }
-  finally { if (btn.isConnected) btn.disabled = !document.getElementById('gtitle').value.trim(); }
+  finally { documentCreationPending=false; if (btn.isConnected) updateDocumentCreateButton(); }
 }
 
 async function loadGroups() {
