@@ -2290,7 +2290,7 @@ async function renderEdit() {
     <div class="row" style="margin-top:8px"><button class="btn" id="delbtn" style="background:var(--pn-bg-b3261e,#b3261e)">Delete Selected</button><button class="btn" id="delall" style="background:var(--pn-bg-b3261e,#b3261e)">Delete All</button></div>
     <section class="batch-annotation-panel">
       <h2>Apply Annotation Template</h2>
-      <p>Select photos below, then add a preset of markings to every selected photo. Review placement on each photo afterward.</p>
+      <p>Select photos below, then add a preset of markings to every selected photo. Original thumbnails stay unchanged. Use Preview / Adjust Photo to see the saved markings.</p>
       <label for="batchTemplate">Annotation Template</label><select id="batchTemplate"><option value="date_address">Date + Address</option><option value="evidence">Evidence Details</option><option value="copyright">Copyright Only</option></select>
       <label for="batchAnnotationMode">Existing Markings</label><select id="batchAnnotationMode"><option value="add">Add template, keep existing markings</option><option value="replace">Replace existing markings</option></select>
       <p id="batchAnnotationEffect">Existing markings will be kept. New template items may overlap them; review each photo.</p>

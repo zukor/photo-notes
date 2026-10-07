@@ -15,7 +15,7 @@
     'I understand that replacing removes all existing markings from the selected photos.':'Entiendo que el reemplazo elimina todas las marcas existentes de las fotos seleccionadas.',
     'Existing markings will be kept. New template items may overlap them; review each photo.':'Se conservarán las marcas existentes. Los nuevos elementos podrían superponerse; revisa cada foto.',
     'All existing markings on the selected photos will be removed and replaced by this template.':'Todas las marcas existentes de las fotos seleccionadas se eliminarán y reemplazarán con esta plantilla.',
-    'Select photos below, then add a preset of markings to every selected photo. Review placement on each photo afterward.':'Selecciona fotos abajo y agrega un conjunto de marcas a cada foto seleccionada. Después revisa la ubicación en cada foto.',
+    'Select photos below, then add a preset of markings to every selected photo. Original thumbnails stay unchanged. Use Preview / Adjust Photo to see the saved markings.':'Selecciona fotos abajo y agrega un conjunto de marcas a cada foto seleccionada. Las miniaturas originales no cambian. Usa Vista previa / Ajustar foto para ver las marcas guardadas.',
     'Adding keeps existing markings. Replacing removes them. Review placement, then Save Changes.':'Agregar conserva las marcas existentes. Reemplazar las elimina. Revisa la ubicación y luego guarda los cambios.',
     'Replace all existing markings on this photo?':'¿Reemplazar todas las marcas existentes de esta foto?',
     'Template applied. Review placement, then Save Changes.':'Plantilla aplicada. Revisa la ubicación y luego guarda los cambios.',
