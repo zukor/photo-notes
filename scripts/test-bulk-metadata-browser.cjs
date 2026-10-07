@@ -18,8 +18,8 @@ await page.route('**/api/**',async route=>{const p=new URL(route.request().url()
  // An unavailable server never displays success and keeps the draft recoverable.
  await page.locator('#editSelected').click();await page.locator('#bulkMetadata-urgency').selectOption('set:urgent');await page.locator('#bulkMetadataReview').click();fail=true;await page.locator('#bulkMetadataApply').click();await page.waitForFunction(()=>document.getElementById('bulkMetadataStatus').textContent.includes('not updated'));assert.equal(photos[0].urgency,'standard');assert(await page.locator('#bulkMetadataApply').isDisabled());fail=false;await page.locator('#bulkMetadataCancel').click();
  assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
- assert.equal(await page.locator('#batchTemplate').count(),0,'Batch Annotation Templates are in Edit, not Organize');
- for(const id of ['applytopic','replacetopic','batchJob','batchDocument','runBatch','addtogroup'])assert.equal(await page.locator('#'+id).count(),1);
+ assert.equal(await page.locator('#batchDocument').count(),0);assert.equal(await page.locator('#batchTemplate').count(),0,'Batch Annotation Templates are in Edit, not Organize');
+ for(const id of ['applytopic','replacetopic','batchJob','runBatch','addtogroup'])assert.equal(await page.locator('#'+id).count(),1);
  await page.locator('#bulktopic').selectOption('Shared');await page.evaluate(()=>applyTopicToSelected());assert(photos.every(c=>c.area_tags.includes('Shared')));await page.locator('#bulktopic').selectOption('First');await page.evaluate(()=>replaceTopicsOnSelected());assert(photos.every(c=>JSON.stringify(c.area_tags)==='["First"]'));await page.locator('#groupsel').selectOption('10');await page.evaluate(()=>addSelectedToGroup());assert(legacy.some(r=>r.path==='/api/groups/10/add'&&r.payload.ids.length===2));
  await page.locator('#batchJob').selectOption('7');await page.locator('#runBatch').click();await page.waitForTimeout(100);assert(legacy.some(b=>b.job_id===7&&!('overlays' in b)));
  }

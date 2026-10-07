@@ -102,10 +102,30 @@ test('scanner routes retain photos, extract fields, save reviews and report serv
   }
   await pool.query('DELETE FROM users WHERE id=$1',[outsider.id]);
   for(const format of ['pdf','docx']){const r=await fetch(base+`/api/asphalt-tickets/${ticket.ticket.id}/report?format=${format}`,{headers:{Cookie:cookie}});assert.equal(r.status,200);assert((await r.arrayBuffer()).byteLength>1000);}
+
+  // Linked evidence follows the owned source photo into Library and document exports.
+  const request=async(url,body,method)=>fetch(base+url,{method:method||(body?'POST':'GET'),headers:{Cookie:cookie,'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});
+  await pool.query("UPDATE users SET pro_type='concrete',feature_access='{}' WHERE id=$1",[user.id]);
+  const areaResponse=await request('/api/concrete/footprints',{capture_id:capture.id,name:'SOURCE AREA',points:[],field_length_ft:30,field_width_ft:40,field_method:'tape',notes:'AREA SOURCE NOTE'});assert.equal(areaResponse.status,200);
+  const fields={instrument_type:'Thermometer',reading:'83',unit:'F',equipment_name:'GAUGE SOURCE',notes:'LONG SOURCE NOTE'};
+  const gauge=(await pool.query("INSERT INTO camera_readings(user_id,reading_type,title,fields,photo_path,status) VALUES($1,'gauge','Thermometer',$2,$3,'saved') RETURNING id",[user.id,JSON.stringify(fields),ticket.ticket.photo_path])).rows[0];
+  const linked=await(await request('/api/camera-readings/'+gauge.id+'/library',{})).json();assert(linked.capture_id);
+  let listed=await(await request('/api/captures')).json();assert.equal(listed.find(c=>c.id===capture.id).footprints.length,1);assert.equal(listed.find(c=>c.id===linked.capture_id).gauge_record.fields.reading,'83');
+  const edited=await request('/api/camera-readings/'+gauge.id,{title:'Thermometer',fields:{...fields,reading:'84'}});assert.equal(edited.status,200);
+  assert.match((await pool.query('SELECT note FROM captures WHERE id=$1',[linked.capture_id])).rows[0].note,/Reading: 84/);
+  const group=await(await request('/api/groups',{title:'LINKED SOURCE REPORT'})).json();await request('/api/groups/'+group.id+'/add',{ids:[capture.id,linked.capture_id]});
+  const document=await(await request('/api/groups/'+group.id)).json();assert.equal(document.items.find(c=>c.id===capture.id).footprints[0].name,'SOURCE AREA');
+  for(const format of ['pdf','docx']){const r=await request('/api/export/'+format+'?group='+group.id);assert.equal(r.status,200);const bytes=Buffer.from(await r.arrayBuffer());let text;if(format==='docx')text=new(require('pizzip'))(bytes).file('word/document.xml').asText();else{const file=path.join(os.tmpdir(),'pn-linked-source.pdf');fs.writeFileSync(file,bytes);text=require('node:child_process').execFileSync('pdftotext',[file,'-'],{encoding:'utf8'});}for(const value of ['SOURCE AREA','1,200','AREA SOURCE NOTE','GAUGE SOURCE','84','LONG SOURCE NOTE'])assert(text.includes(value),format+': '+value);}
+  // User-authored notes survive scanner corrections.
+  await pool.query("UPDATE captures SET note='USER AUTHORED NOTE' WHERE id=$1",[linked.capture_id]);await request('/api/camera-readings/'+gauge.id,{title:'Thermometer',fields:{...fields,reading:'85'}});assert.equal((await pool.query('SELECT note FROM captures WHERE id=$1',[linked.capture_id])).rows[0].note,'USER AUTHORED NOTE');
+  await pool.query("UPDATE users SET pro_type='general' WHERE id=$1",[user.id]);listed=await(await request('/api/captures')).json();assert(!listed.find(c=>c.id===capture.id).footprints);assert(!listed.find(c=>c.id===linked.capture_id).gauge_record);
+  const job=await(await request('/api/jobs',{name:'MISTAKEN JOB'})).json();await pool.query('UPDATE captures SET job_id=$1 WHERE id=$2',[job.id,capture.id]);await pool.query('UPDATE asphalt_tickets SET job_id=$1 WHERE id=$2',[job.id,ticket.ticket.id]);
+  const foreign=(await pool.query("INSERT INTO users(email,password_hash,plan,pro_type) VALUES($1,'none','pro','general') RETURNING id",['job-foreign-'+Date.now()+'@example.invalid'])).rows[0],foreignCookie='pn_token='+require('jsonwebtoken').sign({id:foreign.id},process.env.SESSION_SECRET);
+  assert.equal((await fetch(base+'/api/jobs/'+job.id,{method:'DELETE',headers:{Cookie:foreignCookie}})).status,404);
+  assert.equal((await request('/api/jobs/'+job.id,null,'DELETE')).status,200);assert.equal((await pool.query('SELECT job_id FROM captures WHERE id=$1',[capture.id])).rows[0].job_id,null);assert.equal((await pool.query('SELECT job_id FROM asphalt_tickets WHERE id=$1',[ticket.ticket.id])).rows[0].job_id,null);assert.equal((await request('/api/jobs/'+job.id,null,'DELETE')).status,404);await pool.query('DELETE FROM users WHERE id=$1',[foreign.id]);
   const legacy=await(await fetch(base+'/api/camera-readings?type=business_card',{headers:{Cookie:cookie}})).json();assert(legacy.length>0);
- } finally {
+ } catch(error){console.error(error.stack);throw error;} finally {
   global.fetch=nativeFetch;
-  if(user){await pool.query('DELETE FROM captures WHERE user_id=$1',[user.id]);await pool.query('DELETE FROM events WHERE user_id=$1',[user.id]);await pool.query('DELETE FROM users WHERE id=$1',[user.id]);}
-  await new Promise(r=>server.close(r));await pool.end();fs.rmSync(process.env.UPLOAD_DIR,{recursive:true,force:true});
+  try{if(user){await pool.query('DELETE FROM groups WHERE user_id=$1',[user.id]);await pool.query('DELETE FROM captures WHERE user_id=$1',[user.id]);await pool.query('DELETE FROM events WHERE user_id=$1',[user.id]);await pool.query('DELETE FROM users WHERE id=$1',[user.id]);}}catch(error){console.error('Cleanup: '+error.stack);throw error;}finally{await new Promise(r=>server.close(r));await pool.end();fs.rmSync(process.env.UPLOAD_DIR,{recursive:true,force:true});}
  }
 });
