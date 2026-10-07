@@ -4032,6 +4032,7 @@ async function renderGroupDetail(id) {
     <div class="formhead" style="margin-top:24px">3. Page Layout &amp; Preview</div>
     <section id="exportPresetDocument"></section><div class="document-layout-controls" id="documentLayoutControls"></div>
     <div class="document-preview" id="documentPreview" aria-label="Document preview"></div>
+    <button class="btn secondary slim" id="exhibit-open">Proposal Exhibit</button>
 
     <div class="formhead" style="margin-top:24px">4. Document Contents</div>
     <div class="status">These photos and captions are the document preview. Edit captions, change their order, or remove anything you do not want included.</div>
@@ -4056,6 +4057,7 @@ async function renderGroupDetail(id) {
     `;
   document.getElementById('gback').onclick = () => { state.groupId = null; renderGroups(); };
   document.getElementById('greverse').onclick = reverseItems;
+  document.getElementById('exhibit-open').onclick = () => window.PhotoNotesExhibit.open({group:currentGroup,items:currentGroupItems,photoSrc:capturePhotoSrc,userId:state.me.id});
   const gm = document.getElementById('gotoMap'); if (gm) gm.onclick = () => { state.view = 'map'; state.groupId = null; renderApp(); };
   const en = document.getElementById('ewrNew'); if (en) en.onclick = () => { state.ewrId = 'new'; renderGroups(); };
   renderTitleView();

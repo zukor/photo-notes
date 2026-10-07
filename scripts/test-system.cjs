@@ -37,7 +37,7 @@ async function run(feature, args, overrides = {}, timeout = 180000) {
  return result;
 }
 const browserSuites = [
- 'automation-edition-browser',
+ 'automation-edition-browser','proposal-exhibit',
  'complete-help','admin-help','all-edition-help','shared-workflow-parity','location-intelligence',
  'shared-camera-readers','capture-voice','issue-completion-browser','issue-result-screenshot','sticky-workflow-menu','batch-annotations-browser','crop-context-browser','testing-dashboard','record-notes-check','capture-templates','property-incidents',
  'property-incident-report','property-terminology','photo-markers','send-shortcuts',
