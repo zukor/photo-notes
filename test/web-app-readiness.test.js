@@ -70,3 +70,26 @@ test('every current edition can persist a capture and keeps retries isolated',as
   await queue.remove(saved.id);
  }
 });
+
+
+test('unfinished photo drafts stay account/version scoped and separate from pending uploads',async()=>{
+ global.indexedDB=new IDBFactory();
+ const account=await queue.accountKey('owner@example.invalid'),other=await queue.accountKey('other@example.invalid');
+ const photo=new Blob(['irreplaceable original'],{type:'image/jpeg'});
+ await queue.saveDraft(account,'pro',{photo,note:'Add later',context:{area:'Inspection'}});
+ const draft=await queue.readDraft(account,'pro');
+ assert.equal(await draft.photo.text(),'irreplaceable original');assert.equal(draft.note,'Add later');
+ assert.equal(draft.context.area,'Inspection');assert.equal(await queue.readDraft(other,'pro'),undefined);
+ assert.equal(await queue.readDraft(account,'property'),undefined);assert.equal((await queue.all()).length,0);
+ const pending=await queue.create({photo,note:'Finished'},false,account,'pro');
+ await queue.clearDraft(account,'pro');assert.equal(await queue.readDraft(account,'pro'),undefined);
+ assert.equal((await queue.all())[0].id,pending.id);
+});
+test('draft database upgrade preserves existing version-one pending photos',async()=>{
+ global.indexedDB=new IDBFactory();
+ await new Promise((resolve,reject)=>{const r=global.indexedDB.open('photo-notes-offline',1);r.onupgradeneeded=()=>r.result.createObjectStore('captures',{keyPath:'id',autoIncrement:true});r.onerror=()=>reject(r.error);r.onsuccess=()=>{const db=r.result,tx=db.transaction('captures','readwrite');tx.objectStore('captures').add({payload:{note:'Existing pending photo'}});tx.oncomplete=()=>{db.close();resolve();};tx.onerror=()=>reject(tx.error);};});
+ const account=await queue.accountKey('owner@example.invalid');
+ await queue.saveDraft(account,'pro',{photo:new Blob(['new draft'])});
+ assert.equal((await queue.all())[0].payload.note,'Existing pending photo');
+ assert.equal(await (await queue.readDraft(account,'pro')).photo.text(),'new draft');
+});
