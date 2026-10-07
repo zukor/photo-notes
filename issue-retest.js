@@ -3,6 +3,7 @@ function registerRetest(app,{pool,requireAuth,ticketText,logEvent}){
   const id=Number(req.params.id),result=req.body?.result;
   if(!Number.isInteger(id)||id<1||!['fixed','still_happening','unable_to_test'].includes(result))return res.status(400).json({error:'bad retest result'});
   const notes=ticketText(req.body?.notes,2000);let c;
+  if(result!=='fixed'&&!notes)return res.status(400).json({error:'Explain what still happens or what prevented the test, including the steps and result.'});
   try{
    c=await pool.connect();await c.query('BEGIN');
    const row=(await c.query("SELECT * FROM issue_reports WHERE id=$1 AND user_id=$2 FOR UPDATE",[id,req.user.id])).rows[0];

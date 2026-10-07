@@ -15,7 +15,7 @@ function capture(s){const filters={};for(const [key,a] of adapters.get(s.workspa
 function same(a,b){const x=a.filters||{},y=b?.filters||{};return a.version===b?.version&&Object.keys(x).length===Object.keys(y).length&&Object.keys(x).every(k=>x[k]===y[k]);}
 function status(s){if(session!==s||!s.root.isConnected)return;const node=s.root.querySelector('#svStatus');node.textContent=s.active?`Saved View active: ${s.active.name}${!same(capture(s),s.active.criteria)?' (current filters changed)':''}`:'';if(s.unavailable.length)node.textContent+=` Part of this Saved View is no longer available: ${s.unavailable.join(', ')}. Results are paused. Update the view or choose ${s.workspace==='organize'?'All Photos':'All Records'}.`;}
 function blocked(workspace){return session?.root.isConnected&&session.workspace===workspace&&session.unavailable.length>0;}
-function empty(workspace){return session?.root.isConnected&&session.workspace===workspace&&session.active?'No Photo Notes currently match this Saved View.':null;}
+function empty(workspace){return session?.root.isConnected&&session.workspace===workspace&&session.active?(same(capture(session),session.active.criteria)?'No Photo Notes currently match this Saved View.':'No Photo Notes match the current filters.'):null;}
 function sync(s){const select=s.root.querySelector('#svSelect');select.replaceChildren(new Option('Choose Saved View',''),...s.views.map(v=>new Option(v.name+(v.is_default?' (Default)':''),v.id)));select.value=s.active?.id||'';s.root.querySelector('#svManage').disabled=!s.active;status(s);}
 function apply(s,v){
  if(session!==s||!s.root.isConnected)return;

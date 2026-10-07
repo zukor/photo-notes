@@ -9,8 +9,8 @@ const app = fs.readFileSync(path.join(root, 'public', 'app.js'), 'utf8');
 const css = fs.readFileSync(path.join(root, 'public', 'styles.css'), 'utf8');
 
 test('document detail returns and previews only complete before/after pairs', () => {
-  assert.match(server, /before_id=ANY\(\$2\) AND after_id=ANY\(\$2\)/);
-  assert.match(server, /res\.json\(\{ group: g, items, pairs, score, zones \}\)/);
+  assert.match(server, /before_id=ANY\(\$2\) OR after_id=ANY\(\$2\)/);
+  assert.match(server, /res\.json\(\{ group: g, items, pairs, incomplete_pairs, score, zones \}\)/);
   assert.match(app, /Before &amp; After Evidence/);
   assert.match(app, /Matched photos stay together in PDF, Word, and proposal exports/);
   assert.match(css, /\.before-after-preview/);
