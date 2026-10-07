@@ -38,7 +38,7 @@ function apply(row){
 }
 function dialog(mode,row){
  document.getElementById('ctDialog')?.remove();
- const box=document.createElement('dialog');box.id='ctDialog';box.style.cssText='color:#000;text-align:left;font-family:Arial,sans-serif;width:min(480px,90vw);max-height:85vh;overflow:auto';
+ const box=document.createElement('dialog');box.id='ctDialog';box.style.cssText='color:var(--pn-text-000,#000);text-align:left;font-family:Arial,sans-serif;width:min(480px,90vw);max-height:85vh;overflow:auto';
  const escape=ctx.escape;
  box.innerHTML=`<h2>Capture Templates</h2><p>Defaults for one Photo Note. Review all selections before saving a photo.</p><label for="ctChoice">Saved templates</label><select id="ctChoice"><option value="">Choose a template</option>${live().map(r=>`<option value="${r.id}">${escape(r.name)}</option>`).join('')}</select><div class="row"><button id="ctApply" class="btn">Use Template</button><button id="ctEdit" class="btn secondary">Edit / Rename</button><button id="ctDuplicate" class="btn secondary">Duplicate</button><button id="ctDelete" class="btn secondary">Delete</button></div><button id="ctNew" class="btn secondary">Create Template</button><div id="ctEditor" hidden></div><p id="ctStatus" role="status"></p><button id="ctClose" class="btn secondary">Close</button>`;
  document.body.appendChild(box);box.showModal();
@@ -82,6 +82,6 @@ function mountBar(){
  if(bar.querySelector('#ctLast'))bar.querySelector('#ctLast').onclick=()=>apply(live().find(r=>r.id===last));
  bar.querySelector('#ctIndicator').textContent=ctx.activeName()?'Template: '+ctx.activeName():'';
 }
-window.PhotoNotesCaptureTemplates={mount(options){if(!enabled.includes(options.edition)||!options.user)return;ctx=options;read();if(!document.getElementById('ctStyles')){const style=document.createElement('style');style.id='ctStyles';style.textContent='#ctBar,#ctDialog{color:#000!important;background:#fff;text-align:left}#ctBar *,#ctDialog *{color:#000!important}#ctDialog input,#ctDialog textarea,#ctDialog select,#ctDialog button,#ctBar button{background:#fff!important}';document.head.appendChild(style);}let bar=document.getElementById('ctBar');if(!bar){bar=document.createElement('section');bar.id='ctBar';bar.style.cssText='color:#000;text-align:left;margin-bottom:12px';document.getElementById('body').prepend(bar);}mountBar();void sync();}};
+window.PhotoNotesCaptureTemplates={mount(options){if(!enabled.includes(options.edition)||!options.user)return;ctx=options;read();if(!document.getElementById('ctStyles')){const style=document.createElement('style');style.id='ctStyles';style.textContent='#ctBar,#ctDialog{color:var(--pn-text-000,#000)!important;background:var(--pn-bg-fff,#fff);text-align:left}#ctBar *,#ctDialog *{color:var(--pn-text-000,#000)!important}#ctDialog input,#ctDialog textarea,#ctDialog select,#ctDialog button,#ctBar button{background:var(--pn-bg-fff,#fff)!important}';document.head.appendChild(style);}let bar=document.getElementById('ctBar');if(!bar){bar=document.createElement('section');bar.id='ctBar';bar.style.cssText='color:var(--pn-text-000,#000);text-align:left;margin-bottom:12px';document.getElementById('body').prepend(bar);}mountBar();void sync();}};
 window.addEventListener('online',()=>{void sync();});
 })();

@@ -6,6 +6,11 @@
   function apply(next,persist){
     theme=next==='dark'?'dark':'light';
     document.documentElement.dataset.theme=theme;
+    document.querySelectorAll('img[alt="Zukor AI"]').forEach(img=>{
+      const light=img.dataset.zukorLightSrc||(img.dataset.zukorLightSrc=img.getAttribute('src'));
+      const source=theme==='dark'?'/zukor-logo-dark.jpg':light;
+      if(img.getAttribute('src')!==source)img.setAttribute('src',source);
+    });
     if(persist)try{localStorage.setItem(key,theme);}catch{}
     document.querySelectorAll('[data-theme-choice]').forEach(button=>{
       const pressed=button.dataset.themeChoice===theme;

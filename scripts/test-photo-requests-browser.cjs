@@ -5,6 +5,7 @@ const {chromium,webkit}=require('playwright');
  const server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));const origin='http://127.0.0.1:'+server.address().port;
  try{for(const engine of [chromium,webkit]){const browser=await engine.launch();try{for(const width of [390,1440]){
  const page=await browser.newPage({viewport:{width,height:900},serviceWorkers:'block'});page.on('pageerror',e=>console.error('Browser error:',e.message));let requests=[],submission=null;
+ await page.addInitScript(()=>localStorage.setItem('photo-notes-theme','dark'));
  await page.addInitScript(()=>localStorage.setItem('pn_install_prompt_dismissed_v1','dismissed'));
  await page.route('**/api/**',async route=>{
   const req=route.request(),url=new URL(req.url()),p=url.pathname;
@@ -20,7 +21,7 @@ const {chromium,webkit}=require('playwright');
  await page.goto(origin);await page.waitForFunction(()=>state.me&&document.getElementById('body'));
  for(const edition of ['general','property','hoa','paving','concrete','contractor','roofer']){
   await page.evaluate(edition=>{state.plan='pro';state.proType=edition;state.view='capture';renderApp();},edition);
-  await page.locator('#prOpen').click();await page.locator('#prTitle').waitFor();
+  await page.locator('#prOpen').click();await page.locator('#prTitle').waitFor();assert.equal(await page.locator('.photo-requests p').first().evaluate(el=>getComputedStyle(el).color),'rgb(255, 255, 255)');
   await page.locator('#prTitle').fill('Equipment photos');await page.locator('#prInstructions').fill('Photograph the unit.');await page.locator('#prViews').fill('Overall\nEquipment Plate');
   await page.locator('#prCreate').click();await page.waitForFunction(()=>document.getElementById('prCreateStatus').textContent.includes('Request created'));
   await page.locator('[data-pr-copy]').first().waitFor({state:'visible'});assert.equal(await page.locator('[data-pr-copy]').count()>0,true);

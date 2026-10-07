@@ -13,7 +13,7 @@ async function open({ids,jobs,topics,api,esc,toast,refresh}){
  let initial;try{initial=await request({},{preview:true});}catch(e){return toast(e.message);}
  const helpRoot=document.getElementById('photoNotesHelp'),helpParent=helpRoot?.parentNode;
  const previous=document.activeElement,dialog=document.createElement('dialog');dialog.id='bulkMetadataDialog';dialog.setAttribute('aria-labelledby','bulkMetadataTitle');
- dialog.style.cssText='box-sizing:border-box;width:calc(100% - 24px);max-width:560px;max-height:90dvh;overflow:visible;border:1px solid #000;border-radius:12px;padding:20px;background:#fff;color:#000;text-align:left;font-family:Arial,Helvetica,sans-serif';
+ dialog.style.cssText='box-sizing:border-box;width:calc(100% - 24px);max-width:560px;max-height:90dvh;overflow:visible;border:1px solid #000;border-radius:12px;padding:20px;background:var(--pn-bg-fff,#fff);color:var(--pn-text-000,#000);text-align:left;font-family:Arial,Helvetica,sans-serif';
  const fieldEntries=Object.entries(initial.fields),draft={};let metadata={},review,busy=false;
  const describe=(key,value)=>{
   if(key==='area_tags')return value?.length?value.join(', '):'No Topics';
@@ -23,11 +23,11 @@ async function open({ids,jobs,topics,api,esc,toast,refresh}){
  };
  const current=key=>{const values=initial.rows.map(row=>JSON.stringify(Array.isArray(row[key])?[...row[key]].sort():row[key]??null));return new Set(values).size>1?'Multiple Values':describe(key,initial.rows[0][key]);};
  const close=()=>{if(busy)return;dialog.close();if(helpRoot&&helpParent)helpParent.append(helpRoot);dialog.remove();previous?.focus();};
- const shell=content=>{dialog.innerHTML=`<div style="max-height:calc(90dvh - 40px);overflow:auto"><h2 id="bulkMetadataTitle" style="color:#000">Edit Selected</h2><p>${ids.length} Photo Notes selected</p>${content}<p id="bulkMetadataStatus" role="status" style="color:#000"></p><button type="button" class="btn secondary" id="bulkMetadataCancel">Cancel</button></div>`;dialog.querySelector('#bulkMetadataCancel').onclick=close;if(helpRoot)dialog.append(helpRoot);window.PhotoNotesHelp?.refresh();};
+ const shell=content=>{dialog.innerHTML=`<div style="max-height:calc(90dvh - 40px);overflow:auto"><h2 id="bulkMetadataTitle" style="color:var(--pn-text-000,#000)">Edit Selected</h2><p>${ids.length} Photo Notes selected</p>${content}<p id="bulkMetadataStatus" role="status" style="color:var(--pn-text-000,#000)"></p><button type="button" class="btn secondary" id="bulkMetadataCancel">Cancel</button></div>`;dialog.querySelector('#bulkMetadataCancel').onclick=close;if(helpRoot)dialog.append(helpRoot);window.PhotoNotesHelp?.refresh();};
  function choose(){
   shell(`<p>Choose replacements below. Leave other fields unchanged.</p>${fieldEntries.map(([key,field])=>{
    let options=field.type==='topics'?topics.map(t=>[t,t]):field.type==='job'?jobs.map(j=>[String(j.id),j.name]):field.options;
-   return `<div style="margin:16px 0"><label for="bulkMetadata-${key}" style="color:#000">${esc(field.label)}</label><p style="color:#000;margin:4px 0">Current: ${esc(current(key))}</p><select id="bulkMetadata-${key}" data-bulk-metadata-field="${key}" style="width:100%;min-height:44px;color:#000"><option value="">Leave unchanged</option>${field.type==='topics'||field.type==='job'||field.clear?`<option value="__clear">Remove ${esc(field.label)}</option>`:''}${options.map(([value,label])=>`<option value="set:${esc(value)}">${esc(label)}</option>`).join('')}</select></div>`;
+   return `<div style="margin:16px 0"><label for="bulkMetadata-${key}" style="color:var(--pn-text-000,#000)">${esc(field.label)}</label><p style="color:var(--pn-text-000,#000);margin:4px 0">Current: ${esc(current(key))}</p><select id="bulkMetadata-${key}" data-bulk-metadata-field="${key}" style="width:100%;min-height:44px;color:var(--pn-text-000,#000)"><option value="">Leave unchanged</option>${field.type==='topics'||field.type==='job'||field.clear?`<option value="__clear">Remove ${esc(field.label)}</option>`:''}${options.map(([value,label])=>`<option value="set:${esc(value)}">${esc(label)}</option>`).join('')}</select></div>`;
   }).join('')}<button type="button" class="btn secondary" id="bulkMetadataReview">Review Changes</button>`);
   dialog.querySelectorAll('[data-bulk-metadata-field]').forEach(el=>{el.value=draft[el.dataset.bulkMetadataField]||'';el.onchange=()=>draft[el.dataset.bulkMetadataField]=el.value;});
   dialog.querySelector('#bulkMetadataReview').onclick=async()=>{
@@ -38,7 +38,7 @@ async function open({ids,jobs,topics,api,esc,toast,refresh}){
   };
  }
  function confirmChanges(){
-  shell(`<h3 style="color:#000">Review Changes</h3><ul>${Object.keys(metadata).map(k=>`<li>${esc(initial.fields[k].label)} → ${esc(describe(k,metadata[k]))}</li>`).join('')}</ul><p>Apply these changes to all ${ids.length} selected Photo Notes? ${'area_tags' in metadata?'Topic replacement removes their existing Topics. ':''}Other metadata and original evidence stay unchanged. Changes are recorded in Photo History. There is no automatic Undo.</p><button type="button" class="btn secondary" id="bulkMetadataBack">Back</button><button type="button" class="btn secondary" id="bulkMetadataApply">Apply to ${ids.length} Photo Notes</button>`);
+  shell(`<h3 style="color:var(--pn-text-000,#000)">Review Changes</h3><ul>${Object.keys(metadata).map(k=>`<li>${esc(initial.fields[k].label)} → ${esc(describe(k,metadata[k]))}</li>`).join('')}</ul><p>Apply these changes to all ${ids.length} selected Photo Notes? ${'area_tags' in metadata?'Topic replacement removes their existing Topics. ':''}Other metadata and original evidence stay unchanged. Changes are recorded in Photo History. There is no automatic Undo.</p><button type="button" class="btn secondary" id="bulkMetadataBack">Back</button><button type="button" class="btn secondary" id="bulkMetadataApply">Apply to ${ids.length} Photo Notes</button>`);
   dialog.querySelector('#bulkMetadataBack').onclick=choose;
   dialog.querySelector('#bulkMetadataApply').onclick=async()=>{
    if(busy)return;busy=true;dialog.querySelectorAll('button:not(#photoNotesHelp button)').forEach(b=>b.disabled=true);
