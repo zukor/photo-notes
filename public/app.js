@@ -645,7 +645,8 @@ const PAVING_PHOTO_REASONS=[
   {id:'gauge',label:'Gauge & Instrument Reader',feature:'camera_readers',description:'Read gauges, scales, hour meters, thermometers, fuel displays, and other instruments.'},
   {id:'alignment',label:'Before & After Alignment',feature:'before_after',description:'Compare before and after photos using the same framing.'}
 ];
-function pavingPhotoReasons(){return PAVING_PHOTO_REASONS.filter(r=>!r.feature||featureOn(r.feature));}
+function scannerOn(type){return featureOn('camera_readers')&&globalThis.PhotoNotesScannerAvailability?.allowed(state.proType,type)===true;}
+function pavingPhotoReasons(){return PAVING_PHOTO_REASONS.filter(r=>!r.feature||(r.feature==='camera_readers'?scannerOn(r.id):featureOn(r.feature)));}
 function pavingPhotoReason(){return pavingPhotoReasons().find(r=>r.id===state._pavingReason)||PAVING_PHOTO_REASONS[0];}
 function pavingPhotoReasonMarkup(){
   const selected=pavingPhotoReason(),choices=pavingPhotoReasons();
@@ -677,7 +678,7 @@ function renderPavingToolCapture(){
   bindPavingPhotoReason();
   if(reason.id==='ticket'){ticketPhotoFile=null;ticketDraft=null;renderTicketScanner();}
   else if(reason.id==='alignment')renderAlignmentTool();
-  else{cameraReaderType=reason.id;renderCameraReader();}
+  else{cameraReaderHistory=false;cameraReaderType=reason.id;renderCameraReader();}
 }
 
 function duplicatePhotoNote(source) {
@@ -750,6 +751,7 @@ function renderCapture() {
     <textarea id="note" placeholder="Your recorded notes will appear here as words."></textarea>
     ${isConcreteClient()?concreteCaptureDetailsMarkup():''}
 
+    ${isProClient()?'<button type="button" class="backlink" id="openSavedScanners">Saved Scanner Records</button>':''}
     <section id="captureSettings" class="capture-settings">
     ${isHoaClient()?`<label>Maintenance Category</label><select id="hoaArea">${HOA_AREAS.map(a=>`<option value="${esc(a)}">${esc(a)}</option>`).join('')}</select><div id="hoaDirectedWrap" style="display:none"><label>Directed To</label><input id="hoaDirected" placeholder="Person expected to answer"></div>`:`<details id="captureTopic"><summary id="captureTopicHeading" data-topic-heading="${isIssueReporterClient()?'Topic':'Topic (optional)'}">${isIssueReporterClient()?'Topic':'Topic (optional)'}</summary>
     <div class="pill-group" id="areas">${areaChips()}</div>
@@ -776,6 +778,7 @@ function renderCapture() {
   if(isConcreteClient())bindConcreteCapture();
   if(isPavingClient())bindPavingPhotoReason();
 
+  const savedScanners=document.getElementById('openSavedScanners');if(savedScanners)savedScanners.onclick=()=>{state.view='camera-tools';renderApp();document.getElementById('scannerHistory').open=true;};
   const cameraToolsButton = document.getElementById('openCameraTools');
   if (cameraToolsButton) cameraToolsButton.onclick = () => { state.view = 'camera-tools'; renderApp(); };
 
@@ -830,6 +833,7 @@ function cameraToolCard(title, description, action, id) {
   return `<article class="camera-tool-card"><div><strong>${title}</strong><span>${description}</span></div><button class="btn secondary slim" data-camera-tool id="${id}">${action}</button></article>`;
 }
 function renderCameraTools() {
+  cameraReaderHistory=false;
   const body = document.getElementById('body');
   body.className = 'workflow-camera-tools';
   body.innerHTML = `
@@ -839,14 +843,14 @@ function renderCameraTools() {
       <div class="camera-tool-heading"><strong>Document Scanners</strong><span>Turn photographed documents into searchable, reviewable information.</span></div>
       <div class="camera-tool-grid">
         ${featureOn('ticket_scanner') ? cameraToolCard('Paving Delivery Ticket Scanner','Read asphalt and paving delivery-ticket details and calculate saved daily tonnage.','Scan Ticket','toolTicket') : ''}
-        ${featureOn('camera_readers') ? cameraToolCard('Plan or Sketch Scanner','Read visible project, sheet, revision, scale, dimension, and field-note information without estimating missing details.','Scan Plan or Sketch','toolPlan') : ''}
-        ${featureOn('camera_readers') ? cameraToolCard('Business Card Scanner','Read contact and company details from a photographed business card.','Scan Business Card','toolCard') : ''}
+        ${scannerOn('plan_sketch') ? cameraToolCard('Plan or Sketch Scanner','Read visible project, sheet, revision, scale, dimension, and field-note information without estimating missing details.','Scan Plan or Sketch','toolPlan') : ''}
+        ${scannerOn('business_card') ? cameraToolCard('Business Card Scanner','Read contact and company details from a photographed business card.','Scan Business Card','toolCard') : ''}
       </div>
     </section>
     <section class="camera-tool-group">
       <div class="camera-tool-heading"><strong>Equipment &amp; Material Scanners</strong><span>Record identifying information from equipment plates and construction-product labels.</span></div>
       <div class="camera-tool-grid">
-        ${featureOn('camera_readers') ? cameraToolCard('Equipment Plate Scanner','Read manufacturer, model, serial number, year, and equipment specifications.','Scan Plate','toolEquipment') : ''}
+        ${scannerOn('equipment_plate') ? cameraToolCard('Equipment Plate Scanner','Read manufacturer, model, serial number, year, and equipment specifications.','Scan Plate','toolEquipment') : ''}
         ${featureOn('camera_readers') ? cameraToolCard('Material Label Scanner','Read product, manufacturer, lot, quantity, dates, instructions, and visible warnings.','Scan Label','toolMaterial') : ''}
       </div>
     </section>
@@ -856,13 +860,16 @@ function renderCameraTools() {
         ${featureOn('camera_readers') ? cameraToolCard('Gauge & Instrument Reader','Read gauges, scales, hour meters, thermometers, fuel displays, and other instruments.','Read Instrument','toolGauge') : ''}
       </div>
     </section>
+    <details id="scannerHistory"><summary>Saved Scanner Records</summary><p>Previously saved records remain accessible when a scanner is unavailable in this edition.</p>${Object.entries(readerConfigs).map(([type,cfg])=>`<button class="btn secondary slim" data-scanner-history="${type}">${cfg.title}: Saved Records</button>`).join('')}</details>
     ${beforeAfterOn()?`<section class="camera-tool-group">
       <div class="camera-tool-heading"><strong>Comparison Tools</strong><span>Create consistent visual records of work before and after completion.</span></div>
       <div class="camera-tool-grid">
         ${beforeAfterOn() ? cameraToolCard('Before & After Alignment','Use an earlier photo as a framing reference, compare the alignment, and save the pair.','Match Photos','toolAlignment') : ''}
       </div>
     </section>`:''}`;
+  body.querySelectorAll('.camera-tool-group').forEach(group=>{if(!group.querySelector('button'))group.remove();});
   document.getElementById('toolsBack').onclick = () => { state.view='capture'; renderApp(); };
+  document.querySelectorAll('[data-scanner-history]').forEach(b=>b.onclick=()=>{cameraReaderHistory=true;cameraReaderType=b.dataset.scannerHistory;state.view='camera-reader';renderApp();});
   const wire=(id,fn)=>{const b=document.getElementById(id);if(b)b.onclick=fn;};
   wire('toolTicket',() => { state.view='ticket'; renderApp(); });
   wire('toolEquipment',() => { cameraReaderType='equipment_plate'; state.view='camera-reader'; renderApp(); });
@@ -873,6 +880,7 @@ function renderCameraTools() {
   wire('toolAlignment',() => { state.view='alignment'; renderApp(); });
 }
 
+let cameraReaderHistory=false;
 let cameraReaderType = 'equipment_plate', cameraReaderFile = null, cameraReaderDraft = null;
 const readerConfigs = {
   equipment_plate: { title:'Equipment Plate Scanner', noun:'plate', captureLabel:'Plate', readLabel:'Read Plate', fields:[['manufacturer','Manufacturer'],['model','Model'],['serial_number','Serial Number'],['year','Year'],['equipment_type','Equipment Type'],['specifications','Other Specifications']] },
@@ -882,27 +890,30 @@ const readerConfigs = {
   business_card: { title:'Business Card Scanner', noun:'business card', captureLabel:'Business Card', readLabel:'Read Business Card', fields:[['name','Name'],['job_title','Job Title'],['company','Company'],['phone','Phone'],['email','Email'],['address','Address'],['website','Website']] },
 };
 function renderCameraReader() {
-  if (!featureOn('camera_readers')) { state.view='capture'; renderApp(); return; }
+  if (!isProClient()) { state.view='capture'; renderApp(); return; }
+  const historyOnly=cameraReaderHistory||!scannerOn(cameraReaderType);
   const cfg = readerConfigs[cameraReaderType], body = pavingToolMount(), embedded=pavingToolEmbedded();
   body.className = 'workflow-camera-tools'; cameraReaderFile = null; cameraReaderDraft = null;
   body.innerHTML = `
     ${embedded?'':'<button class="backlink" id="readerBack">‹ Back to Camera Tools</button>'}
     ${embedded?'':`<div class="workflow-intro"><strong>${cfg.title}</strong><span>Fill the frame with the ${cfg.noun}, keep the text or display sharp, and avoid glare. Review the reading before saving.</span></div>`}
-    <section class="ticket-scan-panel">${embedded?'<label>Photo</label>':`<div class="formhead">1. Photograph the ${cfg.captureLabel}</div>`}
+    ${historyOnly?'':`<section class="ticket-scan-panel">${embedded?'<label>Photo</label>':`<div class="formhead">1. Photograph the ${cfg.captureLabel}</div>`}
       <div class="row"><button class="btn" id="readerTake">Take Photo</button><button class="btn secondary" id="readerChoose">Choose Existing Photo</button></div>
       <input type="file" accept="image/*" capture="environment" id="readerCam" style="display:none"><input type="file" accept="image/*" id="readerLib" style="display:none">
       <div class="photo-box" id="readerPreviewBox" style="display:none;margin-top:12px"><img id="readerPreview" alt="Source photo"></div>
       <button class="btn" id="readerRead" style="margin-top:12px" ${embedded?'hidden':''} disabled>${cfg.readLabel}</button><div class="status" id="readerStatus"></div>
-    </section><div id="readerReview"></div><div class="formhead" style="margin-top:28px">Saved ${cfg.title.replace('Scanner','Records').replace('Reader','Readings')}</div><div id="readerSaved"><p class="status">Loading...</p></div>`;
+    </section><div id="readerReview"></div>`}<div class="formhead" style="margin-top:28px">Saved ${cfg.title.replace('Scanner','Records').replace('Reader','Readings')}</div><div id="readerSaved"><p class="status">Loading...</p></div>`;
   if(!embedded)document.getElementById('readerBack').onclick = () => { state.view='camera-tools'; renderApp(); };
+  if(!historyOnly){
   document.getElementById('readerTake').onclick = () => document.getElementById('readerCam').click();
   document.getElementById('readerChoose').onclick = () => document.getElementById('readerLib').click();
   const pick = e => { const f=e.target.files&&e.target.files[0]; if(!f)return; cameraReaderFile=f; document.getElementById('readerPreview').src=URL.createObjectURL(f); document.getElementById('readerPreviewBox').style.display='block'; document.getElementById('readerRead').disabled=false; document.getElementById('readerReview').innerHTML=''; document.getElementById('readerStatus').textContent='Ready to read.'; e.target.value=''; if(embedded)void scanCameraReader(); };
   document.getElementById('readerCam').onchange=pick; document.getElementById('readerLib').onchange=pick; document.getElementById('readerRead').onclick=scanCameraReader;
+  }
   loadCameraReadings();
 }
 async function scanCameraReader() {
-  if(!cameraReaderFile||document.getElementById('readerRead')?.disabled)return;
+  if(!scannerOn(cameraReaderType)||!cameraReaderFile||document.getElementById('readerRead')?.disabled)return;
   const btn=document.getElementById('readerRead'), st=document.getElementById('readerStatus');
   setPavingToolBusy(['readerTake','readerChoose'],true);
   cameraReaderDraft=null;btn.disabled=true;btn.textContent='Reading...';
@@ -945,11 +956,17 @@ async function loadCameraReadings() {
       const fields=x.fields||{},keyNames=cameraReaderType==='gauge'?['instrument_type','equipment_name','reading','unit','observed_at']:Object.keys(fields).filter(k=>!['notes','specifications','instructions','warnings','visible_notes'].includes(k));
       const field=key=>fields[key]?`<div><b>${esc(labels[key]||titleCase(key))}:</b> ${esc(fields[key])}</div>`:'';
       const more=Object.keys(fields).filter(key=>!keyNames.includes(key)&&fields[key]);
-      return `<article class="card camera-reading-card"><div class="camera-reading-photo">${x.photo_path?`<img src="${photoSrc(x.photo_path)}" alt="Source Photo">`:''}</div><div class="camera-reading-details"><strong class="photo-title">${esc(titleCase(cameraReaderType==='gauge'?(fields.instrument_type||x.title):x.title)||'Untitled Record')}</strong>${keyNames.map(field).join('')}${more.length?`<details class="camera-reading-more"><summary>Show More</summary>${more.map(field).join('')}</details>`:''}<div class="row"><button class="btn secondary slim" data-reader-library="${x.id}">Open in Photo Library</button><button class="btn secondary slim" data-reader-delete="${x.id}">Delete Record</button></div></div></article>`;
+      return `<article class="card camera-reading-card"><div class="camera-reading-photo">${x.photo_path?`<img src="${photoSrc(x.photo_path)}" alt="Source Photo">`:''}</div><div class="camera-reading-details"><strong class="photo-title">${esc(titleCase(cameraReaderType==='gauge'?(fields.instrument_type||x.title):x.title)||'Untitled Record')}</strong>${keyNames.map(field).join('')}${more.length?`<details class="camera-reading-more"><summary>Show More</summary>${more.map(field).join('')}</details>`:''}${['plan_sketch','business_card','equipment_plate'].includes(cameraReaderType)?`<label for="readerFormat${x.id}">Report format</label><select id="readerFormat${x.id}" data-reader-format="${x.id}"><option value="pdf">PDF</option><option value="docx">Word</option>${cameraReaderType==='business_card'?'<option value="vcf">Contact File</option>':''}</select><div class="row"><button class="btn secondary slim" data-reader-download="${x.id}">Download Report</button><button class="btn secondary slim" data-reader-share="${x.id}">Share Report</button></div>`:''}<div class="row"><button class="btn secondary slim" data-reader-library="${x.id}">Open in Photo Library</button><button class="btn secondary slim" data-reader-delete="${x.id}">Delete Record</button></div></div></article>`;
     }).join('')}</div>`:'<p class="empty">No saved records yet.</p>';
-    box.querySelectorAll('[data-reader-library]').forEach(button=>button.onclick=async()=>{button.disabled=true;try{const r=await api(`/api/camera-readings/${button.dataset.readerLibrary}/library`,{method:'POST'});if(!r.ok)throw new Error();const d=await r.json();await loadAreas();state.selectedIds=new Set([String(d.capture_id)]);state.view='organize';renderApp();}catch(e){toast('Record could not be opened');button.disabled=false;}});
+    for(const action of ['download','share'])box.querySelectorAll('[data-reader-'+action+']').forEach(b=>b.onclick=()=>deliverScannerReport(Number(b.getAttribute('data-reader-'+action)),action,b));
+    box.querySelectorAll('[data-reader-library]').forEach(button=>button.onclick=async()=>{button.disabled=true;try{const r=await api(`/api/camera-readings/${button.dataset.readerLibrary}/library`,{method:'POST'});if(!r.ok)throw new Error();const d=await r.json();await loadAreas();state.selectedIds=new Set([String(d.capture_id)]);state.view=isHoaClient()?'photo-library':'organize';renderApp();}catch(e){toast('Record could not be opened');button.disabled=false;}});
     box.querySelectorAll('[data-reader-delete]').forEach(button=>button.onclick=async()=>{if(!confirm(uiT('Delete this saved scanner record? Photos already added to the library are kept.')))return;button.disabled=true;try{const r=await api(`/api/camera-readings/${button.dataset.readerDelete}`,{method:'DELETE'});if(!r.ok)throw new Error();loadCameraReadings();}catch(e){toast('Record could not be deleted');button.disabled=false;}});
   }catch(e){box.innerHTML='<p class="status">Saved records could not be loaded.</p>';}
+}
+
+async function deliverScannerReport(id,action,button){
+ const format=document.getElementById('readerFormat'+id)?.value||'pdf';button.disabled=true;
+ try{const r=await api(`/api/camera-readings/${id}/report?format=${format}`);if(!r.ok)throw Error();const blob=await r.blob(),file=new File([blob],`scanner-record-${id}.${format}`,{type:blob.type});if(action==='share')openPreparedExportShare(file,format);else downloadBlob(file,file.name);}catch{toast('Report could not be created. Try again.');}finally{button.disabled=false;}
 }
 
 let alignmentDirectReference=null, alignmentSavedAfter=null, alignmentUploadId=null, alignmentUploadForm=null, alignmentPreviewUrl=null;
@@ -3855,7 +3872,7 @@ function openPreparedExportShare(file, format, groupId) {
   let supported=false;
   try { supported=!windowsFileRestriction&&!!navigator.share&&(!navigator.canShare||navigator.canShare({files:[file]})); } catch {}
   share.hidden=!supported;
-  if(!supported)status.textContent=uiT('This browser cannot share this file directly. Create a share link below, or use Download.');
+  if(!supported)status.textContent=uiT(format==='vcf'?'This browser cannot share this contact file directly. Use Download.':'This browser cannot share this file directly. Create a share link below, or use Download.');
   share.onclick = async () => {
     share.disabled = true;
     try {
@@ -3868,7 +3885,7 @@ function openPreparedExportShare(file, format, groupId) {
         : 'This browser could not share the document. Create a share link below, or use Download.');
     } finally { share.disabled = false; }
   };
-  window.PhotoNotesDocumentLinks?.mount(modal.querySelector('.photo-viewer-dialog'), file, format);
+  if(format!=='vcf')window.PhotoNotesDocumentLinks?.mount(modal.querySelector('.photo-viewer-dialog'), file, format);
   document.body.appendChild(modal);
   window.photoNotesI18n?.apply(modal);
   (supported?share:modal.querySelector('[data-share-download]')).focus();

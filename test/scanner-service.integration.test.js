@@ -42,8 +42,10 @@ test('scanner routes retain photos, extract fields, save reviews and report serv
    ['equipment_plate',{manufacturer:'Fixture',model:'A-42'},'model'],
    ['material_label',{product_name:'Test mix',lot_number:'00077'},'lot_number'],
   ]){
+   if(type==='business_card')await pool.query("UPDATE users SET pro_type='contractor' WHERE id=$1",[user.id]);
    extracted={...data,confidence:'high'};const d=await scan('/api/camera-readings/scan',type);
    assert.equal(d.ai_read,true);assert.equal(d.reading.fields[field],data[field]);
+   if(type==='business_card')await pool.query("UPDATE users SET pro_type='paving' WHERE id=$1",[user.id]);
   }
   extracted={length_in:12,width_in:6,depth_in:null,shape:'rectangle',confidence:'high',warning:null};
   const measured=await scan('/api/measure');assert.equal(measured.ok,true);assert.equal(measured.length_in,12);
@@ -87,6 +89,19 @@ test('scanner routes retain photos, extract fields, save reviews and report serv
    if(process.env.PN_SCANNER_SCREENSHOT)await page.screenshot({path:process.env.PN_SCANNER_SCREENSHOT,fullPage:true});
   } finally {await browser.close();}
 
+
+  // Reports use reviewed saved fields, retain source photos, and preserve legacy access.
+  const cases=[['business_card',{name:'MANUAL CONTACT',email:'manual@example.invalid',phone:'555-0100',company:'REVIEWED COMPANY',address:'SAVED ADDRESS'}],['plan_sketch',{project_name:'REVIEWED PROJECT',sheet_number:'A-22',scale:'1:100',visible_notes:'MANUAL PLAN NOTE'}],['equipment_plate',{manufacturer:'REVIEWED MAKER',model:'MODEL X',serial_number:'000123',specifications:'MANUAL SPECIFICATION'}]];
+  await pool.query("UPDATE users SET pro_type='general',feature_access='{\"camera_readers\":false}' WHERE id=$1",[user.id]);
+  const outsider=(await pool.query("INSERT INTO users(email,password_hash,plan,pro_type) VALUES($1,'none','pro','contractor') RETURNING id",['report-outsider-'+Date.now()+'@example.invalid'])).rows[0];
+  for(const [type,fields] of cases){const row=(await pool.query("INSERT INTO camera_readings(user_id,reading_type,title,fields,photo_path,status) VALUES($1,$2,'REVIEWED REPORT',$3,$4,'saved') RETURNING id",[user.id,type,JSON.stringify(fields),ticket.ticket.photo_path])).rows[0];
+   for(const format of ['pdf','docx']){const r=await fetch(base+`/api/camera-readings/${row.id}/report?format=${format}`,{headers:{Cookie:cookie}});assert.equal(r.status,200);const bytes=Buffer.from(await r.arrayBuffer()),file=path.join(os.tmpdir(),`pn-scanner-${type}.${format}`);fs.writeFileSync(file,bytes);let text;if(format==='docx'){const Zip=require('pizzip'),zip=new Zip(bytes);text=zip.file('word/document.xml').asText();assert(Object.keys(zip.files).some(k=>k.startsWith('word/media/')&&!k.endsWith('/')));}else{const cp=require('node:child_process');text=cp.execFileSync('pdftotext',[file,'-'],{encoding:'utf8'});assert.match(cp.execFileSync('pdfimages',['-list',file],{encoding:'utf8'}),/image/);}for(const value of Object.values(fields))assert(text.includes(value),value);}
+   if(type==='business_card'){const r=await fetch(base+`/api/camera-readings/${row.id}/report?format=vcf`,{headers:{Cookie:cookie}});assert.equal(r.status,200);assert.match(await r.text(),/FN:MANUAL CONTACT/);}
+   else assert.equal((await fetch(base+`/api/camera-readings/${row.id}/report?format=vcf`,{headers:{Cookie:cookie}})).status,400);
+   const outsiderCookie='pn_token='+require('jsonwebtoken').sign({id:outsider.id},process.env.SESSION_SECRET);assert.equal((await fetch(base+`/api/camera-readings/${row.id}/report`,{headers:{Cookie:outsiderCookie}})).status,404);
+  }
+  await pool.query('DELETE FROM users WHERE id=$1',[outsider.id]);
+  const legacy=await(await fetch(base+'/api/camera-readings?type=business_card',{headers:{Cookie:cookie}})).json();assert(legacy.length>0);
  } finally {
   global.fetch=nativeFetch;
   if(user){await pool.query('DELETE FROM captures WHERE user_id=$1',[user.id]);await pool.query('DELETE FROM events WHERE user_id=$1',[user.id]);await pool.query('DELETE FROM users WHERE id=$1',[user.id]);}
