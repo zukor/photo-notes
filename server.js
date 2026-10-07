@@ -3553,7 +3553,8 @@ async function backfillPhotoDims() {
 
 if(require.main===module)init()
   .then(() => {
-    app.listen(PORT, () => console.log(`[efc] listening on ${PORT}`));
+    const server=app.listen(PORT, () => console.log(`[efc] listening on ${PORT}`));
+    require('./server-shutdown').installShutdown(server,pool);
     ramoIntake.start();
     photoFollowUps.start(pool);
     const bootCloud=()=>startCloud(pool).catch(()=>{console.error('[issue-cloud] initialization failed; retrying');setTimeout(bootCloud,30000).unref();});
@@ -3564,7 +3565,8 @@ if(require.main===module)init()
   })
   .catch((err) => {
     console.error('[efc] failed to init db', err);
-    app.listen(PORT, () => console.log(`[efc] listening on ${PORT} (db init failed)`));
+    const server=app.listen(PORT, () => console.log(`[efc] listening on ${PORT} (db init failed)`));
+    require('./server-shutdown').installShutdown(server,pool);
   });
 
 module.exports={app};
