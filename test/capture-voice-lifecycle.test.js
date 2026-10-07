@@ -1,8 +1,8 @@
 const test=require('node:test'),assert=require('node:assert/strict'),vm=require('node:vm'),fs=require('node:fs');
 const source=fs.readFileSync('public/app.js','utf8');
-function harness({ios=true,pending=false,exclusive=false}={}){
+function harness({ios=true,pending=false,exclusive=false,retainOnEnd=false}={}){
  const elements={},sessions=[],timers=new Map(),logs={};let next=0,permission,tracksStopped=0,owner;
- class Speech{constructor(){sessions.push(this);}start(){if(exclusive&&owner)throw new Error('Microphone still owned');owner=this;}stop(){this.stopped=true;}abort(){this.aborted=true;if(owner===this)owner=null;}set onend(handler){this.end=()=>{if(owner===this)owner=null;handler();};}get onend(){return this.end;}}
+ class Speech{constructor(){sessions.push(this);}start(){if(exclusive&&owner)throw new Error('Microphone still owned');owner=this;}stop(){this.stopped=true;}abort(){this.aborted=true;if(owner===this)owner=null;}set onend(handler){this.end=()=>{if(owner===this&&!retainOnEnd)owner=null;handler();};}get onend(){return this.end;}}
  const stream={getTracks:()=>[{stop:()=>tracksStopped++}]};
  const context=vm.createContext({Date,Promise,JSON,navigator:{userAgent:ios?'iPhone':'Android',onLine:true,mediaDevices:{getUserMedia:()=>pending?new Promise(r=>permission=r):Promise.resolve(stream)}},window:{SpeechRecognition:Speech},document:{visibilityState:'visible',getElementById:id=>elements[id]||=( {value:'',textContent:'',focus(){},classList:{add(){},remove(){}}})},localStorage:{getItem:k=>logs[k],setItem:(k,v)=>logs[k]=v},state:{photoFile:{}},uiSpeechLanguage:()=> 'en-US',isIndustryProClient:()=>false,toast(){},setTimeout:(fn,ms)=>{timers.set(++next,{fn,ms});return next;},clearTimeout:id=>timers.delete(id)});
  vm.runInContext("let recognizer=null,dictationActive=false,dictationRestartTimer=null,dictationWatchdog=null,dictationGeneration=0,dictationBase='',dictationFinish=null;"+source.slice(source.indexOf('let dictationEmptySessions'),source.indexOf('let currentGroupItems'))+"function combineSpeechResults(parts){return parts.join(' ');}function mergeSpeechTranscript(a,b){return (a+' '+b).trim();}"+source.slice(source.indexOf('function cleanupDictation()'),source.indexOf('// ================= Pro dimension fields')),context);
@@ -58,4 +58,10 @@ test('a delayed result without end does not cancel the finishing deadline',async
 
 test('Android empty sessions stop after three attempts instead of looping forever',async()=>{
  const h=harness({ios:false});await h.run('toggleDictation()');for(let i=0;i<3;i++){h.sessions[i].onend();h.fire(300);}assert.equal(h.sessions.length,3);assert.equal(h.run('dictationActive'),false);assert.equal(h.elements.dictate.textContent,'Record Notes');
+});
+
+test('Safari end can retain its engine until abort; consecutive sessions explicitly release it',async()=>{
+ const h=harness({exclusive:true,retainOnEnd:true});
+ for(let i=0;i<10;i++){await h.run('toggleDictation()');const s=h.sessions.at(-1);assert.equal(h.run('dictationActive'),true);s.onresult({results:[[{transcript:'Recording '+i}]]});const stopping=h.run('toggleDictation()');s.onend();await stopping;assert.equal(s.aborted,true);}
+ assert.equal(h.sessions.length,10);assert(h.elements.note.value.includes('Recording 9'));
 });
