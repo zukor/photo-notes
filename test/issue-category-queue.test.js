@@ -6,12 +6,13 @@ test('database queue, claims, and stale worker updates exclude all idea categori
  let server;
  try{
   await pool.query(`CREATE TABLE issue_reports(id serial PRIMARY KEY,issue_type text,management_status text DEFAULT 'new',priority text DEFAULT 'normal',repair_claim_hash text,repair_lease_until timestamptz,created_at timestamptz DEFAULT now(),updated_at timestamptz DEFAULT now());CREATE TABLE issue_worker_state(id integer PRIMARY KEY,last_checked timestamptz);CREATE TABLE issue_repair_events(issue_id integer,event text,detail text,created_at timestamptz DEFAULT now())`);
-  for(const col of ['blocked_kind','review_decision','implementation_instructions','reviewed_by','description','page_name','page_url','reported_edition','app_version','viewport','user_agent','fix_summary','release_reference','retest_instructions','verification','blocked_reason','reporter_details','tester_result','tester_notes','screenshot_path','voice_path'])await pool.query(`ALTER TABLE issue_reports ADD COLUMN ${col} text`);
+  for(const col of ['blocked_kind','review_decision','implementation_instructions','reviewed_by','description','page_name','page_url','reported_edition','app_version','viewport','user_agent','fix_summary','release_reference','retest_instructions','verification','blocked_reason','reporter_details','tester_result','tester_notes','screenshot_path','result_screenshot_path','voice_path'])await pool.query(`ALTER TABLE issue_reports ADD COLUMN ${col} text`);
   for(const type of ['bug_problem','ui_improvement','feature_improvement','new_feature'])await pool.query('INSERT INTO issue_reports(issue_type) VALUES($1)',[type]);
   const pass=(req,res,next)=>next();registerIssueRepair(app,{pool,requireAuth:pass,requireAdmin:pass,requireTestingQueueToken:pass});
   server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));const base=`http://127.0.0.1:${server.address().port}`;
   const post=(route,body={})=>fetch(base+route,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-  assert.deepEqual((await(await fetch(base+'/api/automation/testing-queue')).json()).issues.map(i=>i.id),[1]);
+  const queue=await fetch(base+'/api/automation/testing-queue');assert.equal(queue.status,200);
+  assert.deepEqual((await queue.json()).issues.map(i=>i.id),[1]);
   for(const id of [2,3,4]){
    assert.equal((await post(`/api/automation/issues/${id}/claim`)).status,409);
    await pool.query("UPDATE issue_reports SET management_status='fixing',repair_claim_hash=$1,repair_lease_until=now()+interval '1 hour' WHERE id=$2",[digest('old-token'),id]);
