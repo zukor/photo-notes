@@ -35,7 +35,7 @@ test('workflow navigation uses keyboard-accessible buttons with current-page sta
 
 test('the wide-browser header enlarges its brands while phone sizes stay compact', () => {
   assert.match(css, /\.app-header \{[^}]*max-width:980px/);
-  assert.match(css, /\.app-header \.zukor-corner-logo \{[^}]*width:175px; min-width:175px;[^}]*height:auto !important; aspect-ratio:448 \/ 72/);
+  assert.match(css, /\.app-header \.zukor-corner-logo \{[^}]*width:175px; min-width:175px;[^}]*height:calc\(175px \* 72 \/ 448\) !important; aspect-ratio:448 \/ 72/);
   assert.match(css, /@media \(min-width: 701px\)[\s\S]*\.app-header \.zukor-corner-logo \{ width:175px; min-width:175px; \}/);
   assert.match(css, /@media \(min-width: 701px\)[\s\S]*\.app-header \.brandrow \{ width:min\(750px,100%\); \}/);
   assert.match(css, /@media \(min-width: 701px\)[\s\S]*--product-logo-height:90px[\s\S]*\.brand\.road-issues-brand \{ flex-basis:750px; width:750px; max-width:100%; height:var\(--product-logo-height\) !important; \}/);

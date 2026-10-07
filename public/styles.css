@@ -172,7 +172,7 @@ textarea { min-height: 96px; resize: vertical; }
   display:grid; grid-template-columns:112px minmax(0,1fr) 30px; grid-template-rows:auto auto;
   width:100%; max-width:980px; align-items:center; column-gap:12px; row-gap:2px; margin:8px auto 5px;
 }
-.app-header .zukor-corner-logo { display:block; grid-column:1; grid-row:1; width:175px; min-width:175px; max-width:none; height:auto !important; aspect-ratio:448 / 72; object-fit:contain; object-position:left center; justify-self:start; margin:0; }
+.app-header .zukor-corner-logo { display:block; grid-column:1; grid-row:1; width:175px; min-width:175px; max-width:none; height:calc(175px * 72 / 448) !important; aspect-ratio:448 / 72; object-fit:contain; object-position:left center; justify-self:start; margin:0; }
 .app-header .brandrow { grid-column:1 / -1; grid-row:2; min-width:0; width:min(500px,100%); justify-self:center; }
 .app-header .brandrow { --product-logo-height:60px; }
 .app-header .brandrow .brand { flex-basis:500px; width:500px; max-width:100%; height:var(--product-logo-height) !important; aspect-ratio:auto; margin:2px auto 3px; background-position:center; background-size:contain; background-repeat:no-repeat; }
@@ -502,7 +502,7 @@ body:has(.issue-fab) { padding-bottom:calc(80px + env(safe-area-inset-bottom)); 
 @media (max-width: 700px) {
   #body, .workflow-organize, .workflow-edit, .workflow-create, .workflow-send { max-width:640px !important; }
   .app-header { grid-template-columns:auto minmax(0,1fr) auto; column-gap:6px; row-gap:1px; margin-top:6px; }
-  .app-header .zukor-corner-logo { width:92px; min-width:0; }
+  .app-header .zukor-corner-logo { width:92px; min-width:0; height:calc(92px * 72 / 448) !important; }
   .app-header .brandrow { width:100%; }
   .app-header .brandrow { --product-logo-height:57px; }
   .app-header .brandrow .brand,
@@ -551,7 +551,7 @@ body:has(.issue-fab) { padding-bottom:calc(80px + env(safe-area-inset-bottom)); 
 /* Keep the company mark compact on the narrowest iPhones. This rule belongs
    after the 700px phone rule so the cascade cannot enlarge it again. */
 @media (max-width: 380px) {
-  .app-header .zukor-corner-logo { width:82px; min-width:0; }
+  .app-header .zukor-corner-logo { width:82px; min-width:0; height:calc(82px * 72 / 448) !important; }
 }
 .evidence-comparison{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-bottom:18px}.evidence-comparison .card img{width:100%;max-height:340px;object-fit:contain;background:var(--pn-bg-f1f3f5,#f1f3f5);margin-top:8px}@media(max-width:700px){.evidence-comparison{grid-template-columns:1fr}}
 
