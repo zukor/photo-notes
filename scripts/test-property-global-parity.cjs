@@ -27,8 +27,8 @@ const {chromium,webkit}=require('playwright');
      if(['send','organize'].includes(section))await page.locator('#epChoose').waitFor({state:'attached'});
      const toolBoxes=await page.locator('.shared-photo-tools .btn').evaluateAll(nodes=>nodes.map(n=>{const r=n.getBoundingClientRect();return {top:r.top,width:r.width,right:r.right};}));
      assert.equal(toolBoxes.length,2,edition+' shared tools');
-     if(width>=769){assert.equal(toolBoxes[0].top,toolBoxes[1].top,edition+' compact tools on one row');assert(toolBoxes.every(b=>b.width<230),edition+' compact desktop buttons');}
-     else assert(toolBoxes[1].top>toolBoxes[0].top,edition+' keeps mobile tool rows');
+     assert.equal(toolBoxes[0].top,toolBoxes[1].top,edition+' compact tools on one row');assert(toolBoxes.every(b=>b.width<230),edition+' compact secondary controls');
+     assert(await page.locator('.shared-photo-tools').evaluate(el=>el.compareDocumentPosition(document.getElementById('body')) & Node.DOCUMENT_POSITION_PRECEDING),edition+' optional tools follow content');
      const controls=await page.locator('#body button[id],#body input[id],#body select[id],#body textarea[id]').evaluateAll(nodes=>nodes.map(n=>{const s=getComputedStyle(n);return {id:n.id,label:n.tagName==='BUTTON'?n.textContent.trim():n.getAttribute('placeholder'),font:s.fontFamily,size:s.fontSize,color:s.color,background:s.backgroundColor,radius:s.borderRadius};}));
      if(!reference)reference=controls;
      else for(const expected of reference)assert.deepEqual(controls.find(c=>c.id===expected.id),expected,`${edition} ${section} ${expected.id} matches Pro`);

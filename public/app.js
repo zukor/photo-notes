@@ -310,7 +310,16 @@ function closePhotoTool() {
   document.getElementById(state.view==='capture'?'tabCapture':'tabOrganize')?.focus();
   window.scrollTo(0,0);
 }
+function photoToolWorkflowView() {
+  const source=state._photoToolReturnView||(IS_HANDHELD?'capture':'organize');
+  if (['capture','camera-tools','ticket','camera-reader','alignment','organize','photo-library','hoa-visits','hoa-visit','edit','hoa-assets','hoa-asset','create','hoa-inspections','send','hoa-maintenance'].includes(source)) return source;
+  if (['groups','group-detail','document-setup','document-preview'].includes(source)) return 'create';
+  return 'organize';
+}
 function renderApp() {
+  const photoToolOpen=['photo-follow-ups','photo-requests'].includes(state.view);
+  const workflowView=photoToolOpen?photoToolWorkflowView():state.view;
+  const photoToolSection=['capture','camera-tools','ticket','camera-reader','alignment'].includes(workflowView)?'Capture':['edit','hoa-assets','hoa-asset'].includes(workflowView)?(isHoaClient()?'Assets':'Edit'):['create','hoa-inspections'].includes(workflowView)?(isHoaClient()?'Inspections':'Create'):['send','hoa-maintenance'].includes(workflowView)?(isHoaClient()?'Records':'Send'):'Organize';
   document.body.classList.toggle('admin-testing-page',isTestingManager()&&['my-assignment','my-issues','manage-testing'].includes(state.view));
   window.PhotoNotesMatchCamera?.stop();
   document.getElementById('captureShareDialog')?.remove();
@@ -343,15 +352,15 @@ function renderApp() {
         </div>
       </div>
       ${isRoadIssuesClient()||isBasicClient()?'':`<nav class="tabs workflow-tabs ${isHoaClient()?'hoa-tabs':isConcreteClient()?'concrete-tabs':''}" aria-label="Photo Notes workflow">
-        <button type="button" class="tab ${['capture','camera-tools','ticket','camera-reader','alignment'].includes(state.view)?'on':''}" id="tabCapture" aria-current="${['capture','camera-tools','ticket','camera-reader','alignment'].includes(state.view)?'page':'false'}">Capture</button>
-        <button type="button" class="tab ${['organize','photo-library','hoa-visits','hoa-visit'].includes(state.view)?'on':''}" id="tabOrganize" aria-current="${['organize','photo-library','hoa-visits','hoa-visit'].includes(state.view)?'page':'false'}">Organize</button>
-        <button type="button" class="tab ${['edit','hoa-assets','hoa-asset'].includes(state.view)?'on':''}" id="tabEdit" aria-current="${['edit','hoa-assets','hoa-asset'].includes(state.view)?'page':'false'}">${isHoaClient()?'Assets':'Edit'}</button>
-        <button type="button" class="tab ${['create','hoa-inspections'].includes(state.view)?'on':''}" id="tabCreate" aria-current="${['create','hoa-inspections'].includes(state.view)?'page':'false'}">${isHoaClient()?'Inspections':'Create'}</button>
-        <button type="button" class="tab ${['send','hoa-maintenance'].includes(state.view)?'on':''}" id="tabSend" aria-current="${['send','hoa-maintenance'].includes(state.view)?'page':'false'}">${isHoaClient()?'Records':'Send'}</button>
+        <button type="button" class="tab ${['capture','camera-tools','ticket','camera-reader','alignment'].includes(workflowView)?'on':''}" id="tabCapture" aria-current="${['capture','camera-tools','ticket','camera-reader','alignment'].includes(workflowView)?'page':'false'}">Capture</button>
+        <button type="button" class="tab ${['organize','photo-library','hoa-visits','hoa-visit'].includes(workflowView)?'on':''}" id="tabOrganize" aria-current="${['organize','photo-library','hoa-visits','hoa-visit'].includes(workflowView)?'page':'false'}">Organize</button>
+        <button type="button" class="tab ${['edit','hoa-assets','hoa-asset'].includes(workflowView)?'on':''}" id="tabEdit" aria-current="${['edit','hoa-assets','hoa-asset'].includes(workflowView)?'page':'false'}">${isHoaClient()?'Assets':'Edit'}</button>
+        <button type="button" class="tab ${['create','hoa-inspections'].includes(workflowView)?'on':''}" id="tabCreate" aria-current="${['create','hoa-inspections'].includes(workflowView)?'page':'false'}">${isHoaClient()?'Inspections':'Create'}</button>
+        <button type="button" class="tab ${['send','hoa-maintenance'].includes(workflowView)?'on':''}" id="tabSend" aria-current="${['send','hoa-maintenance'].includes(workflowView)?'page':'false'}">${isHoaClient()?'Records':'Send'}</button>
       </nav>`}
-      ${isProClient()&&['general','property','hoa','paving','concrete','contractor','roofer'].includes(state.proType)?'<div class="shared-photo-tools"><div class="fu-actions"><button type="button" class="btn secondary" id="fuOpen">Photo Follow-Ups</button></div><div class="pr-actions"><button type="button" class="btn secondary" id="prOpen">Request Photos</button></div></div>':''}
-      ${['photo-follow-ups','photo-requests'].includes(state.view)?'<button type="button" class="btn secondary" id="photoToolClose">Close</button>':''}
+      ${photoToolOpen?`<div class="photo-tool-navigation"><span id="photoToolLocation">${uiT(photoToolSection)} / ${uiT(state.view==='photo-follow-ups'?'Photo Follow-Ups':'Request Photos')}</span><button type="button" class="btn secondary" id="photoToolClose">${uiT('Close')}</button></div>`:''}
       <div id="body"></div>
+      ${isProClient()&&['general','property','hoa','paving','concrete','contractor','roofer'].includes(state.proType)?'<div class="shared-photo-tools"><div class="fu-actions"><button type="button" class="btn secondary" id="fuOpen">Photo Follow-Ups</button></div><div class="pr-actions"><button type="button" class="btn secondary" id="prOpen">Request Photos</button></div></div>':''}
       <div class="footer">&copy; ${new Date().getFullYear()} Zukor AI. All Rights Reserved.<br><a href="/install.html" target="_blank" rel="noopener">Install Photo Notes on your device</a></div>
     </div>
     <button class="issue-fab ${isRoadIssuesClient()?'road-issue-fab':''}" id="issueFab" type="button" data-html2canvas-ignore="true" aria-label="Report Issue">${issueFabLabel()}</button>
@@ -427,6 +436,7 @@ function renderApp() {
   const tabEdit=document.getElementById('tabEdit');if(tabEdit)tabEdit.onclick = () => { state.view=isHoaClient()?'hoa-assets':'edit'; renderApp(); };
   const tabCreate=document.getElementById('tabCreate');if(tabCreate)tabCreate.onclick = () => { state.view=isHoaClient()?'hoa-inspections':'create'; state.groupId=null; renderApp(); };
   const tabSend=document.getElementById('tabSend');if(tabSend)tabSend.onclick = () => { state.view=isHoaClient()?'hoa-maintenance':'send'; renderApp(); };
+  if(photoToolOpen)window.scrollTo(0,0);
   if (state.view === 'my-issues') renderMyIssueReports();
   else if (state.view === 'manage-testing') renderTestingManagement();
   else if (state.view === 'my-assignment') renderMyTestingAssignment();
