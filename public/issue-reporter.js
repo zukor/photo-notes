@@ -41,9 +41,13 @@ async function issueScreenshotBranding(){
   }};
 }
 // Capture the visible screen, not the full report list, which can exceed canvas limits.
-async function captureIssueScreenshot(quality=.78){
+function issueCaptureViewport(){
+  const v=window.visualViewport;
+  return {width:v?.width||window.innerWidth,height:v?.height||window.innerHeight,x:v?.pageLeft??window.scrollX,y:v?.pageTop??window.scrollY,scrollX:window.scrollX,scrollY:window.scrollY,windowWidth:window.innerWidth,windowHeight:window.innerHeight};
+}
+async function captureIssueScreenshot(quality=.78,viewport=issueCaptureViewport()){
   if(!window.html2canvas)throw Error('Screenshot capture is unavailable');
-  const width=window.innerWidth,height=window.innerHeight;
+  const {width,height}=viewport;
   const scale=Math.min(window.devicePixelRatio||1,1.5,Math.sqrt(4000000/(width*height)));
   activeIssueCapture?.cancel();
   let timer,observer,cancelReject,cancelled=false;
@@ -55,7 +59,7 @@ async function captureIssueScreenshot(quality=.78){
   const capture=(async()=>{
     const onclone=await issueScreenshotBranding();
     if(cancelled)throw Error('Screenshot capture cancelled');
-    const canvas=await window.html2canvas(document.documentElement,{useCORS:true,allowTaint:false,backgroundColor:'#ffffff',width,height,x:window.scrollX,y:window.scrollY,scrollX:window.scrollX,scrollY:window.scrollY,scale,logging:false,imageTimeout:5000,ignoreElements:ignoreIssueCaptureElement,onclone});
+    const canvas=await window.html2canvas(document.documentElement,{useCORS:true,allowTaint:false,backgroundColor:'#ffffff',...viewport,scale,logging:false,imageTimeout:5000,ignoreElements:ignoreIssueCaptureElement,onclone});
     try{const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',quality));if(!blob)throw Error('Screenshot could not be encoded');return blob;}
     finally{canvas.width=0;canvas.height=0;}
   })();
@@ -68,6 +72,7 @@ function updateIssueDescriptionLabel(){
   const field=document.getElementById('issueDescription');if(field)field.placeholder=uiPushText(label);
 }
 async function openIssueReporter(testingContext=null) {
+  const captureViewport=issueCaptureViewport();
   closeIssueReporter();
   issueTestingContext=testingContext?.assignmentId?testingContext:null;
   const generation=issueGeneration;
@@ -89,7 +94,7 @@ async function openIssueReporter(testingContext=null) {
   document.getElementById('issueResultScreenshot').onchange=selectIssueResultScreenshot;
   document.getElementById('issueResultRemove').onclick=clearIssueResultScreenshot;
   if(issueTestingContext){document.getElementById('issueDescription').value=issueTestingContext.notes||'';}
-  document.getElementById('issueClose').focus();
+  document.getElementById('issueClose').focus({preventScroll:true});
   if(fab){fab.disabled=false;fab.textContent=issueFabLabel();}
   // Let the dialog paint before screenshot rendering does any expensive work.
   if(window.requestAnimationFrame)await new Promise(resolve=>setTimeout(resolve,150));
@@ -97,7 +102,7 @@ async function openIssueReporter(testingContext=null) {
   try {
     let shot;
     for(let attempt=0;attempt<2;attempt++){
-      try{shot=await captureIssueScreenshot();break;}
+      try{shot=await captureIssueScreenshot(.78,captureViewport);break;}
       catch(error){if(generation!==issueGeneration||attempt===1)throw error;}
     }
     if(generation!==issueGeneration)return;issueScreenshotBlob=shot;
