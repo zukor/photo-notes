@@ -1,6 +1,20 @@
 (function () {
   const STORAGE_KEY = 'photo-notes-language';
   const ES = {
+    'Result Screenshot (optional)': 'Captura del resultado (opcional)',
+    'Choose Result Screenshot': 'Elegir captura del resultado',
+    'Remove Result Screenshot': 'Quitar captura del resultado',
+    'Show Result Screenshot': 'Mostrar captura del resultado',
+    'Show App Screenshot': 'Mostrar captura de la aplicación',
+    'Preview of the result screenshot': 'Vista previa de la captura del resultado',
+    'Result screenshot supplied by the reporter': 'Captura del resultado proporcionada por quien reportó',
+    'Attach a screenshot of the downloaded document, saved photo, or result received in another app. The page screenshot above is kept separately.': 'Adjunte una captura del documento descargado, la foto guardada o el resultado recibido en otra aplicación. La captura de la página se conserva por separado.',
+    'JPEG, PNG, or WebP, up to 8 MB. Annotated screenshots are welcome.': 'JPEG, PNG o WebP, hasta 8 MB. Se aceptan capturas con anotaciones.',
+    'Choose a JPEG, PNG, or WebP screenshot up to 8 MB.': 'Elija una captura JPEG, PNG o WebP de hasta 8 MB.',
+    'Result screenshot attached.': 'Captura del resultado adjunta.',
+    'This screenshot could not be read. Choose another image.': 'No se pudo leer esta captura. Elija otra imagen.',
+    'Please wait for the result screenshot to finish loading.': 'Espere a que termine de cargar la captura del resultado.',
+
     'Saved Capture Settings (optional)': 'Ajustes de captura guardados (opcional)',
     'Saved Capture Settings': 'Ajustes de captura guardados',
     'Use Saved Settings': 'Usar ajustes guardados',

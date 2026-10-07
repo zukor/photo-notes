@@ -36,6 +36,8 @@ test('permanent deletion with real PostgreSQL constraints and files',{skip:!url}
   await pool.query("INSERT INTO groups(user_id,title) VALUES($1,'Private document')",[id]);
   await pool.query("INSERT INTO jobs(user_id,name) VALUES($1,'Private job')",[id]);
   await pool.query("INSERT INTO testing_assignments(assignment_key,assignee_name,user_id,title) VALUES('fictional-deletion-test','Fictional Test',$1,'Test')",[id]);
+  await pool.query("INSERT INTO issue_reports(user_id,description,result_screenshot_path) VALUES($1,'Result evidence fixture','/uploads/result.png')",[id]);
+  await fs.writeFile(path.join(root,'result.png'),'fixture result');
   await fs.writeFile(path.join(root,'private.jpg'),'private');await fs.writeFile(path.join(root,'shared.jpg'),'shared');
   await t.test('database failure rolls back account and queued files',async()=>{
     await pool.query("CREATE FUNCTION fail_test_delete() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'test rollback'; END $$");
@@ -46,7 +48,7 @@ test('permanent deletion with real PostgreSQL constraints and files',{skip:!url}
   await t.test('confirmed deletion removes owned records and private files while preserving others',async()=>{
     const r=await call('delete',id,'remove@example.test');assert.equal(r.code,200,JSON.stringify(r.body));assert.equal(r.body.file_cleanup_pending,false);assert.equal(await exists(id),false);assert.ok(await exists(other));
     for(const table of ['captures','groups','jobs','testing_assignments'])assert.equal((await pool.query(`SELECT 1 FROM ${table} WHERE user_id=$1`,[id])).rowCount,0);
-    await assert.rejects(fs.access(path.join(root,'private.jpg')));await fs.access(path.join(root,'shared.jpg'));
+    await assert.rejects(fs.access(path.join(root,'result.png')));await assert.rejects(fs.access(path.join(root,'private.jpg')));await fs.access(path.join(root,'shared.jpg'));
     assert.equal((await pool.query("SELECT 1 FROM retired_testing_assignment_keys WHERE assignment_key='fictional-deletion-test'")).rowCount,1);
     assert.equal((await pool.query("SELECT 1 FROM events WHERE user_id=$1 AND action='admin_user_delete'",[actor])).rowCount,1);
   });

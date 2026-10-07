@@ -2,7 +2,7 @@ const fs=require('fs/promises'),path=require('path');
 const FILE_SOURCES=[
  ['captures','photo_path'],['captures','photo_original_path'],['ewr_photos','photo_path'],
  ['asphalt_tickets','photo_path'],['camera_readings','photo_path'],['road_issue_reports','photo_path'],
- ['issue_reports','screenshot_path'],['issue_reports','voice_path'],
+ ['issue_reports','screenshot_path'],['issue_reports','result_screenshot_path'],['issue_reports','voice_path'],
  ['users','document_logo_path'],['users','word_template_path']
 ];
 function uploadFile(root,value){

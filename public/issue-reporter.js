@@ -3,6 +3,7 @@ let activeIssueCapture=null;
 // ================= Shared issue reporter =================
 let issueScreenshotBlob = null, issueVoiceBlob = null, issuePageName = '', issueRecognizer = null, issueMediaRecorder = null, issueMediaStream = null;
 let issueScreenshotURL = null, issueMarkupEditor=null;
+let issueResultFile=null,issueResultURL=null,issueResultPending=false,issueResultSelection=0;
 let issueGeneration = 0, issueMicPending = false;
 let issueDictationActive = false, issueDictationBase = '', issueDictationRestartTimer = null, issueDictationWatchdog = null;
 const issuePageLabels = { capture:'Capture', organize:'Organize', edit:'Edit', create:'Create', send:'Send', map:'Job Site Map' };
@@ -85,6 +86,8 @@ async function openIssueReporter(testingContext=null) {
   document.getElementById('issueClose').onclick=closeIssueReporter;
   document.getElementById('issueRecord').onclick=toggleIssueDictation;
   document.getElementById('issueSend').onclick=submitIssueReport;
+  document.getElementById('issueResultScreenshot').onchange=selectIssueResultScreenshot;
+  document.getElementById('issueResultRemove').onclick=clearIssueResultScreenshot;
   if(issueTestingContext){document.getElementById('issueDescription').value=issueTestingContext.notes||'';}
   document.getElementById('issueClose').focus();
   if(fab){fab.disabled=false;fab.textContent=issueFabLabel();}
@@ -110,8 +113,30 @@ async function retakeIssueScreenshot(){
  }catch(e){if(generation===issueGeneration)document.getElementById('issueShotStatus').textContent='Could not retake the screenshot. The previous screenshot is retained.';}
  finally{if(generation===issueGeneration){modal.hidden=false;button.disabled=false;}}
 }
+function clearIssueResultScreenshot(resetInput=true){
+  issueResultSelection++;issueResultFile=null;issueResultPending=false;
+  if(issueResultURL)URL.revokeObjectURL(issueResultURL);issueResultURL=null;
+  const input=document.getElementById('issueResultScreenshot');if(input&&resetInput)input.value='';
+  const preview=document.getElementById('issueResultPreview');if(preview){preview.removeAttribute('src');preview.hidden=true;}
+  const remove=document.getElementById('issueResultRemove');if(remove)remove.hidden=true;
+  const status=document.getElementById('issueResultStatus');if(status)status.textContent='';
+}
+async function selectIssueResultScreenshot(){
+  const input=document.getElementById('issueResultScreenshot'),file=input?.files?.[0];
+  clearIssueResultScreenshot(false);if(!file)return;
+  const selection=issueResultSelection,generation=issueGeneration,status=document.getElementById('issueResultStatus');
+  if(!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size>8*1024*1024){status.textContent=uiPushText('Choose a JPEG, PNG, or WebP screenshot up to 8 MB.');return;}
+  issueResultPending=true;const url=URL.createObjectURL(file),image=new Image();image.src=url;
+  try{
+    await image.decode();if(selection!==issueResultSelection||generation!==issueGeneration){URL.revokeObjectURL(url);return;}
+    if(image.naturalWidth*image.naturalHeight>40000000)throw Error('Image too large');
+    issueResultFile=file;issueResultURL=url;const preview=document.getElementById('issueResultPreview');preview.src=url;preview.hidden=false;
+    document.getElementById('issueResultRemove').hidden=false;status.textContent=uiPushText('Result screenshot attached.');
+  }catch{URL.revokeObjectURL(url);if(selection===issueResultSelection&&generation===issueGeneration)status.textContent=uiPushText('This screenshot could not be read. Choose another image.');}
+  finally{if(selection===issueResultSelection&&generation===issueGeneration)issueResultPending=false;}
+}
 function stopIssueMediaStream(){if(issueMediaStream){issueMediaStream.getTracks().forEach(track=>track.stop());issueMediaStream=null;}issueMediaRecorder=null;}
-function closeIssueReporter(){activeIssueCapture?.cancel();issueTestingContext=null;if(issueMarkupEditor){issueMarkupEditor.destroy();issueMarkupEditor=null;}const markup=document.getElementById('issueMarkup');if(markup)markup.hidden=true;if(issueScreenshotURL){URL.revokeObjectURL(issueScreenshotURL);issueScreenshotURL=null;}const preview=document.getElementById("issueScreenshot");if(preview){preview.removeAttribute("src");preview.hidden=true;}issueGeneration++;issueMicPending=false;issueDictationActive=false;if(issueDictationRestartTimer)clearTimeout(issueDictationRestartTimer);if(issueDictationWatchdog)clearTimeout(issueDictationWatchdog);issueDictationRestartTimer=null;issueDictationWatchdog=null;if(issueRecognizer){try{issueRecognizer.stop();}catch(e){}}if(issueMediaRecorder&&issueMediaRecorder.state==='recording'){try{issueMediaRecorder.stop();}catch(e){}}stopIssueMediaStream();const m=document.getElementById('issueModal');if(m)m.hidden=true;issueScreenshotBlob=null;issueVoiceBlob=null;issueRecognizer=null;}
+function closeIssueReporter(){clearIssueResultScreenshot();activeIssueCapture?.cancel();issueTestingContext=null;if(issueMarkupEditor){issueMarkupEditor.destroy();issueMarkupEditor=null;}const markup=document.getElementById('issueMarkup');if(markup)markup.hidden=true;if(issueScreenshotURL){URL.revokeObjectURL(issueScreenshotURL);issueScreenshotURL=null;}const preview=document.getElementById("issueScreenshot");if(preview){preview.removeAttribute("src");preview.hidden=true;}issueGeneration++;issueMicPending=false;issueDictationActive=false;if(issueDictationRestartTimer)clearTimeout(issueDictationRestartTimer);if(issueDictationWatchdog)clearTimeout(issueDictationWatchdog);issueDictationRestartTimer=null;issueDictationWatchdog=null;if(issueRecognizer){try{issueRecognizer.stop();}catch(e){}}if(issueMediaRecorder&&issueMediaRecorder.state==='recording'){try{issueMediaRecorder.stop();}catch(e){}}stopIssueMediaStream();const m=document.getElementById('issueModal');if(m)m.hidden=true;issueScreenshotBlob=null;issueVoiceBlob=null;issueRecognizer=null;}
 function cleanSpeechTranscript(value){
   let words=String(value||'').trim().split(/\s+/).filter(Boolean);
   // Android speech services occasionally return the same short fragment three
@@ -233,8 +258,9 @@ async function submitIssueReport(){
   const ta=document.getElementById('issueDescription'),whatHappened=ta.value.trim(),frequency=document.getElementById('issueFrequency').value,btn=document.getElementById('issueSend'),st=document.getElementById('issueStatus');
   const description=[whatHappened&&`What happened: ${whatHappened}`,frequency&&`Frequency: ${frequency}`].filter(Boolean).join('\n');
   if(!whatHappened&&!issueVoiceBlob){st.textContent='Please type what went wrong or attach a voice recording before sending.';ta.focus();return;}
+  if(issueResultPending){st.textContent=uiPushText('Please wait for the result screenshot to finish loading.');return;}
   btn.disabled=true;btn.textContent='Sending...';st.textContent='Saving your report...';
-  try{const screenshot=issueMarkupEditor?await issueMarkupEditor.exportBlob():issueScreenshotBlob;if(generation!==issueGeneration)return;const fd=new FormData();fd.append('description',issueReportDescription(description));if(issueTestingContext){fd.append('testing_assignment_id',issueTestingContext.assignmentId);fd.append('testing_step_id',issueTestingContext.stepId);}fd.append('issue_type',document.getElementById('issueType')?.value||'bug_problem');fd.append('page_name',issuePageName);fd.append('page_url',location.href);fd.append('viewport',`${window.innerWidth} × ${window.innerHeight}`);fd.append('app_version','356');fd.append('user_agent',navigator.userAgent+' | Photo Notes web 356 | '+((window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches)||navigator.standalone?'installed web app':'browser'));if(screenshot)fd.append('screenshot',screenshot,'issue-screen.jpg');if(issueVoiceBlob)fd.append('voice',issueVoiceBlob,issueVoiceBlob.type.includes('webm')?'issue-voice.webm':'issue-voice.m4a');const r=await api('/api/issues',{method:'POST',body:fd});const d=await r.json().catch(()=>({}));if(generation!==issueGeneration)return;if(!r.ok)throw new Error();st.textContent=d.email_status==='sent'?`Issue #${d.id} sent. Thank you.`:`Issue #${d.id} saved. Thank you.`;btn.textContent='Sent';setTimeout(()=>{if(generation===issueGeneration)closeIssueReporter();},1800);}catch(e){if(generation!==issueGeneration)return;st.textContent='The report could not be sent. Check your connection and try again.';btn.disabled=false;btn.textContent='Send Issue Report';}
+  try{const screenshot=issueMarkupEditor?await issueMarkupEditor.exportBlob():issueScreenshotBlob;if(generation!==issueGeneration)return;const fd=new FormData();fd.append('description',issueReportDescription(description));if(issueTestingContext){fd.append('testing_assignment_id',issueTestingContext.assignmentId);fd.append('testing_step_id',issueTestingContext.stepId);}fd.append('issue_type',document.getElementById('issueType')?.value||'bug_problem');fd.append('page_name',issuePageName);fd.append('page_url',location.href);fd.append('viewport',`${window.innerWidth} × ${window.innerHeight}`);fd.append('app_version','366');fd.append('user_agent',navigator.userAgent+' | Photo Notes web 366 | '+((window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches)||navigator.standalone?'installed web app':'browser'));if(screenshot)fd.append('screenshot',screenshot,'issue-screen.jpg');if(issueResultFile)fd.append('result_screenshot',issueResultFile,issueResultFile.name);if(issueVoiceBlob)fd.append('voice',issueVoiceBlob,issueVoiceBlob.type.includes('webm')?'issue-voice.webm':'issue-voice.m4a');const r=await api('/api/issues',{method:'POST',body:fd});const d=await r.json().catch(()=>({}));if(generation!==issueGeneration)return;if(!r.ok)throw new Error(d.error||'');st.textContent=d.email_status==='sent'?`Issue #${d.id} sent. Thank you.`:`Issue #${d.id} saved. Thank you.`;btn.textContent='Sent';setTimeout(()=>{if(generation===issueGeneration)closeIssueReporter();},1800);}catch(e){if(generation!==issueGeneration)return;st.textContent=e.message||'The report could not be sent. Check your connection and try again.';btn.disabled=false;btn.textContent='Send Issue Report';}
 }
 
 function issueReporterMarkup(){return `<a id="issueUpdates" class="issue-updates" href="/?issues=1" hidden data-html2canvas-ignore="true"></a>    <div class="issue-modal" id="issueModal" hidden data-html2canvas-ignore="true">
@@ -247,6 +273,7 @@ function issueReporterMarkup(){return `<a id="issueUpdates" class="issue-updates
         <label for="issueFrequency">How often does it happen?</label>
         <select id="issueFrequency"><option value="">Choose one</option><option>Every time</option><option>Sometimes</option><option>Only happened once</option><option>Not sure</option></select>
         <section class="issue-evidence"><h3>Page screenshot</h3>${typeof IssueMarkup!=='undefined'?IssueMarkup.markup():''}<div class="issue-screenshot-scroll"><img id="issueScreenshot" alt="Screenshot of the page being reported" hidden></div><div class="status" id="issueShotStatus" role="status"></div></section>
+        <section class="issue-evidence"><h3>Result Screenshot (optional)</h3><p>Attach a screenshot of the downloaded document, saved photo, or result received in another app. The page screenshot above is kept separately.</p><label for="issueResultScreenshot">Choose Result Screenshot</label><input id="issueResultScreenshot" type="file" accept="image/jpeg,image/png,image/webp"><p>JPEG, PNG, or WebP, up to 8 MB. Annotated screenshots are welcome.</p><img id="issueResultPreview" alt="Preview of the result screenshot" hidden style="max-width:100%;height:auto"><button class="btn secondary" id="issueResultRemove" type="button" hidden>Remove Result Screenshot</button><div id="issueResultStatus" class="status" role="status" aria-live="polite"></div></section>
         <button class="btn" id="issueSend" type="button">Send Issue Report</button>
         <div class="status" id="issueStatus" role="status" aria-live="polite"></div></section></div>
       </div>

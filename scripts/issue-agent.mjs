@@ -19,7 +19,7 @@ async function main(){
    fs.mkdirSync(dir,{recursive:true,mode:0o700});fs.writeFileSync(claimPath(),JSON.stringify(d),{mode:0o600});console.log(JSON.stringify({issue_id:id,claimed:true,expires:d.repair_lease_until}));return;
  }
  if(command==='attachment'){
-   const kind=opt('kind');if(!['screenshot','voice'].includes(kind))throw new Error('Choose --kind screenshot or voice');
+   const kind=opt('kind');if(!['screenshot','result_screenshot','voice'].includes(kind))throw new Error('Choose --kind screenshot, result_screenshot, or voice');
    const out=opt('out');if(!out)throw new Error('Choose --out local-path');const r=await request(`/api/automation/issues/${id}/attachment/${kind}`);fs.writeFileSync(out,Buffer.from(await r.arrayBuffer()),{mode:0o600});console.log('Attachment saved to '+out);return;
  }
  if(!['update','ready'].includes(command))throw new Error('Use queue, claim, resume, renew, attachment, update, or ready');

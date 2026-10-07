@@ -286,6 +286,7 @@ CREATE TABLE IF NOT EXISTS issue_reports (
   page_name      TEXT,
   page_url       TEXT,
   screenshot_path TEXT,
+  result_screenshot_path TEXT,
   voice_path      TEXT,
   viewport       TEXT,
   user_agent     TEXT,
@@ -704,6 +705,7 @@ async function init() {
   await pool.query(`UPDATE groups SET user_id = $1 WHERE user_id IS NULL`, [adminId]);
   // Tester issue triage. These ALTERs upgrade existing production databases
   // without changing or losing previously submitted reports.
+  await pool.query(`ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS result_screenshot_path TEXT`);
   await pool.query(`ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS management_status TEXT NOT NULL DEFAULT 'new'`);
   await pool.query(`ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS priority TEXT NOT NULL DEFAULT 'normal'`);
   await pool.query(`ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS admin_notes TEXT`);
