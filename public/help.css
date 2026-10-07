@@ -5,8 +5,8 @@
 #photoNotesHelp p,#photoNotesHelp h2,#photoNotesHelp h3,#photoNotesHelp label,#photoNotesHelp input,#photoNotesHelp select,#photoNotesHelp button,#photoNotesHelp summary { color:#000; text-align:left; }
 #photoNotesHelp button { cursor:pointer; font:700 14px Arial,Helvetica,sans-serif; border:1px solid #000; background:#fff; padding:9px 11px; border-radius:8px; margin:0; width:auto; }
 #photoNotesHelp button:focus-visible,#photoNotesHelp summary:focus-visible,#photoNotesHelp input:focus-visible { outline:3px solid #2455d9; outline-offset:2px; }
-#photoNotesHelp .pn-help-fab { position:fixed; right:max(14px,env(safe-area-inset-right)); bottom:max(14px,env(safe-area-inset-bottom)); z-index:10021; display:grid; place-items:center; padding:0; width:48px; height:48px; border:2px solid #9c7400; border-radius:50%; background:radial-gradient(circle at 32% 23%,#fff4a3,#ffdf38 32%,#ffc400 64%,#b98600); box-shadow:0 3px 0 #785800,0 6px 12px #0003; text-align:center; }
-#photoNotesHelp .pn-help-fab span { color:#000; font-size:34px; font-weight:900; line-height:1; }
+#photoNotesHelp .pn-help-fab { position:fixed; right:max(14px,env(safe-area-inset-right)); bottom:max(14px,env(safe-area-inset-bottom)); z-index:10021; display:grid; place-items:center; padding:0; width:24px; height:24px; border:1px solid #9c7400; border-radius:50%; background:radial-gradient(circle at 32% 23%,#fff4a3,#ffdf38 32%,#ffc400 64%,#b98600); box-shadow:0 1.5px 0 #785800,0 3px 6px #0003; text-align:center; }
+#photoNotesHelp .pn-help-fab span { color:#000; font-size:17px; font-weight:900; line-height:1; }
 #photoNotesHelp .pn-help-drawer { position:fixed; right:0; top:0; bottom:0; width:var(--pn-help-width); z-index:10020; display:flex; flex-direction:column; background:#fff; border-left:2px solid #2455d9; box-shadow:-6px 0 22px #0002; padding-top:env(safe-area-inset-top); padding-bottom:calc(76px + env(safe-area-inset-bottom)); transform:translateX(105%); visibility:hidden; transition:transform .2s ease,visibility .2s; }
 .pn-help-open #photoNotesHelp .pn-help-drawer { transform:translateX(0); visibility:visible; }
 .pn-help-open #app { margin-right:var(--pn-help-width); }
