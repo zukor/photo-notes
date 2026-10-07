@@ -9,6 +9,13 @@
     'A template needs 1 to 20 markings.':'Una plantilla necesita de 1 a 20 marcas.',
     'Enter a template name of 1 to 80 characters.':'Escribe un nombre de plantilla de 1 a 80 caracteres.',
 
+    'Select Photos':'Seleccionar fotos',
+    'Photo Library':'Biblioteca de fotos',
+    'Close Photo Selection':'Cerrar selección de fotos',
+    '({count} selected)':'({count} seleccionadas)',
+    '{count} selected. Open Select Photos to change your selection.':'{count} seleccionadas. Abre Seleccionar fotos para cambiar la selección.',
+    'Open Select Photos to choose photos, or return to Organize.':'Abre Seleccionar fotos para elegir fotos o vuelve a Organizar.',
+    'Select the Photo Notes you want to share, download, or include in a customer approval package. Closing this section keeps your selection.':'Selecciona las notas fotográficas que quieras compartir, descargar o incluir en un paquete de aprobación para el cliente. Cerrar esta sección conserva tu selección.',
     'Photos from Job or Topic (optional)':'Fotos de trabajo o tema (opcional)',
     'Use current Organize selection':'Usar la selección actual de Organizar',
     'Jobs':'Trabajos', 'Topics':'Temas',
