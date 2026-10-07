@@ -8,8 +8,8 @@ const pool = new Pool({
   ssl: process.env.PGSSL === 'require' ? { rejectUnauthorized: false } : false,
 });
 
-// Note: the old global `areas` table is kept (vestigial) so migration can copy
-// from it safely; areas are now per-user in `user_areas`.
+// Legacy global topics are retained only for schema compatibility.
+// Selectable topics belong to each account in user_areas.
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS users (
   id            SERIAL PRIMARY KEY,
@@ -567,18 +567,6 @@ CREATE TABLE IF NOT EXISTS hoa_completion_photo_requests (
 );
 `;
 
-const DEFAULT_AREAS = ['Roads', 'Maintenance', 'Fences & Walls', 'Security', 'Landscaping', 'Other'];
-
-async function seedUserAreas(userId) {
-  for (let i = 0; i < DEFAULT_AREAS.length; i++) {
-    await pool.query(
-      `INSERT INTO user_areas (user_id, name, created_at)
-       VALUES ($1, $2, now() + ($3 || ' milliseconds')::interval)
-       ON CONFLICT DO NOTHING`,
-      [userId, DEFAULT_AREAS[i], String(i)]);
-  }
-}
-
 async function init() {
   await pool.query(SCHEMA);
   await pool.query(require('fs').readFileSync(require('path').join(__dirname,'photo-requests-schema.sql'),'utf8'));
@@ -593,11 +581,12 @@ async function init() {
   await pool.query(require('./send-shortcuts').SCHEMA);
   await pool.query(require('./export-presets').SCHEMA);
 
-  // Seeded topics remain available to industry editions. Basic only offers
-  // topics explicitly added by a user. Preserve historical custom names.
   await pool.query(`ALTER TABLE user_areas ADD COLUMN IF NOT EXISTS user_added BOOLEAN NOT NULL DEFAULT false`);
-  await pool.query(`UPDATE user_areas SET user_added=true WHERE NOT user_added AND name <> ALL($1::text[])`,
-    [['Roads','Maintenance','Walls','Fences & Walls','Security','Landscaping','Other']]);
+  await pool.query(require('./topic-reset').SQL);
+  const topicReset = await pool.query(`SELECT removed_count,
+    (SELECT count(*)::integer FROM user_areas) AS remaining_count
+    FROM topic_list_resets WHERE key='empty-account-topics-2026-10-07'`);
+  console.log('[db] topic lists reset', topicReset.rows[0]);
 
   // 1. Ensure an admin user exists. On a fresh/existing DB with no users, seed
   //    the admin from env (email + the current ADMIN_PASSWORD), so the original
@@ -812,20 +801,6 @@ async function init() {
   await pool.query(`UPDATE testing_assignments a SET user_id=u.id,updated_at=now() FROM users u
     WHERE a.user_id IS NULL AND a.assignment_key NOT LIKE 'template-%' AND (lower(COALESCE(a.assignee_email,''))=lower(u.email) OR lower(COALESCE(u.name,'')) LIKE lower(a.assignee_name)||'%')`);
 
-  // This common property-maintenance topic is available to every existing and
-  // future account. Existing custom topics are preserved.
-  await pool.query(`INSERT INTO user_areas (user_id, name) SELECT id, 'Fences & Walls' FROM users ON CONFLICT DO NOTHING`);
-
-  // 3. Move any legacy global areas into the admin's per-user area list.
-  await pool.query(
-    `INSERT INTO user_areas (user_id, name, created_at)
-     SELECT $1, name, created_at FROM areas
-     ON CONFLICT DO NOTHING`, [adminId]);
-
-  // 4. Make sure the admin has a default area list even if none existed.
-  const adminAreas = await pool.query(`SELECT 1 FROM user_areas WHERE user_id = $1 LIMIT 1`, [adminId]);
-  if (adminAreas.rows.length === 0) await seedUserAreas(adminId);
-
   await pool.query(require('./related-photos').SCHEMA);
   await pool.query(require('./photo-comments').SCHEMA);
   await require('./testing-hub').initTestingHub(pool);
@@ -836,4 +811,4 @@ async function init() {
   console.log('[db] schema ready');
 }
 
-module.exports = { pool, init, seedUserAreas };
+module.exports = { pool, init };
