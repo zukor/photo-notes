@@ -14,7 +14,7 @@ const {chromium,webkit}=require('playwright');
    for(const view of ['basic','issue','roads'].includes(edition)?['capture']:['capture','organize','edit','create','send']){
     await page.evaluate(({edition,view})=>{state.plan=['basic','issue','roads'].includes(edition)?'free':'pro';state.proType=edition==='basic'?'general':edition;state.view=view;state.groupId=null;state.ewrId=null;renderApp();},{edition,view});
     const help=page.locator('.pn-help-fab'),issue=page.locator('#issueFab');assert(await help.isVisible());assert(await issue.isVisible());
-    const h=await help.boundingBox(),i=await issue.boundingBox();assert(i.x<width/2&&h.x>width/2);assert(i.x+i.width<h.x);assert(h.y>700&&i.y>700);
+    const h=await help.boundingBox(),i=await issue.boundingBox();assert.equal(h.width,24,edition+' Help width');assert.equal(h.height,24,edition+' Help height');assert.equal(await help.locator('span').evaluate(n=>getComputedStyle(n).fontSize),'17px');assert(i.x<width/2&&h.x>width/2);assert(i.x+i.width<h.x);assert(h.y>700&&i.y>700);
     await help.click();await page.locator('#pnHelpSearch').fill('photo');assert(await page.locator('.pn-help-article').count()>0);
     await page.waitForFunction(()=>{const r=document.querySelector('.pn-help-drawer').getBoundingClientRect();return r.x>=-1&&r.right<=innerWidth+1;});
     const drawer=await page.locator('.pn-help-drawer').boundingBox();assert(drawer.x>=-1&&drawer.x+drawer.width<=width+1);
