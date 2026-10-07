@@ -896,3 +896,7 @@ body:has(#desktopHelp) .issue-fab { left:max(14px,env(safe-area-inset-left)); ri
 #note{display:block}
 #captureSettings>:first-child{margin-top:0}
 #captureSettings>:last-child{margin-bottom:0}
+
+#captureSettings #ctBar p{margin:2px 0 8px}
+#ctBar .ct-saved-actions{display:grid;width:max-content;max-width:100%;gap:8px}
+#ctBar .ct-saved-actions>.btn{width:100%;margin:0;padding:8px 14px;min-height:38px}
