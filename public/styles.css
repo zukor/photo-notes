@@ -922,3 +922,7 @@ body:has(#desktopHelp) .issue-fab { left:max(14px,env(safe-area-inset-left)); ri
 #sendPhotoSelection > summary { color:#000; text-align:left; cursor:pointer; font-weight:bold; text-decoration:underline; padding:8px 0; }
 #sendPhotoSelection .send-selection-actions { margin-bottom:12px; }
 #closeSendPhotoSelection { color:#000; margin-top:12px; }
+
+.send-photo-filters { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+.send-photo-filters > div { min-width:0; }
+@media(max-width:600px){ .send-photo-filters { grid-template-columns:1fr; } }

@@ -3581,6 +3581,7 @@ function wireZonePopup(e, z) {
 
 // ---- Send: deliver individual captures or completed documents ----
 async function renderSend() {
+  window._sendCaptures=[];window._sendMatchedCaptures=[];
   const body = document.getElementById('body');
   body.className = 'workflow-send';
   body.innerHTML = `
@@ -3604,8 +3605,11 @@ async function renderSend() {
     <details id="sendPhotoSelection"><summary id="sendPhotoSelectionSummary">Select Photos <span id="sendPhotoSelectionCount"></span></summary>
       <div class="formhead">Photo Library</div>
       <p>Select the Photo Notes you want to share, download, or include in a customer approval package. Closing this section keeps your selection.</p>
-            <div class="send-selection-actions">
-        <button class="btn secondary slim" id="selectAllSendCaptures" type="button">Select All</button>
+      <div class="send-photo-filters"><div><label for="sendJobFilter">Job</label><select id="sendJobFilter"><option value="">All Jobs</option></select></div><div><label for="sendTopicFilter">Topic</label><select id="sendTopicFilter"><option value="">All Topics</option></select></div></div>
+      <p>Filters narrow the library without changing your selection. Select All Matching adds the displayed records. Clear All clears every selected record.</p>
+      <p id="sendFilterCount" role="status" aria-live="polite"></p>
+      <div class="send-selection-actions">
+        <button class="btn secondary slim" id="selectAllSendCaptures" type="button" disabled>Select All Matching</button>
         <button class="btn secondary slim" id="clearSendSelection" type="button">Clear All</button>
       </div>
       <div id="sendCaptures" class="send-capture-list"></div>
@@ -3627,6 +3631,8 @@ async function renderSend() {
   document.getElementById('shareOriginalPhotos').onclick = shareSelectedPhotos;
   document.getElementById('sendshortcuts').onclick=()=>window.PhotoNotesShortcuts.open();
   document.getElementById('senddocument').onclick = () => deliverExport(document.getElementById('sendformat').value, null, 'download');
+  document.getElementById('sendJobFilter').onchange=renderSendPhotoLibrary;
+  document.getElementById('sendTopicFilter').onchange=renderSendPhotoLibrary;
   document.getElementById('selectAllSendCaptures').onclick = selectAllSendCaptures;
   document.getElementById('clearSendSelection').onclick = clearSendSelection;
   const sendToRamo=document.getElementById('sendToRamo');if(sendToRamo)sendToRamo.onclick=()=>openRamoIntake();
@@ -3643,24 +3649,39 @@ async function startStripeCheckout(button){button.disabled=true;button.textConte
 async function createApprovalPackage(){const ids=Array.from(state.selectedIds).map(Number);if(!ids.length){toast('Select at least one capture');return;}const title=document.getElementById('approvalTitle').value.trim()||'Photo Review',message=document.getElementById('approvalMessage').value.trim();const r=await api('/api/approvals',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids,title,message})});const d=await r.json().catch(()=>({}));if(!r.ok){toast(d.error||'Review link could not be created');return;}const box=document.getElementById('approvalResult');box.innerHTML=`<div class="card"><strong>Customer review link ready</strong><input id="approvalUrl" readonly value="${esc(d.url)}"><button class="btn secondary slim" id="copyApproval">Copy Link</button><div class="meta">Expires in 14 days</div></div>`;document.getElementById('copyApproval').onclick=async()=>{try{await navigator.clipboard.writeText(d.url);toast('Link copied');}catch(e){document.getElementById('approvalUrl').select();}};loadApprovalPackages();}
 async function loadApprovalPackages(){const box=document.getElementById('approvalList');if(!box)return;const r=await api('/api/approvals');if(!r.ok)return;const rows=await r.json();box.innerHTML=rows.length?`<div class="formhead">Recent Customer Reviews</div>${rows.slice(0,10).map(x=>`<div class="card"><strong>${esc(x.title)}</strong> <span class="badge">${esc(x.status.replace('_',' '))}</span><div class="meta">${x.photo_count} photo${x.photo_count===1?'':'s'} · expires ${new Date(x.expires_at).toLocaleDateString(uiLocale())}</div>${x.customer_name?`<div>Response from ${esc(x.customer_name)}${x.customer_comment?`: ${esc(x.customer_comment)}`:''}</div>`:''}<button class="btn secondary slim copyExistingApproval" data-url="${esc(location.origin+'/review/'+x.token)}">Copy Link</button></div>`).join('')}`:'';box.querySelectorAll('.copyExistingApproval').forEach(b=>b.onclick=async()=>{try{await navigator.clipboard.writeText(b.dataset.url);toast('Link copied');}catch(e){}});}
 
-async function loadSendCenter() {
-  const [cr, gr] = await Promise.all([api('/api/captures'), api('/api/groups')]);
-  const captures = cr.ok ? await cr.json() : [];
-  const groups = gr.ok ? await gr.json() : [];
-  window._sendCaptures = captures;
-  window._sendGroups = groups;
+function fillSendPhotoFilters(captures){
+ const jobs=new Map((state.jobs||[]).map(j=>[String(j.id),j.job_number?j.job_number+' - '+j.name:j.name])),topics=new Set(state.areas||[]);
+ for(const c of captures){if(c.job_id&&!jobs.has(String(c.job_id)))jobs.set(String(c.job_id),c.job_name||uiT('Job')+' '+c.job_id);for(const topic of c.area_tags||[])topics.add(topic);}
+ for(const [id,values,label] of [['sendJobFilter',jobs,'All Jobs'],['sendTopicFilter',new Map([...topics].map(t=>[t,t])),'All Topics']]){const select=document.getElementById(id);if(!select)continue;const chosen=select.value;if(chosen&&!values.has(chosen))values.set(chosen,select.selectedOptions[0].textContent);select.innerHTML=`<option value="">${uiT(label)}</option>`+[...values].sort((a,b)=>a[1].localeCompare(b[1])).map(([value,name])=>`<option value="${esc(value)}">${esc(name)}</option>`).join('');select.value=chosen;}
+}
+function renderSendPhotoLibrary(){
   const capBox = document.getElementById('sendCaptures');
-  const visible = captures;
+  if(!capBox)return;
+  const job=document.getElementById('sendJobFilter')?.value||'',topic=document.getElementById('sendTopicFilter')?.value||'';
+  const visible=(window._sendCaptures||[]).filter(c=>(!job||String(c.job_id)===job)&&(!topic||(c.area_tags||[]).includes(topic)));
+  window._sendMatchedCaptures=visible;
   capBox.innerHTML = visible.length ? visible.map(c => `
     <article class="send-capture-row">
       <input type="checkbox" class="sendchk" value="${c.id}" aria-label="Select ${esc(c.photo_title || 'Photo Note')}" ${state.selectedIds.has(String(c.id)) ? 'checked' : ''}>
       ${c.photo_path ? `<img loading="lazy" src="${capturePhotoSrc(c)}" alt="${esc(c.photo_title || 'Photo Note')}">` : '<span class="send-no-photo">Note</span>'}
       <span class="send-capture-details"><strong>${esc(c.photo_title || 'Untitled Photo')}</strong><small>${esc((c.area_tags || []).join(', ') || 'Unfiled')}</small><small>${esc(c.note || 'No notes')}</small></span>
       <button class="send-delete-capture" type="button" data-delete-capture="${c.id}">Delete Photo Note</button>
-    </article>`).join('') : '<p class="empty">Nothing has been captured yet.</p>';
+    </article>`).join('') : `<p class="empty">${uiT((window._sendCaptures||[]).length?'No Photo Notes match these filters.':'Nothing has been captured yet.')}</p>`;
   capBox.querySelectorAll('.sendchk').forEach(c => c.onchange = () => { if (c.checked) state.selectedIds.add(String(c.value)); else state.selectedIds.delete(String(c.value)); updateSendCount(); });
   capBox.querySelectorAll('[data-delete-capture]').forEach(button => button.onclick = () => deleteSendCapture(button.dataset.deleteCapture, button));
   updateSendCount();
+}
+
+async function loadSendCenter() {
+  const target=document.getElementById('sendCaptures'),owner=state.me?.id;
+  const [cr, gr] = await Promise.all([api('/api/captures'), api('/api/groups')]);
+  const captures = cr.ok ? await cr.json() : [];
+  const groups = gr.ok ? await gr.json() : [];
+  if(!target?.isConnected||state.me?.id!==owner)return;
+  window._sendCaptures = captures;
+  window._sendGroups = groups;
+  fillSendPhotoFilters(captures);
+  renderSendPhotoLibrary();
   const docs = document.getElementById('sendDocs');
   docs.innerHTML = groups.length ? groups.map(g => `
     <div class="card delivery-card">
@@ -3721,17 +3742,18 @@ function updateSendCount() {
   const clear = document.getElementById('clearSendSelection');
   if (clear) clear.disabled = !n;
   const selectAll = document.getElementById('selectAllSendCaptures');
-  const available = (window._sendCaptures || []).filter(capture => capture && capture.id != null);
+  const available = (window._sendMatchedCaptures || []).filter(capture => capture && capture.id != null);
+  const filterCount=document.getElementById('sendFilterCount');if(filterCount){const matching=available.filter(c=>state.selectedIds.has(String(c.id))).length;filterCount.textContent=uiT('Showing {shown} Photo Notes. {matching} selected here; {outside} selected outside these filters.').replace('{shown}',available.length).replace('{matching}',matching).replace('{outside}',n-matching);}
   if (selectAll) selectAll.disabled = !available.length || available.every(capture => state.selectedIds.has(String(capture.id)));
 }
 
 function selectAllSendCaptures() {
-  (window._sendCaptures || []).forEach(capture => {
+  (window._sendMatchedCaptures || []).forEach(capture => {
     if (capture && capture.id != null) state.selectedIds.add(String(capture.id));
   });
   document.querySelectorAll('.sendchk').forEach(checkbox => { checkbox.checked = true; });
   updateSendCount();
-  toast('All captures selected');
+  toast('All matching Photo Notes selected');
 }
 
 function clearSendSelection() {

@@ -38,9 +38,9 @@ test('Document delivery separates file format from share, download, and print ac
 });
 
 test('Send selection supports select all and clear all actions',()=>{
-  assert.match(app,/id="selectAllSendCaptures"[^>]*>Select All<\/button>/);
+  assert.match(app,/id="selectAllSendCaptures"[^>]*>Select All Matching<\/button>/);
   assert.match(app,/id="clearSendSelection"[^>]*>Clear All<\/button>/);
-  assert.match(app,/function selectAllSendCaptures\(\) \{[\s\S]*?window\._sendCaptures[\s\S]*?state\.selectedIds\.add/);
+  assert.match(app,/function selectAllSendCaptures\(\) \{[\s\S]*?window\._sendMatchedCaptures[\s\S]*?state\.selectedIds\.add/);
   assert.match(app,/function clearSendSelection\(\) \{[\s\S]*?state\.selectedIds\.clear\(\);[\s\S]*?querySelectorAll\('\.sendchk'\)/);
   assert.match(css,/\.send-selection-bar \{/);
   assert.match(css,/\.send-selection-bar \{[^}]*flex-wrap:wrap/);
