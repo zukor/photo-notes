@@ -131,3 +131,5 @@ html[data-theme="dark"] :is(.photo-follow-ups .btn.secondary, #fuCaptureBanner .
 html[data-theme="dark"] .location-subject-pin { color:#000; }
 
 html[data-theme="dark"] :is(.photo-marker[aria-pressed="true"], .concrete-purpose-menu [aria-selected="true"]) { background:#172235; }
+
+html[data-theme="dark"] .app-header[data-product]:not([data-product="general"]) .brandrow .brand { background:transparent; border-radius:0; }

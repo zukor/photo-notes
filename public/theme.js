@@ -21,6 +21,7 @@
       const source=theme==='dark'?(img.dataset.zukorFallback==='1'?darkLogoFallback:'/zukor-logo-dark.svg?v=364'):light;
       if(img.getAttribute('src')!==source)img.setAttribute('src',source);
     });
+    document.querySelectorAll('.app-header[data-product]:not([data-product="general"]) .photonotes-wordmark').forEach(img=>{const light=img.dataset.photoNotesLightSrc||(img.dataset.photoNotesLightSrc=img.getAttribute('src'));const source=theme==='dark'?'/photonotes-ai-logo-dark.svg?v=1':light;if(img.getAttribute('src')!==source)img.setAttribute('src',source);});
     if(persist)try{localStorage.setItem(key,theme);}catch{}
     document.querySelectorAll('[data-theme-choice]').forEach(button=>{
       const pressed=button.dataset.themeChoice===theme;
