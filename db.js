@@ -30,6 +30,14 @@ CREATE TABLE IF NOT EXISTS users (
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
   last_login_at TIMESTAMPTZ
 );
+CREATE TABLE IF NOT EXISTS annotation_templates (
+ id SERIAL PRIMARY KEY,
+ user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ name TEXT NOT NULL,
+ overlays JSONB NOT NULL,
+ created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS annotation_templates_owner_name ON annotation_templates(user_id,lower(name));
 CREATE TABLE IF NOT EXISTS capture_templates (
  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
  id UUID NOT NULL,

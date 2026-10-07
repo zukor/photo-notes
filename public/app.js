@@ -2227,6 +2227,27 @@ async function loadPavingReadiness(){const box=document.getElementById('pavingRe
 async function createJob(){const name=document.getElementById('newJobName').value.trim();if(!name){toast('Enter a job name');return;}const body={name,job_number:document.getElementById('newJobNumber').value.trim(),customer:document.getElementById('newJobCustomer').value.trim(),address:document.getElementById('newJobAddress').value.trim()};const r=await api('/api/jobs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});if(!r.ok){toast('Job could not be created');return;}const job=await r.json();await loadJobs();state.jobId=String(job.id);toast('Job created');renderList();}
 async function showSelectedJobTimeline(){const id=(document.getElementById('jobFilter')||{}).value;if(!id){toast('Choose a job first');return;}const r=await api(`/api/jobs/${id}/timeline`);if(!r.ok){toast('Timeline could not be loaded');return;}const d=await r.json(),body=document.getElementById('body');body.innerHTML=`<button class="backlink" id="timelineBack">← Back to Organize</button><div class="workflow-intro"><strong>${esc(d.job.name)} Timeline</strong><span>${esc([d.job.job_number,d.job.customer,d.job.address].filter(Boolean).join(' · '))}</span></div><div class="row"><span class="badge">${esc(d.job.status)}</span><button class="btn secondary slim" id="jobStatusBtn">${d.job.status==='active'?'Mark Job Complete':'Reopen Job'}</button></div><div>${d.captures.length?d.captures.map((c,i)=>`<div style="display:grid;grid-template-columns:90px 1fr;gap:12px;border-left:3px solid var(--pn-border-2455d9,#2455d9);padding:0 0 20px 16px"><div><strong>${new Date(c.created_at).toLocaleDateString(uiLocale())}</strong><div class="meta">${new Date(c.created_at).toLocaleTimeString(uiLocale(),{hour:'numeric',minute:'2-digit'})}</div></div><div class="card" style="margin:0"><div class="photo-title">${esc(c.photo_title||'Untitled photo')}</div>${c.photo_path?`<img src="${capturePhotoSrc(c)}" alt="Timeline photo">`:''}${photoLocationHtml(c)}${window.PhotoComments?.enabled()&&c.photo_path?`<button class="btn secondary slim" data-html2canvas-ignore="true" data-comments-id="${c.id}">Comments</button>`:''}<div>${esc(c.note||'(no note)')}</div></div></div>`).join(''):'<p class="empty">No photos are assigned to this job yet.</p>'}</div>`;document.getElementById('timelineBack').onclick=renderList;document.getElementById('jobStatusBtn').onclick=async()=>{const u=await api(`/api/jobs/${id}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:d.job.status==='active'?'completed':'active'})});if(u.ok){toast('Job status updated');await loadJobs();renderList();}else toast('Job status could not be updated');};}
 const ANNOTATION_TEMPLATES=window.PhotoNotesAnnotationTemplates;
+let savedAnnotationTemplates=[],savedAnnotationLoad=0;
+function annotationTemplateItems(key){return key.startsWith('saved:')?savedAnnotationTemplates.find(t=>String(t.id)===key.slice(6))?.overlays:ANNOTATION_TEMPLATES[key];}
+async function loadSavedAnnotationTemplates(){
+ const generation=++savedAnnotationLoad,owner=state.me?.id,targets=['batchTemplate','singleTemplate'].map(id=>document.getElementById(id)).filter(Boolean);
+ try{const r=await api('/api/annotation-templates');if(!r.ok)throw Error();const rows=await r.json();if(state.me?.id!==owner||generation!==savedAnnotationLoad)return;savedAnnotationTemplates=rows;
+ for(const select of targets){if(!select.isConnected)continue;const selected=select.value;select.querySelector('[data-saved-annotation-templates]')?.remove();if(rows.length){const group=document.createElement('optgroup');group.label=uiT('My Annotation Templates');group.dataset.savedAnnotationTemplates='true';for(const template of rows){const option=document.createElement('option');option.value='saved:'+template.id;option.textContent=template.name;group.append(option);}select.append(group);}if([...select.options].some(o=>o.value===selected))select.value=selected;}
+ updateSavedAnnotationDelete();
+ }catch{toast('Saved annotation templates could not be loaded. Preset templates are still available.');}
+}
+function updateSavedAnnotationDelete(){const button=document.getElementById('deleteAnnotationTemplate');if(button)button.hidden=!document.getElementById('singleTemplate')?.value.startsWith('saved:');}
+async function saveAnnotationTemplate(){
+ const name=document.getElementById('annotationTemplateName').value.trim(),button=document.getElementById('saveAnnotationTemplate'),status=document.getElementById('annotationTemplateStatus');
+ if(!name){status.textContent='Enter a template name.';return;}if(!editorOverlays.length){status.textContent='Add at least one marking before saving a template.';return;}
+ const overlays=JSON.parse(JSON.stringify(editorOverlays));button.disabled=true;
+ try{const r=await api('/api/annotation-templates',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,overlays})}),d=await r.json();if(!r.ok)throw Error(d.error||'Annotation template could not be saved.');if(!status.isConnected)return;await loadSavedAnnotationTemplates();if(!status.isConnected)return;document.getElementById('singleTemplate').value='saved:'+d.id;updateSavedAnnotationDelete();status.textContent='Template saved. It is available for this account in single-photo and batch editing. Save Changes separately to save this photo.';document.getElementById('annotationTemplateName').value='';}catch(e){if(status.isConnected)status.textContent=e.message;}finally{button.disabled=false;}
+}
+async function deleteAnnotationTemplate(){
+ const select=document.getElementById('singleTemplate'),value=select.value;if(!value.startsWith('saved:')||!confirm('Delete this saved template? Markings already applied to photos will stay.'))return;
+ const button=document.getElementById('deleteAnnotationTemplate');button.disabled=true;try{const r=await api('/api/annotation-templates/'+value.slice(6),{method:'DELETE'});if(!r.ok)throw Error();await loadSavedAnnotationTemplates();const status=document.getElementById('annotationTemplateStatus');if(status)status.textContent='Template deleted. Existing photo markings were kept.';}catch{toast('Annotation template could not be deleted.');}finally{button.disabled=false;}
+}
+
 async function runBatchChanges(){
  const ids=selectedCaptureIds();if(!ids.length)return toast('Select at least one capture');
  const job=document.getElementById('batchJob').value,group=document.getElementById('batchDocument').value,body={ids};
@@ -2313,6 +2334,7 @@ async function renderEdit() {
 
 function updateAnnotationSelection(){const p=document.getElementById('batchAnnotationSelected');if(p)p.textContent=`${selectedCaptureIds().length} photos selected, including selections retained across filters.`;}
 function wireBatchAnnotations(){
+ void loadSavedAnnotationTemplates();
  updateAnnotationSelection();
  const mode=document.getElementById('batchAnnotationMode');mode.onchange=()=>{const replace=mode.value==='replace';document.getElementById('batchAnnotationConfirmLabel').hidden=!replace;document.getElementById('batchAnnotationConfirm').checked=false;document.getElementById('batchAnnotationEffect').textContent=replace?'All existing markings on the selected photos will be removed and replaced by this template.':'Existing markings will be kept. New template items may overlap them; review each photo.';};
  document.getElementById('applyBatchAnnotations').onclick=applyBatchAnnotations;
@@ -2859,6 +2881,11 @@ function renderStampEditor(c) {
     </div>
     <div class="status" style="margin-top:6px">Topic and Defect are available after they have been assigned to this photo.</div>
     <label>Annotation Template</label><div class="row compact"><select id="singleTemplate"><option value="date_address">Date + Address</option><option value="evidence">Evidence Details</option><option value="copyright">Copyright Only</option></select><button class="btn secondary" id="applySingleTemplate">Apply Template</button></div><label for="singleTemplateMode">Existing Markings</label><select id="singleTemplateMode"><option value="add">Add template, keep existing markings</option><option value="replace">Replace existing markings</option></select><p>Adding keeps existing markings. Replacing removes them. Review placement, then Save Changes.</p>
+    <button type="button" class="btn secondary slim" id="deleteAnnotationTemplate" hidden>Delete Saved Template</button>
+    <label for="annotationTemplateName">Save Current Markings as a Template</label><input id="annotationTemplateName" maxlength="80" placeholder="Template name">
+    <button type="button" class="btn secondary" id="saveAnnotationTemplate">Save as New Template</button>
+    <p>Templates reuse your text, styles and placement. Date, address, GPS and other photo fields use each destination photo's details. Save Changes separately to save markings on this photo.</p>
+    <p id="annotationTemplateStatus" role="status" aria-live="polite"></p>
     <div id="stampCtl"></div>
     <div class="row" style="margin-top:14px">
       <button class="btn" id="stampSave">Save Changes</button>
@@ -2870,7 +2897,11 @@ function renderStampEditor(c) {
   document.getElementById('stampBack').onclick = backToEdit;
   document.getElementById('stampBackBottom').onclick = backToEdit;
   document.getElementById('stampAdd').onclick = (e) => { const p = e.target.closest('[data-add]'); if (p) addOverlayItem(p.getAttribute('data-add')); };
-  document.getElementById('applySingleTemplate').onclick=()=>{const mode=document.getElementById('singleTemplateMode').value;if(mode==='replace'&&editorOverlays.length&&!confirm('Replace all existing markings on this photo?'))return;const items=JSON.parse(JSON.stringify(ANNOTATION_TEMPLATES[document.getElementById('singleTemplate').value]||[]));const next=mode==='add'?[...editorOverlays,...items]:items;if(next.length>20)return toast('A photo can have up to 20 markings. Remove some or choose Replace existing markings.');editorOverlays=next;editorSel=editorOverlays.length?0:-1;drawOverlayItems();renderStampCtl();toast('Template applied. Review placement, then Save Changes.');};
+  document.getElementById('applySingleTemplate').onclick=()=>{const mode=document.getElementById('singleTemplateMode').value;if(mode==='replace'&&editorOverlays.length&&!confirm('Replace all existing markings on this photo?'))return;const source=annotationTemplateItems(document.getElementById('singleTemplate').value);if(!source)return toast('Saved template is unavailable. Reload and choose another template.');const items=JSON.parse(JSON.stringify(source));const next=mode==='add'?[...editorOverlays,...items]:items;if(next.length>20)return toast('A photo can have up to 20 markings. Remove some or choose Replace existing markings.');editorOverlays=next;editorSel=editorOverlays.length?0:-1;drawOverlayItems();renderStampCtl();toast('Template applied. Review placement, then Save Changes.');};
+  document.getElementById('saveAnnotationTemplate').onclick=saveAnnotationTemplate;
+  document.getElementById('deleteAnnotationTemplate').onclick=deleteAnnotationTemplate;
+  document.getElementById('singleTemplate').onchange=updateSavedAnnotationDelete;
+  void loadSavedAnnotationTemplates();
   document.getElementById('stampSave').onclick = saveOverlays;
   document.getElementById('stampCopy').onclick = saveStampedCopy;
   const img = document.getElementById('stampImg');
