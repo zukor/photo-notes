@@ -33,7 +33,7 @@ function remember(){const box=document.getElementById('cfCapture');if(!box)retur
 }}
 function render(){const anchor=document.getElementById('save');if(!anchor)return;
  let box=document.getElementById('cfCapture');if(!box){box=document.createElement('details');box.id='cfCapture';box.className='cf-section';const settings=document.getElementById('captureSettings');if(settings)settings.append(box);else (anchor.closest('.capture-actions')||anchor).before(box);}
- box.innerHTML=`<summary>Additional Details</summary><p>User-entered metadata, separate from photographic evidence.</p>${controls(applicable(),draft,'cfValue-')}${loaded&&!applicable().length?'<p>No active fields for this edition.</p>':''}${!loaded?'<p>Field definitions unavailable. Reconnect to load them.</p>':''}<button id="cfManage" type="button" class="btn secondary slim">Manage Custom Fields</button>`;
+ box.innerHTML=`<summary>${applicable().some(d=>d.required)?'Additional Details':'Additional Details (optional)'}</summary><p>Add fields you define, such as an equipment serial number or room name. ${applicable().some(d=>d.required)?'Complete the fields marked required before saving.':'Skip this if you do not need extra information.'}</p>${controls(applicable(),draft,'cfValue-')}${loaded&&!applicable().length?'<p>No active fields for this edition.</p>':''}${!loaded?'<p>Field definitions unavailable. Reconnect to load them.</p>':''}<button id="cfManage" type="button" class="btn secondary slim">Manage Custom Fields</button>`;
  box.querySelectorAll('[data-cf-id]').forEach(el=>el.oninput=remember);
  box.querySelector('#cfManage').onclick=manage;
 }

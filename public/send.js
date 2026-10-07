@@ -170,7 +170,7 @@
   var topicCollapseHooked = false;
   function fixTopics() {
     var areas = q('areas');
-    if (!areas) return; // capture screen only
+    if (!areas || areas.closest?.('#captureTopic')) return; // Native disclosure handles Capture topics.
     var label = areas.previousElementSibling;                 // the "Topic" <label>
     if (!label || label.tagName !== 'LABEL') return;
     var input = q('newarea');
