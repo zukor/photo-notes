@@ -135,7 +135,7 @@ function retryPhotoImages(container){
 function capturePhotoSrc(c) {
   if(c&&c._comparisonUrl)return c._comparisonUrl;
   return c && Array.isArray(c.overlays) && c.overlays.length
-    ? `/api/captures/${c.id}/stamped?res=standard&v=${state.imgv}` : photoSrc(c.photo_path);
+    ? `/api/captures/${c.id}/stamped?res=standard&v=${c._photoVersion??state.imgv}` : photoSrc(c.photo_path);
 }
 
 
@@ -317,6 +317,7 @@ function photoToolWorkflowView() {
   return 'organize';
 }
 function renderApp() {
+  cropReturnContext=null;
   const photoToolOpen=['photo-follow-ups','photo-requests'].includes(state.view);
   const workflowView=photoToolOpen?photoToolWorkflowView():state.view;
   const photoToolSection=['capture','camera-tools','ticket','camera-reader','alignment'].includes(workflowView)?'Capture':['edit','hoa-assets','hoa-asset'].includes(workflowView)?(isHoaClient()?'Assets':'Edit'):['create','hoa-inspections'].includes(workflowView)?(isHoaClient()?'Inspections':'Create'):['send','hoa-maintenance'].includes(workflowView)?(isHoaClient()?'Records':'Send'):'Organize';
@@ -2636,7 +2637,7 @@ function captureCardHtml(c) {
       ${titleAction?`<button class="editlink edittitle" data-id="${c.id}" type="button">${titleAction}</button>`:''}
     </div>
     ${photoMarkerControls(c)}
-    ${c.photo_path ? `<img src="${capturePhotoSrc(c)}" alt="capture" />` : ''}
+    ${c.photo_path ? `<img data-capture-photo="${c.id}" src="${capturePhotoSrc(c)}" alt="capture" />` : ''}
     ${window.PhotoComments?.enabled()&&c.photo_path?`<button class="btn secondary slim" data-html2canvas-ignore="true" data-comments-id="${c.id}">Comments</button>`:''}
     <div class="meta">${when}</div>
     ${c.job_name?`<div class="badge">${esc(c.job_number?c.job_number+' — '+c.job_name:c.job_name)}</div>`:''}
@@ -2733,7 +2734,7 @@ function pairCardHtml(before, after, pair={}) {
         <input type="checkbox" class="capchk" value="${c.id}" style="width:18px;height:18px"> Select
       </label>
       <div class="phototitlewrap" data-id="${c.id}"><div class="photo-title">${esc(c.photo_title||'Untitled photo')}</div>${titleAction?`<button class="editlink edittitle" data-id="${c.id}" type="button">${titleAction}</button>`:''}</div>
-      ${c.photo_path ? `<img src="${capturePhotoSrc(c)}" alt="${label}" />` : ''}
+      ${c.photo_path ? `<img data-capture-photo="${c.id}" src="${capturePhotoSrc(c)}" alt="${label}" />` : ''}
       <div class="rotaterow">${rotateButtons(c.id)}</div>
       ${badge ? `<div style="margin:4px 0">${badge}</div>` : ''}
       ${photoLocationHtml(c)}
@@ -3087,12 +3088,17 @@ async function saveStampedCopy() {
 // ================= Photo crop editor =================
 // Non-destructive: applying a crop keeps the original so it can be restored.
 let cropCapture = null, cropBox = null; // cropBox = {x,y,w,h} in % of the image
+let cropReturnContext=null;
 function renderCropEditor(c) {
   cropCapture = c;
   cropBox = { x: 10, y: 10, w: 80, h: 80 };
   const body = document.getElementById('body');
+  const fragment=document.createDocumentFragment();
+  cropReturnContext={fragment,view:state.view,bodyClass:body.className,scrollX:window.scrollX,scrollY:window.scrollY,focus:document.activeElement};
+  ++cardsRequest; // Ignore any list request that completes while its workspace is detached.
+  while(body.firstChild)fragment.append(body.firstChild);
   body.innerHTML = `
-    <button class="backlink" id="cropBack">‹ Back to Edit</button>
+    <button class="backlink" id="cropBack">‹ Back to Photos</button>
     <div class="formhead">Crop Photo</div>
     <div class="status">Drag the box to move it. Drag any corner to resize. Everything outside the box is trimmed off. Your original is kept and can be restored.</div>
     <div id="cropStage" style="position:relative;display:inline-block;max-width:100%;border:1px solid var(--pn-border-000,#000);border-radius:8px;overflow:hidden;touch-action:none">
@@ -3102,12 +3108,28 @@ function renderCropEditor(c) {
       <button class="btn" id="cropApply">Apply Crop</button>
       <button class="btn secondary" id="cropCancel">Cancel</button>
     </div>`;
-  document.getElementById('cropBack').onclick = () => { state.view = 'edit'; renderEdit(); };
-  document.getElementById('cropCancel').onclick = () => { state.view = 'edit'; renderEdit(); };
+  document.getElementById('cropBack').onclick = () => returnFromCrop();
+  document.getElementById('cropCancel').onclick = () => returnFromCrop();
   document.getElementById('cropApply').onclick = applyCrop;
+  window.scrollTo(0,0);
   const img = document.getElementById('cropImg');
   if (img.complete) drawCropBox(); else img.onload = drawCropBox;
 }
+function returnFromCrop(context=cropReturnContext){
+ if(!context)return;
+ const body=document.getElementById('body');body.replaceChildren(context.fragment);body.className=context.bodyClass;state.view=context.view;
+ if(context.focus?.isConnected)context.focus.focus({preventScroll:true});
+ if(cropReturnContext===context)cropReturnContext=null;
+ window.scrollTo(context.scrollX,context.scrollY);
+ const marker=body.firstChild;requestAnimationFrame(()=>{if(marker?.parentNode===body&&!document.getElementById('cropStage'))window.scrollTo(context.scrollX,context.scrollY);});
+}
+function updateCroppedPhoto(context,capture,patch){
+ Object.assign(capture,patch);capture._photoVersion=Date.now();delete capture._comparisonUrl;
+ context.fragment.querySelectorAll(`[data-capture-photo="${capture.id}"]`).forEach(img=>{img.src=capturePhotoSrc(capture);});
+ const cropButton=context.fragment.querySelector(`.cropbtn[data-id="${capture.id}"]`);
+ if(cropButton&&!context.fragment.querySelector(`.restorebtn[data-id="${capture.id}"]`)){const restore=document.createElement('button');restore.className='btn secondary slim restorebtn';restore.dataset.id=String(capture.id);restore.textContent='Restore Original Photo';restore.onclick=()=>restoreOriginal(capture.id);cropButton.after(restore);}
+}
+
 function drawCropBox() {
   const st = document.getElementById('cropStage');
   if (!st) return;
@@ -3195,18 +3217,23 @@ function startCropResize(handle, corner) {
 }
 async function applyCrop() {
   const btn = document.getElementById('cropApply');
+  const context=cropReturnContext,capture=cropCapture,box={...cropBox};
   btn.disabled = true; btn.textContent = 'Cropping...';
+  const exits=['cropBack','cropCancel'].map(id=>document.getElementById(id));exits.forEach(b=>b.disabled=true);
   try {
-    const r = await api(`/api/captures/${cropCapture.id}/crop`, {
+    const r = await api(`/api/captures/${capture.id}/crop`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(cropBox),
+      body: JSON.stringify(box),
     });
     if (!r.ok) throw new Error('crop failed');
-    state.imgv++; // bust the image cache so the cropped photo shows
+    const d=await r.json();
+    if(!d.capture?.photo_path)throw new Error('Missing cropped photo');
+    if(context)updateCroppedPhoto(context,capture,d.capture);
     toast('Photo cropped. Original saved.');
-    state.view = 'edit'; renderEdit();
+    if(btn.isConnected&&context===cropReturnContext)returnFromCrop(context);
   } catch (e) {
     btn.disabled = false; btn.textContent = 'Apply Crop';
+    exits.forEach(b=>b.disabled=false);
     toast('Crop failed, try again');
   }
 }
