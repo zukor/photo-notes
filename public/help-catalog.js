@@ -172,6 +172,8 @@ add('photoSearchBtn','Run the library search using the current words, topic, job
 add('photoSearchClear','Clear the library search and refresh the results. This does not delete records or notes.',['Filter']);
 add('searchFrom|searchTo','Limit results to the date range shown. Set either endpoint or both. Check the date range if an older or newer capture is absent from the results.',['Filter']);
 add('searchMissingAddress','Show captures that need address information. Open them to correct the address or retry a lookup where usable GPS exists.',['Geocoding','Filter']);
+add('sendPhotoSelection|sendPhotoSelectionSummary','Open Select Photos to reveal the Photo Library in Send. It starts collapsed so documents and other Send sections remain easy to reach. Select or unselect Photo Notes, then close the section without losing your selection. The selected count remains visible. Closing the library does not share, download or delete anything.',['Selection','Photo Library']);
+add('closeSendPhotoSelection','Collapse the Photo Library and return to Select Photos. Your selection is kept for sharing, downloading or creating a customer approval package.',['Selection','Photo Library']);
 add('selall|selectAllSendCaptures','Select all photos offered by this current view for the next action. Review the selected count and filters; Select All does not automatically mean every record in your account.',['Selection']);
 add('selnone|clearSendSelection','Clear the current selection. This does not delete photos. Select the intended photos again before applying a batch change, sharing, or building a document.',['Selection']);
 add('capchk|sendchk','Include or exclude this photo from the current selection. Selected photos are the scope of batch changes, document creation, deletion, or sharing. Always verify the selected count.',['Selection']);
@@ -466,6 +468,7 @@ const terms={
  'Dictation':'Speech converted to editable written text. Review the words before saving.',
  'Local save':'A draft/capture stored in this browser on this device while awaiting server upload.',
  'Upload':'Sending the photo/record to the PhotoNotes server. It is separate from a local save.',
+ 'Photo Library':'Your saved Photo Notes. In Send, open Select Photos to browse the library and choose records for the next delivery action.',
  'Selection':'The set of photos chosen for an action. Filters and this set determine the action’s scope.',
  'Filter':'A view restriction that narrows displayed results without deleting records.',
  'Document link':'A seven-day download link to a saved document snapshot. Anyone with the link can download it until it expires or its owner revokes it.',

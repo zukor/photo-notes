@@ -917,3 +917,8 @@ body:has(#desktopHelp) .issue-fab { left:max(14px,env(safe-area-inset-left)); ri
 .document-source-photo span { min-width:0; overflow-wrap:anywhere; }
 
 #documentOrganizeSelection[hidden] { display:none!important; }
+
+#sendPhotoSelection { margin:18px 0; color:#000; }
+#sendPhotoSelection > summary { color:#000; text-align:left; cursor:pointer; font-weight:bold; text-decoration:underline; padding:8px 0; }
+#sendPhotoSelection .send-selection-actions { margin-bottom:12px; }
+#closeSendPhotoSelection { color:#000; margin-top:12px; }

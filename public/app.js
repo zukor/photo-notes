@@ -3589,10 +3589,7 @@ async function renderSend() {
     ${isMacClient() ? `<div class="share-requirement"><strong>Texting an Android phone from this Mac?</strong><span>Your iPhone must have Settings → Apps → Messages → Text Message Forwarding enabled for this Mac, plus MMS or RCS messaging.</span></div>` : ''}
     <div class="send-selection-bar">
       <div class="status" id="sendSelection">Loading captures...</div>
-      <div class="send-selection-actions">
-        <button class="btn secondary slim" id="selectAllSendCaptures" type="button">Select All</button>
-        <button class="btn secondary slim" id="clearSendSelection" type="button">Clear All</button>
-      </div>
+
     </div>
     <section id="exportPresetSend"></section>
     <div class="delivery-actions delivery-actions-shortcuts">
@@ -3604,7 +3601,16 @@ async function renderSend() {
     ${isConcreteClient()&&state.me.ramo_intake_access?'<div class="ramo-send-action"><button class="btn secondary" id="sendToRamo" type="button">Send to Ramo Optimizer</button></div>':''}
     <button class="btn secondary" id="shareOriginalPhotos" type="button">Share original photos</button>
     <div class="share-action-status" id="shareActionStatus" role="status" aria-live="polite"></div>
-    <div id="sendCaptures" class="send-capture-list"></div>
+    <details id="sendPhotoSelection"><summary id="sendPhotoSelectionSummary">Select Photos <span id="sendPhotoSelectionCount"></span></summary>
+      <div class="formhead">Photo Library</div>
+      <p>Select the Photo Notes you want to share, download, or include in a customer approval package. Closing this section keeps your selection.</p>
+            <div class="send-selection-actions">
+        <button class="btn secondary slim" id="selectAllSendCaptures" type="button">Select All</button>
+        <button class="btn secondary slim" id="clearSendSelection" type="button">Clear All</button>
+      </div>
+      <div id="sendCaptures" class="send-capture-list"></div>
+      <button type="button" class="backlink" id="closeSendPhotoSelection">Close Photo Selection</button>
+    </details>
     <section class="send-feature-panel" aria-labelledby="customerApprovalHeading">
       <div class="send-feature-heading" id="customerApprovalHeading">Customer Approval Package</div>
       <p class="status">Create a private, expiring review link for the selected photos. The customer can approve them or request changes.</p>
@@ -3615,6 +3621,7 @@ async function renderSend() {
     <div id="sendDocs"><p class="status">Loading documents...</p></div>
     <details id="sharedDocumentLinks"><summary>Shared document links</summary><div id="sharedDocumentLinksList"></div></details>
     <div id="billingOffers"></div>`;
+  document.getElementById('closeSendPhotoSelection').onclick=()=>{document.getElementById('sendPhotoSelection').open=false;const summary=document.getElementById('sendPhotoSelectionSummary');summary.focus();summary.scrollIntoView({block:'nearest'});};
   document.getElementById('sharedDocumentLinks').ontoggle = event => { if(event.target.open) window.PhotoNotesDocumentLinks?.manage(document.getElementById('sharedDocumentLinksList')); };
   document.getElementById('sharephotos').onclick = () => deliverExport(document.getElementById('sendformat').value, null, 'share');
   document.getElementById('shareOriginalPhotos').onclick = shareSelectedPhotos;
@@ -3643,11 +3650,11 @@ async function loadSendCenter() {
   window._sendCaptures = captures;
   window._sendGroups = groups;
   const capBox = document.getElementById('sendCaptures');
-  const visible = captures.slice(0, 40);
+  const visible = captures;
   capBox.innerHTML = visible.length ? visible.map(c => `
     <article class="send-capture-row">
       <input type="checkbox" class="sendchk" value="${c.id}" aria-label="Select ${esc(c.photo_title || 'Photo Note')}" ${state.selectedIds.has(String(c.id)) ? 'checked' : ''}>
-      ${c.photo_path ? `<img src="${capturePhotoSrc(c)}" alt="${esc(c.photo_title || 'Photo Note')}">` : '<span class="send-no-photo">Note</span>'}
+      ${c.photo_path ? `<img loading="lazy" src="${capturePhotoSrc(c)}" alt="${esc(c.photo_title || 'Photo Note')}">` : '<span class="send-no-photo">Note</span>'}
       <span class="send-capture-details"><strong>${esc(c.photo_title || 'Untitled Photo')}</strong><small>${esc((c.area_tags || []).join(', ') || 'Unfiled')}</small><small>${esc(c.note || 'No notes')}</small></span>
       <button class="send-delete-capture" type="button" data-delete-capture="${c.id}">Delete Photo Note</button>
     </article>`).join('') : '<p class="empty">Nothing has been captured yet.</p>';
@@ -3708,8 +3715,9 @@ async function deleteSendCapture(id, button) {
 
 function updateSendCount() {
   const n = state.selectedIds.size;
+  const count=document.getElementById('sendPhotoSelectionCount');if(count)count.textContent=uiT('({count} selected)').replace('{count}',n);
   const s = document.getElementById('sendSelection');
-  if (s) s.textContent = n ? `${n} capture${n === 1 ? '' : 's'} selected. Change the selection below or return to Organize.` : 'Select one or more captures below, or return to Organize.';
+  if (s) s.textContent = n ? uiT('{count} selected. Open Select Photos to change your selection.').replace('{count}',n) : uiT('Open Select Photos to choose photos, or return to Organize.');
   const clear = document.getElementById('clearSendSelection');
   if (clear) clear.disabled = !n;
   const selectAll = document.getElementById('selectAllSendCaptures');
