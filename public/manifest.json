@@ -1,6 +1,6 @@
 {
-  "name": "Photo Notes",
-  "short_name": "Photo Notes",
+  "name": "PhotoNotes AI",
+  "short_name": "PhotoNotes AI",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
@@ -33,5 +33,5 @@
   ],
   "id": "/",
   "scope": "/",
-  "description": "Capture photos, add notes, and organize your authorized Photo Notes versions."
+  "description": "Capture photos, add notes, and organize your authorized PhotoNotes AI versions."
 }
