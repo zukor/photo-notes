@@ -42,9 +42,9 @@ function registerDocumentLinks(app, {pool, requireAuth}) {
       await client.query('SELECT id FROM users WHERE id=$1 FOR UPDATE',[req.user.id]);
       await client.query('DELETE FROM document_share_links WHERE user_id=$1 AND expires_at<=now()',[req.user.id]);
       const usage = (await client.query('SELECT count(*)::int count,COALESCE(sum(octet_length(content)),0)::bigint bytes FROM document_share_links WHERE user_id=$1',[req.user.id])).rows[0];
-      if (usage.count >= 20 || Number(usage.bytes) + req.body.length > 100 * 1024 * 1024) {
+      if (usage.count >= 100 || Number(usage.bytes) + req.body.length > 100 * 1024 * 1024) {
         await client.query('ROLLBACK');
-        return res.status(409).json({error:'Revoke an existing shared link before creating another. The limit is 20 links or 100 MB.'});
+        return res.status(409).json({error:'Revoke an existing shared link before creating another. The limit is 100 links or 100 MB.'});
       }
       const token = crypto.randomBytes(32).toString('base64url');
       const row = (await client.query(`INSERT INTO document_share_links(user_id,token,filename,mime_type,content,expires_at)
