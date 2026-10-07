@@ -751,7 +751,7 @@ function renderCapture() {
     <textarea id="note" placeholder="Your recorded notes will appear here as words."></textarea>
     ${isConcreteClient()?concreteCaptureDetailsMarkup():''}
 
-    ${isProClient()?'<button type="button" class="backlink" id="openSavedScanners">Saved Scanner Records</button>':''}
+    ${isProClient()&&Object.keys(readerConfigs).some(type=>PhotoNotesScannerAvailability.allowed(state.proType,type))?'<button type="button" class="backlink" id="openSavedScanners">Saved Scanner Records</button>':''}
     <section id="captureSettings" class="capture-settings">
     ${isHoaClient()?`<label>Maintenance Category</label><select id="hoaArea">${HOA_AREAS.map(a=>`<option value="${esc(a)}">${esc(a)}</option>`).join('')}</select><div id="hoaDirectedWrap" style="display:none"><label>Directed To</label><input id="hoaDirected" placeholder="Person expected to answer"></div>`:`<details id="captureTopic"><summary id="captureTopicHeading" data-topic-heading="${isIssueReporterClient()?'Topic':'Topic (optional)'}">${isIssueReporterClient()?'Topic':'Topic (optional)'}</summary>
     <div class="pill-group" id="areas">${areaChips()}</div>
@@ -860,7 +860,7 @@ function renderCameraTools() {
         ${scannerOn('gauge') ? cameraToolCard('Gauge & Instrument Reader','Read gauges, scales, hour meters, thermometers, fuel displays, and other instruments.','Read Instrument','toolGauge') : ''}
       </div>
     </section>
-    <details id="scannerHistory"><summary>Saved Scanner Records</summary><p>Previously saved records remain accessible when a scanner is unavailable in this edition.</p>${Object.entries(readerConfigs).map(([type,cfg])=>`<button class="btn secondary slim" data-scanner-history="${type}">${cfg.title}: Saved Records</button>`).join('')}</details>
+    ${Object.keys(readerConfigs).some(type=>PhotoNotesScannerAvailability.allowed(state.proType,type))?`<details id="scannerHistory"><summary>Saved Scanner Records</summary><p>Review scanner records for this industry edition.</p>${Object.entries(readerConfigs).filter(([type])=>PhotoNotesScannerAvailability.allowed(state.proType,type)).map(([type,cfg])=>`<button class="btn secondary slim" data-scanner-history="${type}">${cfg.title}: Saved Records</button>`).join('')}</details>`:''}
     ${beforeAfterOn()?`<section class="camera-tool-group">
       <div class="camera-tool-heading"><strong>Comparison Tools</strong><span>Create consistent visual records of work before and after completion.</span></div>
       <div class="camera-tool-grid">
@@ -891,6 +891,7 @@ const readerConfigs = {
 };
 function renderCameraReader() {
   if (!isProClient()) { state.view='capture'; renderApp(); return; }
+  if(!PhotoNotesScannerAvailability.allowed(state.proType,cameraReaderType)){state.view='camera-tools';renderCameraTools();return;}
   const historyOnly=cameraReaderHistory||!scannerOn(cameraReaderType);
   const cfg = readerConfigs[cameraReaderType], body = pavingToolMount(), embedded=pavingToolEmbedded();
   body.className = 'workflow-camera-tools'; cameraReaderFile = null; cameraReaderDraft = null;

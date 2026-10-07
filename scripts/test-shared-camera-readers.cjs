@@ -13,7 +13,7 @@ for(const engine of [chromium,webkit]){const browser=await engine.launch();try{f
  await page.goto(`http://127.0.0.1:${server.address().port}`);await page.locator('#tabCapture').waitFor();await page.locator('#tabCapture').click();
  if(pro_type==='paving'){await page.locator('.paving-reason-guide > summary').click();await page.locator('#pavingToolsGuide').click();}else await page.locator('#openCameraTools').click();
  for(const [id,type] of Object.entries(types))assert.equal(await page.locator('#'+id).count(),allowed.allowed(pro_type,type)?1:0);
- assert.equal(await page.locator('#toolTicket').count(),pro_type==='paving'?1:0);
+ assert.equal(await page.locator('#toolTicket').count(),pro_type==='paving'?1:0);assert.equal(await page.locator('#scannerHistory').count(),pro_type==='general'?0:1);for(const type of Object.values(types))assert.equal(await page.locator(`[data-scanner-history="${type}"]`).count(),allowed.allowed(pro_type,type)?1:0);
  for(const id of ['toolPlan','toolCard','toolEquipment','toolMaterial','toolGauge']){
   if(!allowed.allowed(pro_type,types[id]))continue;await page.locator('#'+id).click();assert(await page.locator('#readerTake').isVisible());assert(await page.locator('#readerChoose').isVisible());
   assert(!(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth)));
