@@ -20,7 +20,7 @@ test('pending photos survive reopening and keep account, version, bytes, and ret
 });
 test('legacy captures without owner metadata are retained but never eligible to upload',async()=>{
  global.indexedDB=new IDBFactory();await queue.all();
- await new Promise((resolve,reject)=>{const r=global.indexedDB.open('photo-notes-offline',1);r.onsuccess=()=>{const db=r.result,tx=db.transaction('captures','readwrite');tx.objectStore('captures').add({payload:{note:'legacy'}});tx.oncomplete=()=>{db.close();resolve();};tx.onerror=()=>reject(tx.error);};});
+ await new Promise((resolve,reject)=>{const r=global.indexedDB.open('photo-notes-offline',2);r.onsuccess=()=>{const db=r.result,tx=db.transaction('captures','readwrite');tx.objectStore('captures').add({payload:{note:'legacy'}});tx.oncomplete=()=>{db.close();resolve();};tx.onerror=()=>reject(tx.error);};});
  const rows=await queue.all();assert.equal(rows.length,1);assert(!queue.eligible(rows[0],await queue.accountKey('one@example.invalid'),'basic'));
 });
 test('storage unavailable cannot report a local save',async()=>{global.indexedDB=undefined;await assert.rejects(queue.create({note:'retain'},false,'a'.repeat(64),'basic'),/storage unavailable/);});
@@ -29,7 +29,7 @@ test('queue saves resolve on commit and reject an aborted transaction',async()=>
  let settled=false;const pending=queue.create({},false,'a'.repeat(64),'basic').then(row=>{settled=true;assert.equal(row.id,42);},()=>{settled=true;assert(abort);});await new Promise(setImmediate);assert(!settled);abort?tx.onabort():tx.oncomplete();await pending;assert(closed);
  }
 });
-function saveFixture(fail){let release,calls=0;const photo={name:'photo.jpg'},state={photoFile:photo,_note:'draft',location:null};const c={state,document:{getElementById:()=>({value:'draft'})},finishCaptureDictation:async()=>{},stopCaptureDictation(){},toast(){},isHoaClient:()=>false,isConcreteClient:()=>false,isPavingClient:()=>false,confirmPhotoQuality:async()=>true,enqueueUpload:async()=>{calls++;await new Promise(r=>release=r);if(fail)throw Error('full');},freshDims:()=>({}),renderCapture(){},captureLocationGeneration:0};vm.createContext(c);vm.runInContext(source.slice(source.indexOf('let captureSavePending='),source.indexOf('// ================= HOA Maintenance Pro')),c);return {c,state,photo,release:()=>release(),calls:()=>calls};}
+function saveFixture(fail){let release,calls=0;const photo={name:'photo.jpg'},state={photoFile:photo,_note:'draft',location:null};const c={state,document:{getElementById:()=>({value:'draft'})},finishCaptureDictation:async()=>{},persistCaptureDraft:async()=>{},stopCaptureDictation(){},toast(){},isHoaClient:()=>false,isConcreteClient:()=>false,isPavingClient:()=>false,confirmPhotoQuality:async()=>true,enqueueUpload:async()=>{calls++;await new Promise(r=>release=r);if(fail)throw Error('full');},freshDims:()=>({}),renderCapture(){},captureLocationGeneration:0};vm.createContext(c);vm.runInContext(source.slice(source.indexOf('let captureSavePending='),source.indexOf('// ================= HOA Maintenance Pro')),c);return {c,state,photo,release:()=>release(),calls:()=>calls};}
 test('ordinary Save retains the draft until durable commit and suppresses double taps',async()=>{
  const f=saveFixture(false);const pending=f.c.saveCapture();await new Promise(setImmediate);assert.equal(f.state.photoFile,f.photo);assert.equal(await f.c.saveCapture(),false);assert.equal(f.calls(),1);f.release();assert.equal(await pending,true);assert.equal(f.state.photoFile,null);
 });
@@ -69,4 +69,27 @@ test('every current edition can persist a capture and keeps retries isolated',as
   if(edition!=='basic')assert(!queue.eligible(restored,account,'basic'));
   await queue.remove(saved.id);
  }
+});
+
+
+test('unfinished photo drafts stay account/version scoped and separate from pending uploads',async()=>{
+ global.indexedDB=new IDBFactory();
+ const account=await queue.accountKey('owner@example.invalid'),other=await queue.accountKey('other@example.invalid');
+ const photo=new Blob(['irreplaceable original'],{type:'image/jpeg'});
+ await queue.saveDraft(account,'pro',{photo,note:'Add later',context:{area:'Inspection'}});
+ const draft=await queue.readDraft(account,'pro');
+ assert.equal(await draft.photo.text(),'irreplaceable original');assert.equal(draft.note,'Add later');
+ assert.equal(draft.context.area,'Inspection');assert.equal(await queue.readDraft(other,'pro'),undefined);
+ assert.equal(await queue.readDraft(account,'property'),undefined);assert.equal((await queue.all()).length,0);
+ const pending=await queue.create({photo,note:'Finished'},false,account,'pro');
+ await queue.clearDraft(account,'pro');assert.equal(await queue.readDraft(account,'pro'),undefined);
+ assert.equal((await queue.all())[0].id,pending.id);
+});
+test('draft database upgrade preserves existing version-one pending photos',async()=>{
+ global.indexedDB=new IDBFactory();
+ await new Promise((resolve,reject)=>{const r=global.indexedDB.open('photo-notes-offline',1);r.onupgradeneeded=()=>r.result.createObjectStore('captures',{keyPath:'id',autoIncrement:true});r.onerror=()=>reject(r.error);r.onsuccess=()=>{const db=r.result,tx=db.transaction('captures','readwrite');tx.objectStore('captures').add({payload:{note:'Existing pending photo'}});tx.oncomplete=()=>{db.close();resolve();};tx.onerror=()=>reject(tx.error);};});
+ const account=await queue.accountKey('owner@example.invalid');
+ await queue.saveDraft(account,'pro',{photo:new Blob(['new draft'])});
+ assert.equal((await queue.all())[0].payload.note,'Existing pending photo');
+ assert.equal(await (await queue.readDraft(account,'pro')).photo.text(),'new draft');
 });

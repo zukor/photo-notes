@@ -1,6 +1,6 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const source=fs.readFileSync('public/send.js','utf8');
-function fixture(save){const buttons={send:{},save:{}},events=[];const c={window:{},q:id=>buttons[id],state:{photoFile:{name:'actual.jpg'}},lastFile:{name:'stale.jpg'},caption:()=> 'caption',noteVal:()=> 'note',saveCapture:save,locale:()=> 'en',share:async(file,text)=>events.push({file,text}),toast:m=>events.push(m)};vm.createContext(c);vm.runInContext(source.slice(source.indexOf('  var sending'),source.indexOf('  function injectButtons')),c);return {c,events,buttons};}
+function fixture(save){const buttons={send:{},save:{}},events=[];const c={window:{},q:id=>buttons[id],state:{photoFile:{name:'actual.jpg'}},lastFile:{name:'stale.jpg'},caption:()=> 'caption',noteVal:()=> 'note',saveCapture:save,locale:()=> 'en',share:async(file,text)=>events.push({file,text}),toast:m=>events.push(m)};c.persistCaptureDraft=async()=>{};vm.createContext(c);vm.runInContext(source.slice(source.indexOf('  var sending'),source.indexOf('  function injectButtons')),c);return {c,events,buttons};}
 test('capture sharing waits for durable save, suppresses double taps, and uses current photo',async()=>{let finish,calls=0;const f=fixture(async options=>{calls++;assert.equal(options.requireDurable,true);assert.equal(options.preserveDraft,true);return await new Promise(r=>finish=r);});const pending=f.c.onSend();await f.c.onSend();assert.equal(calls,1);assert.equal(f.events.length,0);assert.equal(f.buttons.save.disabled,true);finish(true);await pending;assert.equal(f.events[0].file.name,'actual.jpg');assert.equal(f.buttons.save.disabled,false);});
 test('failed or declined saving never opens sharing',async()=>{for(const save of [async()=>false,async()=>{throw Error('storage');}]){const f=fixture(save);await f.c.onSend();assert(!f.events.some(e=>e.file));assert.equal(f.buttons.send.disabled,false);}});
 
@@ -16,7 +16,7 @@ function saveFixture(){
   const photo={name:'wall.jpg'},note={value:'Raise the wall one foot'},state={photoFile:photo,_note:note.value,me:{email:'owner@example.invalid'},location:{lat:1,lng:2}};
   let saves=0,renders=0;
   const context={state,document:{getElementById:()=>note},finishCaptureDictation:async()=>{},stopCaptureDictation(){},toast(){},isHoaClient:()=>false,isConcreteClient:()=>false,isPavingClient:()=>false,selectedEdition:()=> 'pro',confirmPhotoQuality:async()=>true,enqueueUpload:async()=>{saves++;},freshDims:()=>({}),renderCapture:()=>{renders++;note.value='';},captureLocationGeneration:0};
-  vm.createContext(context);const app=fs.readFileSync('public/app.js','utf8');vm.runInContext(app.slice(app.indexOf('async function saveCaptureDurably('),app.indexOf('// ================= HOA Maintenance Pro')),context);
+  context.persistCaptureDraft=async()=>{};vm.createContext(context);const app=fs.readFileSync('public/app.js','utf8');vm.runInContext(app.slice(app.indexOf('async function saveCaptureDurably('),app.indexOf('// ================= HOA Maintenance Pro')),context);
   return {context,state,note,photo,saves:()=>saves,renders:()=>renders};
 }
 test('cancel sharing then Save preserves the draft and creates only one durable capture',async()=>{

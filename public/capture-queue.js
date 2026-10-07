@@ -7,15 +7,15 @@
   }
   function open(){return new Promise((resolve,reject)=>{
     if(!globalThis.indexedDB)return reject(Error('Local storage unavailable'));
-    const request=indexedDB.open('photo-notes-offline',1);
-    request.onupgradeneeded=()=>{if(!request.result.objectStoreNames.contains('captures'))request.result.createObjectStore('captures',{keyPath:'id',autoIncrement:true});};
+    const request=indexedDB.open('photo-notes-offline',2);
+    request.onupgradeneeded=()=>{if(!request.result.objectStoreNames.contains('drafts'))request.result.createObjectStore('drafts',{keyPath:'key'});if(!request.result.objectStoreNames.contains('captures'))request.result.createObjectStore('captures',{keyPath:'id',autoIncrement:true});};
     request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);request.onblocked=()=>reject(Error('Close other Photo Notes tabs and try again'));
   });}
-  async function transaction(mode,operation){
+  async function transaction(mode,operation,storeName='captures'){
     const db=await open();
     return new Promise((resolve,reject)=>{
       let request,tx;
-      try{tx=db.transaction('captures',mode);request=operation(tx.objectStore('captures'));}
+      try{tx=db.transaction(storeName,mode);request=operation(tx.objectStore(storeName));}
       catch(error){db.close();reject(error);return;}
       tx.oncomplete=()=>{db.close();resolve(request.result);};
       tx.onabort=tx.onerror=()=>{db.close();reject(tx.error||request.error||Error('Local save interrupted'));};
@@ -34,5 +34,13 @@
   const eligible=(row,account,edition)=>row.account===account&&row.edition===edition&&/^[a-f0-9-]{36}$/.test(row.requestId||'');
   const headers=row=>({'X-Photo-Notes-Capture-Id':row.requestId,'X-Photo-Notes-Edition':row.edition,'X-Photo-Notes-Account':row.account});
   const permanent=status=>[400,401,403,409,413,422].includes(status);
-  return {accountKey,create,all,remove,eligible,headers,permanent};
+  const draftKey=(account,edition)=>{if(!/^[a-f0-9]{64}$/.test(account)||!edition)throw Error('Sign in first');return account+':'+edition;};
+  async function saveDraft(account,edition,draft){
+    const row={key:draftKey(account,edition),...draft,photo:null};
+    row.photoBytes=await draft.photo.arrayBuffer();row.photoType=draft.photo.type;row.photoName=draft.photo.name||'draft-photo.jpg';
+    await transaction('readwrite',store=>store.put(row),'drafts');
+  }
+  async function readDraft(account,edition){const row=await transaction('readonly',store=>store.get(draftKey(account,edition)),'drafts');if(row)row.photo=new Blob([row.photoBytes],{type:row.photoType});return row;}
+  const clearDraft=(account,edition)=>transaction('readwrite',store=>store.delete(draftKey(account,edition)),'drafts');
+  return {saveDraft,readDraft,clearDraft,accountKey,create,all,remove,eligible,headers,permanent};
 });

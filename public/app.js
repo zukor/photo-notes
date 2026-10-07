@@ -190,6 +190,7 @@ async function boot() {
     try { const me = await r.json(); state.me = me; state.plan = me.plan || 'free'; state.proType=me.pro_type||'paving'; } catch (e) {}
     await Promise.all([loadAreas(),loadJobs(),loadHoaContext()]);
     await restoreOfflineQueue();
+    await restoreCaptureDraft();
     // Start loading documents as soon as the user signs in. By the time they
     // open Create, existing documents can be shown immediately instead of
     // appearing only after another action refreshes the list.
@@ -380,7 +381,7 @@ function renderApp() {
       profileButton.setAttribute('aria-expanded', 'false');
     }
   };
-  document.getElementById('signout').onclick = async () => { if(captureSavePending){toast('Please wait for this photo to finish saving locally.');return;}if(state.photoFile&&!confirm('Sign out and discard the photo that has not been saved?'))return;try{const r=await api('/api/logout',{method:'POST'});if(!r.ok)throw Error();queueAccount=null;bgQueue=[];clearTimeout(queueRetryTimer);stopCaptureDictation();location.reload();}catch(error){toast('Could not sign out. Check your connection and try again.');} };
+  document.getElementById('signout').onclick = async () => { if(captureSavePending){toast('Please wait for this photo to finish saving locally.');return;}try{await persistCaptureDraft();const r=await api('/api/logout',{method:'POST'});if(!r.ok)throw Error();queueAccount=null;bgQueue=[];clearTimeout(queueRetryTimer);stopCaptureDictation();location.reload();}catch(error){toast('Could not sign out. Check your connection and try again.');} };
   document.getElementById('installHelp').onclick=showInstallHelp;
   document.getElementById('pendingPhotos').onclick=showPendingPhotos;
   const myIssues=document.getElementById('myIssues');if(myIssues)myIssues.onclick=()=>enterTesting('my-issues');
@@ -389,13 +390,14 @@ function renderApp() {
   const editionSwitcher=document.getElementById('editionSwitcher');if(editionSwitcher)editionSwitcher.onchange=async()=>{
     if(captureSavePending){editionSwitcher.value=selectedEdition();toast('Please wait for this photo to finish saving locally.');return;}
     const edition=editionSwitcher.value;
-    if(state.photoFile&&!confirm(uiT('Switch versions and discard this unsaved photo?'))){editionSwitcher.value=selectedEdition();return;}
     editionSwitcher.disabled=true;
     try{
+      await persistCaptureDraft();
       const r=await api('/api/switch-edition',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({edition})});
       if(!r.ok)throw new Error();
       stopCaptureDictation();
       state.view=edition==='roads'?'road-report':(edition==='basic'||edition==='issue')?'capture':(IS_HANDHELD?'capture':'organize');state._captureShareSave=null;state.photoFile=null;state._note='';state._captureTemplateName='';state._concreteCapture=null;state._pavingReason=null;state._duplicateContext=null;
+      clearIssueDeepLink();
       await boot();toast('Version switched');
     }catch(e){toast('Version could not be switched. Please try again.');}
     finally{editionSwitcher.disabled=false;editionSwitcher.value=selectedEdition();}
@@ -486,6 +488,17 @@ async function renderMyTestingAssignment(){
   });
 }
 let myIssueFilter='open';
+function reporterIssueDescription(description){
+  // Older reports keep diagnostic evidence in the description for developers.
+  // Reporter cards show only the authored report, including legacy truncated logs.
+  return String(description||'').split(/\r?\n\s*\r?\nVoice-note diagnostics \(no note text or audio\):\r?\n/)[0];
+}
+function clearIssueDeepLink(){
+  const url=new URL(location.href);
+  if(!url.searchParams.has('issues'))return;
+  url.searchParams.delete('issues');
+  history.replaceState(history.state,'',url.pathname+url.search+url.hash);
+}
 async function renderMyIssueReports(){
   const body=document.getElementById('body');
   body.innerHTML='<button class="backlink" id="issuesBack">← Back</button><div class="workflow-intro"><strong>'+ 'My Issue Reports' +'</strong><span>See what you reported, whether it has been fixed, and what needs another test.</span></div><label for="myIssueFilter">'+uiT('Show issues')+'</label><select id="myIssueFilter"><option value="open">'+uiT('Open issues')+'</option><option value="closed">'+uiT('Closed issues')+'</option><option value="all">'+uiT('All issues')+'</option></select>'+issueNotificationControls()+'<div id="myIssueList"><p class="status">Loading your reports...</p></div>';
@@ -499,7 +512,7 @@ async function renderMyIssueReports(){
   if(!r.ok){box.innerHTML='<p class="status">Your issue reports could not be loaded.</p>';return;}
   const rows=await r.json();
   if(!box.isConnected)return;
-  box.innerHTML=rows.length?rows.map(i=>`<article class="card tester-issue-card" data-issue-closed="${['resolved','tester_confirmed','wont_fix'].includes(i.management_status)}">${i.retest_reminder_at&&['ready_to_test','retest_requested'].includes(i.management_status)?'<p><strong>Retest reminder:</strong> Please submit your result on this original issue. Reminders repeat every four hours until you reply.</p>':''}<div class="tester-issue-head"><strong>Issue #${i.id}: ${esc(i.page_name||'Photo Notes')}</strong><span class="badge issue-status-${esc(i.management_status||'new')}">${esc(i.management_status==='blocked'&&i.review_decision==='clarify'?'Clarification Requested':i.management_status==='blocked'&&['developer','repeated_failure','retry'].includes(i.blocked_kind)?'Developer Investigation':i.management_status==='ready_to_test'&&(!i.verification||!i.release_reference)?'Ready status needs verification':(['ui_improvement','feature_improvement','new_feature'].includes(i.issue_type)?(i.management_status==='wont_fix'?'Closed - No Change':i.review_decision==='clarify'?'Clarification Requested':i.review_decision==='implement'&&i.management_status==='new'?'Approved For Implementation':i.management_status==='new'?'Awaiting Sam Review':MY_ISSUE_STATUS[i.management_status]):MY_ISSUE_STATUS[i.management_status])||'Received')}</span></div><div class="meta">Reported ${new Date(i.created_at).toLocaleString(uiLocale())}</div><p>${esc(i.description)}</p>${i.result_screenshot_path?`<details><summary data-issue-result-evidence>Show Result Screenshot</summary><a href="${esc(i.result_screenshot_path)}" target="_blank" rel="noopener" data-issue-result-evidence><img loading="lazy" src="${esc(i.result_screenshot_path)}" alt="Result screenshot supplied by the reporter" style="max-width:100%;height:auto"></a></details>`:''}${i.management_status==='blocked'&&(i.review_decision==='clarify'||i.issue_type!=='bug_problem')?`<div class="issue-fix-summary"><strong>${i.review_decision==='clarify'?'Question About Your Report':'What stopped and what happens next'}</strong><p style="white-space:pre-wrap">${esc(i.blocked_reason||'Please add reproduction details.')}</p><label for="issueDetailsResult-${i.id}">Result of your check</label><select id="issueDetailsResult-${i.id}"><option value="details">Providing more information</option><option value="fixed">I retested and it is now working</option></select><label for="issueDetails-${i.id}">Your reply and what you tested</label><textarea id="issueDetails-${i.id}" maxlength="5000"></textarea><button class="btn" data-issue-details="${i.id}">Send Details for Review</button></div>`:''}${i.management_status==='blocked'&&i.issue_type==='bug_problem'&&i.review_decision!=='clarify'?'<p>Your report and latest test result are saved. The responsible developer or owner must review them before another test is requested. No additional details are requested from you right now.</p>':''}${i.management_status==='new'&&i.issue_type==='bug_problem'&&i.tester_result==='still_happening'?'<p>'+uiT('Your failed retest was received and this report is queued for another repair attempt. You do not need to submit a new report.')+'</p>':''}${i.management_status==='wont_fix'&&i.review_note?`<div class="issue-fix-summary"><strong>Reason For No Change</strong><p>${esc(i.review_note)}</p></div>`:''}${i.fix_summary?`<div class="issue-fix-summary"><strong>What changed</strong><span>${esc(i.fix_summary)}</span></div>`:''}${i.deployed_at&&i.management_status!=='retest_requested'?`<div class="meta">Deployed: ${new Date(i.deployed_at).toLocaleString(uiLocale())}</div>`:''}<details data-issue-history="${i.id}"><summary>Issue history</summary><div>Open to load history.</div></details>${i.release_reference?`<div class="meta">Release: ${esc(i.release_reference)}</div>`:''}${i.management_status==='retest_requested'||(i.management_status==='ready_to_test'&&i.verification&&i.release_reference)?`<div class="issue-retest"><strong>${i.management_status==='retest_requested'?'Please Retest':'How to retest'}</strong><p style="white-space:pre-wrap">${esc(i.retest_instructions||'Refresh Photo Notes and repeat the steps that caused the problem.')}</p><label for="retestNotes-${i.id}">Comments After Retesting</label><textarea id="retestNotes-${i.id}" placeholder="Describe what you tested, what happened, or why you could not complete the test."></textarea><div class="issue-retest-actions"><button class="btn" type="button" data-retest-fixed="${i.id}">Retest Succeeded</button><button class="btn secondary" type="button" data-retest-broken="${i.id}">Retest Failed</button><button class="btn secondary" type="button" data-retest-unable="${i.id}">Unable to Retest</button></div></div>`:i.tester_result?`<div class="meta">Your retest: ${i.tester_result==='fixed'?'Retest Succeeded':i.tester_result==='unable_to_test'?'Unable to Retest':'Retest Failed'}${i.tester_notes?' - '+esc(i.tester_notes):''}</div>`:''}</article>`).join(''):'<p class="status">You have not submitted any issue reports yet.</p>';
+  box.innerHTML=rows.length?rows.map(i=>`<article class="card tester-issue-card" data-issue-closed="${['resolved','tester_confirmed','wont_fix'].includes(i.management_status)}">${i.retest_reminder_at&&['ready_to_test','retest_requested'].includes(i.management_status)?'<p><strong>Retest reminder:</strong> Please submit your result on this original issue. Reminders repeat every four hours until you reply.</p>':''}<div class="tester-issue-head"><strong>Issue #${i.id}: ${esc(i.page_name||'Photo Notes')}</strong><span class="badge issue-status-${esc(i.management_status||'new')}">${esc(i.management_status==='blocked'&&i.review_decision==='clarify'?'Clarification Requested':i.management_status==='blocked'&&['developer','repeated_failure','retry'].includes(i.blocked_kind)?'Developer Investigation':i.management_status==='ready_to_test'&&(!i.verification||!i.release_reference)?'Ready status needs verification':(['ui_improvement','feature_improvement','new_feature'].includes(i.issue_type)?(i.management_status==='wont_fix'?'Closed - No Change':i.review_decision==='clarify'?'Clarification Requested':i.review_decision==='implement'&&i.management_status==='new'?'Approved For Implementation':i.management_status==='new'?'Awaiting Sam Review':MY_ISSUE_STATUS[i.management_status]):MY_ISSUE_STATUS[i.management_status])||'Received')}</span></div><div class="meta">Reported ${new Date(i.created_at).toLocaleString(uiLocale())}</div><p>${esc(reporterIssueDescription(i.description))}</p>${i.result_screenshot_path?`<details><summary data-issue-result-evidence>Show Result Screenshot</summary><a href="${esc(i.result_screenshot_path)}" target="_blank" rel="noopener" data-issue-result-evidence><img loading="lazy" src="${esc(i.result_screenshot_path)}" alt="Result screenshot supplied by the reporter" style="max-width:100%;height:auto"></a></details>`:''}${i.management_status==='blocked'&&(i.review_decision==='clarify'||i.issue_type!=='bug_problem')?`<div class="issue-fix-summary"><strong>${i.review_decision==='clarify'?'Question About Your Report':'What stopped and what happens next'}</strong><p style="white-space:pre-wrap">${esc(i.blocked_reason||'Please add reproduction details.')}</p><label for="issueDetailsResult-${i.id}">Result of your check</label><select id="issueDetailsResult-${i.id}"><option value="details">Providing more information</option><option value="fixed">I retested and it is now working</option></select><label for="issueDetails-${i.id}">Your reply and what you tested</label><textarea id="issueDetails-${i.id}" maxlength="5000"></textarea><button class="btn" data-issue-details="${i.id}">Send Details for Review</button></div>`:''}${i.management_status==='blocked'&&i.issue_type==='bug_problem'&&i.review_decision!=='clarify'?'<p>Your report and latest test result are saved. The responsible developer or owner must review them before another test is requested. No additional details are requested from you right now.</p>':''}${i.management_status==='new'&&i.issue_type==='bug_problem'&&i.tester_result==='still_happening'?'<p>'+uiT('Your failed retest was received and this report is queued for another repair attempt. You do not need to submit a new report.')+'</p>':''}${i.management_status==='wont_fix'&&i.review_note?`<div class="issue-fix-summary"><strong>Reason For No Change</strong><p>${esc(i.review_note)}</p></div>`:''}${i.fix_summary?`<div class="issue-fix-summary"><strong>What changed</strong><span>${esc(i.fix_summary)}</span></div>`:''}${i.deployed_at&&i.management_status!=='retest_requested'?`<div class="meta">Deployed: ${new Date(i.deployed_at).toLocaleString(uiLocale())}</div>`:''}<details data-issue-history="${i.id}"><summary>Issue history</summary><div>Open to load history.</div></details>${i.release_reference?`<div class="meta">Release: ${esc(i.release_reference)}</div>`:''}${i.management_status==='retest_requested'||(i.management_status==='ready_to_test'&&i.verification&&i.release_reference)?`<div class="issue-retest"><strong>${i.management_status==='retest_requested'?'Please Retest':'How to retest'}</strong><p style="white-space:pre-wrap">${esc(i.retest_instructions||'Refresh Photo Notes and repeat the steps that caused the problem.')}</p><label for="retestNotes-${i.id}">Comments After Retesting</label><textarea id="retestNotes-${i.id}" placeholder="Describe what you tested, what happened, or why you could not complete the test."></textarea><div class="issue-retest-actions"><button class="btn" type="button" data-retest-fixed="${i.id}">Retest Succeeded</button><button class="btn secondary" type="button" data-retest-broken="${i.id}">Retest Failed</button><button class="btn secondary" type="button" data-retest-unable="${i.id}">Unable to Retest</button></div></div>`:i.tester_result?`<div class="meta">Your retest: ${i.tester_result==='fixed'?'Retest Succeeded':i.tester_result==='unable_to_test'?'Unable to Retest':'Retest Failed'}${i.tester_notes?' - '+esc(i.tester_notes):''}</div>`:''}</article>`).join(''):'<p class="status">You have not submitted any issue reports yet.</p>';
   const empty=document.createElement('p');
   empty.className='status';empty.setAttribute('role','status');box.appendChild(empty);
   const applyFilter=()=>{
@@ -575,6 +588,7 @@ async function sendRoadIssueReport(){
     const fd=new FormData();fd.append('issue_type',document.getElementById('roadIssueType').value);fd.append('photo',state.photoFile);
     if(state.location){fd.append('latitude',state.location.lat);fd.append('longitude',state.location.lng);}if(state.address)fd.append('address',state.address);
     const r=await api('/api/road-issues',{method:'POST',body:fd}),d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||'send failed');
+    await persistCaptureDraft(true).catch(()=>{});
     captureLocationGeneration++;if(state._previewUrl)URL.revokeObjectURL(state._previewUrl);state._previewUrl=null;state.photoFile=null;state.location=null;state.address=null;state._locationPromise=null;state._qualityPromise=null;state._qualityResult=null;
     renderRoadIssueReport();const next=document.getElementById('roadIssueStatus');if(next)next.textContent=d.email_status==='sent'?`Road issue #${d.id} sent.`:`Road issue #${d.id} saved. Email delivery is pending.`;toast('Road issue sent');
   }catch(e){status.textContent='The road issue could not be sent. Check your connection and try again.';btn.disabled=false;btn.textContent='Send';}
@@ -664,6 +678,7 @@ function bindPavingPhotoReason(){
     stopCaptureDictation();captureLocationGeneration++;
     if(state._previewUrl)URL.revokeObjectURL(state._previewUrl);
     state._previewUrl=null;state._captureShareSave=null;state.photoFile=null;state._note='';state.location=null;state.address=null;state._locationPromise=null;state._qualityPromise=null;state._qualityResult=null;
+    void persistCaptureDraft(true).catch(()=>{});
     cameraReaderFile=null;cameraReaderDraft=null;ticketPhotoFile=null;ticketDraft=null;alignmentAfterFile=null;alignmentBefore=null;
     state._pavingReason=next;renderCapture();
   };
@@ -693,6 +708,7 @@ function duplicatePhotoNote(source) {
     stopCaptureDictation();captureLocationGeneration++;
     if(state._previewUrl)URL.revokeObjectURL(state._previewUrl);
     state._previewUrl=null;state.photoFile=null;state.location=null;state.address=null;state._locationPromise=null;state._qualityPromise=null;state._qualityResult=null;state._captureShareSave=null;
+    void persistCaptureDraft(true).catch(()=>{});
     state._dims=freshDims();state._measure=null;state.urgency='standard';state._note=context.note;state.area=context.topics[0]||'';state.jobId=context.jobId;state._concreteCapture=context.concrete||null;state._pavingReason='proposal';state._captureTemplateName='';state._duplicateContext=context;window.PhotoNotesCustomFields?.clear();
     if(state.area&&!state.areas.includes(state.area))state.areas=[...state.areas,state.area];
     if(context.property)state.communityId=context.property.communityId;
@@ -1156,6 +1172,40 @@ async function loadTodayTickets() {
   } catch (e) { box.innerHTML = '<p class="status">Today’s tickets could not be loaded.</p>'; }
 }
 
+// Persist immediately, before waiting for location or a note. Serialize writes so
+// slow photo reads cannot resurrect a draft after an explicit Save or Cancel.
+let captureDraftWrites=Promise.resolve();
+function persistCaptureDraft(clear=false){
+  const email=state.me?.email,edition=selectedEdition();
+  if(!email)return Promise.resolve();
+  const photo=state.photoFile;
+  const draft={photo,note:state._note||'',location:state.location,address:state.address,
+    context:Object.fromEntries(['area','jobId','communityId','urgency','_concreteCapture','_pavingReason','_duplicateContext','_captureTemplateName','_dims','_measure','_followUp'].map(k=>[k,state[k]]))};
+  if(!photo&&!clear)return captureDraftWrites;
+  const write=captureDraftWrites.then(async()=>{
+    const account=await PhotoNotesQueue.accountKey(email);
+    if(clear)await PhotoNotesQueue.clearDraft(account,edition);
+    else await PhotoNotesQueue.saveDraft(account,edition,draft);
+  });
+  captureDraftWrites=write.catch(()=>{toast('Automatic photo recovery could not be saved. Keep this screen open and tap Save before leaving.');});
+  return write;
+}
+async function restoreCaptureDraft(){
+  if(!state.me?.email||state.photoFile)return;
+  try{
+    const row=await PhotoNotesQueue.readDraft(await PhotoNotesQueue.accountKey(state.me.email),selectedEdition());
+    if(!row)return;
+    Object.assign(state,row.context||{});
+    state.photoFile=new File([row.photo],row.photoName,{type:row.photoType});
+    state._note=row.note||'';state.location=row.location;state.address=row.address;
+    state.view=selectedEdition()==='roads'?'road-report':'capture';
+  }catch(error){toast('Unfinished photos could not be read. Keep this browser data and try again.');}
+}
+document.addEventListener('input',()=>{if(state.photoFile)void persistCaptureDraft().catch(()=>{});});
+document.addEventListener('change',()=>{if(state.photoFile)void persistCaptureDraft().catch(()=>{});});
+document.addEventListener('visibilitychange',()=>{if(document.hidden)void persistCaptureDraft().catch(()=>{});});
+window.addEventListener('pagehide',()=>{void persistCaptureDraft().catch(()=>{});});
+
 function onPhotoChosen(file) {
   state._captureShareSave=null;
   if(captureSavePending){toast('Please wait for the current photo to save.');return;}
@@ -1163,6 +1213,8 @@ function onPhotoChosen(file) {
   captureLocationGeneration++;
   if(replacing){state._note='';const note=document.getElementById('note');if(note)note.value='';}
   state.photoFile = file;
+  state.location=null;state.address=null;
+  void persistCaptureDraft().catch(()=>{});
   state._qualityResult = null;
   state._qualityPromise = analyzePhotoQuality(file).then(result=>{
     if(state.photoFile!==file)return result;
@@ -1174,7 +1226,7 @@ function onPhotoChosen(file) {
   state._locationPromise = null;
   showCapturePreview(file);
   document.getElementById('locwrap').style.display = 'block';
-  acquireLocation();
+  Promise.resolve(acquireLocation()).finally(()=>{if(state.photoFile===file)void persistCaptureDraft().catch(()=>{});});
 }
 
 function showCapturePreview(file){
@@ -1200,6 +1252,7 @@ function cancelCapturePhoto(){
   const box=document.getElementById('previewBox');if(box)box.style.display='none';
   const loc=document.getElementById('locwrap');if(loc)loc.style.display='none';
   const quality=document.getElementById('qualityStatus');if(quality)quality.textContent='';
+  void persistCaptureDraft(true).catch(()=>{});
   toast('Photo cancelled');
 }
 
@@ -1236,6 +1289,7 @@ function correctCaptureAddress(){
   const corrected=prompt('Enter the correct address or geographic area:',state.address||'');
   if(corrected===null)return;
   state.address=corrected.trim()||null;
+  void persistCaptureDraft().catch(()=>{});
   const addr=document.getElementById('addr');
   if(addr)addr.textContent=state.address||'No address entered. GPS coordinates will still be saved.';
 }
@@ -1280,7 +1334,7 @@ function acquireLocation(force=false) {
         if (r.ok) { const d = await r.json(); if (!isCurrent()) return; state.address = d.address || null; if (addr) addr.textContent = d.address || 'Exact address not found. GPS coordinates will still be saved.'; }
         else if (addr) addr.textContent = 'Address lookup failed. GPS coordinates will still be saved.';
       } catch (e) { if (isCurrent() && addr) addr.textContent = 'Address lookup failed. GPS coordinates will still be saved.'; }
-    } finally { if (isCurrent() && retry) retry.disabled=false; }
+    } finally { if(isCurrent())void persistCaptureDraft().catch(()=>{});if (isCurrent() && retry) retry.disabled=false; }
   })().catch(err => {
     if (!isCurrent()) return;
     if (gps) gps.textContent = err && err.code===1 ? 'Location permission is blocked for this site.' : 'Location timed out or is unavailable.';
@@ -1427,7 +1481,7 @@ function startDictationSession(SR) {
     sessionText=combineSpeechResults(parts);
     recordDictationEvent('result',Array.from(ev.results,result=>result.isFinal?'final':'interim').join(','));
     if(dictationActive)armWatchdog(120000);
-    if (noteEl) { noteEl.value=mergeSpeechTranscript(dictationBase,sessionText); state._note=noteEl.value; }
+    if (noteEl) { noteEl.value=mergeSpeechTranscript(dictationBase,sessionText); state._note=noteEl.value; void persistCaptureDraft().catch(()=>{}); }
     const status=document.getElementById('dictationStatus');if(status&&sessionText)status.textContent='Speech received.';
     if (isIndustryProClient()) applyExtraction(dictationBase+sessionText);
   };
@@ -2037,6 +2091,7 @@ async function saveCaptureDurably(options = {}) {
     return true;
   }
   state._captureShareSave=null;state._duplicateContext=null;state._followUp=null;
+  await persistCaptureDraft(true).catch(()=>{});
   // Only an explicit Save clears the saved draft and hands upload to the background.
   captureLocationGeneration++;
   globalThis.PhotoNotesIncidents?.advance();
