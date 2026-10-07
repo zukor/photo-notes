@@ -1,12 +1,12 @@
 /* Help owns its styles so it can also be used by admin, installation, and public review screens. */
-:root { --pn-help-width:28vw; }
+:root { --pn-help-width:28vw; --pn-floating-control-size:40px; }
 #photoNotesHelp { color:#000; font:15px/1.45 Arial,Helvetica,sans-serif; text-align:left; }
 #photoNotesHelp *,#photoNotesHelp *::before,#photoNotesHelp *::after { box-sizing:border-box; }
 #photoNotesHelp p,#photoNotesHelp h2,#photoNotesHelp h3,#photoNotesHelp label,#photoNotesHelp input,#photoNotesHelp select,#photoNotesHelp button,#photoNotesHelp summary { color:#000; text-align:left; }
 #photoNotesHelp button { cursor:pointer; font:700 14px Arial,Helvetica,sans-serif; border:1px solid #000; background:#fff; padding:9px 11px; border-radius:8px; margin:0; width:auto; }
 #photoNotesHelp button:focus-visible,#photoNotesHelp summary:focus-visible,#photoNotesHelp input:focus-visible { outline:3px solid #2455d9; outline-offset:2px; }
-#photoNotesHelp .pn-help-fab { position:fixed; right:max(14px,env(safe-area-inset-right)); bottom:max(14px,env(safe-area-inset-bottom)); z-index:10021; display:grid; place-items:center; padding:0; width:24px; height:24px; border:1px solid #9c7400; border-radius:50%; background:radial-gradient(circle at 32% 23%,#fff4a3,#ffdf38 32%,#ffc400 64%,#b98600); box-shadow:0 1.5px 0 #785800,0 3px 6px #0003; text-align:center; }
-#photoNotesHelp .pn-help-fab span { color:#000; font-size:17px; font-weight:900; line-height:1; }
+#photoNotesHelp .pn-help-fab { position:fixed; right:max(14px,env(safe-area-inset-right)); bottom:max(14px,env(safe-area-inset-bottom)); z-index:10021; display:grid; place-items:center; padding:0; width:var(--pn-floating-control-size); height:var(--pn-floating-control-size); border:1px solid #9c7400; border-radius:50%; background:radial-gradient(circle at 32% 23%,#fff4a3,#ffdf38 32%,#ffc400 64%,#b98600); box-shadow:0 1.5px 0 #785800,0 3px 6px #0003; text-align:center; }
+#photoNotesHelp .pn-help-fab span { color:#000; font-size:28px; font-weight:900; line-height:1; }
 #photoNotesHelp .pn-help-drawer { position:fixed; right:0; top:0; bottom:0; width:var(--pn-help-width); z-index:10020; display:flex; flex-direction:column; background:#fff; border-left:2px solid #2455d9; box-shadow:-6px 0 22px #0002; padding-top:env(safe-area-inset-top); padding-bottom:calc(76px + env(safe-area-inset-bottom)); transform:translateX(105%); visibility:hidden; transition:transform .2s ease,visibility .2s; }
 .pn-help-open #photoNotesHelp .pn-help-drawer { transform:translateX(0); visibility:visible; }
 .pn-help-open #app { margin-right:var(--pn-help-width); }
@@ -36,7 +36,7 @@
 #photoNotesHelp .pn-help-term button { text-decoration:underline; min-height:40px; }
 #photoNotesHelp [role=tooltip] { display:none; margin-top:6px; padding:10px; background:#fff9cf; color:#000; border:1px solid #000; border-radius:8px; font-size:14px; }
 #photoNotesHelp .pn-help-term:hover [role=tooltip],#photoNotesHelp .pn-help-term:focus-within [role=tooltip],#photoNotesHelp [aria-expanded=true]+[role=tooltip] { display:block; }
-.issue-fab { left:max(14px,env(safe-area-inset-left))!important; right:auto!important; min-height:40px; z-index:10019!important; }
+.issue-fab { left:max(14px,env(safe-area-inset-left))!important; right:auto!important; box-sizing:border-box; height:var(--pn-floating-control-size); min-height:var(--pn-floating-control-size); bottom:max(14px,env(safe-area-inset-bottom))!important; margin:0; white-space:nowrap; z-index:10019!important; }
 body:has(#photoNotesHelp) { padding-bottom:calc(80px + env(safe-area-inset-bottom)); }
 @media (max-width:1099px) {
  :root { --pn-help-width:min(100vw,540px); }
