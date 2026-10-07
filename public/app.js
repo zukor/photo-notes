@@ -2155,7 +2155,7 @@ async function renderList() {
         <label>Apply Batch Changes</label>
         <select id="batchJob"><option value="">Move to Job...</option>${state.jobs.map(j=>`<option value="${j.id}">${esc(j.name)}</option>`).join('')}</select>
         <select id="batchDocument" style="margin-top:8px"><option value="">Add to Document...</option></select>
-        <select id="batchTemplate" style="margin-top:8px"><option value="">Apply Annotation Template...</option><option value="date_address">Date + Address</option><option value="evidence">Evidence Details</option><option value="copyright">Copyright Only</option></select>
+        <button class="btn secondary slim" id="openAnnotationEditing" type="button">Edit Photo Markings</button>
         ${photoMarkersOn()?`<label for="batchMarker">Favorite / Flag selected photos</label><select id="batchMarker"><option value="">Choose marker change...</option><option value="favorite:true">Mark as Favorite</option><option value="favorite:false">Remove Favorite</option><option value="flagged:true">Flag</option><option value="flagged:false">Remove Flag</option></select><button type="button" class="btn secondary" id="applyMarkers">Apply Markers</button>`:''}
         <button class="btn secondary slim" id="runBatch" type="button">Apply Batch Changes</button>
       </section>
@@ -2177,8 +2177,8 @@ async function renderList() {
   document.getElementById('photoSearch').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();runSearch();}};
   void window.PhotoNotesCustomFields?.filters({edition:selectedEdition(),search:runSmartSearch});
   document.getElementById('photoSearchClear').onclick=()=>{globalThis.PhotoNotesCustomFields?.resetFilter();document.getElementById('photoSearch').value='';document.getElementById('filter').value='';document.getElementById('jobFilter').value='';document.getElementById('searchFrom').value='';document.getElementById('searchTo').value='';document.getElementById('searchMissingAddress').checked=false;['markerFavorites','markerFlagged'].forEach(id=>{const e=document.getElementById(id);if(e)e.checked=false;});runSmartSearch();};
-  document.getElementById('selall').onclick = () => document.querySelectorAll('.capchk').forEach(c => { c.checked = true; state.selectedIds.add(String(c.value)); });
-  document.getElementById('selnone').onclick = () => { state.selectedIds.clear(); document.querySelectorAll('.capchk').forEach(c => c.checked = false); };
+  document.getElementById('selall').onclick = () => {document.querySelectorAll('.capchk').forEach(c => { c.checked = true; state.selectedIds.add(String(c.value)); });updateAnnotationSelection();};
+  document.getElementById('selnone').onclick = () => { state.selectedIds.clear(); document.querySelectorAll('.capchk').forEach(c => c.checked = false);updateAnnotationSelection(); };
   const ramoSend=document.getElementById('ramoIntakeSend');if(ramoSend)ramoSend.onclick=()=>openRamoIntake();
   const ramoHistory=document.getElementById('ramoIntakeHistory');if(ramoHistory)ramoHistory.onclick=()=>openRamoIntake(true);
   document.getElementById('applytopic').onclick = applyTopicToSelected;
@@ -2191,7 +2191,7 @@ async function renderList() {
   const pavingPdf=document.getElementById('pavingJobPdf');if(pavingPdf)pavingPdf.onclick=()=>exportPavingJobEvidence('pdf');
   const pavingWord=document.getElementById('pavingJobWord');if(pavingWord)pavingWord.onclick=()=>exportPavingJobEvidence('docx');
   document.getElementById('compareSelected').onclick=compareSelectedPhotos;
-  document.getElementById('runBatch').onclick=runBatchChanges;
+  document.getElementById('runBatch').onclick=runBatchChanges;document.getElementById('openAnnotationEditing').onclick=()=>{state.view='edit';renderApp();};
   const editSelected=document.getElementById('editSelected');if(editSelected)editSelected.onclick=()=>window.PhotoNotesBulkMetadata.open({ids:selectedCaptureIds(),jobs:state.jobs,topics:state.areas,api,esc,toast,refresh:async()=>{await loadAreas();runSmartSearch();}});
   const cb = document.getElementById('classifybatch');
   if (cb) cb.onclick = classifySelected;
@@ -2225,14 +2225,14 @@ async function exportPavingJobEvidence(format){const id=(document.getElementById
 async function loadPavingReadiness(){const box=document.getElementById('pavingReadiness'),id=(document.getElementById('jobFilter')||{}).value;if(!box)return;if(!id){box.textContent='Choose a job to check its photo evidence.';return;}const r=await api(`/api/paving/jobs/${id}/completeness`);if(!r.ok){box.textContent='Photo evidence readiness could not be checked.';return;}const d=await r.json();box.innerHTML=`<strong>Photo evidence readiness: ${d.complete}/${d.total}</strong>${d.checks.map(x=>`<div class="${x.complete?'evidence-ok':'evidence-missing'}">${x.complete?'✓':'○'} ${esc(x.label)}</div>`).join('')}`;}
 async function createJob(){const name=document.getElementById('newJobName').value.trim();if(!name){toast('Enter a job name');return;}const body={name,job_number:document.getElementById('newJobNumber').value.trim(),customer:document.getElementById('newJobCustomer').value.trim(),address:document.getElementById('newJobAddress').value.trim()};const r=await api('/api/jobs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});if(!r.ok){toast('Job could not be created');return;}const job=await r.json();await loadJobs();state.jobId=String(job.id);toast('Job created');renderList();}
 async function showSelectedJobTimeline(){const id=(document.getElementById('jobFilter')||{}).value;if(!id){toast('Choose a job first');return;}const r=await api(`/api/jobs/${id}/timeline`);if(!r.ok){toast('Timeline could not be loaded');return;}const d=await r.json(),body=document.getElementById('body');body.innerHTML=`<button class="backlink" id="timelineBack">← Back to Organize</button><div class="workflow-intro"><strong>${esc(d.job.name)} Timeline</strong><span>${esc([d.job.job_number,d.job.customer,d.job.address].filter(Boolean).join(' · '))}</span></div><div class="row"><span class="badge">${esc(d.job.status)}</span><button class="btn secondary slim" id="jobStatusBtn">${d.job.status==='active'?'Mark Job Complete':'Reopen Job'}</button></div><div>${d.captures.length?d.captures.map((c,i)=>`<div style="display:grid;grid-template-columns:90px 1fr;gap:12px;border-left:3px solid var(--pn-border-2455d9,#2455d9);padding:0 0 20px 16px"><div><strong>${new Date(c.created_at).toLocaleDateString(uiLocale())}</strong><div class="meta">${new Date(c.created_at).toLocaleTimeString(uiLocale(),{hour:'numeric',minute:'2-digit'})}</div></div><div class="card" style="margin:0"><div class="photo-title">${esc(c.photo_title||'Untitled photo')}</div>${c.photo_path?`<img src="${capturePhotoSrc(c)}" alt="Timeline photo">`:''}${photoLocationHtml(c)}${window.PhotoComments?.enabled()&&c.photo_path?`<button class="btn secondary slim" data-html2canvas-ignore="true" data-comments-id="${c.id}">Comments</button>`:''}<div>${esc(c.note||'(no note)')}</div></div></div>`).join(''):'<p class="empty">No photos are assigned to this job yet.</p>'}</div>`;document.getElementById('timelineBack').onclick=renderList;document.getElementById('jobStatusBtn').onclick=async()=>{const u=await api(`/api/jobs/${id}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:d.job.status==='active'?'completed':'active'})});if(u.ok){toast('Job status updated');await loadJobs();renderList();}else toast('Job status could not be updated');};}
-const ANNOTATION_TEMPLATES={date_address:[{t:'datetime',x:4,y:4,size:3,color:'#ffffff',font:'sans',outline:true},{t:'address',x:4,y:11,size:3,color:'#ffffff',font:'sans',outline:true}],evidence:[{t:'datetime',x:4,y:4,size:2.5,color:'#ffffff',font:'sans',outline:true},{t:'address',x:4,y:10,size:2.5,color:'#ffffff',font:'sans',outline:true},{t:'gps',x:4,y:16,size:2.5,color:'#ffffff',font:'sans',outline:true},{t:'copyright',x:4,y:92,size:2.2,color:'#ffffff',font:'sans',outline:true}],copyright:[{t:'copyright',x:4,y:92,size:2.2,color:'#ffffff',font:'sans',outline:true}]};
+const ANNOTATION_TEMPLATES=window.PhotoNotesAnnotationTemplates;
 async function runBatchChanges(){
  const ids=selectedCaptureIds();if(!ids.length)return toast('Select at least one capture');
- const job=document.getElementById('batchJob').value,template=document.getElementById('batchTemplate').value,group=document.getElementById('batchDocument').value,body={ids};
- if(!job&&!template&&!group)return toast('Choose a batch change');
- if(job)body.job_id=Number(job);if(template)body.overlays=ANNOTATION_TEMPLATES[template];
+ const job=document.getElementById('batchJob').value,group=document.getElementById('batchDocument').value,body={ids};
+ if(!job&&!group)return toast('Choose a batch change');
+ if(job)body.job_id=Number(job);
  const button=document.getElementById('runBatch');button.disabled=true;
- try{if(job||template){const r=await api('/api/captures/batch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});if(!r.ok)throw new Error('Photo details could not be updated');}
+ try{if(job){const r=await api('/api/captures/batch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});if(!r.ok)throw new Error('Photo details could not be updated');}
  if(group){const r=await api(`/api/groups/${group}/add`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids})});if(!r.ok)throw new Error('Document could not be updated. Check the selection and try again.');}
  state.imgv++;toast(`Updated ${ids.length} photos`);await loadGroupOptions();runSmartSearch();
  }catch(e){toast(e.message);}finally{button.disabled=false;}
@@ -2288,14 +2288,44 @@ async function renderEdit() {
     <select id="filter"><option value="">All Topics</option>${state.areas.map(a => `<option value="${esc(a)}">${esc(a)}</option>`).join('')}</select>
     <div class="row" style="margin-top:10px"><button class="btn secondary" id="selall">Select All</button><button class="btn secondary" id="selnone">Clear Selected</button></div>
     <div class="row" style="margin-top:8px"><button class="btn" id="delbtn" style="background:var(--pn-bg-b3261e,#b3261e)">Delete Selected</button><button class="btn" id="delall" style="background:var(--pn-bg-b3261e,#b3261e)">Delete All</button></div>
+    <section class="batch-annotation-panel">
+      <h2>Apply Annotation Template</h2>
+      <p>Select photos below, then add a preset of markings to every selected photo. Review placement on each photo afterward.</p>
+      <label for="batchTemplate">Annotation Template</label><select id="batchTemplate"><option value="date_address">Date + Address</option><option value="evidence">Evidence Details</option><option value="copyright">Copyright Only</option></select>
+      <label for="batchAnnotationMode">Existing Markings</label><select id="batchAnnotationMode"><option value="add">Add template, keep existing markings</option><option value="replace">Replace existing markings</option></select>
+      <p id="batchAnnotationEffect">Existing markings will be kept. New template items may overlap them; review each photo.</p>
+      <label id="batchAnnotationConfirmLabel" hidden><input type="checkbox" id="batchAnnotationConfirm"> I understand that replacing removes all existing markings from the selected photos.</label>
+      <p id="batchAnnotationSelected" role="status"></p><button class="btn secondary" id="applyBatchAnnotations">Apply to Selected Photos</button>
+      <p id="batchAnnotationStatus" role="status" aria-live="polite"></p>
+      <div id="batchAnnotationReview" hidden><label for="batchAnnotationPhoto">Review Applied Markings</label><select id="batchAnnotationPhoto"></select><button class="btn secondary" id="previewBatchAnnotations">Preview / Adjust Photo</button></div>
+    </section>
     <div id="cards" style="margin-top:16px"></div>`;
   document.getElementById('filter').onchange = e => {state.editTopic=e.target.value;loadCards(e.target.value);};
-  document.getElementById('selall').onclick = () => document.querySelectorAll('.capchk').forEach(c => { c.checked = true; state.selectedIds.add(String(c.value)); });
-  document.getElementById('selnone').onclick = () => { state.selectedIds.clear(); document.querySelectorAll('.capchk').forEach(c => c.checked = false); };
+  document.getElementById('selall').onclick = () => {document.querySelectorAll('.capchk').forEach(c => { c.checked = true; state.selectedIds.add(String(c.value)); });updateAnnotationSelection();};
+  document.getElementById('selnone').onclick = () => { state.selectedIds.clear(); document.querySelectorAll('.capchk').forEach(c => c.checked = false);updateAnnotationSelection(); };
   document.getElementById('delbtn').onclick = () => doDeleteSelected();
   document.getElementById('delall').onclick = () => doDeleteSelected(true);
+  wireBatchAnnotations();
   document.getElementById('filter').value=state.editTopic||'';
   loadCards(state.editTopic||'');
+}
+
+function updateAnnotationSelection(){const p=document.getElementById('batchAnnotationSelected');if(p)p.textContent=`${selectedCaptureIds().length} photos selected, including selections retained across filters.`;}
+function wireBatchAnnotations(){
+ updateAnnotationSelection();
+ const mode=document.getElementById('batchAnnotationMode');mode.onchange=()=>{const replace=mode.value==='replace';document.getElementById('batchAnnotationConfirmLabel').hidden=!replace;document.getElementById('batchAnnotationConfirm').checked=false;document.getElementById('batchAnnotationEffect').textContent=replace?'All existing markings on the selected photos will be removed and replaced by this template.':'Existing markings will be kept. New template items may overlap them; review each photo.';};
+ document.getElementById('applyBatchAnnotations').onclick=applyBatchAnnotations;
+ document.getElementById('previewBatchAnnotations').onclick=async()=>{const id=Number(document.getElementById('batchAnnotationPhoto').value),r=await api(`/api/captures/${id}/annotation-preview`);if(!r.ok)return toast('Photo could not be opened');renderStampEditor(await r.json());};
+}
+async function applyBatchAnnotations(){
+ const ids=selectedCaptureIds(),button=document.getElementById('applyBatchAnnotations'),status=document.getElementById('batchAnnotationStatus'),mode=document.getElementById('batchAnnotationMode').value;
+ if(!ids.length){status.textContent='Select at least one photo.';return;}
+ const confirmed=document.getElementById('batchAnnotationConfirm').checked;if(mode==='replace'&&!confirmed){status.textContent='Confirm replacement of existing markings before applying.';return;}
+ button.disabled=true;status.textContent='Applying template...';
+ try{const r=await api('/api/captures/annotations',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids,template:document.getElementById('batchTemplate').value,mode,confirm_replace:confirmed})}),d=await r.json();if(!r.ok)throw Error(d.error||'Templates could not be applied');
+ state.imgv++;status.textContent=`Template applied to ${d.updated} photo${d.updated===1?'':'s'}. ${mode==='add'?'Existing markings kept.':'Existing markings replaced.'} Preview each photo to check placement.`;
+ document.getElementById('batchAnnotationConfirm').checked=false;const review=document.getElementById('batchAnnotationReview');review.hidden=false;document.getElementById('batchAnnotationPhoto').innerHTML=d.ids.map((id,i)=>`<option value="${id}">Photo ${i+1} - ${esc((window._lastCards||[]).find(c=>c.id===id)?.photo_title||String(id))}</option>`).join('');await loadCards(state.editTopic||'');
+ }catch(e){status.textContent=e.message;}finally{button.disabled=false;}
 }
 
 async function pairSelected() {
@@ -2731,7 +2761,7 @@ function wireCards(cards, rows) {
   window.PhotoNotesQR?.wireSavedCards(cards,rows,selectedEdition(),{api,esc,toast});
   wirePhotoMarkers(cards);
   cards.querySelectorAll('.concrete-area-button').forEach(b=>b.onclick=()=>openConcreteFootprints(Number(b.dataset.id)));
-  cards.querySelectorAll('.capchk').forEach(c => c.onchange = () => { if (c.checked) state.selectedIds.add(String(c.value)); else state.selectedIds.delete(String(c.value)); });
+  cards.querySelectorAll('.capchk').forEach(c => c.onchange = () => { if (c.checked) state.selectedIds.add(String(c.value)); else state.selectedIds.delete(String(c.value)); updateAnnotationSelection(); });
   cards.querySelectorAll('[data-visual-analysis]').forEach(b=>b.onclick=()=>window.PhotoNotesVisualAnalysis.open(Number(b.dataset.visualAnalysis),()=>loadCards(document.getElementById('filter')?.value||'')));
   wireRotate(cards);
   cards.querySelectorAll('.duplicate-photo-note').forEach(b=>b.onclick=()=>{const source=rows.find(c=>String(c.id)===b.dataset.id);if(source)duplicatePhotoNote(source);});
@@ -2827,7 +2857,7 @@ function renderStampEditor(c) {
       ${addOpts.map(t => `<div class="pill" data-add="${t}">${OVERLAY_FIELD_LABELS[t]}</div>`).join('')}
     </div>
     <div class="status" style="margin-top:6px">Topic and Defect are available after they have been assigned to this photo.</div>
-    <label>Annotation Template</label><div class="row compact"><select id="singleTemplate"><option value="date_address">Date + Address</option><option value="evidence">Evidence Details</option><option value="copyright">Copyright Only</option></select><button class="btn secondary" id="applySingleTemplate">Apply Template</button></div>
+    <label>Annotation Template</label><div class="row compact"><select id="singleTemplate"><option value="date_address">Date + Address</option><option value="evidence">Evidence Details</option><option value="copyright">Copyright Only</option></select><button class="btn secondary" id="applySingleTemplate">Apply Template</button></div><label for="singleTemplateMode">Existing Markings</label><select id="singleTemplateMode"><option value="add">Add template, keep existing markings</option><option value="replace">Replace existing markings</option></select><p>Adding keeps existing markings. Replacing removes them. Review placement, then Save Changes.</p>
     <div id="stampCtl"></div>
     <div class="row" style="margin-top:14px">
       <button class="btn" id="stampSave">Save Changes</button>
@@ -2839,7 +2869,7 @@ function renderStampEditor(c) {
   document.getElementById('stampBack').onclick = backToEdit;
   document.getElementById('stampBackBottom').onclick = backToEdit;
   document.getElementById('stampAdd').onclick = (e) => { const p = e.target.closest('[data-add]'); if (p) addOverlayItem(p.getAttribute('data-add')); };
-  document.getElementById('applySingleTemplate').onclick=()=>{editorOverlays=JSON.parse(JSON.stringify(ANNOTATION_TEMPLATES[document.getElementById('singleTemplate').value]||[]));editorSel=editorOverlays.length?0:-1;drawOverlayItems();renderStampCtl();toast('Template applied');};
+  document.getElementById('applySingleTemplate').onclick=()=>{const mode=document.getElementById('singleTemplateMode').value;if(mode==='replace'&&editorOverlays.length&&!confirm('Replace all existing markings on this photo?'))return;const items=JSON.parse(JSON.stringify(ANNOTATION_TEMPLATES[document.getElementById('singleTemplate').value]||[]));const next=mode==='add'?[...editorOverlays,...items]:items;if(next.length>20)return toast('A photo can have up to 20 markings. Remove some or choose Replace existing markings.');editorOverlays=next;editorSel=editorOverlays.length?0:-1;drawOverlayItems();renderStampCtl();toast('Template applied. Review placement, then Save Changes.');};
   document.getElementById('stampSave').onclick = saveOverlays;
   document.getElementById('stampCopy').onclick = saveStampedCopy;
   const img = document.getElementById('stampImg');

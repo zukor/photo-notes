@@ -1,6 +1,25 @@
 (function () {
   const STORAGE_KEY = 'photo-notes-language';
   const ES = {
+    'Apply Annotation Template':'Aplicar plantilla de anotación',
+    'Edit Photo Markings':'Editar marcas de fotos',
+    'Existing Markings':'Marcas existentes',
+    'Add template, keep existing markings':'Agregar plantilla, conservar marcas existentes',
+    'Replace existing markings':'Reemplazar marcas existentes',
+    'Apply to Selected Photos':'Aplicar a las fotos seleccionadas',
+    'Review Applied Markings':'Revisar marcas aplicadas',
+    'Preview / Adjust Photo':'Vista previa / Ajustar foto',
+    'Select at least one photo.':'Selecciona al menos una foto.',
+    'Applying template...':'Aplicando plantilla...',
+    'Confirm replacement of existing markings before applying.':'Confirma el reemplazo de las marcas existentes antes de aplicar.',
+    'I understand that replacing removes all existing markings from the selected photos.':'Entiendo que el reemplazo elimina todas las marcas existentes de las fotos seleccionadas.',
+    'Existing markings will be kept. New template items may overlap them; review each photo.':'Se conservarán las marcas existentes. Los nuevos elementos podrían superponerse; revisa cada foto.',
+    'All existing markings on the selected photos will be removed and replaced by this template.':'Todas las marcas existentes de las fotos seleccionadas se eliminarán y reemplazarán con esta plantilla.',
+    'Select photos below, then add a preset of markings to every selected photo. Review placement on each photo afterward.':'Selecciona fotos abajo y agrega un conjunto de marcas a cada foto seleccionada. Después revisa la ubicación en cada foto.',
+    'Adding keeps existing markings. Replacing removes them. Review placement, then Save Changes.':'Agregar conserva las marcas existentes. Reemplazar las elimina. Revisa la ubicación y luego guarda los cambios.',
+    'Replace all existing markings on this photo?':'¿Reemplazar todas las marcas existentes de esta foto?',
+    'Template applied. Review placement, then Save Changes.':'Plantilla aplicada. Revisa la ubicación y luego guarda los cambios.',
+
     'Result Screenshot (optional)': 'Captura del resultado (opcional)',
     'Choose Result Screenshot': 'Elegir captura del resultado',
     'Remove Result Screenshot': 'Quitar captura del resultado',
@@ -798,6 +817,9 @@
     const table = lang === 'es' ? ES : ES_TO_EN;
     if (table[text]) return table[text];
     const rules = lang === 'es' ? [
+      [/^(\d+) photos selected, including selections retained across filters\.$/, '$1 fotos seleccionadas, incluidas las selecciones conservadas entre filtros.'],
+      [/^Template applied to (\d+) photos?\. Existing markings kept\. Preview each photo to check placement\.$/, 'Plantilla aplicada a $1 fotos. Se conservaron las marcas existentes. Revisa la ubicación en cada foto.'],
+      [/^Template applied to (\d+) photos?\. Existing markings replaced\. Preview each photo to check placement\.$/, 'Plantilla aplicada a $1 fotos. Se reemplazaron las marcas existentes. Revisa la ubicación en cada foto.'],
       [/^Saved settings: (.+)$/, 'Ajustes guardados: $1'],
       [/^Saved settings applied\. Review unavailable choices: (.+)$/, 'Ajustes guardados aplicados. Revise las opciones no disponibles: $1'],
       [/^(\d+) captures? selected\. Change the selection below or return to Organize\.$/, (_, n) => `${n} ${n === '1' ? 'captura seleccionada' : 'capturas seleccionadas'}. Cambie la selección abajo o vuelva a Organizar.`],
@@ -828,6 +850,9 @@
       [/^The (.+) could not be read\. Retake the photo closer, in even light, and avoid glare\.$/, 'No se pudo leer $1. Vuelva a tomar la foto más cerca, con luz uniforme y sin reflejos.'],
       [/^Remove the "(.+)" topic\? Photos already tagged keep their label\.$/, '¿Eliminar el tema "$1"? Las fotos ya etiquetadas conservarán su etiqueta.']
     ] : [
+      [/^(\d+) fotos seleccionadas, incluidas las selecciones conservadas entre filtros\.$/, '$1 photos selected, including selections retained across filters.'],
+      [/^Plantilla aplicada a (\d+) fotos\. Se conservaron las marcas existentes\. Revisa la ubicación en cada foto\.$/, (_,n)=>`Template applied to ${n} photo${n==='1'?'':'s'}. Existing markings kept. Preview each photo to check placement.`],
+      [/^Plantilla aplicada a (\d+) fotos\. Se reemplazaron las marcas existentes\. Revisa la ubicación en cada foto\.$/, (_,n)=>`Template applied to ${n} photo${n==='1'?'':'s'}. Existing markings replaced. Preview each photo to check placement.`],
       [/^Ajustes guardados: (.+)$/, 'Saved settings: $1'],
       [/^Ajustes guardados aplicados\. Revise las opciones no disponibles: (.+)$/, 'Saved settings applied. Review unavailable choices: $1'],
       [/^(\d+) capturas? seleccionadas?\. Cambie la selección abajo o vuelva a Organizar\.$/, (_, n) => `${n} capture${n === '1' ? '' : 's'} selected. Change the selection below or return to Organize.`],
