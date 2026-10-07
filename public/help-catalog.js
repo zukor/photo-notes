@@ -174,7 +174,9 @@ add('searchFrom|searchTo','Limit results to the date range shown. Set either end
 add('searchMissingAddress','Show captures that need address information. Open them to correct the address or retry a lookup where usable GPS exists.',['Geocoding','Filter']);
 add('sendPhotoSelection|sendPhotoSelectionSummary','Open Select Photos to reveal the Photo Library in Send. It starts collapsed so documents and other Send sections remain easy to reach. Select or unselect Photo Notes, then close the section without losing your selection. The selected count remains visible. Closing the library does not share, download or delete anything.',['Selection','Photo Library']);
 add('closeSendPhotoSelection','Collapse the Photo Library and return to Select Photos. Your selection is kept for sharing, downloading or creating a customer approval package.',['Selection','Photo Library']);
-add('selall|selectAllSendCaptures','Select all photos offered by this current view for the next action. Review the selected count and filters; Select All does not automatically mean every record in your account.',['Selection']);
+add('sendJobFilter|sendTopicFilter','Narrow the Send Photo Library by job, topic or both. Both filters must match when combined. All Jobs and All Topics remove their respective filters. Changing filters does not change selections. Check the counts for selected records inside and outside the filters before sharing.',['Job','Topic','Selection']);
+add('selectAllSendCaptures','Add every currently matching Photo Note to the selection. Records outside the filters are not newly selected; any already selected outside them remain selected. Clear All clears the entire selection. Review the total and outside-filter count before sharing.',['Selection','Job','Topic']);
+add('selall','Select all photos offered by this current view for the next action. Review the selected count and filters; Select All does not automatically mean every record in your account.',['Selection']);
 add('selnone|clearSendSelection','Clear the current selection. This does not delete photos. Select the intended photos again before applying a batch change, sharing, or building a document.',['Selection']);
 add('capchk|sendchk','Include or exclude this photo from the current selection. Selected photos are the scope of batch changes, document creation, deletion, or sharing. Always verify the selected count.',['Selection']);
 add('compareSelected|pairbtn','Select exactly two photographs, then compare them or create a Before/After pair as labeled. Check which image represents the earlier condition. Comparison does not alter the underlying originals.',['Before/after','Selection']);
@@ -469,7 +471,7 @@ const terms={
  'Local save':'A draft/capture stored in this browser on this device while awaiting server upload.',
  'Upload':'Sending the photo/record to the PhotoNotes server. It is separate from a local save.',
  'Photo Library':'Your saved Photo Notes. In Send, open Select Photos to browse the library and choose records for the next delivery action.',
- 'Selection':'The set of photos chosen for an action. Filters and this set determine the action’s scope.',
+ 'Selection':'The Photo Notes chosen for an action. In Send, changing filters keeps this set, including hidden records. Check the total and outside-filter counts before delivery.',
  'Filter':'A view restriction that narrows displayed results without deleting records.',
  'Document link':'A seven-day download link to a saved document snapshot. Anyone with the link can download it until it expires or its owner revokes it.',
  'Document':'A named, ordered report made from photo copies, captions, and supporting details. A nonblank title is required when creating or renaming it. Start with the Organize selection or review photos from a job or topic in Create.',

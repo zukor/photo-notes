@@ -9,6 +9,13 @@
     'A template needs 1 to 20 markings.':'Una plantilla necesita de 1 a 20 marcas.',
     'Enter a template name of 1 to 80 characters.':'Escribe un nombre de plantilla de 1 a 80 caracteres.',
 
+    'All Jobs':'Todos los trabajos',
+    'All Topics':'Todos los temas',
+    'Select All Matching':'Seleccionar todas las coincidencias',
+    'Filters narrow the library without changing your selection. Select All Matching adds the displayed records. Clear All clears every selected record.':'Los filtros reducen la biblioteca sin cambiar la selección. Seleccionar todas las coincidencias agrega los registros mostrados. Borrar todo elimina la selección completa.',
+    'Showing {shown} Photo Notes. {matching} selected here; {outside} selected outside these filters.':'Se muestran {shown} notas fotográficas. {matching} seleccionadas aquí; {outside} seleccionadas fuera de estos filtros.',
+    'No Photo Notes match these filters.':'Ninguna nota fotográfica coincide con estos filtros.',
+    'All matching Photo Notes selected':'Se seleccionaron todas las notas fotográficas coincidentes',
     'Select Photos':'Seleccionar fotos',
     'Photo Library':'Biblioteca de fotos',
     'Close Photo Selection':'Cerrar selección de fotos',
