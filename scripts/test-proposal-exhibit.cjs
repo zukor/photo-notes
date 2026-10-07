@@ -34,7 +34,8 @@ const output = path.join(__dirname, '../output/proposal-exhibit-qa');
       return route.fulfill({json:data});
      });
      await page.goto(`http://127.0.0.1:${server.address().port}`);
-     await page.waitForFunction(()=>typeof state!=='undefined'&&state.me);
+     await page.waitForFunction(()=>typeof state!=='undefined'&&state.me&&document.getElementById('body'));
+     await page.waitForFunction(()=>document.getElementById('body').children.length>0);
      for(const edition of editions){
       fixtureNote=edition==='general'?note:'Observed site condition for '+edition;
       await page.evaluate(()=>localStorage.removeItem('proposal-exhibit:1:42'));
