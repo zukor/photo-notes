@@ -2095,22 +2095,23 @@ async function editCaptureAddress(c) {
 }
 
 // ---- Library (saved captures) ----
+const organizeSectionStates=new Map();
 async function renderList() {
   const body = document.getElementById('body');
   body.className = 'workflow-organize';
   body.innerHTML = `
     <div class="workflow-intro organize-intro"><strong>Organize your Photo Notes</strong><span>Find the photos you need, select them, and choose what you want to do with them.</span></div>
 
-    <section class="organize-workspace-section organize-context-section">
-      <div class="organize-step-head"><span class="organize-step-number">1</span><div><h2>Choose a job</h2><p>Show Photo Notes from one job, review its timeline, or create a new job.</p></div></div>
-      <details class="pair-builder organize-job-builder" open><summary><span>Job controls</span><span class="pair-expand">Open or close</span></summary>
+    <details id="organizeJobSection" class="organize-workspace-section organize-context-section" open>
+      <summary class="organize-step-head"><span class="organize-step-number">1</span><div><h2>Choose a job</h2><p>Show Photo Notes from one job, review its timeline, or create a new job.</p></div></summary>
+      <div class="organize-job-builder">
         <div class="organize-form-grid"><section class="organize-panel"><label>Current Job</label><select id="jobFilter"><option value="">All Jobs</option>${state.jobs.map(j=>`<option value="${j.id}">${esc(j.job_number?j.job_number+' — '+j.name:j.name)} (${j.photo_count||0})</option>`).join('')}</select><button class="btn secondary slim" id="timelineBtn" type="button">View Job Timeline</button>${isPavingClient()?`<div id="pavingReadiness" class="evidence-readiness">Choose a job to check its photo evidence.</div><div class="row compact" style="margin-top:8px"><button class="btn secondary slim" id="pavingJobPdf" type="button">Job Evidence PDF</button><button class="btn secondary slim" id="pavingJobWord" type="button">Job Evidence Word</button></div>`:''}</section>
         <section class="organize-panel"><label>Create a New Job</label><input id="newJobName" placeholder="Job name"><div class="row compact"><input id="newJobNumber" placeholder="Job number"><input id="newJobCustomer" placeholder="Customer"></div><input id="newJobAddress" placeholder="Job address"><button class="btn secondary slim" id="createJobBtn" type="button">Create Job</button></section></div>
-      </details>
-    </section>
+      </div>
+    </details>
 
-    <section class="organize-workspace-section organize-search-section">
-      <div class="organize-step-head"><span class="organize-step-number">2</span><div><h2>Find Photo Notes</h2><p>Filter by topic or search the details saved with each photo.</p></div></div>
+    <details id="organizeFindSection" class="organize-workspace-section organize-search-section" open>
+      <summary class="organize-step-head"><span class="organize-step-number">2</span><div><h2>Find Photo Notes</h2><p>Filter by topic or search the details saved with each photo.</p></div></summary>
       <div class="organize-search-grid">
         <div><label>Filter by Topic</label><select id="filter"><option value="">All Topics</option>${state.areas.map(a => `<option value="${esc(a)}">${esc(a)}</option>`).join('')}</select></div>
         <div class="organize-search-box"><label>Search Photo Notes</label><div class="row compact"><input id="photoSearch" type="search" placeholder="Notes, jobs, customers, addresses, topics, dates, or defects"><button class="btn" id="photoSearchBtn" type="button">Search</button><button class="btn secondary" id="photoSearchClear" type="button">Clear</button></div></div>
@@ -2118,10 +2119,10 @@ async function renderList() {
       <details class="organize-search-filters"><summary>More search filters</summary><div class="row compact"><input id="searchFrom" type="date" title="From date"><input id="searchTo" type="date" title="To date"></div><label style="text-transform:none;letter-spacing:0"><input id="searchMissingAddress" type="checkbox" style="width:auto"> Missing address only</label></details>
       ${photoMarkersOn()?`<div class="row photo-marker-filters"><label style="color:var(--pn-text-000,#000);min-height:44px;display:flex;align-items:center;gap:8px"><input type="checkbox" id="markerFavorites" style="width:22px;height:22px"> Favorites</label><label style="color:var(--pn-text-000,#000);min-height:44px;display:flex;align-items:center;gap:8px"><input type="checkbox" id="markerFlagged" style="width:22px;height:22px"> Flagged</label></div>`:''}
       <div class="status" id="photoSearchStatus"></div>
-    </section>
+    </details>
 
-    <section class="organize-workspace-section organize-actions-section">
-      <div class="organize-step-head"><span class="organize-step-number">3</span><div><h2>Work with selected Photo Notes</h2><p>Select photos in the library below, then use only the action you need.</p></div></div>
+    <details id="organizeWorkSection" class="organize-workspace-section organize-actions-section" open>
+      <summary class="organize-step-head"><span class="organize-step-number">3</span><div><h2>Work with selected Photo Notes</h2><p>Select photos in the library below, then use only the action you need.</p></div></summary>
       <div class="organize-selection-toolbar" aria-label="Photo Note selection controls">
         <strong>Selection</strong>
         <div class="organize-action-row"><button class="btn secondary" id="selall">Select All</button><button class="btn secondary" id="selnone">Clear Selection</button><button class="btn secondary" id="compareSelected">Compare 2 Photos</button>${window.PhotoNotesBulkMetadata?.enabled(state)?`<button type="button" class="btn secondary" id="editSelected">Edit Selected</button>`:''}${featureOn('measurements') ? `<button class="btn secondary" id="classifybatch">Classify Selected (AI)</button>` : ''}</div>
@@ -2161,7 +2162,7 @@ async function renderList() {
         <button class="btn secondary slim" id="runBatch" type="button">Apply Batch Changes</button>
       </section>
     </div>
-    </section>
+    </details>
 
     ${isConcreteClient()?'<div class="organize-footer-actions"><button class="btn secondary" id="concreteAreas">Patio &amp; Foundation Areas</button></div>':''}
     ${featureOn('measurements') ? `<div class="organize-footer-actions"><button class="btn secondary" id="openmap">Open Job Site Map</button></div>` : ''}
@@ -2169,6 +2170,7 @@ async function renderList() {
     <div class="organize-library-heading"><div><span class="organize-library-kicker">Your library</span><h2>Current Photo Notes</h2></div><p>Saved Photo Notes appear here. Select any photos you want to organize or compare.</p></div>
     ${isProClient()?'<details class="organize-panel" id="epLibrary"><summary>Export Presets</summary><p style="color:var(--pn-text-000,#000);text-align:left">Package selected Photo Notes using reusable export settings.</p><section id="exportPresetLibrary"></section></details>':''}
     <div id="cards"></div>`;
+  for(const id of ['organizeJobSection','organizeFindSection','organizeWorkSection']){const panel=document.getElementById(id),key=state.me?.id+':'+selectedEdition()+':'+id;panel.open=organizeSectionStates.get(key)!==false;panel.ontoggle=()=>organizeSectionStates.set(key,panel.open);}
   document.getElementById('filter').onchange = e => runSmartSearch();
   ['markerFavorites','markerFlagged'].forEach(id=>{const e=document.getElementById(id);if(e)e.onchange=()=>runSmartSearch();});
   const markers=document.getElementById('applyMarkers');if(markers)markers.onclick=batchPhotoMarkers;
@@ -3646,8 +3648,12 @@ async function renderSend() {
 async function loadBillingOffers(){const box=document.getElementById('billingOffers');if(!box)return;try{const r=await api('/api/billing/config');if(!r.ok)return;const d=await r.json(),offers=Object.entries(d.offers||{});if(!d.checkout_enabled||!offers.length){box.innerHTML='';return;}box.innerHTML=`<section class="send-feature-panel" aria-labelledby="paymentsHeading"><div class="send-feature-heading" id="paymentsHeading">Payments</div><p class="status">Pay securely on Stripe’s hosted checkout page.</p>${offers.map(([slug,o])=>`<div class="card delivery-card"><div><strong>${esc(o.label)}</strong><div class="meta">Provided by ${esc(o.dba)}</div></div><button class="btn slim billing-checkout" data-offer="${esc(slug)}">Pay with Stripe</button></div>`).join('')}</section>`;box.querySelectorAll('.billing-checkout').forEach(button=>button.onclick=()=>startStripeCheckout(button));}catch(e){box.innerHTML='';}}
 async function startStripeCheckout(button){button.disabled=true;button.textContent='Opening Stripe...';try{const r=await api('/api/billing/checkout',{method:'POST',headers:{'Content-Type':'application/json','Idempotency-Key':`checkout-${Date.now()}-${crypto.randomUUID()}`},body:JSON.stringify({offer:button.dataset.offer,quantity:1})}),d=await r.json();if(!r.ok||!d.url)throw new Error();location.assign(d.url);}catch(e){toast('Stripe checkout could not be opened');button.disabled=false;button.textContent='Pay with Stripe';}}
 
-async function createApprovalPackage(){const ids=Array.from(state.selectedIds).map(Number);if(!ids.length){toast('Select at least one capture');return;}const title=document.getElementById('approvalTitle').value.trim()||'Photo Review',message=document.getElementById('approvalMessage').value.trim();const r=await api('/api/approvals',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids,title,message})});const d=await r.json().catch(()=>({}));if(!r.ok){toast(d.error||'Review link could not be created');return;}const box=document.getElementById('approvalResult');box.innerHTML=`<div class="card"><strong>Customer review link ready</strong><input id="approvalUrl" readonly value="${esc(d.url)}"><button class="btn secondary slim" id="copyApproval">Copy Link</button><div class="meta">Expires in 14 days</div></div>`;document.getElementById('copyApproval').onclick=async()=>{try{await navigator.clipboard.writeText(d.url);toast('Link copied');}catch(e){document.getElementById('approvalUrl').select();}};loadApprovalPackages();}
-async function loadApprovalPackages(){const box=document.getElementById('approvalList');if(!box)return;const r=await api('/api/approvals');if(!r.ok)return;const rows=await r.json();box.innerHTML=rows.length?`<div class="formhead">Recent Customer Reviews</div>${rows.slice(0,10).map(x=>`<div class="card"><strong>${esc(x.title)}</strong> <span class="badge">${esc(x.status.replace('_',' '))}</span><div class="meta">${x.photo_count} photo${x.photo_count===1?'':'s'} · expires ${new Date(x.expires_at).toLocaleDateString(uiLocale())}</div>${x.customer_name?`<div>Response from ${esc(x.customer_name)}${x.customer_comment?`: ${esc(x.customer_comment)}`:''}</div>`:''}<button class="btn secondary slim copyExistingApproval" data-url="${esc(location.origin+'/review/'+x.token)}">Copy Link</button></div>`).join('')}`:'';box.querySelectorAll('.copyExistingApproval').forEach(b=>b.onclick=async()=>{try{await navigator.clipboard.writeText(b.dataset.url);toast('Link copied');}catch(e){}});}
+async function shareReviewLink(url,title){
+ if(navigator.share){try{await navigator.share({title:title||uiT('Customer Review'),url});}catch(e){if(e?.name!=='AbortError')toast('Could not share the link. Use Copy Link.');}return;}
+ try{await navigator.clipboard.writeText(url);toast('Link copied. Paste it into your preferred app.');}catch{toast('Sharing is unavailable in this browser. Use Copy Link.');}
+}
+async function createApprovalPackage(){const ids=Array.from(state.selectedIds).map(Number);if(!ids.length){toast('Select at least one capture');return;}const title=document.getElementById('approvalTitle').value.trim()||'Photo Review',message=document.getElementById('approvalMessage').value.trim();const r=await api('/api/approvals',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids,title,message})});const d=await r.json().catch(()=>({}));if(!r.ok){toast(d.error||'Review link could not be created');return;}const box=document.getElementById('approvalResult');box.innerHTML=`<div class="card"><strong>Customer review link ready</strong><input id="approvalUrl" readonly value="${esc(d.url)}"><div class="row compact"><button class="btn secondary slim" id="copyApproval">Copy Link</button><button class="btn secondary slim" id="shareApproval">Share Link</button></div><div class="meta">Expires in 14 days</div></div>`;document.getElementById('copyApproval').onclick=async()=>{try{await navigator.clipboard.writeText(d.url);toast('Link copied');}catch(e){document.getElementById('approvalUrl').select();}};document.getElementById('shareApproval').onclick=()=>shareReviewLink(d.url,title);loadApprovalPackages();}
+async function loadApprovalPackages(){const box=document.getElementById('approvalList');if(!box)return;const r=await api('/api/approvals');if(!r.ok)return;const rows=await r.json();box.innerHTML=rows.length?`<div class="formhead">Recent Customer Reviews</div>${rows.slice(0,10).map(x=>`<div class="card"><strong>${esc(x.title)}</strong> <span class="badge">${esc(x.status.replace('_',' '))}</span><div class="meta">${x.photo_count} photo${x.photo_count===1?'':'s'} · expires ${new Date(x.expires_at).toLocaleDateString(uiLocale())}</div>${x.customer_name?`<div>Response from ${esc(x.customer_name)}${x.customer_comment?`: ${esc(x.customer_comment)}`:''}</div>`:''}<button class="btn secondary slim copyExistingApproval" data-url="${esc(location.origin+'/review/'+x.token)}">Copy Link</button><button class="btn secondary slim shareExistingApproval" data-url="${esc(location.origin+'/review/'+x.token)}" data-title="${esc(x.title)}">Share Link</button></div>`).join('')}`:'';box.querySelectorAll('.shareExistingApproval').forEach(b=>b.onclick=()=>shareReviewLink(b.dataset.url,b.dataset.title));box.querySelectorAll('.copyExistingApproval').forEach(b=>b.onclick=async()=>{try{await navigator.clipboard.writeText(b.dataset.url);toast('Link copied');}catch(e){}});}
 
 function fillSendPhotoFilters(captures){
  const jobs=new Map((state.jobs||[]).map(j=>[String(j.id),j.job_number?j.job_number+' - '+j.name:j.name])),topics=new Set(state.areas||[]);
