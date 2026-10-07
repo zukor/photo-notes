@@ -360,7 +360,7 @@ function renderApp() {
       </nav>`}
       ${photoToolOpen?`<div class="photo-tool-navigation"><span id="photoToolLocation">${uiT(photoToolSection)} / ${uiT(state.view==='photo-follow-ups'?'Photo Follow-Ups':'Request Photos')}</span><button type="button" class="btn secondary" id="photoToolClose">${uiT('Close')}</button></div>`:''}
       <div id="body"></div>
-      ${isProClient()&&['general','property','hoa','paving','concrete','contractor','roofer'].includes(state.proType)?'<div class="shared-photo-tools"><div class="fu-actions"><button type="button" class="btn secondary" id="fuOpen">Photo Follow-Ups</button></div><div class="pr-actions"><button type="button" class="btn secondary" id="prOpen">Request Photos</button></div></div>':''}
+      ${isProClient()&&['organize','photo-library','hoa-visits','hoa-visit','photo-follow-ups','photo-requests'].includes(state.view)&&['general','property','hoa','paving','concrete','contractor','roofer'].includes(state.proType)?'<div class="shared-photo-tools"><div class="fu-actions"><button type="button" class="btn secondary" id="fuOpen">Photo Follow-Ups</button></div><div class="pr-actions"><button type="button" class="btn secondary" id="prOpen">Request Photos</button></div></div>':''}
       <div class="footer">&copy; ${new Date().getFullYear()} Zukor AI. All Rights Reserved.<br><a href="/install.html" target="_blank" rel="noopener">Install Photo Notes on your device</a></div>
     </div>
     <button class="issue-fab ${isRoadIssuesClient()?'road-issue-fab':''}" id="issueFab" type="button" data-html2canvas-ignore="true" aria-label="Report Issue">${issueFabLabel()}</button>
@@ -750,14 +750,14 @@ function renderCapture() {
     ${isConcreteClient()?concreteCaptureDetailsMarkup():''}
 
     <section id="captureSettings" class="capture-settings">
-    ${isHoaClient()?`<label>Maintenance Category</label><select id="hoaArea">${HOA_AREAS.map(a=>`<option value="${esc(a)}">${esc(a)}</option>`).join('')}</select><div id="hoaDirectedWrap" style="display:none"><label>Directed To</label><input id="hoaDirected" placeholder="Person expected to answer"></div>`:`<label data-topic-heading="${isIssueReporterClient()?'Topic':'Topic (optional)'}">${isIssueReporterClient()?'Topic':'Topic (optional)'}</label>
+    ${isHoaClient()?`<label>Maintenance Category</label><select id="hoaArea">${HOA_AREAS.map(a=>`<option value="${esc(a)}">${esc(a)}</option>`).join('')}</select><div id="hoaDirectedWrap" style="display:none"><label>Directed To</label><input id="hoaDirected" placeholder="Person expected to answer"></div>`:`<details id="captureTopic"><summary id="captureTopicHeading" data-topic-heading="${isIssueReporterClient()?'Topic':'Topic (optional)'}">${isIssueReporterClient()?'Topic':'Topic (optional)'}</summary>
     <div class="pill-group" id="areas">${areaChips()}</div>
     <div class="row compact" style="margin-top:10px">
       <input type="text" id="newarea" placeholder="${isIssueReporterClient()?'Type issue name here':isBasicClient()?'Type topic name here':'Add a topic...'}" />
       <button class="btn ${isBasicClient()?'':'secondary'}" id="addarea">Add</button>
-    </div>`}
+    </div></details>`}
 
-    ${isProClient()?`<label for="captureUrgency">Urgency</label><select id="captureUrgency"><option value="standard" ${state.urgency==='urgent'?'':'selected'}>Standard</option><option value="urgent" ${state.urgency==='urgent'?'selected':''}>Urgent</option></select>`:''}
+    ${isProClient()?`<details id="captureUrgencyOptions"><summary id="captureUrgencyHeading">Urgency (optional): ${state.urgency==='urgent'?'Urgent':'Standard'}</summary><select id="captureUrgency" aria-label="Urgency"><option value="standard" ${state.urgency==='urgent'?'':'selected'}>Standard</option><option value="urgent" ${state.urgency==='urgent'?'selected':''}>Urgent</option></select></details>`:''}
     </section>
     <div class="capture-actions">${isBasicClient()?'':'<button class="btn" id="save" type="button">Save</button>'}<button class="btn" id="send" type="button">Send/Share</button></div>
   `;
@@ -769,7 +769,7 @@ function renderCapture() {
     active:name=>{state._captureTemplateName=name;},activeName:()=>state._captureTemplateName||''
   });
   const urgencySelect=document.getElementById('captureUrgency');
-  if(urgencySelect)urgencySelect.onchange=()=>{state.urgency=urgencySelect.value;};
+  if(urgencySelect)urgencySelect.onchange=()=>{state.urgency=urgencySelect.value;document.getElementById('captureUrgencyHeading').textContent=uiT('Urgency (optional)')+': '+uiT(state.urgency==='urgent'?'Urgent':'Standard');};
   if(isProClient())window.PhotoNotesCustomFields?.mount({user:state.me?.id,edition:selectedEdition(),toast});
   if(isConcreteClient())bindConcreteCapture();
   if(isPavingClient())bindPavingPhotoReason();

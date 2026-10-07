@@ -879,3 +879,15 @@ body:has(#desktopHelp) .issue-fab { left:max(14px,env(safe-area-inset-left)); ri
 #captureSettings :is(p,.status){font-size:14px;line-height:1.4}
 #captureSettings :is(input,select,textarea,button){font-size:16px}
 #captureSettings #ctBar{margin-top:16px}
+
+/* One flat disclosure style for optional Capture choices. */
+#captureSettings{width:100%;padding:0}
+#captureSettings>details,#captureSettings #ctBar,#captureSettings #ctBar>details,#captureSettings #cfCapture{width:100%;margin:8px 0;padding:0;border:0;border-radius:0;background:transparent}
+#captureSettings summary{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:36px;padding:6px 0;font-size:16px;cursor:pointer;list-style:none}
+#captureSettings summary::-webkit-details-marker{display:none}
+#captureSettings summary::marker{content:''}
+#captureSettings summary::after{content:'';flex:0 0 7px;width:7px;height:7px;margin-right:3px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(45deg)}
+#captureSettings details[open]>summary::after{transform:rotate(225deg)}
+#captureSettings summary:focus-visible{outline:2px solid currentColor;outline-offset:2px}
+#captureSettings :is(input,select,textarea){width:100%;box-sizing:border-box}
+.shared-photo-tools{justify-content:center}
