@@ -250,6 +250,8 @@ add('ramoDescription','Describe what changed, why the grouped photos matter, and
 add('ramoCaption*','Explain this photo’s role in the grouped submission. Captions should identify the condition, location, and change supported by the image. Review all attachments before submitting.',['Ramo','Caption']);
 add('approvalTitle','Name the customer review package so the recipient can recognize the work. Check the selected photos before creating the link.',['Approval']);
 add('approvalMessage','Write instructions for the customer, including what to review and any question needing a response. This message accompanies the review link.',['Approval']);
+add('organizeJobSection|organizeFindSection|organizeWorkSection','Open or close this Organize section independently. Its heading and explanation stay visible. Closing hides controls without clearing selections, filters or entered fields. Open/closed choices are remembered for this account and edition during this session.',['Selection','Job','Topic']);
+add('shareApproval|shareExistingApproval','Share the customer review link through the device sharing menu. Choose a destination and complete delivery yourself. Canceling does not send it. When device sharing is unavailable, the link is copied if clipboard access is allowed; Copy Link remains available as a fallback. Sharing does not mean the customer approved the photos.',['Approval','Share sheet']);
 add('createApproval','Create a private, expiring review link for the selected photos. Review the package before sharing the URL. Creating the link does not send it or mark the photos approved.',['Approval','Selection']);
 add('approvalUrl|copyApproval|copyExistingApproval','Copy the review URL and send it to the intended customer through your chosen channel. Treat it as a private link. Check expiration and recorded responses in PhotoNotes.',['Approval']);
 add('billing-checkout','Open the configured Stripe checkout for this offer. Review the provider, description, quantity, and price before completing payment. Opening checkout does not complete a purchase.',['Checkout']);
@@ -481,10 +483,10 @@ const terms={
  'Markdown':'Plain text with simple formatting. Markdown + Photos exports text and images in a ZIP package.',
  'Resolution':'The number of pixels in an image. Lower-resolution exports can lose visible detail.',
  'Download':'Saving a generated file to this device. It does not automatically send the file to anyone.',
- 'Share sheet':'The operating system or browser’s destination chooser used to share a prepared file.',
+ 'Share sheet':'The operating system or browser’s destination chooser used to share a prepared file or review link.',
  'Shortcut':'A saved delivery destination associated with your account for reuse.',
  'HTTPS':'A secure website URL starting with https://. It protects the connection, not the accuracy of content.',
- 'Approval':'A recorded customer/board decision. Creating a review link is not approval.',
+ 'Approval':'A recorded customer/board decision. Creating or sharing a review link is not approval.',
  'Completion link':'A private link used to submit photos of completed property work for later verification.',
  'Receipt':'A saved confirmation from the receiving workflow. Check its status and attachment count.',
  'Ramo':'The authorized Ramo Optimizer integration receiving grouped photo evidence submissions.',

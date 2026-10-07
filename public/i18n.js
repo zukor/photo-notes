@@ -9,6 +9,11 @@
     'A template needs 1 to 20 markings.':'Una plantilla necesita de 1 a 20 marcas.',
     'Enter a template name of 1 to 80 characters.':'Escribe un nombre de plantilla de 1 a 80 caracteres.',
 
+    'Share Link':'Compartir enlace',
+    'Customer Review':'Revisión del cliente',
+    'Could not share the link. Use Copy Link.':'No se pudo compartir el enlace. Usa Copiar enlace.',
+    'Link copied. Paste it into your preferred app.':'Enlace copiado. Pégalo en la aplicación que prefieras.',
+    'Sharing is unavailable in this browser. Use Copy Link.':'Este navegador no permite compartir. Usa Copiar enlace.',
     'All Jobs':'Todos los trabajos',
     'All Topics':'Todos los temas',
     'Select All Matching':'Seleccionar todas las coincidencias',
