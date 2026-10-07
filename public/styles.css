@@ -874,7 +874,7 @@ body:has(#desktopHelp) .issue-fab { left:max(14px,env(safe-area-inset-left)); ri
 .testing-navigation .testing-actions{display:flex;flex-wrap:wrap;gap:8px}
 
 /* Optional capture choices follow the photograph and its notes, without a panel. */
-.capture-settings{margin-top:16px;text-align:left}
+.capture-settings{margin-top:12px;text-align:left}
 #captureSettings :is(label,summary){font:700 14px/1.4 Arial,Helvetica,sans-serif;text-transform:none;letter-spacing:0}
 #captureSettings :is(p,.status){font-size:14px;line-height:1.4}
 #captureSettings :is(input,select,textarea,button){font-size:16px}
@@ -891,3 +891,8 @@ body:has(#desktopHelp) .issue-fab { left:max(14px,env(safe-area-inset-left)); ri
 #captureSettings summary:focus-visible{outline:2px solid currentColor;outline-offset:2px}
 #captureSettings :is(input,select,textarea){width:100%;box-sizing:border-box}
 .shared-photo-tools{justify-content:center}
+
+/* Match the outer spacing above and below the optional capture rows. */
+#note{display:block}
+#captureSettings>:first-child{margin-top:0}
+#captureSettings>:last-child{margin-bottom:0}
