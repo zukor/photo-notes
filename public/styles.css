@@ -1,6 +1,6 @@
 :root { --accent:#1d4ed8; --line:#000; }
 * { box-sizing: border-box; }
-html, body { max-width: 100%; overflow-x: hidden; }
+html, body { max-width: 100%; overflow-x: clip; }
 body {
   margin: 0;
   /* Installed iPhone apps draw behind the status bar with viewport-fit=cover. */
@@ -252,7 +252,7 @@ textarea { min-height: 96px; resize: vertical; }
 .tab { flex: 1; width:auto; margin:0; text-align: center; padding: 10px; border: 1px solid var(--pn-border-000,#000); border-radius: 8px; color: var(--pn-text-000,#000); background: var(--pn-bg-fff,#fff); font:700 16px Arial, Helvetica, sans-serif; cursor:pointer; }
 .tab.on { background: var(--pn-bg-000,#000); color: var(--pn-text-fff,#fff); }
 .tab:focus-visible { outline:3px solid var(--pn-border-2455d9,#2455d9); outline-offset:2px; }
-.workflow-tabs { max-width: 820px; margin: 4px auto 16px; }
+.workflow-tabs { position:sticky; top:env(safe-area-inset-top,0px); z-index:30; max-width:820px; margin:4px auto 16px; padding:4px 0; background:var(--pn-bg-fff,#fff); }
 .asset-card img { width:100%; max-height:280px; object-fit:cover; border-radius:9px; margin-bottom:10px; }
 .visit-progress,.visit-next,.success-box { border:2px solid var(--pn-border-2455d9,#2455d9); border-radius:12px; padding:16px; margin:14px 0; background:var(--pn-bg-f4f7ff,#f4f7ff); }
 .success-box { border-color:var(--pn-border-238636,#238636); background:var(--pn-bg-effaf1,#effaf1); }
