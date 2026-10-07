@@ -6,9 +6,9 @@ const root=path.join(__dirname,'..');
 const db=fs.readFileSync(path.join(root,'db.js'),'utf8');
 const app=fs.readFileSync(path.join(root,'public','app.js'),'utf8');
 
-test('Fences & Walls is available to existing and future users',()=>{
-  assert.match(db,/DEFAULT_AREAS = \[[^\]]*'Fences & Walls'/);
-  assert.match(db,/SELECT id, 'Fences & Walls' FROM users ON CONFLICT DO NOTHING/);
+test('accounts have no seeded topics',()=>{
+  assert.doesNotMatch(db,/DEFAULT_AREAS|seedUserAreas|SELECT id, 'Fences & Walls'/);
+  assert.ok(db.includes("require('./topic-reset').SQL"));
 });
 
 test('Capture does not silently assign the first topic',()=>{
