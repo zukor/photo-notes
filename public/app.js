@@ -3938,20 +3938,23 @@ async function renderGroups() {
   body.innerHTML = `
     <div class="workflow-intro"><strong>Create a document</strong><span>Build an ordered report from organized captures. PDF and Word documents include the title, description, photos, captions, dates, topics, and locations.</span></div>
     <div class="formhead">Start a New Document</div>
-    <input id="gtitle" type="text" placeholder="Document Title" style="font-size:18px;font-weight:bold" />
+    <input id="gtitle" type="text" required aria-label="Document Title" aria-describedby="documentTitleRequirement" placeholder="Document Title" style="font-size:18px;font-weight:bold" />
     <textarea id="gdesc" placeholder="Subtitle or description (optional)" style="min-height:60px;margin-top:8px"></textarea>
     <div class="status">${state.selectedIds.size ? `${state.selectedIds.size} selected capture${state.selectedIds.size === 1 ? '' : 's'} will be added.` : 'You can create an empty document, then add captures from Organize.'}</div>
-    <button class="btn slim" id="gcreate">Create Document</button>
+    <p id="documentTitleRequirement">Enter a document title to enable Create Document.</p>
+    <button class="btn slim" id="gcreate" disabled>Create Document</button>
 
     <div class="formhead" style="margin-top:30px">Your Documents</div>
     <div id="glist"></div>`;
   document.getElementById('gcreate').onclick = createGroup;
   titleCaseInput(document.getElementById('gtitle'));
+  document.getElementById('gtitle').addEventListener('input', () => { document.getElementById('gcreate').disabled = !document.getElementById('gtitle').value.trim(); });
   loadGroups();
 }
 
 async function createGroup() {
-  const title = document.getElementById('gtitle').value.trim() || 'Untitled group';
+  const title = document.getElementById('gtitle').value.trim();
+  if (!title) { toast('Enter a document title.'); document.getElementById('gtitle').focus(); return; }
   const description = document.getElementById('gdesc').value.trim();
   const btn = document.getElementById('gcreate');
   btn.disabled = true;
@@ -3968,7 +3971,7 @@ async function createGroup() {
     toast('Document created. Add or review its contents below.');
     await renderGroups();
   } catch (e) { toast('Could not create group'); }
-  finally { btn.disabled = false; }
+  finally { if (btn.isConnected) btn.disabled = !document.getElementById('gtitle').value.trim(); }
 }
 
 async function loadGroups() {
@@ -4451,7 +4454,8 @@ function editTitle() {
   document.getElementById('cancelTitle').onclick = renderTitleView;
 }
 async function saveTitle() {
-  const v = document.getElementById('gdtitle').value.trim() || 'Untitled group';
+  const v = document.getElementById('gdtitle').value.trim();
+  if (!v) { toast('Enter a document title.'); document.getElementById('gdtitle').focus(); return; }
   const r = await api(`/api/groups/${currentGroup.id}`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ title: v }),

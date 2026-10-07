@@ -249,9 +249,9 @@ add('approvalMessage','Write instructions for the customer, including what to re
 add('createApproval','Create a private, expiring review link for the selected photos. Review the package before sharing the URL. Creating the link does not send it or mark the photos approved.',['Approval','Selection']);
 add('approvalUrl|copyApproval|copyExistingApproval','Copy the review URL and send it to the intended customer through your chosen channel. Treat it as a private link. Check expiration and recorded responses in PhotoNotes.',['Approval']);
 add('billing-checkout','Open the configured Stripe checkout for this offer. Review the provider, description, quantity, and price before completing payment. Opening checkout does not complete a purchase.',['Checkout']);
-add('gtitle|gdtitle','Enter the document title that will appear in the generated report. Identify the job or subject and the report purpose. Save an edited title before exporting.',['Document']);
+add('gtitle|gdtitle','A nonblank document title is required. The title field starts empty; no default name is assigned. Enter the document title that will appear in the generated report. Identify the job or subject and the report purpose. Save an edited title before exporting.',['Document']);
 add('gdesc|gddesc','Enter the report subtitle or description. Explain the scope and context of the selected evidence. Keep it distinct from individual photo captions.',['Document','Caption']);
-add('gcreate','Create a document using the title, description, and selected photos. You may create an empty document and add photos later from Organize. The document’s copies can be arranged independently of library originals.',['Document','Selection']);
+add('gcreate','Enter a nonblank title to enable Create Document. Whitespace alone is not a title. You may deliberately type any name, including Untitled Document. Create a document using the title, description, and selected photos. You may create an empty document and add photos later from Organize. The document’s copies can be arranged independently of library originals.',['Document','Selection']);
 add('gopen','Open the document composer to review details, photos, captions, order, branding, preview, and export settings. Changes to document copies do not replace the library originals.',['Document']);
 add('editTitle|saveTitle','Edit or save the document title. Check the saved heading in the preview before exporting.',['Document']);
 add('editDesc|saveDesc','Edit or save the document subtitle/description. Review the preview so the context is accurate for the included photos.',['Document']);
@@ -467,7 +467,7 @@ const terms={
  'Selection':'The set of photos chosen for an action. Filters and this set determine the action’s scope.',
  'Filter':'A view restriction that narrows displayed results without deleting records.',
  'Document link':'A seven-day download link to a saved document snapshot. Anyone with the link can download it until it expires or its owner revokes it.',
- 'Document':'An ordered report made from photo copies, captions, and supporting details.',
+ 'Document':'A named, ordered report made from photo copies, captions, and supporting details. A nonblank title is required when creating or renaming it.',
  'Caption':'Text explaining an individual photo in a report or grouped submission.',
  'PDF':'A document format preserving the finished page layout for viewing and printing.',
  'Word':'An editable .docx document that can be opened in Word or compatible software.',
