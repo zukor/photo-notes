@@ -2875,12 +2875,12 @@ function renderStampEditor(c) {
     <div id="stampStage" style="position:relative;display:inline-block;max-width:100%;border:1px solid var(--pn-border-000,#000);border-radius:8px;overflow:hidden;touch-action:none">
       <img id="stampImg" src="${photoSrc(c.photo_path)}" alt="photo" style="display:block;max-width:100%;height:auto" />
     </div>
-    <label style="margin-top:10px">Add Item</label>
+    <label style="margin-top:10px">Add Individual Marking</label>
     <div class="pill-group" id="stampAdd">
       ${addOpts.map(t => `<div class="pill" data-add="${t}">${OVERLAY_FIELD_LABELS[t]}</div>`).join('')}
     </div>
     <div class="status" style="margin-top:6px">Topic and Defect are available after they have been assigned to this photo.</div>
-    <label>Annotation Template</label><div class="row compact"><select id="singleTemplate"><option value="date_address">Date + Address</option><option value="evidence">Evidence Details</option><option value="copyright">Copyright Only</option></select><button class="btn secondary" id="applySingleTemplate">Apply Template</button></div><label for="singleTemplateMode">Existing Markings</label><select id="singleTemplateMode"><option value="add">Add template, keep existing markings</option><option value="replace">Replace existing markings</option></select><p>Adding keeps existing markings. Replacing removes them. Review placement, then Save Changes.</p>
+    <label for="singleTemplate">Apply Saved or Preset Template</label><p>Add one marking with the controls above, or choose a template below to apply a reusable group of markings.</p><div class="row compact"><select id="singleTemplate"><option value="date_address">Date + Address</option><option value="evidence">Evidence Details</option><option value="copyright">Copyright Only</option></select><button class="btn secondary" id="applySingleTemplate">Apply Template</button></div><label for="singleTemplateMode">Existing Markings</label><select id="singleTemplateMode"><option value="add">Add template, keep existing markings</option><option value="replace">Replace existing markings</option></select><p>Adding keeps existing markings. Replacing removes them. Review placement, then Save Changes.</p>
     <button type="button" class="btn secondary slim" id="deleteAnnotationTemplate" hidden>Delete Saved Template</button>
     <label for="annotationTemplateName">Save Current Markings as a Template</label><input id="annotationTemplateName" maxlength="80" placeholder="Template name">
     <button type="button" class="btn secondary" id="saveAnnotationTemplate">Save as New Template</button>
