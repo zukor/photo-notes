@@ -909,3 +909,11 @@ body:has(#desktopHelp) .issue-fab { left:max(14px,env(safe-area-inset-left)); ri
 #ctBar .ct-saved-actions>.btn{width:100%;margin:0;padding:8px 14px;min-height:38px}
 
 #deleteAnnotationTemplate[hidden] { display:none!important; }
+
+.document-source-photos { display:grid; gap:10px; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); }
+.document-source-photo { text-transform:none; font-weight:normal; display:flex; align-items:center; gap:10px; border:1px solid #000; padding:10px; color:#000; text-align:left; }
+.document-source-photo input { width:20px; flex-shrink:0; }
+.document-source-photo img { width:72px; height:72px; object-fit:contain; }
+.document-source-photo span { min-width:0; overflow-wrap:anywhere; }
+
+#documentOrganizeSelection[hidden] { display:none!important; }
