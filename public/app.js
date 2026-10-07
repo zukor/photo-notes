@@ -190,6 +190,7 @@ async function boot() {
     try { const me = await r.json(); state.me = me; state.plan = me.plan || 'free'; state.proType=me.pro_type||'paving'; } catch (e) {}
     await Promise.all([loadAreas(),loadJobs(),loadHoaContext()]);
     await restoreOfflineQueue();
+    await restoreCaptureDraft();
     // Start loading documents as soon as the user signs in. By the time they
     // open Create, existing documents can be shown immediately instead of
     // appearing only after another action refreshes the list.
@@ -380,7 +381,7 @@ function renderApp() {
       profileButton.setAttribute('aria-expanded', 'false');
     }
   };
-  document.getElementById('signout').onclick = async () => { if(captureSavePending){toast('Please wait for this photo to finish saving locally.');return;}if(state.photoFile&&!confirm('Sign out and discard the photo that has not been saved?'))return;try{const r=await api('/api/logout',{method:'POST'});if(!r.ok)throw Error();queueAccount=null;bgQueue=[];clearTimeout(queueRetryTimer);stopCaptureDictation();location.reload();}catch(error){toast('Could not sign out. Check your connection and try again.');} };
+  document.getElementById('signout').onclick = async () => { if(captureSavePending){toast('Please wait for this photo to finish saving locally.');return;}try{await persistCaptureDraft();const r=await api('/api/logout',{method:'POST'});if(!r.ok)throw Error();queueAccount=null;bgQueue=[];clearTimeout(queueRetryTimer);stopCaptureDictation();location.reload();}catch(error){toast('Could not sign out. Check your connection and try again.');} };
   document.getElementById('installHelp').onclick=showInstallHelp;
   document.getElementById('pendingPhotos').onclick=showPendingPhotos;
   const myIssues=document.getElementById('myIssues');if(myIssues)myIssues.onclick=()=>enterTesting('my-issues');
@@ -389,9 +390,9 @@ function renderApp() {
   const editionSwitcher=document.getElementById('editionSwitcher');if(editionSwitcher)editionSwitcher.onchange=async()=>{
     if(captureSavePending){editionSwitcher.value=selectedEdition();toast('Please wait for this photo to finish saving locally.');return;}
     const edition=editionSwitcher.value;
-    if(state.photoFile&&!confirm(uiT('Switch versions and discard this unsaved photo?'))){editionSwitcher.value=selectedEdition();return;}
     editionSwitcher.disabled=true;
     try{
+      await persistCaptureDraft();
       const r=await api('/api/switch-edition',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({edition})});
       if(!r.ok)throw new Error();
       stopCaptureDictation();
@@ -575,6 +576,7 @@ async function sendRoadIssueReport(){
     const fd=new FormData();fd.append('issue_type',document.getElementById('roadIssueType').value);fd.append('photo',state.photoFile);
     if(state.location){fd.append('latitude',state.location.lat);fd.append('longitude',state.location.lng);}if(state.address)fd.append('address',state.address);
     const r=await api('/api/road-issues',{method:'POST',body:fd}),d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||'send failed');
+    await persistCaptureDraft(true).catch(()=>{});
     captureLocationGeneration++;if(state._previewUrl)URL.revokeObjectURL(state._previewUrl);state._previewUrl=null;state.photoFile=null;state.location=null;state.address=null;state._locationPromise=null;state._qualityPromise=null;state._qualityResult=null;
     renderRoadIssueReport();const next=document.getElementById('roadIssueStatus');if(next)next.textContent=d.email_status==='sent'?`Road issue #${d.id} sent.`:`Road issue #${d.id} saved. Email delivery is pending.`;toast('Road issue sent');
   }catch(e){status.textContent='The road issue could not be sent. Check your connection and try again.';btn.disabled=false;btn.textContent='Send';}
@@ -664,6 +666,7 @@ function bindPavingPhotoReason(){
     stopCaptureDictation();captureLocationGeneration++;
     if(state._previewUrl)URL.revokeObjectURL(state._previewUrl);
     state._previewUrl=null;state._captureShareSave=null;state.photoFile=null;state._note='';state.location=null;state.address=null;state._locationPromise=null;state._qualityPromise=null;state._qualityResult=null;
+    void persistCaptureDraft(true).catch(()=>{});
     cameraReaderFile=null;cameraReaderDraft=null;ticketPhotoFile=null;ticketDraft=null;alignmentAfterFile=null;alignmentBefore=null;
     state._pavingReason=next;renderCapture();
   };
@@ -693,6 +696,7 @@ function duplicatePhotoNote(source) {
     stopCaptureDictation();captureLocationGeneration++;
     if(state._previewUrl)URL.revokeObjectURL(state._previewUrl);
     state._previewUrl=null;state.photoFile=null;state.location=null;state.address=null;state._locationPromise=null;state._qualityPromise=null;state._qualityResult=null;state._captureShareSave=null;
+    void persistCaptureDraft(true).catch(()=>{});
     state._dims=freshDims();state._measure=null;state.urgency='standard';state._note=context.note;state.area=context.topics[0]||'';state.jobId=context.jobId;state._concreteCapture=context.concrete||null;state._pavingReason='proposal';state._captureTemplateName='';state._duplicateContext=context;window.PhotoNotesCustomFields?.clear();
     if(state.area&&!state.areas.includes(state.area))state.areas=[...state.areas,state.area];
     if(context.property)state.communityId=context.property.communityId;
@@ -1156,6 +1160,40 @@ async function loadTodayTickets() {
   } catch (e) { box.innerHTML = '<p class="status">Today’s tickets could not be loaded.</p>'; }
 }
 
+// Persist immediately, before waiting for location or a note. Serialize writes so
+// slow photo reads cannot resurrect a draft after an explicit Save or Cancel.
+let captureDraftWrites=Promise.resolve();
+function persistCaptureDraft(clear=false){
+  const email=state.me?.email,edition=selectedEdition();
+  if(!email)return Promise.resolve();
+  const photo=state.photoFile;
+  const draft={photo,note:state._note||'',location:state.location,address:state.address,
+    context:Object.fromEntries(['area','jobId','communityId','urgency','_concreteCapture','_pavingReason','_duplicateContext','_captureTemplateName','_dims','_measure','_followUp'].map(k=>[k,state[k]]))};
+  if(!photo&&!clear)return captureDraftWrites;
+  const write=captureDraftWrites.then(async()=>{
+    const account=await PhotoNotesQueue.accountKey(email);
+    if(clear)await PhotoNotesQueue.clearDraft(account,edition);
+    else await PhotoNotesQueue.saveDraft(account,edition,draft);
+  });
+  captureDraftWrites=write.catch(()=>{toast('Automatic photo recovery could not be saved. Keep this screen open and tap Save before leaving.');});
+  return write;
+}
+async function restoreCaptureDraft(){
+  if(!state.me?.email||state.photoFile)return;
+  try{
+    const row=await PhotoNotesQueue.readDraft(await PhotoNotesQueue.accountKey(state.me.email),selectedEdition());
+    if(!row)return;
+    Object.assign(state,row.context||{});
+    state.photoFile=new File([row.photo],row.photoName,{type:row.photoType});
+    state._note=row.note||'';state.location=row.location;state.address=row.address;
+    state.view=selectedEdition()==='roads'?'road-report':'capture';
+  }catch(error){toast('Unfinished photos could not be read. Keep this browser data and try again.');}
+}
+document.addEventListener('input',()=>{if(state.photoFile)void persistCaptureDraft().catch(()=>{});});
+document.addEventListener('change',()=>{if(state.photoFile)void persistCaptureDraft().catch(()=>{});});
+document.addEventListener('visibilitychange',()=>{if(document.hidden)void persistCaptureDraft().catch(()=>{});});
+window.addEventListener('pagehide',()=>{void persistCaptureDraft().catch(()=>{});});
+
 function onPhotoChosen(file) {
   state._captureShareSave=null;
   if(captureSavePending){toast('Please wait for the current photo to save.');return;}
@@ -1163,6 +1201,8 @@ function onPhotoChosen(file) {
   captureLocationGeneration++;
   if(replacing){state._note='';const note=document.getElementById('note');if(note)note.value='';}
   state.photoFile = file;
+  state.location=null;state.address=null;
+  void persistCaptureDraft().catch(()=>{});
   state._qualityResult = null;
   state._qualityPromise = analyzePhotoQuality(file).then(result=>{
     if(state.photoFile!==file)return result;
@@ -1174,7 +1214,7 @@ function onPhotoChosen(file) {
   state._locationPromise = null;
   showCapturePreview(file);
   document.getElementById('locwrap').style.display = 'block';
-  acquireLocation();
+  Promise.resolve(acquireLocation()).finally(()=>{if(state.photoFile===file)void persistCaptureDraft().catch(()=>{});});
 }
 
 function showCapturePreview(file){
@@ -1200,6 +1240,7 @@ function cancelCapturePhoto(){
   const box=document.getElementById('previewBox');if(box)box.style.display='none';
   const loc=document.getElementById('locwrap');if(loc)loc.style.display='none';
   const quality=document.getElementById('qualityStatus');if(quality)quality.textContent='';
+  void persistCaptureDraft(true).catch(()=>{});
   toast('Photo cancelled');
 }
 
@@ -1236,6 +1277,7 @@ function correctCaptureAddress(){
   const corrected=prompt('Enter the correct address or geographic area:',state.address||'');
   if(corrected===null)return;
   state.address=corrected.trim()||null;
+  void persistCaptureDraft().catch(()=>{});
   const addr=document.getElementById('addr');
   if(addr)addr.textContent=state.address||'No address entered. GPS coordinates will still be saved.';
 }
@@ -1280,7 +1322,7 @@ function acquireLocation(force=false) {
         if (r.ok) { const d = await r.json(); if (!isCurrent()) return; state.address = d.address || null; if (addr) addr.textContent = d.address || 'Exact address not found. GPS coordinates will still be saved.'; }
         else if (addr) addr.textContent = 'Address lookup failed. GPS coordinates will still be saved.';
       } catch (e) { if (isCurrent() && addr) addr.textContent = 'Address lookup failed. GPS coordinates will still be saved.'; }
-    } finally { if (isCurrent() && retry) retry.disabled=false; }
+    } finally { if(isCurrent())void persistCaptureDraft().catch(()=>{});if (isCurrent() && retry) retry.disabled=false; }
   })().catch(err => {
     if (!isCurrent()) return;
     if (gps) gps.textContent = err && err.code===1 ? 'Location permission is blocked for this site.' : 'Location timed out or is unavailable.';
@@ -1427,7 +1469,7 @@ function startDictationSession(SR) {
     sessionText=combineSpeechResults(parts);
     recordDictationEvent('result',Array.from(ev.results,result=>result.isFinal?'final':'interim').join(','));
     if(dictationActive)armWatchdog(120000);
-    if (noteEl) { noteEl.value=mergeSpeechTranscript(dictationBase,sessionText); state._note=noteEl.value; }
+    if (noteEl) { noteEl.value=mergeSpeechTranscript(dictationBase,sessionText); state._note=noteEl.value; void persistCaptureDraft().catch(()=>{}); }
     const status=document.getElementById('dictationStatus');if(status&&sessionText)status.textContent='Speech received.';
     if (isIndustryProClient()) applyExtraction(dictationBase+sessionText);
   };
@@ -2037,6 +2079,7 @@ async function saveCaptureDurably(options = {}) {
     return true;
   }
   state._captureShareSave=null;state._duplicateContext=null;state._followUp=null;
+  await persistCaptureDraft(true).catch(()=>{});
   // Only an explicit Save clears the saved draft and hands upload to the background.
   captureLocationGeneration++;
   globalThis.PhotoNotesIncidents?.advance();
