@@ -297,6 +297,19 @@ function enterTesting(view){if(!['my-assignment','my-issues','manage-testing'].i
 function leaveTesting(){state.view=testingReturnView||(IS_HANDHELD?'capture':'organize');renderApp();}
 function testingNavigation(admin=false){return `<section class="testing-navigation"><button type="button" class="backlink" id="testingReturn">${uiT('Back to Photo Notes')}</button><h1>${uiT(admin?'Testing Administration':'My Testing Dashboard')}</h1><nav aria-label="${uiT('Testing sections')}" class="testing-actions">${admin?`${isTestingManager()?'<a id="testingAllIssues" class="btn secondary" href="/admin?view=super&tool=issues">'+uiT('Issues & Retests')+'</a>':''}<button type="button" class="btn secondary" id="testingAssignments">${uiT('Assignments & Results')}</button>`:`<button type="button" class="btn secondary" id="testingAssignments">${uiT('My Assignments')}</button><button type="button" class="btn secondary" id="testingIssues">${uiT('My Issue Reports')}</button>`}</nav></section>`;}
 function bindTestingNavigation(admin=false){document.getElementById('testingReturn').onclick=leaveTesting;document.getElementById('testingAssignments').onclick=()=>enterTesting(admin?'manage-testing':'my-assignment');const issues=document.getElementById('testingIssues');if(issues)issues.onclick=()=>enterTesting('my-issues');}
+function rememberPhotoToolReturn() {
+  if (!['photo-follow-ups','photo-requests'].includes(state.view)) state._photoToolReturnView=state.view;
+}
+function closePhotoTool() {
+  state.view=state._photoToolReturnView|| (IS_HANDHELD?'capture':'organize');
+  state._photoToolReturnView=null;
+  state._followUpSource=null;
+  state._photoRequestFollowUp=null;
+  state._photoRequestFocus=null;
+  renderApp();
+  document.getElementById(state.view==='capture'?'tabCapture':'tabOrganize')?.focus();
+  window.scrollTo(0,0);
+}
 function renderApp() {
   document.body.classList.toggle('admin-testing-page',isTestingManager()&&['my-assignment','my-issues','manage-testing'].includes(state.view));
   window.PhotoNotesMatchCamera?.stop();
@@ -337,6 +350,7 @@ function renderApp() {
         <button type="button" class="tab ${['send','hoa-maintenance'].includes(state.view)?'on':''}" id="tabSend" aria-current="${['send','hoa-maintenance'].includes(state.view)?'page':'false'}">${isHoaClient()?'Records':'Send'}</button>
       </nav>`}
       ${isProClient()&&['general','property','hoa','paving','concrete','contractor','roofer'].includes(state.proType)?'<div class="shared-photo-tools"><div class="fu-actions"><button type="button" class="btn secondary" id="fuOpen">Photo Follow-Ups</button></div><div class="pr-actions"><button type="button" class="btn secondary" id="prOpen">Request Photos</button></div></div>':''}
+      ${['photo-follow-ups','photo-requests'].includes(state.view)?'<button type="button" class="btn secondary" id="photoToolClose">Close</button>':''}
       <div id="body"></div>
       <div class="footer">&copy; ${new Date().getFullYear()} Zukor AI. All Rights Reserved.<br><a href="/install.html" target="_blank" rel="noopener">Install Photo Notes on your device</a></div>
     </div>
@@ -401,9 +415,10 @@ function renderApp() {
     editionSwitcher.hidden=true;editionSwitcher.after(picker);
   }
   void window.PhotoNotesQR?.resume({api,state,renderApp,toast});
-  if(new URLSearchParams(location.search).has('followups')&&isProClient()&&['general','paving','concrete','property','hoa','contractor','roofer'].includes(state.proType)){state.view='photo-follow-ups';history.replaceState(null,'',location.pathname);}
+  if(new URLSearchParams(location.search).has('followups')&&isProClient()&&['general','paving','concrete','property','hoa','contractor','roofer'].includes(state.proType)){rememberPhotoToolReturn();state.view='photo-follow-ups';history.replaceState(null,'',location.pathname);renderApp();return;}
   const fuOpen=document.getElementById('fuOpen');if(fuOpen)fuOpen.onclick=()=>window.PhotoNotesFollowUps.open();
-  const prOpen=document.getElementById('prOpen');if(prOpen)prOpen.onclick=()=>{state.view='photo-requests';renderApp();};
+  const prOpen=document.getElementById('prOpen');if(prOpen)prOpen.onclick=()=>{rememberPhotoToolReturn();state.view='photo-requests';renderApp();};
+  const photoToolClose=document.getElementById('photoToolClose');if(photoToolClose)photoToolClose.onclick=closePhotoTool;
   refreshIssueAttention();
   const updates=document.getElementById('issueUpdates');if(updates)updates.onclick=e=>{e.preventDefault();state.view='my-issues';renderApp();};
   const issueFab = document.getElementById('issueFab'); if (issueFab) issueFab.onclick = openIssueReporter;
