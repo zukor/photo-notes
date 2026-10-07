@@ -1,4 +1,4 @@
-.saved-views, .saved-views *, .saved-view-dialog, .saved-view-dialog * { color: #000; text-align: left; }
+.saved-views, .saved-views *, .saved-view-dialog, .saved-view-dialog * { color:var(--pn-text-000,#000); text-align: left; }
 .saved-views button, .saved-view-dialog button { min-height: 44px; white-space: normal; }
 .saved-view-dialog input:not([type=checkbox]), .saved-view-dialog textarea { box-sizing: border-box; width: 100%; }
 .saved-view-dialog::backdrop { background: rgba(0,0,0,.4); }
