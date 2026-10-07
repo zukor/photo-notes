@@ -9,6 +9,8 @@
     'A template needs 1 to 20 markings.':'Una plantilla necesita de 1 a 20 marcas.',
     'Enter a template name of 1 to 80 characters.':'Escribe un nombre de plantilla de 1 a 80 caracteres.',
 
+    'Enter a document title.':'Ingresa un título para el documento.',
+    'Enter a document title to enable Create Document.':'Ingresa un título para habilitar Crear documento.',
     'Add Individual Marking':'Agregar marca individual',
     'Apply Saved or Preset Template':'Aplicar plantilla guardada o predefinida',
     'Add one marking with the controls above, or choose a template below to apply a reusable group of markings.':'Agrega una marca con los controles de arriba o elige una plantilla abajo para aplicar un grupo reutilizable de marcas.',
