@@ -1,6 +1,7 @@
 (function () {
   const STORAGE_KEY = 'photo-notes-language';
   const ES = {
+    '‹ Back to Photos':'‹ Volver a las fotos',
     'Apply Annotation Template':'Aplicar plantilla de anotación',
     'Edit Photo Markings':'Editar marcas de fotos',
     'Existing Markings':'Marcas existentes',
