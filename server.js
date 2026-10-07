@@ -1057,7 +1057,7 @@ app.post('/api/hoa/items/:id',requireAuth,requireHoa,async(req,res)=>{try{const 
 app.get('/api/hoa/notifications',requireAuth,requireHoa,async(req,res)=>{try{res.json((await pool.query(`SELECT * FROM hoa_notifications WHERE user_id=$1 ORDER BY created_at DESC LIMIT 100`,[req.user.id])).rows);}catch(e){res.status(500).json({error:'notifications failed'});}});
 app.post('/api/hoa/notifications/read',requireAuth,requireHoa,async(req,res)=>{try{await pool.query(`UPDATE hoa_notifications SET read_at=now() WHERE user_id=$1 AND read_at IS NULL`,[req.user.id]);res.json({ok:true});}catch(e){res.status(500).json({error:'notifications failed'});}});
 
-app.get('/completion-photos/:token',async(req,res)=>{try{const row=(await pool.query(`SELECT q.*,i.title,i.description,c.name community_name,cap.photo_path original_photo FROM hoa_completion_photo_requests q JOIN hoa_maintenance_items i ON i.id=q.item_id JOIN hoa_communities c ON c.id=i.community_id LEFT JOIN captures cap ON cap.id=i.capture_id WHERE q.token=$1`,[req.params.token])).rows[0];if(!row)return res.status(404).send('Photo request not found.');if(row.status!=='open'||new Date(row.expires_at)<new Date())return res.status(410).send('This photo request is no longer open.');res.send(`<!doctype html><html><head><meta name="viewport" content="width=device-width"><link rel="stylesheet" href="/help.css?v=366"><script src="/help-catalog.js?v=366" defer></script><script src="/help.js?v=350" defer></script><title>Submit Completion Photos</title><style>body{font-family:Arial,sans-serif;max-width:720px;margin:auto;padding:20px;color:#111}img{width:100%;max-height:480px;object-fit:contain;border-radius:10px;background:#eee}input,textarea,button{box-sizing:border-box;width:100%;padding:14px;margin:7px 0;font-size:16px}button{background:#2455d9;color:#fff;border:0;border-radius:9px;font-weight:700}.box{background:#eef3ff;border-radius:10px;padding:14px}</style></head><body><h1>Submit Completion Photos</h1><div class="box"><b>${escXml(row.community_name)}</b><h2>${escXml(row.title)}</h2><p>${escXml(row.description||'')}</p></div>${row.original_photo?`<h3>Original issue</h3><img src="${escXml(row.original_photo)}" alt="Original maintenance issue">`:''}<h3>Show the completed work</h3><p>Take clear overview and close-up photos. These photos will be added directly to this maintenance record.</p><form method="post" action="/completion-photos/${row.token}" enctype="multipart/form-data"><input name="submitter_name" value="${escXml(row.recipient_name||'')}" placeholder="Your name" required><input type="file" name="photos" accept="image/*" capture="environment" multiple required><textarea name="note" placeholder="What work was completed?"></textarea><button>Send Completion Photos</button></form></body></html>`);}catch(e){res.status(500).send('Photo request unavailable.');}});
+app.get('/completion-photos/:token',async(req,res)=>{try{const row=(await pool.query(`SELECT q.*,i.title,i.description,c.name community_name,cap.photo_path original_photo FROM hoa_completion_photo_requests q JOIN hoa_maintenance_items i ON i.id=q.item_id JOIN hoa_communities c ON c.id=i.community_id LEFT JOIN captures cap ON cap.id=i.capture_id WHERE q.token=$1`,[req.params.token])).rows[0];if(!row)return res.status(404).send('Photo request not found.');if(row.status!=='open'||new Date(row.expires_at)<new Date())return res.status(410).send('This photo request is no longer open.');res.send(`<!doctype html><html><head><meta name="viewport" content="width=device-width"><link rel="stylesheet" href="/help.css?v=366"><script src="/help-catalog.js?v=367" defer></script><script src="/help.js?v=350" defer></script><title>Submit Completion Photos</title><style>body{font-family:Arial,sans-serif;max-width:720px;margin:auto;padding:20px;color:#111}img{width:100%;max-height:480px;object-fit:contain;border-radius:10px;background:#eee}input,textarea,button{box-sizing:border-box;width:100%;padding:14px;margin:7px 0;font-size:16px}button{background:#2455d9;color:#fff;border:0;border-radius:9px;font-weight:700}.box{background:#eef3ff;border-radius:10px;padding:14px}</style></head><body><h1>Submit Completion Photos</h1><div class="box"><b>${escXml(row.community_name)}</b><h2>${escXml(row.title)}</h2><p>${escXml(row.description||'')}</p></div>${row.original_photo?`<h3>Original issue</h3><img src="${escXml(row.original_photo)}" alt="Original maintenance issue">`:''}<h3>Show the completed work</h3><p>Take clear overview and close-up photos. These photos will be added directly to this maintenance record.</p><form method="post" action="/completion-photos/${row.token}" enctype="multipart/form-data"><input name="submitter_name" value="${escXml(row.recipient_name||'')}" placeholder="Your name" required><input type="file" name="photos" accept="image/*" capture="environment" multiple required><textarea name="note" placeholder="What work was completed?"></textarea><button>Send Completion Photos</button></form></body></html>`);}catch(e){res.status(500).send('Photo request unavailable.');}});
 app.post('/completion-photos/:token',(req,res,next)=>require('./external-photo-submission').externalPhotoUpload(UPLOAD_DIR)(req,res,async error=>{if(error){await require('./external-photo-submission').removeUploads(req.files);return res.status(400).send('Use at most 8 photographs, up to 25 MB each.');}next();}),async(req,res)=>{
  const {inspectPhotos,saveExternalPhoto,removeUploads}=require('./external-photo-submission');
  let db,committed=false;
@@ -1073,7 +1073,7 @@ app.post('/completion-photos/:token',(req,res,next)=>require('./external-photo-s
   await hoaHistory(q.item_id,null,'completion_photos_submitted',{submitted_by:name,photo_count:req.files.length},db);
   await hoaNotifyCompany(q.company_id,q.item_id,'Completion photos submitted',0,db);
   await db.query('COMMIT');committed=true;
-  res.send('<!doctype html><meta name="viewport" content="width=device-width"><link rel="stylesheet" href="/help.css?v=366"><script src="/help-catalog.js?v=366" defer></script><script src="/help.js?v=350" defer></script><style>body{font-family:Arial;color:#000;text-align:left;padding:30px 20px}</style><h1>Photos received</h1><p>Thank you. The completion photos were added to the maintenance record.</p>');
+  res.send('<!doctype html><meta name="viewport" content="width=device-width"><link rel="stylesheet" href="/help.css?v=366"><script src="/help-catalog.js?v=367" defer></script><script src="/help.js?v=350" defer></script><style>body{font-family:Arial;color:#000;text-align:left;padding:30px 20px}</style><h1>Photos received</h1><p>Thank you. The completion photos were added to the maintenance record.</p>');
  }catch(e){if(db&&!committed)await db.query('ROLLBACK');await removeUploads(req.files);res.status(400).send('Photos could not be submitted. Use supported photographs and try again.');}
  finally{if(db)db.release();}
 });
@@ -1099,7 +1099,7 @@ app.get('/review/:token/photos/:id',async(req,res)=>{
     res.setHeader('Cache-Control','private, no-store');res.type('jpeg').send(rendered.buffer);
   }catch(e){res.sendStatus(500);}
 });
-app.get('/review/:token',async(req,res)=>{try{const p=(await pool.query(`SELECT * FROM approval_packages WHERE token=$1`,[req.params.token])).rows[0];if(!p)return res.status(404).send('Review link not found.');if(new Date(p.expires_at)<new Date())return res.status(410).send('This review link has expired.');const photos=(await pool.query(`SELECT id,photo_path,note,address,created_at FROM captures WHERE user_id=$1 AND id=ANY($2) ORDER BY created_at`,[p.user_id,p.capture_ids])).rows;const cards=photos.map(c=>`<article><img src="/review/${encodeURIComponent(p.token)}/photos/${c.id}" alt="Project photo"><p><b>${escXml(c.address||'')}</b></p><p>${escXml(c.note||'')}</p><small>${new Date(c.created_at).toLocaleString()}</small></article>`).join('');res.send(`<!doctype html><html><head><meta name="viewport" content="width=device-width"><link rel="stylesheet" href="/help.css?v=366"><script src="/help-catalog.js?v=366" defer></script><script src="/help.js?v=350" defer></script><title>${escXml(p.title)}</title><style>body{font-family:Arial;margin:auto;max-width:850px;padding:20px;color:#111}article{border:1px solid #ccc;border-radius:10px;padding:12px;margin:18px 0}img{width:100%;max-height:650px;object-fit:contain}textarea,input,button{box-sizing:border-box;width:100%;padding:12px;margin:6px 0;font-size:16px}button{background:#2455d9;color:white;border:0;border-radius:8px;font-weight:bold}.changes{background:#555}.status{padding:12px;background:#eef3ff}</style></head><body><h1>${escXml(p.title)}</h1>${p.message?`<p>${escXml(p.message)}</p>`:''}<div class="status">Status: ${escXml(p.status)}</div>${cards}${p.status==='pending'?`<form method="post" action="/review/${p.token}"><input name="customer_name" placeholder="Your name" required><textarea name="comment" placeholder="Comment (optional)"></textarea><button name="decision" value="approved">Approve Photos</button><button class="changes" name="decision" value="changes_requested">Request Changes</button></form>`:`<p><b>Response received. Thank you.</b></p>`}</body></html>`);}catch(e){res.status(500).send('Review unavailable.');}});
+app.get('/review/:token',async(req,res)=>{try{const p=(await pool.query(`SELECT * FROM approval_packages WHERE token=$1`,[req.params.token])).rows[0];if(!p)return res.status(404).send('Review link not found.');if(new Date(p.expires_at)<new Date())return res.status(410).send('This review link has expired.');const photos=(await pool.query(`SELECT id,photo_path,note,address,created_at FROM captures WHERE user_id=$1 AND id=ANY($2) ORDER BY created_at`,[p.user_id,p.capture_ids])).rows;const cards=photos.map(c=>`<article><img src="/review/${encodeURIComponent(p.token)}/photos/${c.id}" alt="Project photo"><p><b>${escXml(c.address||'')}</b></p><p>${escXml(c.note||'')}</p><small>${new Date(c.created_at).toLocaleString()}</small></article>`).join('');res.send(`<!doctype html><html><head><meta name="viewport" content="width=device-width"><link rel="stylesheet" href="/help.css?v=366"><script src="/help-catalog.js?v=367" defer></script><script src="/help.js?v=350" defer></script><title>${escXml(p.title)}</title><style>body{font-family:Arial;margin:auto;max-width:850px;padding:20px;color:#111}article{border:1px solid #ccc;border-radius:10px;padding:12px;margin:18px 0}img{width:100%;max-height:650px;object-fit:contain}textarea,input,button{box-sizing:border-box;width:100%;padding:12px;margin:6px 0;font-size:16px}button{background:#2455d9;color:white;border:0;border-radius:8px;font-weight:bold}.changes{background:#555}.status{padding:12px;background:#eef3ff}</style></head><body><h1>${escXml(p.title)}</h1>${p.message?`<p>${escXml(p.message)}</p>`:''}<div class="status">Status: ${escXml(p.status)}</div>${cards}${p.status==='pending'?`<form method="post" action="/review/${p.token}"><input name="customer_name" placeholder="Your name" required><textarea name="comment" placeholder="Comment (optional)"></textarea><button name="decision" value="approved">Approve Photos</button><button class="changes" name="decision" value="changes_requested">Request Changes</button></form>`:`<p><b>Response received. Thank you.</b></p>`}</body></html>`);}catch(e){res.status(500).send('Review unavailable.');}});
 app.post('/review/:token',express.urlencoded({extended:false}),async(req,res)=>{try{const decision=req.body.decision==='approved'?'approved':'changes_requested';const row=(await pool.query(`UPDATE approval_packages SET status=$1,customer_name=$2,customer_comment=$3,responded_at=now() WHERE token=$4 AND status='pending' AND expires_at>now() RETURNING token`,[decision,ticketText(req.body.customer_name,200),ticketText(req.body.comment,1000),req.params.token])).rows[0];if(!row)return res.status(400).send('This review can no longer be changed.');res.redirect(`/review/${row.token}`);}catch(e){res.status(500).send('Response could not be saved.');}});
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
@@ -1494,6 +1494,8 @@ async function emailIssueReport(report, user) {
   };
   const local = localPhoto(report.screenshot_path);
   if (local && fs.existsSync(local)) body.attachments = [{ filename:`photo-notes-issue-${report.id}.jpg`, content:fs.readFileSync(local).toString('base64') }];
+  const resultLocal=localPhoto(report.result_screenshot_path);
+  if(resultLocal&&fs.existsSync(resultLocal)){body.attachments=body.attachments||[];body.attachments.push({filename:`photo-notes-issue-${report.id}-result${path.extname(resultLocal)}`,content:fs.readFileSync(resultLocal).toString('base64')});}
   const voiceLocal=localPhoto(report.voice_path);
   if(voiceLocal&&fs.existsSync(voiceLocal)){body.attachments=body.attachments||[];body.attachments.push({filename:`photo-notes-issue-${report.id}-voice${path.extname(voiceLocal)||'.m4a'}`,content:fs.readFileSync(voiceLocal).toString('base64')});}
   try {
@@ -1503,21 +1505,37 @@ async function emailIssueReport(report, user) {
   } catch (e) { return { status:'failed', error:ticketText(e && e.message, 200) || 'Mail request failed' }; }
 }
 
-app.post('/api/issues', requireAuth, upload.fields([{name:'screenshot',maxCount:1},{name:'voice',maxCount:1}]), async (req, res) => {
+app.post('/api/issues', requireAuth, upload.fields([{name:'screenshot',maxCount:1},{name:'result_screenshot',maxCount:1},{name:'voice',maxCount:1}]), async (req, res) => {
   try {
-    const screenshotFile=req.files&&req.files.screenshot&&req.files.screenshot[0],voiceFile=req.files&&req.files.voice&&req.files.voice[0];
+    const screenshotFile=req.files&&req.files.screenshot&&req.files.screenshot[0],voiceFile=req.files&&req.files.voice&&req.files.voice[0],resultFile=req.files&&req.files.result_screenshot&&req.files.result_screenshot[0];
     const issueType=req.body.issue_type||'bug_problem';
-    if(!['bug_problem','ui_improvement','feature_improvement','new_feature'].includes(issueType)){for(const file of [screenshotFile,voiceFile])if(file){try{fs.unlinkSync(file.path);}catch(e){}}return res.status(400).json({error:'invalid issue type'});}
+    if(!['bug_problem','ui_improvement','feature_improvement','new_feature'].includes(issueType)){for(const file of [screenshotFile,voiceFile,resultFile])if(file){try{fs.unlinkSync(file.path);}catch(e){}}return res.status(400).json({error:'invalid issue type'});}
     const description = ticketText(req.body && req.body.description, 10000);
     if (!description) {
-      for(const file of [screenshotFile,voiceFile])if(file){try{fs.unlinkSync(file.path);}catch(e){}}
+      for(const file of [screenshotFile,voiceFile,resultFile])if(file){try{fs.unlinkSync(file.path);}catch(e){}}
       return res.status(400).json({ error:'description required' });
     }
     let testingAssignmentId=null,testingStepId=null;
     if(req.body.testing_assignment_id||req.body.testing_step_id){
       const a=(await pool.query('SELECT id,steps FROM testing_assignments WHERE id=$1 AND user_id=$2',[Number(req.body.testing_assignment_id)||0,req.user.id])).rows[0];
-      if(!a||!a.steps.some(s=>s.id===req.body.testing_step_id)){for(const f of [screenshotFile,voiceFile])if(f)try{fs.unlinkSync(f.path);}catch{}return res.status(400).json({error:'Assignment or step is not available to this account'});}
+      if(!a||!a.steps.some(s=>s.id===req.body.testing_step_id)){for(const f of [screenshotFile,voiceFile,resultFile])if(f)try{fs.unlinkSync(f.path);}catch{}return res.status(400).json({error:'Assignment or step is not available to this account'});}
       testingAssignmentId=a.id;testingStepId=req.body.testing_step_id;
+    }
+    let resultScreenshotPath=null;
+    if(resultFile){
+      try{
+        if(resultFile.size>8*1024*1024)throw Error('Result screenshot exceeds 8 MB');
+        const metadata=await sharp(resultFile.path,{limitInputPixels:40000000}).metadata();
+        if(!['jpeg','png','webp'].includes(metadata.format))throw Error('Unsupported result screenshot');
+        // Decode the pixels, not just the header, before accepting evidence.
+        await sharp(resultFile.path,{limitInputPixels:40000000}).stats();
+        const normalized=resultFile.path.replace(/\.[^.]+$/,'.'+(metadata.format==='jpeg'?'jpg':metadata.format));
+        if(normalized!==resultFile.path)fs.renameSync(resultFile.path,normalized);
+        resultFile.path=normalized;resultScreenshotPath='/uploads/'+path.basename(normalized);
+      }catch{
+        for(const f of [screenshotFile,voiceFile,resultFile])if(f)try{fs.unlinkSync(f.path);}catch{}
+        return res.status(400).json({error:'Choose a valid JPEG, PNG, or WebP result screenshot up to 8 MB.'});
+      }
     }
     let screenshotPath = null;
     if (screenshotFile) {
@@ -1527,15 +1545,15 @@ app.post('/api/issues', requireAuth, upload.fields([{name:'screenshot',maxCount:
     let voicePath=null;
     if(voiceFile){if(!String(voiceFile.mimetype||'').startsWith('audio/')){try{fs.unlinkSync(voiceFile.path);}catch(e){}}else voicePath=`/uploads/${path.basename(voiceFile.path)}`;}
     const row = (await pool.query(
-      `INSERT INTO issue_reports (user_id, description, page_name, page_url, screenshot_path, voice_path, viewport, user_agent,reported_edition,app_version,issue_type,testing_assignment_id,testing_step_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
-      [req.user.id, description, ticketText(req.body.page_name,100), ticketText(req.body.page_url,500), screenshotPath, voicePath, ticketText(req.body.viewport,100), ticketText(req.body.user_agent,1000),currentEdition(req.user),/^\d{1,12}$/.test(req.body.app_version||'')?req.body.app_version:'unknown',issueType,testingAssignmentId,testingStepId])).rows[0];
+      `INSERT INTO issue_reports (user_id, description, page_name, page_url, screenshot_path, voice_path, viewport, user_agent,reported_edition,app_version,issue_type,testing_assignment_id,testing_step_id,result_screenshot_path)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
+      [req.user.id, description, ticketText(req.body.page_name,100), ticketText(req.body.page_url,500), screenshotPath, voicePath, ticketText(req.body.viewport,100), ticketText(req.body.user_agent,1000),currentEdition(req.user),/^\d{1,12}$/.test(req.body.app_version||'')?req.body.app_version:'unknown',issueType,testingAssignmentId,testingStepId,resultScreenshotPath])).rows[0];
     const user = (await pool.query(`SELECT name,email FROM users WHERE id=$1`, [req.user.id])).rows[0] || req.user;
     let delivery={status:'pending',error:'Notification pending'};
     try{delivery=await emailIssueReport(row,user);await pool.query('UPDATE issue_reports SET email_status=$1,email_error=$2 WHERE id=$3',[delivery.status,delivery.error,row.id]);}catch(e){}
-    logEvent(req.user.id, 'issue_report', { issue_id:row.id, screenshot:!!screenshotPath, voice:!!voicePath, email_status:delivery.status });
+    logEvent(req.user.id, 'issue_report', { issue_id:row.id, screenshot:!!screenshotPath,result_screenshot:!!resultScreenshotPath, voice:!!voicePath, email_status:delivery.status });
     res.json({ ok:true, id:row.id, email_status:delivery.status });
-  } catch (err) { console.error('[issues.create]', err); res.status(500).json({ error:'issue report failed' }); }
+  } catch (err) { for(const f of Object.values(req.files||{}).flat())try{fs.unlinkSync(f.path);}catch{} console.error('[issues.create]', err); res.status(500).json({ error:'issue report failed' }); }
 });
 
 const requireIssueMonitor=(req,res,next)=>requireAuth(req,res,()=>req.user.role==='admin'||req.user.is_testing_manager===true?next():res.status(403).json({error:'Testing manager access required'}));
@@ -1558,7 +1576,7 @@ registerCloud(app,{pool,requireAuth,requireAdmin,requireTestingQueueToken});
 
 app.get('/api/issues/mine', requireAuth, async (req,res)=>{
   try{
-    const rows=(await pool.query(`SELECT id,(SELECT max(created_at) FROM issue_retest_reminders WHERE issue_id=issue_reports.id AND user_id=$1) AS retest_reminder_at,issue_type,review_decision,review_note,description,page_name,screenshot_path,reported_edition,app_version,blocked_kind,blocked_reason,reporter_details,management_status,fix_summary,release_reference,retest_instructions,tester_notification_status,tester_notified_at,tester_result,tester_notes,tester_retested_at,created_at,updated_at,verification,(SELECT max(created_at) FROM issue_repair_events WHERE issue_id=issue_reports.id AND event='ready_to_test') AS deployed_at FROM issue_reports WHERE user_id=$1 ORDER BY created_at DESC`,[req.user.id])).rows;
+    const rows=(await pool.query(`SELECT id,(SELECT max(created_at) FROM issue_retest_reminders WHERE issue_id=issue_reports.id AND user_id=$1) AS retest_reminder_at,issue_type,review_decision,review_note,description,page_name,screenshot_path,result_screenshot_path,reported_edition,app_version,blocked_kind,blocked_reason,reporter_details,management_status,fix_summary,release_reference,retest_instructions,tester_notification_status,tester_notified_at,tester_result,tester_notes,tester_retested_at,created_at,updated_at,verification,(SELECT max(created_at) FROM issue_repair_events WHERE issue_id=issue_reports.id AND event='ready_to_test') AS deployed_at FROM issue_reports WHERE user_id=$1 ORDER BY created_at DESC`,[req.user.id])).rows;
     res.json(rows);
   }catch(e){console.error('[issues.mine]',e);res.status(500).json({error:'failed'});}
 });
@@ -2846,7 +2864,8 @@ app.get('/api/admin/usage', requireAdmin, async (req,res)=>{
         UNION ALL SELECT photo_path FROM asphalt_tickets WHERE user_id=$1 AND photo_path IS NOT NULL
         UNION ALL SELECT photo_path FROM camera_readings WHERE user_id=$1 AND photo_path IS NOT NULL
         UNION ALL SELECT photo_path FROM ewr_photos WHERE user_id=$1 AND photo_path IS NOT NULL
-        UNION ALL SELECT screenshot_path AS photo_path FROM issue_reports WHERE user_id=$1 AND screenshot_path IS NOT NULL`,[u.id])).rows;
+        UNION ALL SELECT screenshot_path AS photo_path FROM issue_reports WHERE user_id=$1 AND screenshot_path IS NOT NULL
+        UNION ALL SELECT result_screenshot_path AS photo_path FROM issue_reports WHERE user_id=$1 AND result_screenshot_path IS NOT NULL`,[u.id])).rows;
       const unique=[...new Set(paths.map(p=>p.photo_path).filter(Boolean))];
       const events=(await pool.query(`SELECT
         COUNT(*) FILTER(WHERE action IN ('measure','classify','camera_reader_scan','ticket_scan'))::int ai_actions,

@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="/styles.css?v=364" />
   <script src="/vendor/html2canvas.min.js?v=59"></script>
   <script src="/issue-markup.js?v=277"></script>
-  <script src="/issue-reporter.js?v=356"></script>
+  <script src="/issue-reporter.js?v=367"></script>
   <style>
     .stat { display:inline-block; min-width:84px; margin:4px 14px 4px 0; vertical-align:top; }
     .stat .n { font-size:19px; font-weight:bold; color:var(--pn-text-000,#000); }
@@ -162,7 +162,7 @@
   </style>
   <link rel="stylesheet" href="/testing-hub.css?v=277">
   <script src="/testing-hub.js?v=350"></script>
-<link rel="stylesheet" href="/theme.css?v=365"><script src="/theme.js?v=364"></script><link rel="stylesheet" href="/help.css?v=366"><script src="/help-catalog.js?v=366" defer></script><script src="/help.js?v=350" defer></script></head>
+<link rel="stylesheet" href="/theme.css?v=365"><script src="/theme.js?v=364"></script><link rel="stylesheet" href="/help.css?v=366"><script src="/help-catalog.js?v=367" defer></script><script src="/help.js?v=350" defer></script></head>
 <body>
   <div id="app"></div>
   <script src="/account-menu.js?v=277"></script>
@@ -722,7 +722,7 @@
     }
     function progressIssueCard(i){
       const status=PhotoNotesIssueRouting.disposition(i)==='completed'?'Completed, Fixed and Verified':PhotoNotesIssueRouting.disposition(i)==='closed'?'Closed Without Verified Fix':PhotoNotesIssueRouting.disposition(i)==='developer'?'Developer Investigation':i.issue_type==='bug_problem'?(i.review_decision==='clarify'?'Awaiting Tester Clarification':(i.management_status==='blocked'?'Needs My Decision':issueStatusLabels[i.management_status])||'New'):uiReviewLabel(i);
-      return `<details class="card issue-admin-card" data-issue-card="${i.id}">${issueCardSummary(i,status)}<div class="issue-detail-body">${issueActionBrief(i)}<div class="issue-original-report"><h3>Original Report</h3>${isRetestFollowup(i)?'<p>This issue was submitted as a retest follow-up. The complete text is shown under Tester’s Retest Comments.</p>':'<div class="issue-description">'+issueDescriptionHtml(i.description)+'</div>'}${i.screenshot_path?`<details class="issue-screenshot"><summary>Show Screenshot</summary><a href="${esc(i.screenshot_path)}" target="_blank" rel="noopener"><img loading="lazy" src="${esc(i.screenshot_path)}" alt="Issue ${i.id} screenshot"></a></details>`:''}${i.reporter_details?'<h4>Tester’s Clarification</h4><p class="issue-description">'+esc(i.reporter_details)+'</p>':''}</div>${issueProgress(i)}<div class="issue-review-footer">${i.implementation_instructions?'<p class="issue-description"><strong>Your Implementation Instructions:</strong> '+esc(i.implementation_instructions)+'</p>':''}${i.review_note&&i.review_decision!=='retest'?'<p class="issue-description"><strong>Last Decision Notes:</strong> '+esc(i.review_note)+'</p>':''}${decisionPanel(i.id)}</div></div></details>`;
+      return `<details class="card issue-admin-card" data-issue-card="${i.id}">${issueCardSummary(i,status)}<div class="issue-detail-body">${issueActionBrief(i)}<div class="issue-original-report"><h3>Original Report</h3>${isRetestFollowup(i)?'<p>This issue was submitted as a retest follow-up. The complete text is shown under Tester’s Retest Comments.</p>':'<div class="issue-description">'+issueDescriptionHtml(i.description)+'</div>'}${i.screenshot_path?`<details class="issue-screenshot"><summary data-issue-app-evidence>Show App Screenshot</summary><a href="${esc(i.screenshot_path)}" target="_blank" rel="noopener"><img loading="lazy" src="${esc(i.screenshot_path)}" alt="Issue ${i.id} screenshot"></a></details>`:''}${i.result_screenshot_path?`<details class="issue-screenshot"><summary data-issue-result-evidence>Show Result Screenshot</summary><a href="${esc(i.result_screenshot_path)}" target="_blank" rel="noopener" data-issue-result-evidence><img loading="lazy" src="${esc(i.result_screenshot_path)}" alt="Result screenshot supplied by the reporter"></a></details>`:''}${i.reporter_details?'<h4>Tester’s Clarification</h4><p class="issue-description">'+esc(i.reporter_details)+'</p>':''}</div>${issueProgress(i)}<div class="issue-review-footer">${i.implementation_instructions?'<p class="issue-description"><strong>Your Implementation Instructions:</strong> '+esc(i.implementation_instructions)+'</p>':''}${i.review_note&&i.review_decision!=='retest'?'<p class="issue-description"><strong>Last Decision Notes:</strong> '+esc(i.review_note)+'</p>':''}${decisionPanel(i.id)}</div></div></details>`;
     }
     function updateUiDecision(id){
       const action=document.getElementById(`ui-decision-${id}`).value;

@@ -21,7 +21,7 @@ function validateRepairUpdate(body){
 function registerIssueRepair(app,{pool,requireAuth,requireAdmin,requireTestingQueueToken,uploadDir}){
   app.get('/api/automation/testing-queue',requireTestingQueueToken,async(req,res)=>{try{
     await pool.query("INSERT INTO issue_worker_state(id,last_checked) VALUES(1,now()) ON CONFLICT(id) DO UPDATE SET last_checked=now()");
-    const {rows:issues}=await pool.query(`SELECT id,blocked_kind,issue_type,review_decision,implementation_instructions,reviewed_by,description,page_name,page_url,reported_edition,app_version,viewport,user_agent,management_status,priority,fix_summary,release_reference,retest_instructions,verification,blocked_reason,reporter_details,tester_result,tester_notes,created_at,updated_at,repair_lease_until,(screenshot_path IS NOT NULL) AS has_screenshot,(voice_path IS NOT NULL) AS has_voice FROM issue_reports WHERE ${eligibleIssueSql()} AND management_status NOT IN ('resolved','wont_fix','tester_confirmed') ORDER BY CASE priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 ELSE 2 END,created_at`);
+    const {rows:issues}=await pool.query(`SELECT id,blocked_kind,issue_type,review_decision,implementation_instructions,reviewed_by,description,page_name,page_url,reported_edition,app_version,viewport,user_agent,management_status,priority,fix_summary,release_reference,retest_instructions,verification,blocked_reason,reporter_details,tester_result,tester_notes,created_at,updated_at,repair_lease_until,(screenshot_path IS NOT NULL) AS has_screenshot,(result_screenshot_path IS NOT NULL) AS has_result_screenshot,(voice_path IS NOT NULL) AS has_voice FROM issue_reports WHERE ${eligibleIssueSql()} AND management_status NOT IN ('resolved','wont_fix','tester_confirmed') ORDER BY CASE priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 ELSE 2 END,created_at`);
     const history=issues.length?(await pool.query('SELECT issue_id,event,detail,created_at FROM issue_repair_events WHERE issue_id=ANY($1::int[]) ORDER BY created_at DESC LIMIT 500',[issues.map(i=>i.id)])).rows:[];
     res.json({issues,history});
   }catch(e){res.status(500).json({error:'queue unavailable'});}});
@@ -33,8 +33,8 @@ function registerIssueRepair(app,{pool,requireAuth,requireAdmin,requireTestingQu
     res.json({issue_id:id,markers,links});
   }catch{res.status(503).json({error:'Diagnostics unavailable'});}});
   app.get('/api/automation/issues/:id/attachment/:kind',requireTestingQueueToken,async(req,res)=>{try{
-    if(!['screenshot','voice'].includes(req.params.kind))return res.status(400).json({error:'Invalid attachment type'});
-    const col=req.params.kind==='voice'?'voice_path':'screenshot_path';const row=(await pool.query(`SELECT ${col} AS file FROM issue_reports WHERE id=$1`,[req.params.id])).rows[0];
+    if(!['screenshot','result_screenshot','voice'].includes(req.params.kind))return res.status(400).json({error:'Invalid attachment type'});
+    const col=req.params.kind==='voice'?'voice_path':req.params.kind==='result_screenshot'?'result_screenshot_path':'screenshot_path';const row=(await pool.query(`SELECT ${col} AS file FROM issue_reports WHERE id=$1`,[req.params.id])).rows[0];
     if(!row?.file||!/^\/uploads\/[^/\\]+$/.test(row.file))return res.status(404).json({error:'Attachment not found'});
     res.sendFile(path.join(uploadDir,path.basename(row.file)));
   }catch(e){res.status(500).json({error:'Attachment unavailable'});}});
