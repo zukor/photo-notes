@@ -936,3 +936,10 @@ body:has(#desktopHelp) .issue-fab { left:max(14px,env(safe-area-inset-left)); ri
 /* Keep installed-app navigation clear of landscape notches too. */
 .wrap { padding-left:max(16px,env(safe-area-inset-left,0px)); padding-right:max(16px,env(safe-area-inset-right,0px)); }
 .capture-job-dialog { color:#000; text-align:left; width:min(520px,calc(100vw - 32px)); max-height:calc(100dvh - 32px); overflow:auto; font-family:Arial,Helvetica,sans-serif; }
+
+.camera-reading-photo { flex-direction:column; width:100%; }
+.camera-reading-card .camera-reading-photo img { width:100%; max-width:100%; flex:none; height:auto; max-height:360px; object-fit:contain; }
+.camera-reading-photo .photo-viewer-button { width:auto; flex:none; }
+
+#exportShareDialog { padding-bottom:calc(80px + env(safe-area-inset-bottom,0px)); }
+#exportShareDialog .photo-viewer-dialog { max-height:calc(100dvh - 100px); }
