@@ -17,7 +17,7 @@ test('photo viewer is explicitly view-only with zoom movement and reset controls
 test('all rendered card photos receive a discoverable viewer without changing files',()=>{
   assert.match(app,/function installPhotoViewerButtons\(root=document\)/);
   assert.match(app,/root\.querySelectorAll\('\.card img'\)/);
-  assert.match(app,/button\.textContent='View & Zoom'/);
+  assert.match(app,/button\.textContent=.*'View':'View & Zoom'/);
   assert.match(app,/new MutationObserver/);
   assert.doesNotMatch(app,/photoViewer[\s\S]{0,500}api\(/);
   assert.match(css,/\.photo-viewer-viewport \{[\s\S]*touch-action:none/);
