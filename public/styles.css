@@ -201,7 +201,7 @@ textarea { min-height: 96px; resize: vertical; }
 .language-switch button { appearance:none; border:0; border-bottom:2px solid transparent; padding:2px 1px; background:transparent; color:var(--pn-text-555,#555); font:700 12px Arial,Helvetica,sans-serif; cursor:pointer; }
 .language-switch button.active { color:var(--pn-text-1d4ed8,#1d4ed8); border-bottom-color:var(--pn-border-1d4ed8,#1d4ed8); }
 .language-switch button:focus-visible { outline:2px solid var(--pn-border-1d4ed8,#1d4ed8); outline-offset:2px; }
-.account-menu-wrap { position:relative; z-index:3; }
+.account-menu-wrap { position:relative; z-index:40; }
 .profile-button {
   width:30px; height:30px; padding:0; border:0; border-radius:50%; cursor:pointer;
   display:flex; align-items:center; justify-content:center;
