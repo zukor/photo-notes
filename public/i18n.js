@@ -1,6 +1,26 @@
 (function () {
   const STORAGE_KEY = 'photo-notes-language';
   const ES = {
+    'That template name already exists. Choose a different name.':'Ese nombre de plantilla ya existe. Elige otro nombre.',
+    'Annotation template could not be saved.':'No se pudo guardar la plantilla de anotación.',
+    'Annotation template could not be deleted.':'No se pudo eliminar la plantilla de anotación.',
+    'Saved template is unavailable. Reload and choose another template.':'La plantilla guardada no está disponible. Actualiza y elige otra plantilla.',
+    'Saved annotation templates could not be loaded. Preset templates are still available.':'No se pudieron cargar las plantillas guardadas. Las plantillas predefinidas siguen disponibles.',
+    'A template needs 1 to 20 markings.':'Una plantilla necesita de 1 a 20 marcas.',
+    'Enter a template name of 1 to 80 characters.':'Escribe un nombre de plantilla de 1 a 80 caracteres.',
+
+    'My Annotation Templates':'Mis plantillas de anotación',
+    'Save Current Markings as a Template':'Guardar las marcas actuales como plantilla',
+    'Template name':'Nombre de la plantilla',
+    'Save as New Template':'Guardar como nueva plantilla',
+    'Delete Saved Template':'Eliminar plantilla guardada',
+    'Enter a template name.':'Escribe un nombre para la plantilla.',
+    'Add at least one marking before saving a template.':'Agrega al menos una marca antes de guardar una plantilla.',
+    'Template saved. It is available for this account in single-photo and batch editing. Save Changes separately to save this photo.':'Plantilla guardada. Está disponible para esta cuenta en la edición individual y por lotes. Guarda los cambios por separado para guardar esta foto.',
+    'Template deleted. Existing photo markings were kept.':'Plantilla eliminada. Se conservaron las marcas existentes en las fotos.',
+    'Delete this saved template? Markings already applied to photos will stay.':'¿Eliminar esta plantilla guardada? Las marcas ya aplicadas a las fotos se conservarán.',
+    'Templates reuse your text, styles and placement. Date, address, GPS and other photo fields use each destination photo\'s details. Save Changes separately to save markings on this photo.':'Las plantillas reutilizan texto, estilos y ubicación. Fecha, dirección, GPS y otros campos usan los datos de cada foto de destino. Guarda los cambios por separado para guardar las marcas de esta foto.',
+
     '‹ Back to Photos':'‹ Volver a las fotos',
     'Apply Annotation Template':'Aplicar plantilla de anotación',
     'Edit Photo Markings':'Editar marcas de fotos',
