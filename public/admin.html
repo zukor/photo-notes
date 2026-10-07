@@ -162,7 +162,7 @@
   </style>
   <link rel="stylesheet" href="/testing-hub.css?v=277">
   <script src="/testing-hub.js?v=350"></script>
-<link rel="stylesheet" href="/theme.css?v=277"><script src="/theme.js?v=277"></script><link rel="stylesheet" href="/help.css?v=339"><script src="/help-catalog.js?v=357" defer></script><script src="/help.js?v=350" defer></script></head>
+<link rel="stylesheet" href="/theme.css?v=277"><script src="/theme.js?v=277"></script><link rel="stylesheet" href="/help.css?v=339"><script src="/help-catalog.js?v=358" defer></script><script src="/help.js?v=350" defer></script></head>
 <body>
   <div id="app"></div>
   <script src="/account-menu.js?v=277"></script>
@@ -641,7 +641,7 @@
       document.getElementById('issueSummary').innerHTML=Object.entries(queueLabels).map(([queue,label])=>'<button type="button" class="pill basic" data-issue-queue="'+queue+'" aria-pressed="'+(sf===queue)+'">'+(closedView?closedCounts[queue]:queue==='open'?openCount:lanes[queue])+' '+label+'</button>').join('');
       const archiveLink=document.getElementById('issueArchiveLink');archiveLink.textContent=closedView?'Open Issues':'Closed Issues';archiveLink.onclick=()=>{document.getElementById('issueStatusFilter').value=closedView?'open':'closed_all';renderIssues();};
       document.querySelectorAll('[data-issue-queue]').forEach(button=>button.onclick=()=>{document.getElementById('issueStatusFilter').value=button.dataset.issueQueue;renderIssues();});
-      document.getElementById('issueQueueHeading').textContent=(queueLabels[sf]||issueStatusLabels[sf]||'Issues')+' · '+rows.length+' reports · highest impact first';
+      document.getElementById('issueQueueHeading').textContent=(queueLabels[sf]||issueStatusLabels[sf]||'Issues')+' · '+rows.length+' '+(rows.length===1?'issue':'issues')+' '+(closedView?'closed':'open')+' · highest impact first';
       box.innerHTML=rows.length?rows.map(issueCard).join(''):'<p class="helper">No issues match this view. Broaden the filters to see more reports.</p>';
       for(const issue of rows){const body=box.querySelector(`[data-issue-card="${issue.id}"] .issue-detail-body`);if(body&&(issue.reminder_created_at||issue.reminder_sent_at||issue.reminder_error)){const note=document.createElement('p');note.textContent=issue.reminder_error?'Retest reminder recorded: '+fdatetime(issue.reminder_created_at)+'. Email copy needs attention: '+issue.reminder_error:issue.reminder_sent_at?'Last email reminder accepted: '+fdatetime(issue.reminder_sent_at):'Retest reminder recorded: '+fdatetime(issue.reminder_created_at)+'. Browser reminders go to enabled devices.';body.prepend(note);}}
       for(const issue of rows){if(issue.request_email_sent_at||issue.request_email_error){const body=box.querySelector(`[data-issue-card="${issue.id}"] .issue-detail-body`),notice=document.createElement('p');notice.textContent=issue.request_email_error?'Request email delivery needs attention: '+issue.request_email_error:'Request email accepted: '+fdatetime(issue.request_email_sent_at);body?.prepend(notice);}}
