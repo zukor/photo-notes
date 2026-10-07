@@ -1,6 +1,25 @@
 (function () {
   const STORAGE_KEY = 'photo-notes-language';
   const ES = {
+    'Saved Capture Settings (optional)': 'Ajustes de captura guardados (opcional)',
+    'Saved Capture Settings': 'Ajustes de captura guardados',
+    'Use Saved Settings': 'Usar ajustes guardados',
+    'Save Current Settings': 'Guardar ajustes actuales',
+    'Manage Saved Settings': 'Administrar ajustes guardados',
+    'Last Used Settings': 'Últimos ajustes usados',
+    'Saved settings': 'Ajustes guardados',
+    'Device storage unavailable. Settings were not saved.': 'Almacenamiento del dispositivo no disponible. Los ajustes no se guardaron.',
+    'Choose saved settings': 'Elegir ajustes guardados',
+    'Create Saved Settings': 'Crear ajustes guardados',
+    'Save Settings': 'Guardar ajustes',
+    'Settings Name (required)': 'Nombre de los ajustes (obligatorio)',
+    'Settings Name is required.': 'El nombre de los ajustes es obligatorio.',
+    'Save choices such as Topic and Urgency, then reuse them for new photos.': 'Guarde opciones como Tema y Urgencia y reutilícelas para fotos nuevas.',
+    'Save choices such as Topic and Urgency, then reuse them for new photos. You still take a new photo and add new notes. Review all choices before saving the photo.': 'Guarde opciones como Tema y Urgencia y reutilícelas para fotos nuevas. Tome una foto nueva y agregue notas nuevas. Revise las opciones antes de guardar la foto.',
+    'Settings saved on this device. Syncs when connected.': 'Ajustes guardados en este dispositivo. Se sincronizan al conectarse.',
+    'Saved settings applied. Review before saving.': 'Ajustes guardados aplicados. Revise antes de guardar.',
+    'Delete these saved capture settings? Saved photos are unchanged.': '¿Eliminar estos ajustes de captura guardados? Las fotos guardadas no cambian.',
+
     'Question About Your Report': 'Pregunta sobre su reporte',
     'Your failed retest was received and this report is queued for another repair attempt. You do not need to submit a new report.': 'Recibimos el resultado fallido de su prueba y este reporte está en la cola para otro intento de reparación. No necesita enviar un reporte nuevo.',
     'Starting microphone...': 'Iniciando el micrófono...',
@@ -765,6 +784,8 @@
     const table = lang === 'es' ? ES : ES_TO_EN;
     if (table[text]) return table[text];
     const rules = lang === 'es' ? [
+      [/^Saved settings: (.+)$/, 'Ajustes guardados: $1'],
+      [/^Saved settings applied\. Review unavailable choices: (.+)$/, 'Ajustes guardados aplicados. Revise las opciones no disponibles: $1'],
       [/^(\d+) captures? selected\. Change the selection below or return to Organize\.$/, (_, n) => `${n} ${n === '1' ? 'captura seleccionada' : 'capturas seleccionadas'}. Cambie la selección abajo o vuelva a Organizar.`],
       [/^Provided by (.+)$/, 'Proveedor: $1'],
       [/^File format for (.+)$/, 'Formato de archivo para $1'],
@@ -793,6 +814,8 @@
       [/^The (.+) could not be read\. Retake the photo closer, in even light, and avoid glare\.$/, 'No se pudo leer $1. Vuelva a tomar la foto más cerca, con luz uniforme y sin reflejos.'],
       [/^Remove the "(.+)" topic\? Photos already tagged keep their label\.$/, '¿Eliminar el tema "$1"? Las fotos ya etiquetadas conservarán su etiqueta.']
     ] : [
+      [/^Ajustes guardados: (.+)$/, 'Saved settings: $1'],
+      [/^Ajustes guardados aplicados\. Revise las opciones no disponibles: (.+)$/, 'Saved settings applied. Review unavailable choices: $1'],
       [/^(\d+) capturas? seleccionadas?\. Cambie la selección abajo o vuelva a Organizar\.$/, (_, n) => `${n} capture${n === '1' ? '' : 's'} selected. Change the selection below or return to Organize.`],
       [/^Proveedor: (.+)$/, 'Provided by $1'],
       [/^Formato de archivo para (.+)$/, 'File format for $1'],
