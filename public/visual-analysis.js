@@ -2,7 +2,7 @@
 const escape=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 async function request(url,body){const r=await fetch(url,body===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const d=await r.json();if(!r.ok)throw Error(d.error||'Analysis unavailable');return d;}
 window.PhotoNotesVisualAnalysis={async open(id,onSave,{domain='concrete'}={}){
- const dialog=document.createElement('dialog');dialog.style.cssText='color:black;text-align:left;font-family:Arial,sans-serif;width:min(680px,90vw);max-height:85vh;overflow:auto';document.body.append(dialog);
+ const dialog=document.createElement('dialog');dialog.style.cssText='color:var(--pn-text-000,#000);text-align:left;font-family:Arial,sans-serif;width:min(680px,90vw);max-height:85vh;overflow:auto';document.body.append(dialog);
  const base=`/api/visual-analysis/${encodeURIComponent(domain)}/${id}`;let history,selected;
  const fields=()=>Object.keys(history.schema.fields);
  const options=(values,value)=>values.map(v=>`<option value="${escape(v)}" ${v===value?'selected':''}>${escape(v.replaceAll('_',' '))}</option>`).join('');

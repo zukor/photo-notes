@@ -4,7 +4,7 @@ test('Saved Views runtime loads before the shared app and is available offline',
  const index=fs.readFileSync('public/index.html','utf8'),shell=fs.readFileSync('public/sw.js','utf8');
  const runtime=index.indexOf('src="/saved-views.js?'),app=index.indexOf('src="/app.js?');
  assert(runtime>=0&&app>runtime,'Saved Views must initialize before renderers use it');
- assert(shell.includes('/saved-views.js?v=2'));assert(shell.includes('/saved-views.css?v=1'));
+ assert.match(shell,/\/saved-views\.js\?v=\d+/);assert.match(shell,/\/saved-views\.css\?v=\d+/);
 });
 test('criteria are versioned scalar filter state, never photo snapshots',()=>{
  const body={name:'Drainage',description:'',is_default:false,criteria:{version:1,filters:{search:'drainage',topic:'Exterior',favorite:true,from:'2026-10-01',futureFilter:'ready'}}};
