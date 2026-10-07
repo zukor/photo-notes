@@ -44,8 +44,8 @@ test('the wide-browser header enlarges its brands while phone sizes stay compact
   assert.match(css, /\.app-header \{\s*position:relative;/);
   assert.doesNotMatch(css, /\.edition-switcher \{[^}]*position:absolute/);
   assert.doesNotMatch(css, /\.edition-switcher select \{[^}]*width:106px/);
-  assert.match(css, /@media \(max-width: 700px\)[\s\S]*\.app-header \.zukor-corner-logo \{ width:92px; min-width:0; \}/);
-  assert.match(css, /@media \(max-width: 380px\)[\s\S]*\.app-header \.zukor-corner-logo \{ width:82px; min-width:0; \}/);
+  assert.match(css, /@media \(max-width: 700px\)[\s\S]*\.app-header \.zukor-corner-logo \{ width:92px; min-width:0; height:calc\(92px \* 72 \/ 448\) !important; \}/);
+  assert.match(css, /@media \(max-width: 380px\)[\s\S]*\.app-header \.zukor-corner-logo \{ width:82px; min-width:0; height:calc\(82px \* 72 \/ 448\) !important; \}/);
   assert.ok(css.lastIndexOf('@media (max-width: 380px)') > css.lastIndexOf('@media (max-width: 700px)'));
   assert.match(app, /serviceWorker\.register\('\/sw\.js', \{ updateViaCache:'none' \}\)/);
   assert.match(send, /if \(p\.classList\.contains\('app-header'\)\) \{[\s\S]*removeProperty\('height'\)[\s\S]*removeProperty\('width'\)[\s\S]*return;/);
