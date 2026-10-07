@@ -125,7 +125,7 @@ html[data-theme="dark"] :is(.leaflet-popup-content-wrapper,.leaflet-popup-tip,.l
 html[data-theme="dark"] .tab.on { background:#1d4ed8; color:#fff; border-color:#9fc5ff; }
 
 /* Shared feature surfaces follow the selected appearance, including dynamic dialogs. */
-html[data-theme="dark"] img[alt="Zukor AI"] { background:transparent; border-radius:0; object-fit:contain; mix-blend-mode:screen; }
+html[data-theme="dark"] img[alt="Zukor AI"] { background:transparent; border-radius:0; object-fit:contain; mix-blend-mode:normal; }
 html[data-theme="dark"] :is(.photo-follow-ups .btn, #fuCaptureBanner .btn, .location-panel .btn, .comments-panel #commentsPost) { background:#1d4ed8; color:#fff; }
 html[data-theme="dark"] :is(.photo-follow-ups .btn.secondary, #fuCaptureBanner .btn.secondary, .location-panel .btn.secondary) { background:#111827; }
 html[data-theme="dark"] .location-subject-pin { color:#000; }

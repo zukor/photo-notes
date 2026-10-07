@@ -3,15 +3,15 @@ const express=require('express'),assert=require('node:assert/strict'),{chromium,
 try{for(const engine of [chromium,webkit]){const browser=await engine.launch();try{for(const width of [320,390,1440]){for(const theme of ['light','dark']){
  const saved=new Map();const page=await browser.newPage({viewport:{width,height:900},serviceWorkers:'block'}),errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.route('**/api/**',r=>{const p=new URL(r.request().url()).pathname;if(p.startsWith('/api/capture-templates/')){const row=r.request().postDataJSON();saved.set(row.id,row);return r.fulfill({json:{ok:true}});}if(p==='/api/capture-templates')return r.fulfill({json:[...saved.values()]});return r.fulfill({json:p==='/api/me'?{email:'capture-test@example.com',name:'Test',role:'user',plan:'pro',pro_type:'general',edition_access:['pro']}:p==='/api/areas'?['Pavement']:[]});});
- await page.route('**/zukor-logo-dark.jpg*',r=>r.abort());
+ await page.route('**/zukor-logo-dark.svg*',r=>r.abort());
  await page.addInitScript(theme=>localStorage.setItem('photo-notes-theme',theme),theme);
  await page.addInitScript(()=>{localStorage.setItem('pn_install_prompt_dismissed_v1','dismissed');localStorage.setItem('pn_first_use_v1:'+encodeURIComponent('capture-test@example.com'),'done');});
  await page.goto(`http://127.0.0.1:${server.address().port}`);await page.waitForFunction(()=>state.me&&document.getElementById('body'));
  for(const edition of ['general','paving','concrete','hoa','property','contractor','roofer']){
   await page.evaluate(edition=>{state.plan='pro';state.proType=edition;state.view='capture';state._captureTemplateName='';renderApp();document.getElementById('firstUseSetup')?.remove();},edition);
   await page.waitForFunction(()=>{const img=document.querySelector('img[alt="Zukor AI"]');return img&&img.naturalWidth>0;});
-  const logo=await page.locator('img[alt="Zukor AI"]').evaluate(img=>({fallback:img.dataset.zukorFallback==='1',ratio:img.getBoundingClientRect().width/img.getBoundingClientRect().height}));
-  if(theme==='dark')assert.equal(logo.fallback,true,'White-letter logo must recover from a failed image request');assert(logo.ratio>5,'Logo must stay a wordmark rather than a square');
+  const logo=await page.locator('img[alt="Zukor AI"]').evaluate(img=>({fallback:img.dataset.zukorFallback==='1',ratio:img.getBoundingClientRect().width/img.getBoundingClientRect().height,width:img.getBoundingClientRect().width,height:img.getBoundingClientRect().height,natural:[img.naturalWidth,img.naturalHeight]}));
+  if(theme==='dark')assert.equal(logo.fallback,true,'White-letter logo must recover from a failed image request');assert(logo.ratio>5,'Logo must stay a wordmark rather than a square: '+edition+' '+JSON.stringify(logo));
   assert.equal(await page.locator('#ctOptions').textContent(),'Saved Capture Settings (optional)');
   assert.equal(await page.locator('#ctBar').evaluate(el=>getComputedStyle(el).backgroundColor),theme==='dark'?'rgb(17, 24, 39)':'rgb(255, 255, 255)');
   assert(await page.locator('#takephoto').isVisible());await page.locator('#ctBar summary').click();assert(await page.locator('#ctUse').isVisible());
