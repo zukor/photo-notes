@@ -77,7 +77,7 @@ function dialog(mode,row){
 function mountBar(){
  const bar=document.getElementById('ctBar');if(!bar)return;
  const expanded=bar.querySelector('details')?.open;
- bar.innerHTML='<details'+(expanded?' open':'')+'><summary id="ctOptions">Saved Capture Settings (optional)</summary><p>Save choices such as Topic and Urgency, then reuse them for new photos.</p><button id="ctUse" class="btn secondary slim">Use Saved Settings</button> <button id="ctSaveSetup" class="btn secondary slim">Save Current Settings</button> <button id="ctManage" class="btn secondary slim">Manage Saved Settings</button>'+(live().some(r=>r.id===last)?' <button id="ctLast" class="btn secondary slim">Last Used Settings</button>':'')+'</details><div id="ctIndicator" role="status"></div>';
+ bar.innerHTML='<details'+(expanded?' open':'')+'><summary id="ctOptions">Saved Capture Settings (optional)</summary><p>Reuse Topic and Urgency for new photos.</p><div class="ct-saved-actions"><button id="ctUse" class="btn secondary slim">Use Saved Settings</button> <button id="ctSaveSetup" class="btn secondary slim">Save Current Settings</button> <button id="ctManage" class="btn secondary slim">Manage Saved Settings</button>'+(live().some(r=>r.id===last)?' <button id="ctLast" class="btn secondary slim">Last Used Settings</button>':'')+'</div></details><div id="ctIndicator" role="status"></div>';
  bar.querySelector('#ctUse').onclick=()=>dialog('use');bar.querySelector('#ctManage').onclick=()=>dialog('manage');bar.querySelector('#ctSaveSetup').onclick=()=>dialog('save');
  if(bar.querySelector('#ctLast'))bar.querySelector('#ctLast').onclick=()=>apply(live().find(r=>r.id===last));
  bar.querySelector('#ctIndicator').textContent=ctx.activeName()?'Saved settings: '+ctx.activeName():'';
