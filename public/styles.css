@@ -954,3 +954,12 @@ body:has(#desktopHelp) .issue-fab { left:max(14px,env(safe-area-inset-left)); ri
 .ticket-card-photo { display:flex; flex-direction:column; gap:6px; width:110px; flex:0 0 110px; }
 .ticket-card-photo .photo-viewer-button { width:auto; margin:0; padding:8px; }
 .ticket-card > div:not(.ticket-card-photo) { min-width:0; overflow-wrap:anywhere; }
+
+/* Saved scanner evidence stays black on a light panel in every appearance. */
+.camera-reading-details {background:#fff;color:#000;padding:12px;border-radius:8px;--pn-text-000:#000;--pn-text-111:#000;--pn-text-333:#000;--pn-text-555:#000;--pn-bg-fff:#fff;--pn-bg-eee:#fff;--pn-bg-e9f0ff:#fff;--pn-border-000:#000;}
+.camera-reading-details .photo-title,.camera-reading-details .meta,.camera-reading-details label,.camera-reading-details select,.camera-reading-details .btn.secondary {color:#000;background:#fff;}
+
+.imagery-readout,.imagery-status,.imagery-retry {color:#000;background:#fff;text-align:left;}
+
+.camera-reader-review {color:#000;background:#fff;--pn-text-000:#000;--pn-text-111:#000;--pn-text-333:#000;--pn-bg-fff:#fff;}
+.reader-review-source {display:block;width:100%;max-height:480px;object-fit:contain;}

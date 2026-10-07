@@ -937,12 +937,12 @@ async function scanCameraReader() {
 }
 function renderCameraReaderReview() {
   const cfg=readerConfigs[cameraReaderType], f=cameraReaderDraft.fields||{}, box=document.getElementById('readerReview');
-  box.innerHTML=`<section class="ticket-review-panel"><div class="formhead">2. Review and Save</div><div class="status">AI confidence: <strong>${esc(cameraReaderDraft.confidence||'low')}</strong>. The photograph is the source of truth.</div><div class="ticket-form-grid">${cfg.fields.map(([key,label,kind])=>`<div>${kind==='textarea'?`<label for="cr_${key}">${label}</label><textarea id="cr_${key}">${esc(f[key]||'')}</textarea>`:ticketField('cr_'+key,label,f[key])}</div>`).join('')}</div><label for="cr_title">Record Name</label><input id="cr_title" value="${esc(cameraReaderDraft.title||'')}"><button class="btn" id="readerSave">Save Record</button></section>`;
+  box.innerHTML=`<section class="ticket-review-panel camera-reader-review"><div class="formhead">2. Review and Save</div>${!cameraReaderFile&&cameraReaderDraft.photo_path?`<img class="reader-review-source" src="${photoSrc(cameraReaderDraft.photo_path)}" alt="Source photo for verifying readings">`:''}<div class="status">AI confidence: <strong>${esc(cameraReaderDraft.confidence||'low')}</strong>. The photograph is the source of truth.</div><div class="ticket-form-grid">${cfg.fields.map(([key,label,kind])=>`<div>${kind==='textarea'?`<label for="cr_${key}">${label}</label><textarea id="cr_${key}">${esc(f[key]||'')}</textarea>`:ticketField('cr_'+key,label,f[key])}</div>`).join('')}</div><label for="cr_title">Record Name</label><input id="cr_title" value="${esc(cameraReaderDraft.title||'')}"><button class="btn" id="readerSave">Save Record</button></section>`;
   document.getElementById('readerSave').onclick=saveCameraReading;
 }
 async function saveCameraReading() {
   const cfg=readerConfigs[cameraReaderType], fields={}; cfg.fields.forEach(([key])=>fields[key]=document.getElementById('cr_'+key).value.trim()); const btn=document.getElementById('readerSave'); btn.disabled=true; btn.textContent='Saving...';
-  setPavingToolBusy(['readerTake','readerChoose'],true);try{const r=await api(`/api/camera-readings/${cameraReaderDraft.id}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:document.getElementById('cr_title').value.trim(),fields})});
+  setPavingToolBusy(['readerTake','readerChoose'],true);try{const r=await api(`/api/camera-readings/${cameraReaderDraft.id}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:document.getElementById('cr_title').value.trim(),fields,confidence:cameraReaderDraft.confidence})});
   if(document.getElementById('readerSave')!==btn)return;if(!r.ok)throw new Error();toast('Record saved');setPavingToolBusy([],false);renderCameraReader();}catch(e){if(document.getElementById('readerSave')===btn){toast('Record could not be saved');btn.disabled=false;btn.textContent='Save Record';}}finally{if(document.getElementById('readerSave')===btn)setPavingToolBusy(['readerTake','readerChoose'],false);}
 }
 async function loadCameraReadings() {
@@ -956,10 +956,11 @@ async function loadCameraReadings() {
       const fields=x.fields||{},keyNames=({gauge:['reading','unit','instrument_type','equipment_name'],equipment_plate:['manufacturer','model','serial_number'],material_label:['product_name','manufacturer','lot_number'],plan_sketch:['project_name','sheet_number','scale'],business_card:['name','company','phone']}[cameraReaderType]||Object.keys(fields).slice(0,3));
       const field=key=>fields[key]?`<div><b>${esc(labels[key]||titleCase(key))}:</b> ${esc(fields[key])}</div>`:'';
       const more=Object.keys(fields).filter(key=>!keyNames.includes(key)&&fields[key]);
-      return `<article class="card camera-reading-card specialist-record-card" data-reading-type="${cameraReaderType}"><div class="camera-reading-photo">${x.photo_path?`<img src="${photoSrc(x.photo_path)}" alt="Source Photo">`:''}</div><div class="camera-reading-details"><strong class="photo-title">${esc(titleCase(cameraReaderType==='gauge'?(fields.instrument_type||x.title):x.title)||'Untitled Record')}</strong><div class="specialist-record-summary">${keyNames.map(field).join('')}${cameraReaderType==='gauge'&&fields.notes?`<div><b>Notes:</b> ${esc(String(fields.notes).slice(0,90))}</div>`:''}</div><div class="meta">${esc(x.created_at?new Date(x.created_at).toLocaleString(uiLocale()):'')}</div><div class="row compact"><button class="btn secondary slim" data-reader-details="${x.id}">View Details</button><button class="btn secondary slim" data-reader-edit="${x.id}">Edit Record</button></div>${PhotoNotesScannerAvailability.reportTypes.includes(cameraReaderType)?`<label for="readerFormat${x.id}">Report format</label><select id="readerFormat${x.id}" data-reader-format="${x.id}"><option value="pdf">PDF</option><option value="docx">Word</option>${cameraReaderType==='business_card'?'<option value="vcf">Contact File</option>':''}</select><div class="row"><button class="btn secondary slim" data-reader-download="${x.id}">Download Report</button><button class="btn secondary slim" data-reader-share="${x.id}">Share Report</button></div>`:''}<div class="row"><button class="btn secondary slim" data-reader-library="${x.id}">Open Photo</button><button class="btn secondary slim" data-reader-delete="${x.id}">Delete Record</button></div></div></article>`;
+      return `<article class="card camera-reading-card specialist-record-card" data-reading-type="${cameraReaderType}"><div class="camera-reading-photo">${x.photo_path?`<img src="${photoSrc(x.photo_path)}" alt="Source Photo">`:''}</div><div class="camera-reading-details"><strong class="photo-title">${esc(titleCase(cameraReaderType==='gauge'?(fields.instrument_type||x.title):x.title)||'Untitled Record')}</strong><div class="specialist-record-summary">${keyNames.map(field).join('')}${cameraReaderType==='gauge'&&fields.notes?`<div><b>Notes:</b> ${esc(String(fields.notes).slice(0,90))}</div>`:''}</div><div class="meta">${esc(x.created_at?new Date(x.created_at).toLocaleString(uiLocale()):'')}</div><div class="row compact"><button class="btn secondary slim" data-reader-details="${x.id}">View Details</button><button class="btn secondary slim" data-reader-edit="${x.id}">Edit Record</button>${cameraReaderType==='gauge'&&PhotoNotesScannerAvailability.allowed(state.proType,'gauge')?`<button class="btn secondary slim" data-reader-reread="${x.id}">Read Again</button>`:''}</div>${PhotoNotesScannerAvailability.reportTypes.includes(cameraReaderType)?`<label for="readerFormat${x.id}">Report format</label><select id="readerFormat${x.id}" data-reader-format="${x.id}"><option value="pdf">PDF</option><option value="docx">Word</option>${cameraReaderType==='business_card'?'<option value="vcf">Contact File</option>':''}</select><div class="row"><button class="btn secondary slim" data-reader-download="${x.id}">Download Report</button><button class="btn secondary slim" data-reader-share="${x.id}">Share Report</button></div>`:''}<div class="row"><button class="btn secondary slim" data-reader-library="${x.id}">Open Photo</button><button class="btn secondary slim" data-reader-delete="${x.id}">Delete Record</button></div></div></article>`;
     }).join('')}</div>`:'<p class="empty">No saved records yet.</p>';
     box.querySelectorAll('[data-reader-details]').forEach(b=>b.onclick=()=>showScannerDetails(rows.find(x=>x.id===Number(b.dataset.readerDetails)),labels));
     box.querySelectorAll('[data-reader-edit]').forEach(b=>b.onclick=()=>{cameraReaderDraft=rows.find(x=>x.id===Number(b.dataset.readerEdit));let review=document.getElementById('readerReview');if(!review){review=document.createElement('div');review.id='readerReview';box.before(review);}renderCameraReaderReview();review.scrollIntoView({block:'start'});});
+    box.querySelectorAll('[data-reader-reread]').forEach(button=>button.onclick=async()=>{button.disabled=true;button.textContent='Reading...';try{const r=await api(`/api/camera-readings/${button.dataset.readerReread}/reread`,{method:'POST'});const d=await r.json();if(!r.ok||!d.reading)throw Error();cameraReaderDraft=d.reading;let review=document.getElementById('readerReview');if(!review){review=document.createElement('div');review.id='readerReview';box.before(review);}renderCameraReaderReview();review.scrollIntoView({block:'start'});toast('Review this new reading. Save Record applies your corrections.');}catch{toast('Reread unavailable. Your saved record is unchanged.');}finally{button.disabled=false;button.textContent='Read Again';}});
     for(const action of ['download','share'])box.querySelectorAll('[data-reader-'+action+']').forEach(b=>b.onclick=()=>deliverScannerReport(Number(b.getAttribute('data-reader-'+action)),action,b));
     box.querySelectorAll('[data-reader-library]').forEach(button=>button.onclick=async()=>{button.disabled=true;try{const r=await api(`/api/camera-readings/${button.dataset.readerLibrary}/library`,{method:'POST'});if(!r.ok)throw new Error();const d=await r.json();await loadAreas();state.selectedIds=new Set([String(d.capture_id)]);state.view=isHoaClient()?'photo-library':'organize';renderApp();}catch(e){toast('Record could not be opened');button.disabled=false;}});
     box.querySelectorAll('[data-reader-delete]').forEach(button=>button.onclick=async()=>{if(!confirm(uiT('Delete this saved scanner record? Photos already added to the library are kept.')))return;button.disabled=true;try{const r=await api(`/api/camera-readings/${button.dataset.readerDelete}`,{method:'DELETE'});if(!r.ok)throw new Error();loadCameraReadings();}catch(e){toast('Record could not be deleted');button.disabled=false;}});
@@ -967,7 +968,7 @@ async function loadCameraReadings() {
 }
 
 function showScannerDetails(row,labels={}){
- const dialog=document.createElement('dialog');dialog.id='scannerDetails';dialog.setAttribute('aria-labelledby','scannerDetailsTitle');dialog.className='scanner-details-dialog';dialog.innerHTML=`<h2 id="scannerDetailsTitle">${esc(titleCase(row.title)||'Saved Record')}</h2>${row.photo_path?`<img src="${photoSrc(row.photo_path)}" alt="Source Photo">`:''}${Object.entries(row.fields||{}).filter(([,v])=>v).map(([k,v])=>`<p><strong>${esc(labels[k]||k.replaceAll('_',' '))}:</strong> ${esc(v)}</p>`).join('')}<button class="btn secondary" id="scannerDetailsClose">Close Details</button>`;document.body.append(dialog);dialog.showModal();dialog.onclose=()=>dialog.remove();dialog.querySelector('#scannerDetailsClose').onclick=()=>dialog.close();
+ const dialog=document.createElement('dialog');dialog.id='scannerDetails';dialog.setAttribute('aria-labelledby','scannerDetailsTitle');dialog.className='scanner-details-dialog';dialog.innerHTML=`<h2 id="scannerDetailsTitle">${esc(row.title||'Saved Record')}</h2>${row.photo_path?`<img src="${photoSrc(row.photo_path)}" alt="Source Photo">`:''}${Object.entries(row.fields||{}).filter(([,v])=>v).map(([k,v])=>`<p><strong>${esc(labels[k]||k.replaceAll('_',' '))}:</strong> ${esc(v)}</p>`).join('')}<button class="btn secondary" id="scannerDetailsClose">Close Details</button>`;document.body.append(dialog);dialog.showModal();dialog.onclose=()=>dialog.remove();dialog.querySelector('#scannerDetailsClose').onclick=()=>dialog.close();
 }
 async function deliverScannerReport(id,action,button,kind='reader'){
  const format=document.getElementById((kind==='ticket'?'ticketFormat':'readerFormat')+id)?.value||'pdf';button.disabled=true;
@@ -3366,8 +3367,25 @@ function startEditTopics(id, rows) {
 // ---- Map (Pro): satellite view of captures + measurement zones ----
 let mapObj = null, mapMarkers = [], mapZoneLayers = [];
 function installMapTileFallback(layer,map,onFallback){
- layer.on('tileerror',event=>{const level=Number(event.coords&&event.coords.z),current=Number(layer.options.maxNativeZoom||19);if(!Number.isFinite(level)||level>current||level<=13)return;layer.options.maxNativeZoom=level-1;onFallback?.();setTimeout(()=>{if(map.hasLayer(layer))layer.redraw();},250);});
- return layer;
+ // A missing or transient tile must never lower native resolution for the whole map.
+ layer.on('tileerror',event=>{
+  const tile=event.tile,coords=event.coords;if(!tile||!coords||coords.z<=13||!map.hasLayer(layer))return;
+  if(!tile.dataset.imageryRetried){tile.dataset.imageryRetried='1';const url=layer.getTileUrl(coords);tile.src=url+(url.includes('?')?'&':'?')+'pn_retry=1';return;}
+  if(tile.dataset.imageryFallback)return;tile.dataset.imageryFallback='1';
+  let level=coords.z-1;
+  const tryParent=()=>{
+   if(!map.hasLayer(layer)||!tile.isConnected)return;if(level<13){onFallback?.({zoom:coords.z,sourceZoom:null});return;}
+   const sourceLevel=level--,factor=2**(coords.z-sourceLevel),parent={x:Math.floor(coords.x/factor),y:Math.floor(coords.y/factor),z:sourceLevel};
+   const image=new Image();image.crossOrigin='anonymous';
+   image.onload=()=>{if(!map.hasLayer(layer)||!tile.isConnected)return;try{
+    const canvas=document.createElement('canvas'),size=layer.getTileSize();canvas.width=size.x;canvas.height=size.y;
+    const w=image.naturalWidth/factor,h=image.naturalHeight/factor;
+    canvas.getContext('2d').drawImage(image,(coords.x-parent.x*factor)*w,(coords.y-parent.y*factor)*h,w,h,0,0,size.x,size.y);
+    tile.src=canvas.toDataURL('image/png');onFallback?.({zoom:coords.z,sourceZoom:sourceLevel});
+   }catch{onFallback?.({zoom:coords.z,sourceZoom:null});}};
+   image.onerror=tryParent;image.src=layer._url?L.Util.template(layer._url,{...layer.options,...parent,z:sourceLevel+(layer.options.zoomOffset||0),s:layer._getSubdomain(parent),r:L.Browser.retina?'@2x':''}):layer.getTileUrl(parent);
+  };tryParent();
+ });return layer;
 }
 function loadLeaflet() {
   return new Promise((resolve) => {
@@ -3400,7 +3418,7 @@ async function renderMap() {
     ${featureOn('measurements')?`<label style="margin-top:14px">Optional Takeoff Tools</label>
     <div class="status">Trace a pavement area or measure a roadway span directly on the satellite map.</div>
     <div id="mapMeasureBar" style="margin-top:6px"></div>`:''}
-    <div id="mapdiv" style="height:68vh;min-height:340px;margin-top:8px;border:1px solid var(--pn-border-000,#000);border-radius:8px"></div>`;
+    <button class="btn secondary imagery-retry" id="mapRetryImagery">Retry Imagery</button><p id="mapImageryReadout" class="imagery-readout" role="status"></p><p id="mapImageryStatus" class="imagery-status" role="status"></p><div id="mapdiv" style="height:68vh;min-height:340px;margin-top:8px;border:1px solid var(--pn-border-000,#000);border-radius:8px"></div>`;
   await loadLeaflet();
   if (!window.L) { document.getElementById('mapdiv').innerHTML = '<p class="status">Map library could not load. Check your connection.</p>'; return; }
   mapObj = null; mapMarkers = []; mapZoneLayers = [];
@@ -3410,7 +3428,9 @@ async function renderMap() {
   try { const gr = await api('/api/groups'); if (gr.ok) { const gs = await gr.json(); gsel.innerHTML = '<option value="">All Documents</option>' + gs.map(g => `<option value="${g.id}">${esc(g.title || 'Untitled')}</option>`).join(''); } } catch (e) {}
   const div = document.getElementById('mapdiv');
   mapObj = L.map(div).setView([29.5, -98.5], 12);
-  sharedSatelliteLayer(cfg,mapObj).addTo(mapObj);
+  const imagery=sharedSatelliteLayer(cfg,mapObj,info=>{document.getElementById('mapImageryStatus').textContent=info?.sourceZoom!=null?`Some tiles use source level ${info.sourceZoom}. Enlarging imagery adds no detail. Verify boundaries on site.`:'Some imagery could not be recovered.';}).addTo(mapObj);
+  const readout=()=>{const c=mapObj.getCenter();document.getElementById('mapImageryReadout').textContent=`Map zoom ${mapObj.getZoom()} · Requested source level ${Math.min(mapObj.getZoom(),imagery.options.maxNativeZoom)+(imagery.options.zoomOffset||0)} · ${cfg.mapbox_token?'Mapbox':'Esri'} · Center ${c.lat.toFixed(6)}, ${c.lng.toFixed(6)}`;};mapObj.on('moveend zoomend',readout);readout();
+  document.getElementById('mapRetryImagery').onclick=()=>{imagery.redraw();document.getElementById('mapImageryStatus').textContent='Retrying the best available imagery. Clearer tiles depend on source coverage.';readout();};
   mapObj.on('popupopen', (e) => {
     const btn = e.popup.getElement().querySelector('.mapopen');
     if (btn) btn.onclick = () => openCaptureInLibrary(parseInt(btn.getAttribute('data-id'), 10));
