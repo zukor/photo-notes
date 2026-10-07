@@ -73,7 +73,7 @@ test('scanner routes retain photos, extract fields, save reviews and report serv
    await page.route('**/*',route=>route.request().url().startsWith(base)?route.continue():route.abort());
    await page.goto(base,{waitUntil:'domcontentloaded'});
    await page.waitForFunction(()=>typeof renderTicketScanner==='function'&&state.me);
-   await page.locator('#body').waitFor();
+   await page.locator('#body').waitFor();await page.evaluate(()=>{localStorage.setItem('pn_first_use_v1:'+encodeURIComponent(state.me.email),'done');document.getElementById('firstUseSetup')?.close();});
    await page.evaluate(()=>{state.view='ticket-scanner';renderTicketScanner();});
    await page.locator('#ticketLib').setInputFiles(fixture);
    await page.locator('#ticketRead').click();
@@ -91,7 +91,7 @@ test('scanner routes retain photos, extract fields, save reviews and report serv
 
 
   // Reports use reviewed saved fields, retain source photos, and preserve legacy access.
-  const cases=[['business_card',{name:'MANUAL CONTACT',email:'manual@example.invalid',phone:'555-0100',company:'REVIEWED COMPANY',address:'SAVED ADDRESS'}],['plan_sketch',{project_name:'REVIEWED PROJECT',sheet_number:'A-22',scale:'1:100',visible_notes:'MANUAL PLAN NOTE'}],['equipment_plate',{manufacturer:'REVIEWED MAKER',model:'MODEL X',serial_number:'000123',specifications:'MANUAL SPECIFICATION'}]];
+  const cases=[['material_label',{product_name:'MANUAL PRODUCT',manufacturer:'LABEL MAKER',product_code:'CODE-7',lot_number:'0009',quantity:'10',manufactured_date:'2026-01-01',expiration_date:'2027-01-01',instructions:'REVIEWED INSTRUCTIONS',warnings:'REVIEWED WARNINGS'}],['gauge',{instrument_type:'Thermometer',reading:'83',unit:'F',equipment_name:'WIKA',observed_at:'12:30',notes:'MANUAL READING NOTE'}],['business_card',{name:'MANUAL CONTACT',email:'manual@example.invalid',phone:'555-0100',company:'REVIEWED COMPANY',address:'SAVED ADDRESS'}],['plan_sketch',{project_name:'REVIEWED PROJECT',sheet_number:'A-22',scale:'1:100',visible_notes:'MANUAL PLAN NOTE'}],['equipment_plate',{manufacturer:'REVIEWED MAKER',model:'MODEL X',serial_number:'000123',specifications:'MANUAL SPECIFICATION'}]];
   await pool.query("UPDATE users SET pro_type='general',feature_access='{\"camera_readers\":false}' WHERE id=$1",[user.id]);
   const outsider=(await pool.query("INSERT INTO users(email,password_hash,plan,pro_type) VALUES($1,'none','pro','contractor') RETURNING id",['report-outsider-'+Date.now()+'@example.invalid'])).rows[0];
   for(const [type,fields] of cases){const row=(await pool.query("INSERT INTO camera_readings(user_id,reading_type,title,fields,photo_path,status) VALUES($1,$2,'REVIEWED REPORT',$3,$4,'saved') RETURNING id",[user.id,type,JSON.stringify(fields),ticket.ticket.photo_path])).rows[0];
@@ -101,6 +101,7 @@ test('scanner routes retain photos, extract fields, save reviews and report serv
    const outsiderCookie='pn_token='+require('jsonwebtoken').sign({id:outsider.id},process.env.SESSION_SECRET);assert.equal((await fetch(base+`/api/camera-readings/${row.id}/report`,{headers:{Cookie:outsiderCookie}})).status,404);
   }
   await pool.query('DELETE FROM users WHERE id=$1',[outsider.id]);
+  for(const format of ['pdf','docx']){const r=await fetch(base+`/api/asphalt-tickets/${ticket.ticket.id}/report?format=${format}`,{headers:{Cookie:cookie}});assert.equal(r.status,200);assert((await r.arrayBuffer()).byteLength>1000);}
   const legacy=await(await fetch(base+'/api/camera-readings?type=business_card',{headers:{Cookie:cookie}})).json();assert(legacy.length>0);
  } finally {
   global.fetch=nativeFetch;

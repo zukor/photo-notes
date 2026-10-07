@@ -5,11 +5,11 @@ function gates(user){const context=vm.createContext({pool:{query:async()=>({rows
 test('reader eligibility and opt-out across all editions, specialist gates preserved',async()=>{
  for(const pro_type of [...editions,'issue','roads','unknown'])for(const plan of ['pro','free'])for(const enabled of [true,false]){
   const g=gates({plan,pro_type,feature_access:{camera_readers:enabled}});
-  assert.equal(await g.featureAllowed(1,'camera_readers'),plan==='pro'&&editions.includes(pro_type)&&enabled);
+  assert.equal(await g.featureAllowed(1,'camera_readers'),plan==='pro'&&pro_type!=='general'&&editions.includes(pro_type)&&enabled);
   assert.equal(await g.featureAllowed(1,'ticket_scanner'),plan==='pro'&&pro_type==='paving');
   assert.equal(await g.featureAllowed(1,'measurements'),plan==='pro'&&['paving','concrete'].includes(pro_type));
  }
- for(const pro_type of editions)assert.equal(await gates({plan:'pro',pro_type}).featureAllowed(1,'camera_readers'),true);
+ for(const pro_type of editions)assert.equal(await gates({plan:'pro',pro_type}).featureAllowed(1,'camera_readers'),pro_type!=='general');
 });
 test('actual reader routes preserve ownership, review, photo, publishing and manual fallback',async()=>{
  for(const pro_type of editions){
