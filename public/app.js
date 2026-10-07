@@ -749,6 +749,7 @@ function renderCapture() {
     <textarea id="note" placeholder="Your recorded notes will appear here as words."></textarea>
     ${isConcreteClient()?concreteCaptureDetailsMarkup():''}
 
+    <section id="captureSettings" class="capture-settings">
     ${isHoaClient()?`<label>Maintenance Category</label><select id="hoaArea">${HOA_AREAS.map(a=>`<option value="${esc(a)}">${esc(a)}</option>`).join('')}</select><div id="hoaDirectedWrap" style="display:none"><label>Directed To</label><input id="hoaDirected" placeholder="Person expected to answer"></div>`:`<label data-topic-heading="${isIssueReporterClient()?'Topic':'Topic (optional)'}">${isIssueReporterClient()?'Topic':'Topic (optional)'}</label>
     <div class="pill-group" id="areas">${areaChips()}</div>
     <div class="row compact" style="margin-top:10px">
@@ -757,6 +758,7 @@ function renderCapture() {
     </div>`}
 
     ${isProClient()?`<label for="captureUrgency">Urgency</label><select id="captureUrgency"><option value="standard" ${state.urgency==='urgent'?'':'selected'}>Standard</option><option value="urgent" ${state.urgency==='urgent'?'selected':''}>Urgent</option></select>`:''}
+    </section>
     <div class="capture-actions">${isBasicClient()?'':'<button class="btn" id="save" type="button">Save</button>'}<button class="btn" id="send" type="button">Send/Share</button></div>
   `;
 

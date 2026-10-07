@@ -32,7 +32,7 @@ function remember(){const box=document.getElementById('cfCapture');if(!box)retur
  const raw=el.value;draft[d.id]={id:d.id,revision:d.revision,value:raw===''?null:d.type==='number'?Number(raw):d.type==='boolean'?raw==='Yes':raw};
 }}
 function render(){const anchor=document.getElementById('save');if(!anchor)return;
- let box=document.getElementById('cfCapture');if(!box){box=document.createElement('details');box.id='cfCapture';box.className='cf-section';(anchor.closest('.capture-actions')||anchor).before(box);}
+ let box=document.getElementById('cfCapture');if(!box){box=document.createElement('details');box.id='cfCapture';box.className='cf-section';const settings=document.getElementById('captureSettings');if(settings)settings.append(box);else (anchor.closest('.capture-actions')||anchor).before(box);}
  box.innerHTML=`<summary>Additional Details</summary><p>User-entered metadata, separate from photographic evidence.</p>${controls(applicable(),draft,'cfValue-')}${loaded&&!applicable().length?'<p>No active fields for this edition.</p>':''}${!loaded?'<p>Field definitions unavailable. Reconnect to load them.</p>':''}<button id="cfManage" type="button" class="btn secondary slim">Manage Custom Fields</button>`;
  box.querySelectorAll('[data-cf-id]').forEach(el=>el.oninput=remember);
  box.querySelector('#cfManage').onclick=manage;
