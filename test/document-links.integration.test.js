@@ -97,7 +97,13 @@ test('document snapshots: exact exports, owner isolation, expiry, revoke and bro
     // Enforce capacity with a serialized check, not a client-only limit.
     await pool.query('DELETE FROM document_share_links WHERE user_id=$1',[users[0]]);
     await pool.query("INSERT INTO document_share_links(user_id,token,filename,mime_type,content,expires_at) SELECT $1,'quota-'||n,'fixture.docx','application/octet-stream',$2,now()+interval '1 day' FROM generate_series(1,20)n",[users[0],word]);
-    assert.equal((await create(word)).status,409);
+    assert.equal((await create(word)).status,201,'the previous 20-link limit must no longer block sharing');
+    await pool.query("DELETE FROM document_share_links WHERE user_id=$1",[users[0]]);
+    await pool.query("INSERT INTO document_share_links(user_id,token,filename,mime_type,content,expires_at) SELECT $1,'quota-'||n,'fixture.docx','application/octet-stream',$2,now()+interval '1 day' FROM generate_series(1,99)n",[users[0],word]);
+    const boundary=await Promise.all([create(word),create(word)]);
+    assert.deepEqual(boundary.map(r=>r.status).sort(),[201,409],'concurrent requests cannot exceed 100 active links');
+    assert.equal((await pool.query('SELECT count(*)::int n FROM document_share_links WHERE user_id=$1',[users[0]])).rows[0].n,100);
+    assert.match(await boundary.find(r=>r.status===409).text(),/100 links or 100 MB/);
   } catch(error) { console.error(error); throw error; } finally {
     await pool.query('DELETE FROM captures WHERE user_id=ANY($1)',[users]);
     await pool.query('DELETE FROM users WHERE id=ANY($1)',[users]);
