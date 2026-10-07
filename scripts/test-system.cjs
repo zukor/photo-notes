@@ -39,13 +39,14 @@ async function run(feature, args, overrides = {}, timeout = 180000) {
 const browserSuites = [
  'automation-edition-browser',
  'complete-help','admin-help','all-edition-help','shared-workflow-parity','location-intelligence',
- 'shared-camera-readers','capture-voice','issue-completion-browser','issue-result-screenshot','sticky-workflow-menu','testing-dashboard','record-notes-check','capture-templates','property-incidents',
+ 'shared-camera-readers','capture-voice','issue-completion-browser','issue-result-screenshot','sticky-workflow-menu','batch-annotations-browser','testing-dashboard','record-notes-check','capture-templates','property-incidents',
  'property-incident-report','property-terminology','photo-markers','send-shortcuts',
  'visual-analysis-browser','photo-requests-browser','qr-codes-browser','related-photos-browser',
  'photo-comments-browser','photo-comments-app','bulk-metadata-browser','custom-fields-browser',
  'saved-views-browser','saved-views-help','property-global-parity','shared-before-after-browser'
 ];
 const legacySuites = [
+ ['batch-annotations.integration','PN_LEGACY_TEST_DATABASE_URL','pn_annotations_test','PN_ANNOTATION_TEST'],
  ['document-links.integration','PN_LEGACY_TEST_DATABASE_URL','pn_document_links_test','PN_DOCUMENT_LINKS'],
  ['photo-evidence-export.integration','PN_LEGACY_TEST_DATABASE_URL','pn_evidence_test','PN_EVIDENCE_EXPORT_TEST'],
  ['unresolved-bugs.integration','PN_LEGACY_TEST_DATABASE_URL','pn_bugs_test','PN_BUG_RETEST'],

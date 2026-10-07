@@ -892,6 +892,13 @@ body:has(#desktopHelp) .issue-fab { left:max(14px,env(safe-area-inset-left)); ri
 #captureSettings :is(input,select,textarea){width:100%;box-sizing:border-box}
 .shared-photo-tools{justify-content:center}
 
+.batch-annotation-panel { border:1px solid #000; border-radius:10px; padding:14px; margin-top:16px; color:var(--pn-text-000,#000); text-align:left; }
+.batch-annotation-panel h2 { font-size:18px; margin:0 0 8px; }
+.batch-annotation-panel p { color:var(--pn-text-000,#000); }
+#batchAnnotationConfirm { width:auto; margin-right:8px; }
+#batchAnnotationConfirmLabel { text-transform:none; letter-spacing:normal; }
+
+.batch-annotation-panel [hidden] { display:none!important; }
 /* Match the outer spacing above and below the optional capture rows. */
 #note{display:block}
 #captureSettings>:first-child{margin-top:0}
