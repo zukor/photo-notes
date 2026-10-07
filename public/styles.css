@@ -932,3 +932,7 @@ body:has(#desktopHelp) .issue-fab { left:max(14px,env(safe-area-inset-left)); ri
 .organize-workspace-section:not([open]) > summary::before { content:'▸'; }
 .organize-workspace-section:not([open]) > summary { margin-bottom:0; }
 .organize-workspace-section > summary h2,.organize-workspace-section > summary p { color:#000; }
+
+/* Keep installed-app navigation clear of landscape notches too. */
+.wrap { padding-left:max(16px,env(safe-area-inset-left,0px)); padding-right:max(16px,env(safe-area-inset-right,0px)); }
+.capture-job-dialog { color:#000; text-align:left; width:min(520px,calc(100vw - 32px)); max-height:calc(100dvh - 32px); overflow:auto; font-family:Arial,Helvetica,sans-serif; }

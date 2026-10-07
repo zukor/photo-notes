@@ -57,5 +57,10 @@ test('real exports retain paired and instrument details with their photos',{skip
   if(format==='docx'){const xml=new Zip(bytes).file('word/document.xml').asText();assert(xml.includes('BEFORE UNIQUE NOTE'));assert(xml.includes('AFTER UNIQUE NOTE'));assert(!xml.includes('Before and after comparison'));}
   else{const text=require('node:child_process').execFileSync('pdftotext',[file,'-'],{encoding:'utf8'});assert(text.includes('BEFORE UNIQUE NOTE'));assert(text.includes('AFTER UNIQUE NOTE'));}
  }
+
+ // Blank labels are numbered, explicit Untitled is preserved, and job filters combine.
+ const labelIds=[];for(const title of ['Untitled','   '])labelIds.push((await pool.query("INSERT INTO captures(user_id,photo_title,note,address,area_tags) VALUES($1,$2,'LABEL TEST','DISTINCT LOCATION',ARRAY['Electrical']) RETURNING id",[owner.id,title])).rows[0].id);
+ for(const format of ['pdf','docx']){const r=await req('/api/export/'+format+'?ids='+labelIds.join(','));assert.equal(r.status,200);const bytes=Buffer.from(await r.arrayBuffer()),file=path.join(os.tmpdir(),'pn-title-fallback.'+format);fs.writeFileSync(file,bytes);const text=format==='docx'?new Zip(bytes).file('word/document.xml').asText():require('node:child_process').execFileSync('pdftotext',[file,'-'],{encoding:'utf8'});assert(text.includes('Untitled'));assert(text.includes('Photo 2'));assert(text.includes('DISTINCT LOCATION'));}
+ const unassigned=await(await req('/api/captures/search?job_id=unassigned&q=LABEL&area=Electrical')).json();assert.deepEqual(unassigned.map(c=>c.id).sort((a,b)=>a-b),labelIds);assert(unassigned.every(c=>c.job_id===null));
  }finally{server.closeAllConnections();await new Promise(r=>server.close(r));await pool.end();}
 });

@@ -40,7 +40,7 @@ const browserSuites = [
  'automation-edition-browser','proposal-exhibit',
  'complete-help','admin-help','all-edition-help','shared-workflow-parity','location-intelligence',
  'shared-camera-readers','capture-voice','issue-completion-browser','issue-result-screenshot','sticky-workflow-menu','batch-annotations-browser','custom-annotation-templates','document-title','document-photo-source','crop-context-browser','testing-dashboard','record-notes-check','capture-templates','property-incidents',
- 'property-incident-report','property-terminology','photo-markers','send-shortcuts','send-photo-selection','send-photo-filters','review-share-organize',
+ 'property-incident-report','property-terminology','photo-markers','send-shortcuts','send-photo-selection','send-photo-filters','review-share-organize','capture-job-library',
  'visual-analysis-browser','photo-requests-browser','qr-codes-browser','related-photos-browser',
  'photo-comments-browser','photo-comments-app','bulk-metadata-browser','custom-fields-browser',
  'saved-views-browser','saved-views-help','property-global-parity','shared-before-after-browser'
