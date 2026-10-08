@@ -85,10 +85,12 @@ function titleCaseInput(el) {
 }
 
 async function loadAreas() {
-  const r = await api('/api/areas');
+  const [r,saved] = await Promise.all([api('/api/areas'),api('/api/areas?include_saved=1')]);
   state.areas = r.ok ? await r.json() : [];
+  state.filterAreas = saved.ok ? await saved.json() : [...state.areas];
   if (state.area && !state.areas.includes(state.area)) state.area = '';
 }
+function filterTopics(){return [...new Set([...state.areas,...(state.filterAreas||[])])];}
 async function loadJobs(){try{const r=await api('/api/jobs');state.jobs=r.ok?await r.json():[];if(state.jobId&&!state.jobs.some(j=>String(j.id)===String(state.jobId)))state.jobId='';}catch(e){state.jobs=[];}}
 async function loadHoaContext(){if(!isHoaClient())return;try{const [a,b,m,n]=await Promise.all([api('/api/hoa/company'),api('/api/hoa/communities'),api('/api/hoa/members'),api('/api/hoa/notifications')]);state.hoaCompany=a.ok?await a.json():null;state.communities=b.ok?await b.json():[];state.hoaMembers=m.ok?await m.json():[];const notes=n.ok?await n.json():[];state.hoaUnread=notes.filter(x=>!x.read_at).length;if(!state.communityId&&state.communities.length)state.communityId=String(state.communities[0].id);}catch(e){state.communities=[];state.hoaMembers=[];}}
 
@@ -405,7 +407,7 @@ function renderApp() {
       const r=await api('/api/switch-edition',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({edition})});
       if(!r.ok)throw new Error();
       stopCaptureDictation();
-      state.view=edition==='roads'?'road-report':(edition==='basic'||edition==='issue')?'capture':(IS_HANDHELD?'capture':'organize');state._captureShareSave=null;state.photoFile=null;state._note='';state._captureTemplateName='';state._concreteCapture=null;state._pavingReason=null;state._duplicateContext=null;
+      state.view=edition==='roads'?'road-report':'capture';state._captureShareSave=null;state.photoFile=null;state._note='';state._captureTemplateName='';state._concreteCapture=null;state._pavingReason=null;state._duplicateContext=null;
       clearIssueDeepLink();
       await boot();toast('Version switched');
     }catch(e){toast('Version could not be switched. Please try again.');}
@@ -2218,7 +2220,7 @@ async function renderList() {
     <details id="organizeFindSection" class="organize-workspace-section organize-search-section" open>
       <summary class="organize-step-head"><div><h2>Search</h2></div></summary>
       <div class="organize-search-grid">
-        <div><label>Filter by Topic</label><select id="filter"><option value="">All Topics</option>${state.areas.map(a => `<option value="${esc(a)}">${esc(a)}</option>`).join('')}</select></div>
+        <div><label>Filter by Topic</label><select id="filter"><option value="">All Topics</option>${filterTopics().map(a => `<option value="${esc(a)}">${esc(a)}</option>`).join('')}</select></div>
         <div class="organize-search-box"><label>Search PhotoNotes</label><div class="row compact"><input id="photoSearch" type="search" placeholder="Search photo titles, notes, and details"><button class="btn" id="photoSearchBtn" type="button">Search</button><button class="btn secondary" id="photoSearchClear" type="button">Clear Search &amp; Filters</button></div></div>
       </div>
       <details class="organize-search-filters"><summary>More search filters</summary><div class="row compact"><input id="searchFrom" type="date" title="From date"><input id="searchTo" type="date" title="To date"></div><label style="text-transform:none;letter-spacing:0"><input id="searchMissingAddress" type="checkbox" style="width:auto"> Missing address only</label></details>
@@ -2419,7 +2421,7 @@ async function renderEdit() {
   body.className = 'workflow-edit';
   body.innerHTML = `
     <label for="filter">Filter</label>
-    <select id="filter"><option value="">All Topics</option>${state.areas.map(a => `<option value="${esc(a)}">${esc(a)}</option>`).join('')}</select>
+    <select id="filter"><option value="">All Topics</option>${filterTopics().map(a => `<option value="${esc(a)}">${esc(a)}</option>`).join('')}</select>
     <div class="row" style="margin-top:10px"><button class="btn secondary" id="selall">Select All</button><button class="btn secondary" id="selnone">Clear Selected</button></div>
     <div class="row" style="margin-top:8px"><button class="btn" id="delbtn" style="background:var(--pn-bg-b3261e,#b3261e)">Delete Selected</button><button class="btn" id="delall" style="background:var(--pn-bg-b3261e,#b3261e)">Delete All</button></div>
     <section class="batch-annotation-panel">
@@ -2766,9 +2768,9 @@ function libraryCardHtml(c){
     <label class="library-photo-select"><input type="checkbox" class="capchk" value="${c.id}" aria-label="Select ${esc(c.photo_title||'Untitled PhotoNote')}"></label>
     ${c.photo_path?`<img data-capture-photo="${c.id}" src="${capturePhotoSrc(c)}" alt="${esc(c.photo_title||'PhotoNote')}">`:''}
     <div class="photo-title">${esc(c.photo_title||'Untitled PhotoNote')}</div>
-    <div class="library-note"><strong>Notes:</strong> ${esc(c.note||'None')}</div>
+    <div class="library-details"><div class="library-note"><strong>Notes:</strong> ${esc(c.note||'None')}</div>
     <div class="library-membership"><strong>Project(s):</strong> ${projects}</div>
-    <div class="library-membership"><strong>Group(s):</strong> ${groups}</div>
+    <div class="library-membership"><strong>Group(s):</strong> ${groups}</div></div>
     <button type="button" class="btn secondary slim library-open" data-library-open="${c.id}">Open</button>
   </article>`;
 }
@@ -2987,7 +2989,7 @@ function overlayTextClient(item, c) {
     case 'topic': return (c.area_tags || []).length ? `Topic: ${(c.area_tags || []).join(', ')}` : '';
     case 'dims': return fmtDimsClient(c);
     case 'defect': return c.defect_type ? ('Defect: ' + defectLabelClient(c.defect_type) + (c.defect_severity ? ', ' + c.defect_severity : '')) : '';
-    case 'copyright': return item.text || ('© ' + new Date().getFullYear());
+    case 'copyright': return item.text || ('© ' + new Date().getFullYear() + ' Zukor AI. All Rights Reserved.');
     default: return item.text || '';
   }
 }
@@ -3045,6 +3047,7 @@ function renderStampEditor(c) {
   const img = document.getElementById('stampImg');
   if (img.complete) drawOverlayItems(); else img.onload = drawOverlayItems;
   renderStampCtl();
+  window.scrollTo({top:0,left:0,behavior:'instant'});
 }
 function stageSize() {
   const st = document.getElementById('stampStage');
@@ -3094,7 +3097,8 @@ function drawOverlayItems() {
       st.appendChild(box);
       return;
     }
-    const txt = overlayTextClient(it, editorCapture) || OVERLAY_FIELD_LABELS[it.t] || 'Text';
+    const txt = overlayTextClient(it, editorCapture);
+    if (!txt) return; // Missing photo metadata must not become a literal field label.
     const d = document.createElement('div');
     d.className = 'ovitem' + (i === editorSel ? ' sel' : '');
     d.style.cssText = `position:absolute;left:${it.x}%;top:${it.y}%;font-size:${Math.max(4, it.size / 100 * h)}px;color:${it.color};font-family:${OVERLAY_FONT_CSS[it.font] || OVERLAY_FONT_CSS.sans};font-weight:${it.font === 'heavy' ? '800' : 'normal'};white-space:nowrap;cursor:move;user-select:none;line-height:1;${it.outline ? 'text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000;' : ''}${i === editorSel ? 'outline:2px dashed #1d4ed8;outline-offset:2px;' : ''}`;
@@ -3503,7 +3507,7 @@ async function renderMap() {
     <div class="row map-filter-row">
       <div>
         <label for="mapTopic" style="margin-top:0">Filter by Topic</label>
-        <select id="mapTopic"><option value="">All Topics</option>${state.areas.map(a => `<option value="${esc(a)}">${esc(a)}</option>`).join('')}</select>
+        <select id="mapTopic"><option value="">All Topics</option>${filterTopics().map(a => `<option value="${esc(a)}">${esc(a)}</option>`).join('')}</select>
       </div>
       <div>
         <label for="mapGroup" style="margin-top:0">Filter by Document</label>
@@ -3642,12 +3646,12 @@ function redrawDraw() {
   const ro = document.getElementById('drawReadout');
   if (d.mode === 'polygon') {
     if (d.poly) mapObj.removeLayer(d.poly);
-    d.poly = L.polygon(latlngs, { color: '#1f4d2e', weight: 2, fillColor: '#1f4d2e', fillOpacity: 0.25 }).addTo(mapObj);
+    d.poly = L.polygon(latlngs, { color: '#1f4d2e', weight: 2, fillColor: '#1f4d2e', fillOpacity: 0.25, interactive:false }).addTo(mapObj);
     const a = clientPolygonAreaSqft(d.points);
     if (ro) ro.textContent = d.points.length < 3 ? `${d.points.length} corner(s)` : `Area: ${a ? Math.round(a).toLocaleString() : '—'} sq ft (${d.points.length} corners)`;
   } else {
     if (d.line) mapObj.removeLayer(d.line);
-    d.line = L.polyline(latlngs, { color: '#1f4d2e', weight: 3 }).addTo(mapObj);
+    d.line = L.polyline(latlngs, { color: '#1f4d2e', weight: 3, interactive:false }).addTo(mapObj);
     const len = clientSpanLengthFeet(d.points);
     if (ro) ro.textContent = d.points.length < 2 ? `${d.points.length} point(s)` : `Length: ${len ? Math.round(len).toLocaleString() : '—'} ft`;
   }
@@ -4147,7 +4151,7 @@ async function renderGroups() {
     <textarea id="gdesc" placeholder="Subtitle or description (optional)" style="min-height:60px;margin-top:8px"></textarea>
     <div class="status" id="documentOrganizeSelection">${state.selectedIds.size ? `${state.selectedIds.size} selected capture${state.selectedIds.size === 1 ? '' : 's'} will be added.` : 'You can create an empty document, then add captures from Organize.'}</div>
     <label for="documentPhotoSource">Photos from Job or Topic (optional)</label>
-    <select id="documentPhotoSource"><option value="">Use current Organize selection</option>${state.jobs.length?`<optgroup label="${uiT('Jobs')}">${state.jobs.map(j=>`<option value="job:${j.id}">${esc(j.job_number?j.job_number+' - '+j.name:j.name)}</option>`).join('')}</optgroup>`:''}${state.areas.length?`<optgroup label="${uiT('Topics')}">${state.areas.map(topic=>`<option value="topic:${esc(topic)}">${esc(topic)}</option>`).join('')}</optgroup>`:''}</select>
+    <select id="documentPhotoSource"><option value="">Use current Organize selection</option>${state.jobs.length?`<optgroup label="${uiT('Jobs')}">${state.jobs.map(j=>`<option value="job:${j.id}">${esc(j.job_number?j.job_number+' - '+j.name:j.name)}</option>`).join('')}</optgroup>`:''}${filterTopics().length?`<optgroup label="${uiT('Topics')}">${filterTopics().map(topic=>`<option value="topic:${esc(topic)}">${esc(topic)}</option>`).join('')}</optgroup>`:''}</select>
     <p>Choose a job or topic to review its photos here. Uncheck any photo you do not want included. This replaces the Organize selection for this document only.</p>
     <p id="documentSourceStatus" role="status" aria-live="polite"></p><div id="documentSourcePhotos" class="document-source-photos"></div>
     <p id="documentTitleRequirement">Enter a document title to enable Create Document.</p>

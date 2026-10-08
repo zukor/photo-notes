@@ -4,7 +4,7 @@ This workflow is authorized for Photo Notes app defects reported through its iss
 
 ## Scheduled checks
 
-The Codex heartbeat checks about every 15 minutes while the local automation runtime is available. This is a local recurring worker, not a server-hosted always-on agent or an instant webhook. It must stay quiet if nothing actionable has changed. Report verified repairs, failures, or concrete blockers to the owner in the existing task.
+The Codex heartbeat checks about every five minutes while the local automation runtime is available. This is a local recurring worker, not a server-hosted always-on agent or an instant webhook. It must stay quiet if nothing actionable has changed. Report verified repairs, failures, or concrete blockers to the owner in the existing task.
 
 Start from `/Users/Sammy/Documents/ChatGPT/photo notes`. Read this file and inspect Git status. Preserve untracked documents and output files.
 

@@ -981,3 +981,8 @@ body:has(#desktopHelp) .issue-fab { left:max(14px,env(safe-area-inset-left)); ri
 /* Login failures must remain prominent in either theme. */
 #loginErr, #err, .login-error-message { color:#b42318 !important; font-size:18px; font-weight:700; line-height:1.5; text-align:left; margin-top:12px; overflow-wrap:anywhere; }
 html[data-theme="dark"] :is(#loginErr, #err, .login-error-message) { color:#ff6b6b !important; }
+
+/* Readable shared Library metadata in either theme. */
+.library-details { background:#fff; color:#000; padding:8px; border-radius:6px; margin-top:7px; }
+.library-details .library-note,.library-details .library-membership { color:#000; }
+.library-details .library-note:first-child { margin-top:0; }
