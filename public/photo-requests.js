@@ -24,6 +24,7 @@ window.PhotoNotesRequests={
    renderList(requests);
    if(focusRequestId){list.querySelector('[data-pr-detail="'+focusRequestId+'"]')?.click();clearFollowUp?.();}
    if(followUp){document.getElementById('prTitle').value=followUp.occurrence.title;document.getElementById('prInstructions').value=followUp.occurrence.instructions||'Photograph the same subject as the reference Photo Note.';document.getElementById('prViews').value='Follow-Up Photograph';const select=document.getElementById('prRelated');if([...select.options].some(o=>o.value===String(followUp.reference?.id)))select.value=String(followUp.reference.id);const text=document.createElement('p');text.textContent='This request satisfies the scheduled photograph after every requested view is received. Copy or share the link yourself.';document.getElementById('prCreateForm').prepend(text);}
+   if(state._photoRequestProjectId){document.getElementById('prJob').value=String(state._photoRequestProjectId);state._photoRequestProjectId=null;}
 
    document.getElementById('prRefresh').onclick=async()=>{try{renderList(await json('/api/photo-requests'));toast('Requests refreshed');}catch(e){toast(e.message);}};
    document.getElementById('prCreateForm').onsubmit=async event=>{

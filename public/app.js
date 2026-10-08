@@ -355,14 +355,14 @@ function renderApp() {
       </div>
       ${isRoadIssuesClient()||isBasicClient()?'':`<nav class="tabs workflow-tabs ${isHoaClient()?'hoa-tabs':isConcreteClient()?'concrete-tabs':''}" aria-label="Photo Notes workflow">
         <button type="button" class="tab ${['capture','camera-tools','ticket','camera-reader','alignment'].includes(workflowView)?'on':''}" id="tabCapture" aria-current="${['capture','camera-tools','ticket','camera-reader','alignment'].includes(workflowView)?'page':'false'}">Capture</button>
-        <button type="button" class="tab ${['organize','photo-library','hoa-visits','hoa-visit'].includes(workflowView)?'on':''}" id="tabOrganize" aria-current="${['organize','photo-library','hoa-visits','hoa-visit'].includes(workflowView)?'page':'false'}">Organize</button>
-        <button type="button" class="tab ${['edit','hoa-assets','hoa-asset'].includes(workflowView)?'on':''}" id="tabEdit" aria-current="${['edit','hoa-assets','hoa-asset'].includes(workflowView)?'page':'false'}">${isHoaClient()?'Assets':'Edit'}</button>
+        <button type="button" class="tab ${['organize','photo-library','edit','hoa-visits','hoa-visit'].includes(workflowView)?'on':''}" id="tabOrganize" aria-current="${['organize','photo-library','edit','hoa-visits','hoa-visit'].includes(workflowView)?'page':'false'}">${isHoaClient()?'Organize':'Library'}</button>
+        ${isHoaClient()?`<button type="button" class="tab ${['hoa-assets','hoa-asset'].includes(workflowView)?'on':''}" id="tabEdit" aria-current="${['hoa-assets','hoa-asset'].includes(workflowView)?'page':'false'}">Assets</button>`:''}
         <button type="button" class="tab ${['create','hoa-inspections'].includes(workflowView)?'on':''}" id="tabCreate" aria-current="${['create','hoa-inspections'].includes(workflowView)?'page':'false'}">${isHoaClient()?'Inspections':'Create'}</button>
         <button type="button" class="tab ${['send','hoa-maintenance'].includes(workflowView)?'on':''}" id="tabSend" aria-current="${['send','hoa-maintenance'].includes(workflowView)?'page':'false'}">${isHoaClient()?'Records':'Send'}</button>
       </nav>`}
-      ${photoToolOpen?`<div class="photo-tool-navigation"><span id="photoToolLocation">${uiT(photoToolSection)} / ${uiT(state.view==='photo-follow-ups'?'Photo Follow-Ups':'Request Photos')}</span><button type="button" class="btn secondary" id="photoToolClose">${uiT('Close')}</button></div>`:''}
+      ${photoToolOpen?`<div class="photo-tool-navigation"><span id="photoToolLocation">${uiT(photoToolSection)} / ${uiT(state.view==='photo-follow-ups'?'Scheduled Photos':'Request Photos')}</span><button type="button" class="btn secondary" id="photoToolClose">${uiT('Close')}</button></div>`:''}
       <div id="body"></div>
-      ${isProClient()&&['organize','photo-library','hoa-visits','hoa-visit','photo-follow-ups','photo-requests'].includes(state.view)&&['general','property','hoa','paving','concrete','contractor','roofer'].includes(state.proType)?'<div class="shared-photo-tools"><div class="fu-actions"><button type="button" class="btn secondary" id="fuOpen">Photo Follow-Ups</button></div><div class="pr-actions"><button type="button" class="btn secondary" id="prOpen">Request Photos</button></div></div>':''}
+      ${isProClient()&&['hoa-visits','hoa-visit','photo-follow-ups','photo-requests'].includes(state.view)&&['property','hoa'].includes(state.proType)?'<div class="shared-photo-tools"><div class="fu-actions"><button type="button" class="btn secondary" id="fuOpen">Scheduled Photos</button></div><div class="pr-actions"><button type="button" class="btn secondary" id="prOpen">Request Photos</button></div></div>':''}
       <div class="footer">&copy; ${new Date().getFullYear()} Zukor AI. All Rights Reserved.<br><a href="/install.html" target="_blank" rel="noopener">Install Photo Notes on your device</a></div>
     </div>
     <button class="issue-fab ${isRoadIssuesClient()?'road-issue-fab':''}" id="issueFab" type="button" data-html2canvas-ignore="true" aria-label="Report Issue">${issueFabLabel()}</button>
@@ -434,8 +434,8 @@ function renderApp() {
   refreshIssueAttention();
   const updates=document.getElementById('issueUpdates');if(updates)updates.onclick=e=>{e.preventDefault();state.view='my-issues';renderApp();};
   const issueFab = document.getElementById('issueFab'); if (issueFab) issueFab.onclick = openIssueReporter;
-  const tabCapture=document.getElementById('tabCapture');if(tabCapture)tabCapture.onclick = () => { state.view='capture'; renderApp(); };
-  const tabOrganize=document.getElementById('tabOrganize');if(tabOrganize)tabOrganize.onclick = () => { state.view=isHoaClient()?'hoa-visits':'organize'; renderApp(); };
+  const tabCapture=document.getElementById('tabCapture');if(tabCapture)tabCapture.onclick = () => { state._libraryOpenId=null;state.view='capture'; renderApp(); };
+  const tabOrganize=document.getElementById('tabOrganize');if(tabOrganize)tabOrganize.onclick = () => { state._libraryOpenId=null;state.view=isHoaClient()?'hoa-visits':'organize'; renderApp(); };
   const tabEdit=document.getElementById('tabEdit');if(tabEdit)tabEdit.onclick = () => { state.view=isHoaClient()?'hoa-assets':'edit'; renderApp(); };
   const tabCreate=document.getElementById('tabCreate');if(tabCreate)tabCreate.onclick = () => { state.view=isHoaClient()?'hoa-inspections':'create'; state.groupId=null; renderApp(); };
   const tabSend=document.getElementById('tabSend');if(tabSend)tabSend.onclick = () => { state.view=isHoaClient()?'hoa-maintenance':'send'; renderApp(); };
@@ -2195,29 +2195,29 @@ async function renderList() {
   const body = document.getElementById('body');
   body.className = 'workflow-organize';
   body.innerHTML = `
-    <div class="workflow-intro organize-intro"><strong>Organize your Photo Notes</strong><span>Find the photos you need, select them, and choose what you want to do with them.</span></div>
+    <div class="library-heading"><h1>Library</h1>${window.PhotoNotesFollowUps?.allowed()?'<button type="button" class="btn secondary slim" id="fuOpen">Scheduled Photos</button>':''}</div>
 
     <details id="organizeJobSection" class="organize-workspace-section organize-context-section" open>
-      <summary class="organize-step-head"><span class="organize-step-number">1</span><div><h2>Choose a job</h2><p>Show Photo Notes from one job, review its timeline, or create a new job.</p></div></summary>
+      <summary class="organize-step-head"><div><h2>Projects</h2></div></summary>
       <div class="organize-job-builder">
-        <div class="organize-form-grid"><section class="organize-panel"><label>Current Job</label><select id="jobFilter"><option value="">All Jobs</option><option value="unassigned">Unassigned</option>${state.jobs.map(j=>`<option value="${j.id}">${esc(j.job_number?j.job_number+' — '+j.name:j.name)} (${j.photo_count||0})</option>`).join('')}</select><button class="btn secondary slim" id="timelineBtn" type="button">View Job Timeline</button><button class="btn secondary slim" id="deleteJobBtn" type="button">Delete Job</button>${isPavingClient()?`<div id="pavingReadiness" class="evidence-readiness">Choose a job to check its photo evidence.</div><div class="row compact" style="margin-top:8px"><button class="btn secondary slim" id="pavingJobPdf" type="button">Job Evidence PDF</button><button class="btn secondary slim" id="pavingJobWord" type="button">Job Evidence Word</button></div>`:''}</section>
+        <div class="organize-form-grid"><section class="organize-panel"><label>Current Job</label><select id="jobFilter"><option value="">All Jobs</option><option value="unassigned">Unassigned</option>${state.jobs.map(j=>`<option value="${j.id}">${esc(j.job_number?j.job_number+' — '+j.name:j.name)} (${j.photo_count||0})</option>`).join('')}</select><button class="btn secondary slim" id="timelineBtn" type="button">View Job Timeline</button><button class="btn secondary slim" id="requestProjectPhotos" type="button">Request Project Photos</button><button class="btn secondary slim" id="deleteJobBtn" type="button">Delete Job</button>${isPavingClient()?`<div id="pavingReadiness" class="evidence-readiness">Choose a job to check its photo evidence.</div><div class="row compact" style="margin-top:8px"><button class="btn secondary slim" id="pavingJobPdf" type="button">Job Evidence PDF</button><button class="btn secondary slim" id="pavingJobWord" type="button">Job Evidence Word</button></div>`:''}</section>
         <section class="organize-panel"><label>Create a New Job</label><input id="newJobName" placeholder="Job name"><div class="row compact"><input id="newJobNumber" placeholder="Job number"><input id="newJobCustomer" placeholder="Customer"></div><input id="newJobAddress" placeholder="Job address"><button class="btn secondary slim" id="createJobBtn" type="button">Create Job</button></section></div>
       </div>
     </details>
 
     <details id="organizeFindSection" class="organize-workspace-section organize-search-section" open>
-      <summary class="organize-step-head"><span class="organize-step-number">2</span><div><h2>Find Photo Notes</h2><p>Filter by topic or search the details saved with each photo.</p></div></summary>
+      <summary class="organize-step-head"><div><h2>Search</h2></div></summary>
       <div class="organize-search-grid">
         <div><label>Filter by Topic</label><select id="filter"><option value="">All Topics</option>${state.areas.map(a => `<option value="${esc(a)}">${esc(a)}</option>`).join('')}</select></div>
-        <div class="organize-search-box"><label>Search Photo Notes</label><div class="row compact"><input id="photoSearch" type="search" placeholder="Notes, jobs, customers, addresses, topics, dates, or defects"><button class="btn" id="photoSearchBtn" type="button">Search</button><button class="btn secondary" id="photoSearchClear" type="button">Clear</button></div></div>
+        <div class="organize-search-box"><label>Search PhotoNotes</label><div class="row compact"><input id="photoSearch" type="search" placeholder="Search photo titles, notes, and details"><button class="btn" id="photoSearchBtn" type="button">Search</button><button class="btn secondary" id="photoSearchClear" type="button">Clear Search &amp; Filters</button></div></div>
       </div>
       <details class="organize-search-filters"><summary>More search filters</summary><div class="row compact"><input id="searchFrom" type="date" title="From date"><input id="searchTo" type="date" title="To date"></div><label style="text-transform:none;letter-spacing:0"><input id="searchMissingAddress" type="checkbox" style="width:auto"> Missing address only</label></details>
       ${photoMarkersOn()?`<div class="row photo-marker-filters"><label style="color:var(--pn-text-000,#000);min-height:44px;display:flex;align-items:center;gap:8px"><input type="checkbox" id="markerFavorites" style="width:22px;height:22px"> Favorites</label><label style="color:var(--pn-text-000,#000);min-height:44px;display:flex;align-items:center;gap:8px"><input type="checkbox" id="markerFlagged" style="width:22px;height:22px"> Flagged</label></div>`:''}
       <div class="status" id="photoSearchStatus"></div>
     </details>
 
-    <details id="organizeWorkSection" class="organize-workspace-section organize-actions-section" open>
-      <summary class="organize-step-head"><span class="organize-step-number">3</span><div><h2>Work with selected Photo Notes</h2><p>Select photos in the library below, then use only the action you need.</p></div></summary>
+    <details id="organizeWorkSection" class="organize-workspace-section organize-actions-section" ${state.selectedIds.size?'open':''}>
+      <summary class="organize-step-head"><div><h2>Selected PhotoNotes</h2></div></summary>
       <div class="organize-selection-toolbar" aria-label="Photo Note selection controls">
         <strong>Selection</strong>
         <div class="organize-action-row"><button class="btn secondary" id="selall">Select All</button><button class="btn secondary" id="selnone">Clear Selection</button><button class="btn secondary" id="compareSelected">Compare 2 Photos</button>${window.PhotoNotesBulkMetadata?.enabled(state)?`<button type="button" class="btn secondary" id="editSelected">Edit Selected</button>`:''}${featureOn('measurements') ? `<button class="btn secondary" id="classifybatch">Classify Selected (AI)</button>` : ''}</div>
@@ -2262,10 +2262,10 @@ async function renderList() {
     ${isConcreteClient()?'<div class="organize-footer-actions"><button class="btn secondary" id="concreteAreas">Patio &amp; Foundation Areas</button></div>':''}
     ${featureOn('measurements') ? `<div class="organize-footer-actions"><button class="btn secondary" id="openmap">Open Job Site Map</button></div>` : ''}
 
-    <div class="organize-library-heading"><div><span class="organize-library-kicker">Your library</span><h2>Current Photo Notes</h2></div><p>Saved Photo Notes appear here. Select any photos you want to organize or compare.</p></div>
+    <div class="organize-library-heading"><div><h2>Saved PhotoNotes</h2></div><div class="row compact"><button class="btn secondary slim" id="librarySelectAll">Select All</button><button class="btn secondary slim" id="libraryClearSelection">Clear Selection</button></div></div>
     ${isProClient()?'<details class="organize-panel" id="epLibrary"><summary>Export Presets</summary><p style="color:var(--pn-text-000,#000);text-align:left">Package selected Photo Notes using reusable export settings.</p><section id="exportPresetLibrary"></section></details>':''}
     <div id="cards"></div>`;
-  for(const id of ['organizeJobSection','organizeFindSection','organizeWorkSection']){const panel=document.getElementById(id),key=state.me?.id+':'+selectedEdition()+':'+id;panel.open=organizeSectionStates.get(key)!==false;panel.ontoggle=()=>organizeSectionStates.set(key,panel.open);}
+  for(const id of ['organizeJobSection','organizeFindSection','organizeWorkSection']){const panel=document.getElementById(id),key=state.me?.id+':'+selectedEdition()+':'+id;if(organizeSectionStates.has(key))panel.open=organizeSectionStates.get(key);panel.ontoggle=()=>organizeSectionStates.set(key,panel.open);}
   document.getElementById('filter').onchange = e => runSmartSearch();
   ['markerFavorites','markerFlagged'].forEach(id=>{const e=document.getElementById(id);if(e)e.onchange=()=>runSmartSearch();});
   const markers=document.getElementById('applyMarkers');if(markers)markers.onclick=batchPhotoMarkers;
@@ -2277,6 +2277,10 @@ async function renderList() {
   document.getElementById('photoSearchClear').onclick=()=>{globalThis.PhotoNotesCustomFields?.resetFilter();document.getElementById('photoSearch').value='';document.getElementById('filter').value='';document.getElementById('jobFilter').value='';document.getElementById('searchFrom').value='';document.getElementById('searchTo').value='';document.getElementById('searchMissingAddress').checked=false;['markerFavorites','markerFlagged'].forEach(id=>{const e=document.getElementById(id);if(e)e.checked=false;});runSmartSearch();};
   document.getElementById('selall').onclick = () => {document.querySelectorAll('.capchk').forEach(c => { c.checked = true; state.selectedIds.add(String(c.value)); });updateAnnotationSelection();};
   document.getElementById('selnone').onclick = () => { state.selectedIds.clear(); document.querySelectorAll('.capchk').forEach(c => c.checked = false);updateAnnotationSelection(); };
+  document.getElementById('librarySelectAll').onclick=document.getElementById('selall').onclick;
+  document.getElementById('libraryClearSelection').onclick=document.getElementById('selnone').onclick;
+  const scheduledPhotos=document.getElementById('fuOpen');if(scheduledPhotos)scheduledPhotos.onclick=()=>window.PhotoNotesFollowUps.open();
+  document.getElementById('requestProjectPhotos').onclick=()=>{const id=document.getElementById('jobFilter').value;if(!id||id==='unassigned')return toast('Choose a project first');state._photoRequestProjectId=id;rememberPhotoToolReturn();state.view='photo-requests';renderApp();};
   const ramoSend=document.getElementById('ramoIntakeSend');if(ramoSend)ramoSend.onclick=()=>openRamoIntake();
   const ramoHistory=document.getElementById('ramoIntakeHistory');if(ramoHistory)ramoHistory.onclick=()=>openRamoIntake(true);
   document.getElementById('applytopic').onclick = applyTopicToSelected;
@@ -2400,6 +2404,7 @@ async function replaceTopicsOnSelected() {
 }
 
 async function renderEdit() {
+  if(state._libraryOpenId)return renderLibraryPhoto();
   const body = document.getElementById('body');
   body.className = 'workflow-edit';
   body.innerHTML = `
@@ -2429,7 +2434,18 @@ async function renderEdit() {
   loadCards(state.editTopic||'');
 }
 
-function updateAnnotationSelection(){const p=document.getElementById('batchAnnotationSelected');if(p)p.textContent=`${selectedCaptureIds().length} photos selected, including selections retained across filters.`;}
+async function renderLibraryPhoto(){
+  const body=document.getElementById('body');body.className='workflow-edit library-photo-detail';
+  body.innerHTML='<button type="button" class="backlink" id="libraryBack">‹ Back to Library</button><div id="cards"><p class="status">Loading PhotoNote...</p></div>';
+  document.getElementById('libraryBack').onclick=()=>{state._libraryOpenId=null;state.view=isHoaClient()?'photo-library':'organize';renderApp();};
+  const r=await api('/api/captures');
+  if(!r.ok||!document.getElementById('cards')){body.querySelector('#cards').innerHTML='<p class="status">PhotoNote could not be loaded.</p>';return;}
+  const rows=await r.json(),photo=rows.find(c=>Number(c.id)===Number(state._libraryOpenId));
+  if(!photo){body.querySelector('#cards').innerHTML='<p class="status">This PhotoNote is no longer available.</p>';return;}
+  window._lastCards=[photo];body.querySelector('#cards').innerHTML=captureCardHtml(photo);wireCards(body.querySelector('#cards'),[photo]);retryPhotoImages(body.querySelector('#cards'));
+}
+
+function updateAnnotationSelection(){const count=selectedCaptureIds().length,p=document.getElementById('batchAnnotationSelected'),panel=document.getElementById('organizeWorkSection');if(p)p.textContent=`${count} photos selected, including selections retained across filters.`;if(count&&panel&&!panel.open)panel.open=true;}
 function wireBatchAnnotations(){
  void loadSavedAnnotationTemplates();
  updateAnnotationSelection();
@@ -2696,7 +2712,7 @@ async function loadCards(area, query = '', filters = {}) {
   // Pro: pull only pairs the user deliberately created so we can render them
   // as combined before/after cards. Never suggest pairs automatically.
   let pairs = [];
-  if (beforeAfterOn() && ['organize','photo-library'].includes(state.view)) {
+  if (beforeAfterOn() && !['organize','photo-library'].includes(state.view)) {
     try { const pr = await api('/api/pairs'); if (pr.ok) pairs = await pr.json(); } catch (e) {}
   }
   if(request!==cardsRequest||document.getElementById('cards')!==cards)return;
@@ -2711,7 +2727,7 @@ async function loadCards(area, query = '', filters = {}) {
     if (ab && byId[ab.after_id] && !consumed.has(ab.after_id)) { html.push(pairCardHtml(c, byId[ab.after_id],ab)); consumed.add(c.id); consumed.add(ab.after_id); continue; }
     const aa = afterOf[c.id];
     if (aa && byId[aa.before_id] && !consumed.has(aa.before_id)) { html.push(pairCardHtml(byId[aa.before_id], c,aa)); consumed.add(c.id); consumed.add(aa.before_id); continue; }
-    html.push(captureCardHtml(c));
+    html.push(['organize','photo-library'].includes(state.view)?libraryCardHtml(c):captureCardHtml(c));
     consumed.add(c.id);
   }
   cards.innerHTML = html.join('');
@@ -2733,6 +2749,19 @@ function photoLocationHtml(c,addressFallback='No address'){
 }
 function gaugePhotoHtml(c,full=false){if(!c.gauge_record||!['contractor','paving','concrete','hoa','property'].includes(state.proType))return '';const f=c.gauge_record.fields||{},field=(key,label)=>f[key]?`<div><b>${label}:</b> ${esc(f[key])}</div>`:'';return `<section class="gauge-photo-details"><strong>Gauge &amp; Instrument</strong><div class="${full?'':'specialist-record-summary'}">${field('reading','Reading')}${field('unit','Unit')}${field('instrument_type','Instrument Type')}${field('equipment_name','Equipment Name')}</div>${full?`${field('observed_at','Observed At')}${f.notes?`<strong>Additional Details</strong>${field('notes','Notes')}`:''}`:`<details data-gauge-photo-details><summary>Show More</summary>${field('observed_at','Observed At')}${field('notes','Notes')}</details>`}</section>`;}
 function photoEvidencePreview(c,full=false){return gaugePhotoHtml(c,full)+(isConcreteClient()?(c.footprints||[]).map(f=>`<section class="concrete-evidence"><strong>Saved Area: ${esc(f.name)}</strong><p>${esc(concreteAreaText(f))}</p>${f.notes?`<p>${esc(f.notes)}</p>`:''}</section>`).join(''):'');}
+function libraryCardHtml(c){
+  const projects=c.job_name?esc(c.job_number?c.job_number+' - '+c.job_name:c.job_name):'None';
+  const groups=(c.group_names||c.groups||[]).map(g=>esc(typeof g==='string'?g:g.name)).join(', ')||'None';
+  return `<article class="card library-photo-card" data-library-photo="${c.id}">
+    <label class="library-photo-select"><input type="checkbox" class="capchk" value="${c.id}" aria-label="Select ${esc(c.photo_title||'Untitled PhotoNote')}"></label>
+    ${c.photo_path?`<img data-capture-photo="${c.id}" src="${capturePhotoSrc(c)}" alt="${esc(c.photo_title||'PhotoNote')}">`:''}
+    <div class="photo-title">${esc(c.photo_title||'Untitled PhotoNote')}</div>
+    <div class="library-note"><strong>Notes:</strong> ${esc(c.note||'None')}</div>
+    <div class="library-membership"><strong>Project(s):</strong> ${projects}</div>
+    <div class="library-membership"><strong>Group(s):</strong> ${groups}</div>
+    <button type="button" class="btn secondary slim library-open" data-library-open="${c.id}">Open</button>
+  </article>`;
+}
 function captureCardHtml(c) {
   const when = new Date(c.created_at).toLocaleString(uiLocale(), { year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' });
   const tags = (c.area_tags || []).map(t => `<span class="badge">${esc(t)}</span>`).join('');
@@ -2778,14 +2807,14 @@ function captureCardHtml(c) {
     ${measureRow}
     ${c.photo_path ? `<button class="btn secondary slim stampbtn" data-id="${c.id}">Mark Up Photo${(c.overlays && c.overlays.length) ? ' (' + c.overlays.length + ')' : ''}</button>` : ''}
     ${c.photo_path ? `<button class="btn secondary slim cropbtn" data-id="${c.id}">Crop Photo</button>` : ''}
-    ${matchingPhotoAction(c)}${duplicateAction(c)}<button class="btn secondary slim evidencebtn" data-id="${c.id}">Photo Details &amp; History</button>
+    ${state._libraryOpenId?'':matchingPhotoAction(c)+duplicateAction(c)}<button class="btn secondary slim evidencebtn" data-id="${c.id}">Photo Details &amp; History</button>
     ${c.photo_original_path ? `<button class="btn secondary slim restorebtn" data-id="${c.id}">Restore Original Photo</button>` : ''}
     <div class="notewrap photo-notes-panel" data-id="${c.id}">
       <div class="photo-notes-heading">Notes</div>
       ${isPavingClient()||c.gauge_record?`<details data-paving-record-details><summary>Notes: ${esc(String(c.note||'No notes added.').slice(0,120))}${String(c.note||'').length>120?'…':''}</summary><div class="notetext photo-notes-box">${esc(c.note||'No notes added.')}</div></details>`:`<div class="notetext photo-notes-box">${esc(c.note || 'No notes added.')}</div>`}${window.PhotoNotesCustomFields?.html(c)||''}
       <button class="btn secondary editnote" data-id="${c.id}" style="margin-top:6px">Edit Note</button>
     </div>
-    ${['organize','photo-library'].includes(state.view) ? `<button class="btn secondary slim organize-delete-capture" data-delete-organize="${c.id}" type="button">Delete Photo Note</button>` : ''}
+    ${['organize','photo-library'].includes(state.view)||state._libraryOpenId ? `<button class="btn secondary slim organize-delete-capture" data-delete-organize="${c.id}" type="button">Delete PhotoNote</button>` : ''}
   </div>`;
 }
 
@@ -2836,7 +2865,7 @@ function openPhotoViewer(src,title='Photo'){
 }
 
 function installPhotoViewerButtons(root=document){
-  root.querySelectorAll('.card img').forEach(img=>{if(img.closest('.photo-viewer-modal')||img.nextElementSibling?.classList.contains('photo-viewer-button'))return;const button=document.createElement('button');button.type='button';button.className='btn secondary slim photo-viewer-button';button.textContent=img.closest('[data-reading-type="gauge"]')?'View':'View & Zoom';button.onclick=e=>{e.stopPropagation();const card=img.closest('.card'),title=card&&card.querySelector('.photo-title');openPhotoViewer(img.currentSrc||img.src,title&&title.textContent||img.alt||'Photo');};img.insertAdjacentElement('afterend',button);img.style.cursor='zoom-in';img.onclick=()=>button.click();});
+  root.querySelectorAll('.card img').forEach(img=>{if(img.closest('.photo-viewer-modal,.library-photo-card')||img.nextElementSibling?.classList.contains('photo-viewer-button'))return;const button=document.createElement('button');button.type='button';button.className='btn secondary slim photo-viewer-button';button.textContent=img.closest('[data-reading-type="gauge"]')?'View':'View & Zoom';button.onclick=e=>{e.stopPropagation();const card=img.closest('.card'),title=card&&card.querySelector('.photo-title');openPhotoViewer(img.currentSrc||img.src,title&&title.textContent||img.alt||'Photo');};img.insertAdjacentElement('afterend',button);img.style.cursor='zoom-in';img.onclick=()=>button.click();});
 }
 const photoViewerObserver=new MutationObserver(records=>{for(const record of records)for(const node of record.addedNodes)if(node.nodeType===1){installPhotoViewerButtons(node.matches&&node.matches('.card')?node:node);}});
 photoViewerObserver.observe(document.body,{childList:true,subtree:true});
@@ -2877,9 +2906,10 @@ function pairCardHtml(before, after, pair={}) {
 }
 
 function wireCards(cards, rows) {
+  cards.querySelectorAll('[data-library-open]').forEach(button=>button.onclick=()=>{state._libraryOpenId=Number(button.dataset.libraryOpen);state.view='edit';renderApp();});
   cards.querySelectorAll('[data-match-photo]').forEach(b=>b.onclick=()=>startMatchingPhoto(rows.find(c=>String(c.id)===b.dataset.matchPhoto)));
   cards.querySelectorAll('[data-view-pair]').forEach(b=>b.onclick=()=>{const before=rows.find(c=>String(c.id)===b.dataset.before),after=rows.find(c=>String(c.id)===b.dataset.after);if(before&&after)openPhotoComparison(before,after,{id:Number(b.dataset.viewPair),comparison_opacity:b.dataset.opacity===''?null:Number(b.dataset.opacity)});});
-  window.PhotoNotesQR?.wireSavedCards(cards,rows,selectedEdition(),{api,esc,toast});
+  if(!state._libraryOpenId)window.PhotoNotesQR?.wireSavedCards(cards,rows,selectedEdition(),{api,esc,toast});
   wirePhotoMarkers(cards);
   cards.querySelectorAll('.concrete-area-button').forEach(b=>b.onclick=()=>openConcreteFootprints(Number(b.dataset.id)));
   cards.querySelectorAll('.capchk').forEach(c => c.onchange = () => { if (c.checked) state.selectedIds.add(String(c.value)); else state.selectedIds.delete(String(c.value)); updateAnnotationSelection(); });
@@ -2925,7 +2955,7 @@ async function deleteOrganizePhotoNote(id, button) {
     if (!r.ok) throw new Error('delete failed');
     state.selectedIds.delete(String(id));
     toast('Photo Note deleted');
-    runSmartSearch();
+    if(state._libraryOpenId){state._libraryOpenId=null;state.view='organize';renderApp();}else runSmartSearch();
   } catch (e) {
     button.disabled = false;
     button.textContent = 'Delete Photo Note';

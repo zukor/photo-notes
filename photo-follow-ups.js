@@ -6,14 +6,17 @@ CREATE TABLE IF NOT EXISTS photo_follow_up_schedules (
  id bigserial PRIMARY KEY, user_id integer NOT NULL REFERENCES users(id) ON DELETE CASCADE,
  edition text NOT NULL, subject_type text NOT NULL, subject_id integer NOT NULL,
  reference_capture_id integer REFERENCES captures(id) ON DELETE SET NULL,
- title text NOT NULL, instructions text NOT NULL DEFAULT '', timezone text NOT NULL,
+ title text NOT NULL, scheduling_reason text NOT NULL DEFAULT '', instructions text NOT NULL DEFAULT '', timezone text NOT NULL,
  anchor_date date NOT NULL, recurrence jsonb, reminder_days integer NOT NULL DEFAULT 0,
  assigned_user_id integer REFERENCES users(id) ON DELETE SET NULL,
  active boolean NOT NULL DEFAULT true, next_index integer NOT NULL DEFAULT 0,
  created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(),
  CHECK(subject_type IN ('capture','asset','inspection_stop','route','maintenance','job')),
- CHECK(reminder_days IN (0,1,3,7))
+ CHECK(reminder_days BETWEEN 0 AND 365)
 );
+ALTER TABLE photo_follow_up_schedules ADD COLUMN IF NOT EXISTS scheduling_reason text NOT NULL DEFAULT '';
+ALTER TABLE photo_follow_up_schedules DROP CONSTRAINT IF EXISTS photo_follow_up_schedules_reminder_days_check;
+ALTER TABLE photo_follow_up_schedules ADD CONSTRAINT photo_follow_up_schedules_reminder_days_check CHECK(reminder_days BETWEEN 0 AND 365);
 CREATE TABLE IF NOT EXISTS photo_follow_up_occurrences (
  id bigserial PRIMARY KEY, schedule_id bigint NOT NULL REFERENCES photo_follow_up_schedules(id) ON DELETE CASCADE,
  due_date date NOT NULL, title text NOT NULL, instructions text NOT NULL, timezone text NOT NULL,
@@ -58,12 +61,12 @@ function recurrenceDate(anchor,rule,index){
  return date.toISOString().slice(0,10);
 }
 function validate(body){
- const title=String(body.title||'').trim().slice(0,200),instructions=String(body.instructions||'').trim().slice(0,2000),timezone=String(body.timezone||'');
- if(!title||!validDate(body.due_date))throw Error('Enter a title and a valid due date.');
+ const title=String(body.title||'').trim().slice(0,200),scheduling_reason=String(body.scheduling_reason||'').trim().slice(0,500),instructions=String(body.instructions||'').trim().slice(0,2000),timezone=String(body.timezone||'');
+ if(!title||!scheduling_reason||!validDate(body.due_date))throw Error('Enter a title, reason, and valid due date.');
  try{today(timezone);}catch{throw Error('Choose a valid time zone.');}if(!timezone)throw Error('Choose a time zone.');
  let recurrence=null;if(body.recurrence){const {unit,interval}=body.recurrence;if(!['day','week','month','year'].includes(unit)||!Number.isInteger(interval)||interval<1||interval>365)throw Error('Choose a valid calendar interval.');recurrence={unit,interval};}
- const reminder_days=Number(body.reminder_days||0);if(![0,1,3,7].includes(reminder_days))throw Error('Choose a supported advance reminder.');
- return {title,instructions,timezone,recurrence,reminder_days,due_date:body.due_date};
+ const reminder_days=Number(body.reminder_days||0);if(!Number.isInteger(reminder_days)||reminder_days<0||reminder_days>365)throw Error('Choose an advance reminder from 0 to 365 days.');
+ return {title,scheduling_reason,instructions,timezone,recurrence,reminder_days,due_date:body.due_date};
 }
 const eligible=user=>!!user&&EDITIONS.includes(currentEdition(user));
 const fail=(message,status=400)=>Object.assign(Error(message),{status});
@@ -177,10 +180,10 @@ function register(app,{pool,requireAuth}){
  route('post','/notifications/read',async(req,db)=>{await db.query('UPDATE photo_follow_up_notifications SET read_at=now() WHERE user_id=$1',[req.user.id]);return {ok:true};});
  route('post','',async(req,db)=>{const b=req.body,data=validate(b),context=await subject(db,req.user,b.subject_type,b.subject_id),assigned=await assignment(db,req.user,context,b.assigned_user_id);let ref=context.reference_capture_id||null;
  if(b.reference_capture_id){const id=Number(b.reference_capture_id);if(id!==Number(ref))await subject(db,req.user,'capture',id);ref=id;}
- const s=(await db.query(`INSERT INTO photo_follow_up_schedules(user_id,edition,subject_type,subject_id,reference_capture_id,title,instructions,timezone,anchor_date,recurrence,reminder_days,assigned_user_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,[req.user.id,currentEdition(req.user),b.subject_type,Number(b.subject_id),ref,data.title,data.instructions,data.timezone,data.due_date,data.recurrence&&JSON.stringify(data.recurrence),data.reminder_days,assigned])).rows[0];await generate(db,s);return {...s,anchor_date:dateString(s.anchor_date)};});
+ const s=(await db.query(`INSERT INTO photo_follow_up_schedules(user_id,edition,subject_type,subject_id,reference_capture_id,title,scheduling_reason,instructions,timezone,anchor_date,recurrence,reminder_days,assigned_user_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,[req.user.id,currentEdition(req.user),b.subject_type,Number(b.subject_id),ref,data.title,data.scheduling_reason,data.instructions,data.timezone,data.due_date,data.recurrence&&JSON.stringify(data.recurrence),data.reminder_days,assigned])).rows[0];await generate(db,s);return {...s,anchor_date:dateString(s.anchor_date)};});
  route('post','/:id/edit',async(req,db)=>{const s=(await db.query('SELECT * FROM photo_follow_up_schedules WHERE id=$1 FOR UPDATE',[req.params.id])).rows[0];if(!s)throw fail('Follow-up unavailable.',404);const context=await authorize(db,req.user,s,true),data=validate(req.body),assigned=await assignment(db,req.user,context,req.body.assigned_user_id);if(!s.active)throw fail('This schedule has ended.',409);if(data.due_date<=today(data.timezone))throw fail('Choose a future date when editing a schedule.');
  await db.query(`DELETE FROM photo_follow_up_occurrences WHERE schedule_id=$1 AND status='pending' AND due_date>(now() AT TIME ZONE timezone)::date AND visit_id IS NULL AND photo_request_id IS NULL`,[s.id]);
- const updated=(await db.query(`UPDATE photo_follow_up_schedules SET title=$1,instructions=$2,timezone=$3,anchor_date=$4,recurrence=$5,reminder_days=$6,assigned_user_id=$7,next_index=0,updated_at=now() WHERE id=$8 RETURNING *`,[data.title,data.instructions,data.timezone,data.due_date,data.recurrence&&JSON.stringify(data.recurrence),data.reminder_days,assigned,s.id])).rows[0];await generate(db,updated);return {...updated,anchor_date:dateString(updated.anchor_date)};});
+ const updated=(await db.query(`UPDATE photo_follow_up_schedules SET title=$1,scheduling_reason=$2,instructions=$3,timezone=$4,anchor_date=$5,recurrence=$6,reminder_days=$7,assigned_user_id=$8,next_index=0,updated_at=now() WHERE id=$9 RETURNING *`,[data.title,data.scheduling_reason,data.instructions,data.timezone,data.due_date,data.recurrence&&JSON.stringify(data.recurrence),data.reminder_days,assigned,s.id])).rows[0];await generate(db,updated);return {...updated,anchor_date:dateString(updated.anchor_date)};});
  route('post','/:id/end',async(req,db)=>{const s=(await db.query('SELECT * FROM photo_follow_up_schedules WHERE id=$1 FOR UPDATE',[req.params.id])).rows[0];if(!s)throw fail('Follow-up unavailable.',404);await authorize(db,req.user,s,true);await db.query('UPDATE photo_follow_up_schedules SET active=false,updated_at=now() WHERE id=$1',[s.id]);await db.query(`UPDATE photo_follow_up_occurrences SET status='cancelled',reason='Schedule ended',completed_at=now() WHERE schedule_id=$1 AND status='pending' AND due_date>(now() AT TIME ZONE timezone)::date`,[s.id]);await db.query("UPDATE photo_follow_up_notifications n SET read_at=COALESCE(read_at,now()) FROM photo_follow_up_occurrences o WHERE o.id=n.occurrence_id AND o.schedule_id=$1 AND o.status='cancelled'",[s.id]);return {ok:true};});
  route('get','/occurrences/:id',async(req,db)=>{const o=await lockedOccurrence(db,req.user,req.params.id),context=await subject(db,req.user,o.subject_type,o.subject_id),reference=o.reference_capture_id?(await db.query('SELECT id,photo_path,note,address,latitude,longitude,created_at FROM captures WHERE id=$1',[o.reference_capture_id])).rows[0]:null;return {occurrence:{...o,due_date:dateString(o.due_date)},context,reference};});
  route('post','/occurrences/:id/:action',async(req,db)=>{const action=req.params.action,o=await lockedOccurrence(db,req.user,req.params.id);if(action==='complete'){await completeCapture(db,req.user,o.id,Number(req.body.capture_id));return {ok:true};}if(o.status!=='pending')throw fail('This occurrence is already closed.',409);

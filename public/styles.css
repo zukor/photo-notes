@@ -300,8 +300,19 @@ textarea { min-height: 96px; resize: vertical; }
 .organize-library-kicker { display:block; margin-bottom:3px; color:var(--pn-text-1254a3,#1254a3); font-size:12px; font-weight:800; letter-spacing:.8px; text-transform:uppercase; }
 .map-filter-row { align-items:flex-end; }
 .workflow-organize, .workflow-edit, .workflow-create, .workflow-send { max-width:980px !important; }
-.workflow-organize #cards, .workflow-edit #cards, #glist, .workflow-create #gitems, .send-capture-list { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
+.workflow-organize #cards { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:14px; }
+.workflow-edit #cards, #glist, .workflow-create #gitems, .send-capture-list { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
 .workflow-organize #cards .card, .workflow-edit #cards .card, #glist .card, .workflow-create #gitems .card { margin-bottom:0; }
+.library-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:12px 0 18px; }
+.library-heading h1 { margin:0; color:#000; }
+.library-photo-card { position:relative; text-align:left; color:#000; }
+.library-photo-card img { aspect-ratio:4/3; object-fit:cover; width:100%; }
+.library-photo-select { position:absolute; top:10px; left:10px; z-index:2; margin:0; padding:0; background:#fff; border:1px solid #000; }
+.library-photo-select input { width:22px; height:22px; margin:0; display:block; }
+.library-note,.library-membership { margin-top:7px; color:#000; overflow-wrap:anywhere; }
+.library-photo-detail #cards { display:block; max-width:900px; margin:16px auto; }
+@media (min-width:1440px){.workflow-organize #cards{grid-template-columns:repeat(5,minmax(0,1fr));}}
+@media (min-width:1680px){.workflow-organize #cards{grid-template-columns:repeat(6,minmax(0,1fr));}}
 .document-card { display:flex; flex-direction:column; }
 .document-card > .row { margin-top:auto !important; padding-top:8px; border-top:1px solid var(--pn-border-d7d7d7,#d7d7d7); }
 .before-after-preview { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:14px; }
@@ -511,7 +522,8 @@ body:has(.issue-fab) { padding-bottom:calc(80px + env(safe-area-inset-bottom)); 
   .workflow-tabs { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:4px; overflow:visible; padding-bottom:0; }
   .workflow-tabs .tab { min-width:0; padding:9px 2px; font-size:12px; }
   .workflow-tabs.hoa-tabs .tab { font-size:10px; line-height:1.15; overflow-wrap:anywhere; }
-  .workflow-organize #cards, .workflow-edit #cards, #glist, .workflow-create #gitems, .send-capture-list { grid-template-columns:1fr; }
+  .workflow-organize #cards { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .workflow-edit #cards, #glist, .workflow-create #gitems, .send-capture-list { grid-template-columns:1fr; }
   .send-selection-bar { align-items:stretch; flex-direction:column; }
   .send-selection-bar .status { flex-basis:auto; }
   .send-selection-actions { width:100%; }
@@ -547,6 +559,8 @@ body:has(.issue-fab) { padding-bottom:calc(80px + env(safe-area-inset-bottom)); 
   .organize-action-row .btn { flex:1 1 auto; }
   .organize-footer-actions .btn { width:100%; }
 }
+@media (max-width:360px){.workflow-organize #cards{grid-template-columns:1fr;}}
+input::placeholder,textarea::placeholder { color:#6b7280 !important; font-weight:400 !important; opacity:1 !important; }
 
 /* Keep the company mark compact on the narrowest iPhones. This rule belongs
    after the 700px phone rule so the cascade cannot enlarge it again. */
