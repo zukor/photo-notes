@@ -305,6 +305,9 @@ textarea { min-height: 96px; resize: vertical; }
 .workflow-organize #cards .card, .workflow-edit #cards .card, #glist .card, .workflow-create #gitems .card { margin-bottom:0; }
 .library-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:12px 0 18px; }
 .library-heading h1 { margin:0; color:#000; }
+/* Keep shared Library headings readable while retaining black text. */
+.library-heading, .workflow-organize .organize-step-head { background:#fff; color:#000; padding:12px; border-radius:8px; }
+.workflow-organize .organize-step-head h2 { color:#000; }
 .library-photo-card { position:relative; text-align:left; color:#000; }
 .library-photo-card img { aspect-ratio:4/3; object-fit:cover; width:100%; }
 .library-photo-select { position:absolute; top:10px; left:10px; z-index:2; margin:0; padding:0; background:#fff; border:1px solid #000; }
