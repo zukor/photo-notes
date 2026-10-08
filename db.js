@@ -816,6 +816,7 @@ async function init() {
   await require('./issue-request-notices').initRequestNotices(pool);
   await pool.query(require('./visual-analysis').SCHEMA);
   await pool.query(require('fs').readFileSync(require('path').join(__dirname,'qr-codes-schema.sql'),'utf8'));
+  await pool.query(require('./ai-settings').SCHEMA);
   console.log('[db] schema ready');
 }
 
