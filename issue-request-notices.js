@@ -10,7 +10,7 @@ async function notifyRequests(pool,{fetcher=fetch,env=process.env}={}){
  const c=await pool.connect();let locked=false;
  try{
   locked=(await c.query('SELECT pg_try_advisory_lock(740195) AS locked')).rows[0].locked;if(!locked)return;
-  const settings=(await c.query('SELECT email_notifications_enabled,email_notifications_updated_at FROM issue_notification_settings WHERE id=1')).rows[0];
+  const settings=(await c.query('SELECT email_notifications_enabled,email_notifications_updated_at::text AS email_notifications_updated_at FROM issue_notification_settings WHERE id=1')).rows[0];
   if(settings?.email_notifications_enabled===false)return;
   const since=settings?.email_notifications_updated_at||null;
   await c.query(`INSERT INTO issue_request_notices(event_id,user_id,notice_type)
