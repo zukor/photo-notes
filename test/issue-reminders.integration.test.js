@@ -56,6 +56,26 @@ test('four-hour retest reminders persist, copy managers, retry and stop after re
   await pool.query("INSERT INTO issue_repair_events(issue_id,event,detail) VALUES($1,'bug_review_clarify','{}')",[clarification]);
   await notifyRequests(pool,{fetcher:initialFetch,env});assert.equal(initial.length,6);
   await pool.query("UPDATE issue_reports SET management_status='resolved' WHERE id=$1",[clarification]);
+  // Immediate delivery has its own persisted switch, without resetting reminder timing.
+  const settingsBefore=(await pool.query('SELECT * FROM issue_notification_settings WHERE id=1')).rows[0];
+  const immediate=async enabled=>{const r=await call(owner,route,'POST',{email_notifications_enabled:enabled,email_reminders_enabled:false,email_interval_minutes:240});assert.equal(r.status,200);return r.json();};
+  for(const bad of ['false',0,null])assert.equal((await call(owner,route,'POST',{email_notifications_enabled:bad,email_reminders_enabled:false,email_interval_minutes:240})).status,400);
+  const immediateOff=await immediate(false);assert.equal(immediateOff.email_notifications_enabled,false);assert.equal(immediateOff.schedule_version,settingsBefore.schedule_version);assert.equal(immediateOff.updated_at,settingsBefore.updated_at?.toISOString()||null);
+  await save(false,240);assert.equal((await(await call(owner,route)).json()).email_notifications_enabled,false,'old clients must preserve immediate setting');
+  await pool.query("UPDATE issue_reports SET management_status='blocked',review_decision='clarify',tester_retested_at=NULL WHERE id=$1",[clarification]);
+  await pool.query("INSERT INTO issue_repair_events(issue_id,event,detail) VALUES($1,'bug_review_clarify','{}')",[clarification]);
+  const count=initial.length;await notifyRequests(pool,{fetcher:initialFetch,env});assert.equal(initial.length,count,'disabled immediate requests must not send');
+  await immediate(true);await notifyRequests(pool,{fetcher:initialFetch,env});assert.equal(initial.length,count,'reenabling must not send suppressed old requests');
+  await pool.query("INSERT INTO issue_repair_events(issue_id,event,detail) VALUES($1,'bug_review_clarify','{}')",[clarification]);
+  await notifyRequests(pool,{fetcher:initialFetch,env});assert.equal(initial.length,count+2,'new clarification sends to reporter and manager');
+  // Actual new-issue creation respects the same setting without contacting a provider.
+  const originalFetch=global.fetch,oldKey=process.env.RESEND_API_KEY,newIssueMails=[];
+  global.fetch=async(url,options)=>String(url)==='https://api.resend.com/emails'?(newIssueMails.push(JSON.parse(options.body)),new Response('{}',{status:200})):originalFetch(url,options);
+  process.env.RESEND_API_KEY='fixture-not-a-real-key';
+  try{await immediate(false);let r=await call(tester,'/api/issues','POST',{description:'Immediate email switch fixture'});assert.equal(r.status,200);assert.equal((await r.json()).email_status,'disabled');assert.equal(newIssueMails.length,0);
+   await immediate(true);r=await call(tester,'/api/issues','POST',{description:'Enabled immediate email fixture'});assert.equal(r.status,200);assert.equal((await r.json()).email_status,'sent');assert.equal(newIssueMails.length,1);
+  }finally{global.fetch=originalFetch;if(oldKey===undefined)delete process.env.RESEND_API_KEY;else process.env.RESEND_API_KEY=oldKey;}
+  await pool.query("UPDATE issue_reports SET management_status='resolved' WHERE id=$1",[clarification]);
   const hourly=await save(true,60);assert.equal(hourly.email_interval_minutes,60);
   const unchanged=await save(true,60);assert.equal(unchanged.schedule_version,hourly.schedule_version);assert.equal(unchanged.updated_at,hourly.updated_at);
   await remindRetests(pool,{fetcher,env});assert.equal(sent.length,before,'changing settings must not send catch-up email');
