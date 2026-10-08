@@ -426,7 +426,7 @@ const terms={
 'Result screenshot':'An image of the final output after saving, exporting, downloading, or sharing. It is separate from the automatic screenshot of the Photo Notes page.',
 'Exact Location':'Specific human-readable details within an Area, such as third light pole from the entrance.',
 'Workflow menu':'The row of section tabs that remains at the top while scrolling in editions with a workflow menu. Only available sections are shown.',
-'Library':'The shared workspace for finding, organizing, opening, and editing saved PhotoNotes.',
+'Library':'The shared workspace for finding, organizing, opening, and editing saved PhotoNotes. Library and section headings use black text on white panels in either appearance mode.',
 'Inactive Area':'An Area retained for historical references but unavailable for new assignments.',
  'Damage / Incident':'One Property Manager photographic record of observed physical conditions, with context and multiple linked Photo Notes. It does not establish cause, liability, coverage or legal responsibility.',
  'Observed time':'The entered time the user observed or documented the condition, distinct from the underlying incident time.',
