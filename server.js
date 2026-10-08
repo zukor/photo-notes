@@ -3212,7 +3212,7 @@ app.get('/api/export/pdf', requireAuth, async (req, res) => {
       doc.y=logo?235:170;if(branding.company_name)doc.fontSize(13).fillColor(layout.accent).text(branding.company_name,{align:'center'}).moveDown(.8);
       doc.fontSize(25).fillColor('#000').text(heading||'Document',{align:'center'});if(desc)doc.moveDown(.5).fontSize(13).text(desc,{align:'center'});
       if(layout.footer&&branding.footer_text)doc.fontSize(9).fillColor('#000').text(branding.footer_text,48,720,{width:516,align:'center'});
-    }else if(heading){if(logo)doc.image(logo.buffer,48,48,{fit:[150,55]});doc.y=logo?115:48;doc.fontSize(20).fillColor('#000').text(heading,{align:'center'});if(desc)doc.moveDown(.3).fontSize(12).text(desc,{align:'center'});doc.moveDown(1);drawChrome();}
+    }else if(heading){if(logo)doc.image(logo.buffer,48,48,{fit:[150,55]});doc.y=logo?115:48;if(branding.company_name)doc.fontSize(13).fillColor(layout.accent).text(branding.company_name,{align:'center'}).moveDown(.4);doc.fontSize(20).fillColor('#000').text(heading,{align:'center'});if(desc)doc.moveDown(.3).fontSize(12).text(desc,{align:'center'});doc.moveDown(1);drawChrome();}
     doc.on('pageAdded',drawChrome);
     const pairs = pro ? await userPairs(req.user.id) : [];
     const units = buildRenderUnits(rows, pairs);
@@ -3227,8 +3227,7 @@ app.get('/api/export/pdf', requireAuth, async (req, res) => {
         const entries=[];
         for(const [label,c] of [['Before',before],['After',after]]){
           const image=localPhoto(c.photo_path),rendered=image?await renderForEmbedStamped(image,imgRes,imgFmt,c):null;
-          const df=pro?fmtDefect(c):'',dm=pro?exportDims(c):'';
-          entries.push({label,image:rendered?.buffer,details:[c.property_area_name&&'Area: '+c.property_area_name,c.photo_title,df&&'Defect: '+df,dm&&'Dimensions: '+dm,c.note||'(no note)',(c.custom_fields?.length?require('./custom-fields').lines(c):'')&&'Additional Details (user-entered)\n'+(c.custom_fields?.length?require('./custom-fields').lines(c):''),'Date: '+fmtWhen(c.created_at),(c.area_tags||[]).length?'Topic: '+c.area_tags.join(', '):'',c.latitude!=null&&c.longitude!=null?`GPS: ${Number(c.latitude).toFixed(5)}, ${Number(c.longitude).toFixed(5)}`:'',c.address&&'Location: '+c.address].filter(Boolean)});
+          entries.push({label,image:rendered?.buffer,details:[c.photo_title,...documentPhotoDetails(c,pro)].filter(Boolean)});
         }
         await PdfEvidence.pair(doc,entries);
         continue;
@@ -3255,47 +3254,39 @@ app.get('/api/export/pdf', requireAuth, async (req, res) => {
           } catch (e) {}
         }
       }
-      if(c.address)await PdfEvidence.text(doc,'Location: '+c.address,{size:11});
-      if(c.latitude!=null&&c.longitude!=null)doc.fontSize(9).text(`GPS: ${Number(c.latitude).toFixed(5)}, ${Number(c.longitude).toFixed(5)}`);
-      if (c.area_tags && c.area_tags.length) doc.fontSize(10).fillColor('#000').text('Topic: ' + c.area_tags.join(', '));
-      if (pro) { const df = fmtDefect(c); if (df) doc.fontSize(10).fillColor('#000').text('Defect: ' + df); }
-      if (pro) { const dm = exportDims(c); if (dm) doc.fontSize(10).fillColor('#000').text('Dimensions: ' + dm); }
-      doc.fontSize(9).fillColor('#000').text(fmtWhen(c.created_at));
-      doc.moveDown(0.4);
-      if(c.property_area_name)await PdfEvidence.text(doc,'Area: '+c.property_area_name,{size:12});
-      await PdfEvidence.text(doc,c.note || '(no note)',{size:12});
-      if((c.custom_fields?.length?require('./custom-fields').lines(c):''))await PdfEvidence.text(doc,'Additional Details (user-entered)\n'+(c.custom_fields?.length?require('./custom-fields').lines(c):''),{size:12});
+      for(const line of documentPhotoDetails(c,pro))await PdfEvidence.text(doc,line,{size:12});
     }
     if (!rows.length) doc.fontSize(12).fillColor('#000').text('No captures yet.');
     doc.end();
   } catch (err) { console.error('[export.pdf]', err); if (!res.headersSent) res.status(500).json({ error: 'pdf export failed' }); }
 });
 
+// One authored metadata order and body size for both regular document formats.
+function documentPhotoDetails(c,pro){
+ const fields=c.custom_fields?.length?require('./custom-fields').lines(c):'';
+ const defect=pro?fmtDefect(c):'',dimensions=pro?exportDims(c):'';
+ return [c.address&&'Location: '+c.address,c.latitude!=null&&c.longitude!=null?`GPS: ${Number(c.latitude).toFixed(5)}, ${Number(c.longitude).toFixed(5)}`:'',(c.area_tags||[]).length?'Topic: '+c.area_tags.join(', '):'',defect&&'Defect: '+defect,dimensions&&'Dimensions: '+dimensions,'Date: '+fmtWhen(c.created_at),c.property_area_name&&'Area: '+c.property_area_name,c.note||'(no note)',fields&&'Additional Details (user-entered)\n'+fields].filter(Boolean);
+}
+
 async function buildDocumentWord(req,resolved){
     const { imgRes, imgFmt, heading, desc, fnameBase, rows, scope, layout, branding, logoPath, templatePath } = resolved;
     const pro = await currentPlan(req.user.id) === 'pro';
     const font=layout.font,children=[],logo=await documentLogoAsset(logoPath,220,90);
     if(!templatePath&&logo)children.push(new Paragraph({alignment:AlignmentType.CENTER,children:[new ImageRun({type:'png',data:logo.buffer,transformation:{width:logo.width,height:logo.height}})]}));
-    if(!templatePath&&branding.company_name)children.push(new Paragraph({alignment:AlignmentType.CENTER,children:[new TextRun({text:branding.company_name,bold:true,color:layout.accent.replace('#',''),font})]}));
-    if(!templatePath)children.push(new Paragraph({ heading: HeadingLevel.HEADING_1, alignment:AlignmentType.CENTER, children: [new TextRun({ text: heading, bold: true, color: '000000', font })] }));
+    if(!templatePath&&branding.company_name)children.push(new Paragraph({alignment:AlignmentType.CENTER,children:[new TextRun({text:branding.company_name,bold:false,color:layout.accent.replace('#',''),font,size:26})]}));
+    if(!templatePath)children.push(new Paragraph({ heading: HeadingLevel.HEADING_1, alignment:AlignmentType.CENTER, children: [new TextRun({ text: heading, bold: false, color: '000000', font, size:layout.cover_page?50:40 })] }));
     if (!templatePath&&desc) children.push(new Paragraph({ alignment:AlignmentType.CENTER,children: [new TextRun({ text: desc, color: '000000', font })] }));
     if(!templatePath&&layout.cover_page)children.push(new Paragraph({children:[new PageBreak()]}));
     const pairsD = pro ? await userPairs(req.user.id) : [];
     const unitsD = buildRenderUnits(rows, pairsD);
     const arialCell = (runs) => new TableCell({ children: runs });
-    const detailParagraphs=c=>[fmtWhen(c.created_at),(c.area_tags||[]).length?'Topic: '+c.area_tags.join(', '):'',c.latitude!=null&&c.longitude!=null?`GPS: ${Number(c.latitude).toFixed(5)}, ${Number(c.longitude).toFixed(5)}`:''].filter(Boolean).map(text=>new Paragraph({children:[new TextRun({text,font,color:'000000',size:18})]}));
     const imageSize=async(buffer,width,height)=>{const m=await sharp(buffer).metadata(),scale=Math.min(width/m.width,height/m.height);return {width:Math.round(m.width*scale),height:Math.round(m.height*scale)};};
-    const noteParagraphs=c=>String([c.property_area_name&&'Area: '+c.property_area_name,c.note||'(no note)',(c.custom_fields?.length?require('./custom-fields').lines(c):'')&&'Additional Details (user-entered)\n'+(c.custom_fields?.length?require('./custom-fields').lines(c):'')].filter(Boolean).join('\n')).split('\n').map(line=>{
-      const field=/^(Instrument Type|Equipment Name|Reading|Unit|Observed At|Notes):\s*(.*)$/.exec(line);
-      return new Paragraph({children:field?[new TextRun({text:field[1]+': ',bold:true,font,color:'000000'}),new TextRun({text:field[2],font,color:'000000'})]:[new TextRun({text:line,font,color:'000000'})]});
-    });
+    const detailParagraphs=c=>documentPhotoDetails(c,pro).flatMap(value=>String(value).split('\n')).map(text=>{const field=/^(Instrument Type|Equipment Name|Reading|Unit|Observed At|Notes):\s*(.*)$/.exec(text);return new Paragraph({children:field?[new TextRun({text:field[1]+': ',bold:true,font,color:'000000',size:24}),new TextRun({text:field[2],font,color:'000000',size:24})]:[new TextRun({text,font,color:'000000',size:24})]});});
     const compactCell=async(c)=>{
-      const kids=[new Paragraph({children:[new TextRun({text:c.photo_title||'Untitled Photo',bold:true,font,color:'000000'})]})];
+      const kids=[new Paragraph({children:[new TextRun({text:c.photo_title||'Untitled Photo',bold:false,font,color:'000000',size:26})]})];
       const img=localPhoto(c.photo_path);
-      if(img){const r=await renderForEmbedStamped(img,imgRes,imgFmt,c);if(r)kids.push(new Paragraph({children:[new ImageRun({type:r.ext==='.png'?'png':'jpg',data:r.buffer,transformation:await imageSize(r.buffer,480,180)})]}));}
-      if(c.address)kids.push(new Paragraph({children:[new TextRun({text:c.address,font,size:18,color:'000000'})]}));
+      if(img){const r=await renderForEmbedStamped(img,imgRes,imgFmt,c);if(r)kids.push(new Paragraph({alignment:AlignmentType.CENTER,children:[new ImageRun({type:r.ext==='.png'?'png':'jpg',data:r.buffer,transformation:await imageSize(r.buffer,688,240)})]}));}
       kids.push(...detailParagraphs(c));
-      kids.push(...noteParagraphs(c));
       return kids;
     };
 
@@ -3309,13 +3300,9 @@ async function buildDocumentWord(req,resolved){
         const cellFor = async (lbl, c) => {
           const kids = [new Paragraph({ children: [new TextRun({ text: lbl, bold: true, color: '000000', font })] })];
           const img = localPhoto(c.photo_path);
-          if (img) { const r = await renderForEmbedStamped(img, imgRes, imgFmt, c); if (r) { try { kids.push(new Paragraph({ children: [new ImageRun({ type: r.ext === '.png' ? 'png' : 'jpg', data: r.buffer, transformation: await imageSize(r.buffer,250,188) })] })); } catch (e) {} } }
-          const df = pro ? fmtDefect(c) : ''; const dm = pro ? exportDims(c) : '';
-          if (df) kids.push(new Paragraph({ children: [new TextRun({ text: 'Defect: ' + df, color: '000000', font })] }));
-          if (dm) kids.push(new Paragraph({ children: [new TextRun({ text: 'Dimensions: ' + dm, color: '000000', font })] }));
-          kids.push(...noteParagraphs(c));
+          if (img) { const r = await renderForEmbedStamped(img, imgRes, imgFmt, c); if (r) { try { kids.push(new Paragraph({ alignment:AlignmentType.CENTER, children: [new ImageRun({ type: r.ext === '.png' ? 'png' : 'jpg', data: r.buffer, transformation: await imageSize(r.buffer,328,320) })] })); } catch (e) {} } }
+          if(c.photo_title)kids.push(new Paragraph({children:[new TextRun({text:c.photo_title,font,color:'000000',size:24})]}));
           kids.push(...detailParagraphs(c));
-          if(c.address)kids.push(new Paragraph({children:[new TextRun({text:c.address,font,color:'000000'})]}));
           return arialCell(kids);
         };
         const row = new TableRow({ children: [await cellFor('BEFORE', before), await cellFor('AFTER', after)] });
@@ -3324,17 +3311,13 @@ async function buildDocumentWord(req,resolved){
         continue;
       }
       const c = u.single;
-      children.push(new Paragraph({children:[new TextRun({text:c.photo_title||'Untitled Photo',bold:true,font,color:'000000'})]}));
-      children.push(...detailParagraphs(c));
+      children.push(new Paragraph({children:[new TextRun({text:c.photo_title||'Untitled Photo',bold:false,font,color:'000000',size:26})]}));
       const img = localPhoto(c.photo_path);
       if (img) {
         const r = await renderForEmbedStamped(img, imgRes, imgFmt, c);
-        if (r) { try { children.push(new Paragraph({ children: [new ImageRun({ type: r.ext === '.png' ? 'png' : 'jpg', data: r.buffer, transformation: await imageSize(r.buffer,480,390) })] })); } catch (e) {} }
+        if (r) { try { children.push(new Paragraph({ alignment:AlignmentType.CENTER, children: [new ImageRun({ type: r.ext === '.png' ? 'png' : 'jpg', data: r.buffer, transformation: await imageSize(r.buffer,688,606) })] })); } catch (e) {} }
       }
-      children.push(new Paragraph({ spacing: { before: 120 }, children: [new TextRun({ text: (c.address || 'No location') + (c.kind === 'task' ? '   [TASK]' : ''), bold: true, color: '000000', font })] }));
-      if (pro) { const df = fmtDefect(c); if (df) children.push(new Paragraph({ children: [new TextRun({ text: 'Defect: ' + df, color: '000000', font })] })); }
-      if (pro) { const dm = exportDims(c); if (dm) children.push(new Paragraph({ children: [new TextRun({ text: 'Dimensions: ' + dm, color: '000000', font })] })); }
-      children.push(...noteParagraphs(c));
+      children.push(...detailParagraphs(c));
       children.push(new Paragraph({ children: [new TextRun({ text: '' })] }));
     }
     if (!rows.length) children.push(new Paragraph({ children: [new TextRun({ text: 'No captures yet.', color: '000000', font })] }));
@@ -3527,14 +3510,14 @@ app.get('/api/export/proposal', requireAuth, async (req, res) => {
         for (const [label, capture] of [['BEFORE', before], ['AFTER', c]]) {
           const cellChildren = [new Paragraph({ children: [new TextRun({ text: label, bold: true, color: '000000', font: 'Arial' })] })];
           const img = localPhoto(capture.photo_path);
-          if (img) { const r = await renderForEmbedStamped(img, imgRes, imgFmt, capture); if (r) { try { cellChildren.push(new Paragraph({ children: [new ImageRun({ type: r.ext === '.png' ? 'png' : 'jpg', data: r.buffer, transformation: await fittedWordImage(r.buffer,245,184) })] })); } catch (e) {} } }
+          if (img) { const r = await renderForEmbedStamped(img, imgRes, imgFmt, capture); if (r) { try { cellChildren.push(new Paragraph({ alignment:AlignmentType.CENTER, children: [new ImageRun({ type: r.ext === '.png' ? 'png' : 'jpg', data: r.buffer, transformation: await fittedWordImage(r.buffer,245,184) })] })); } catch (e) {} } }
           cellChildren.push(new Paragraph({ children: [new TextRun({ text: capture.note || '(no note)', color: '000000', font: 'Arial' })] }));
           pairCells.push(new TableCell({ children: cellChildren }));
         }
         children.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: [new TableRow({ children: pairCells })] }));
       } else {
         const img = localPhoto(c.photo_path);
-        if (img) { const r = await renderForEmbedStamped(img, imgRes, imgFmt, c); if (r) { try { children.push(new Paragraph({ children: [new ImageRun({ type: r.ext === '.png' ? 'png' : 'jpg', data: r.buffer, transformation: await fittedWordImage(r.buffer,400,300) })] })); } catch (e) {} } }
+        if (img) { const r = await renderForEmbedStamped(img, imgRes, imgFmt, c); if (r) { try { children.push(new Paragraph({ alignment:AlignmentType.CENTER, children: [new ImageRun({ type: r.ext === '.png' ? 'png' : 'jpg', data: r.buffer, transformation: await fittedWordImage(r.buffer,400,300) })] })); } catch (e) {} } }
       }
       children.push(new Paragraph({ spacing: { before: 120 }, children: [new TextRun({ text: `${i + 1}. ${c.address || 'No location'}`, bold: true, color: '000000', font: 'Arial' })] }));
       const df = fmtDefect(c); if (df) children.push(new Paragraph({ children: [new TextRun({ text: 'Defect: ' + df, color: '000000', font: 'Arial' })] }));
