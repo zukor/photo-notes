@@ -979,5 +979,5 @@ body:has(#desktopHelp) .issue-fab { left:max(14px,env(safe-area-inset-left)); ri
 .reader-review-source {display:block;width:100%;max-height:480px;object-fit:contain;}
 
 /* Login failures must remain prominent in either theme. */
-.login-error-message { color:#b42318 !important; font-size:18px; font-weight:700; line-height:1.5; text-align:left; margin-top:12px; overflow-wrap:anywhere; }
-html[data-theme="dark"] .login-error-message { color:#ff6b6b !important; }
+#loginErr, #err, .login-error-message { color:#b42318 !important; font-size:18px; font-weight:700; line-height:1.5; text-align:left; margin-top:12px; overflow-wrap:anywhere; }
+html[data-theme="dark"] :is(#loginErr, #err, .login-error-message) { color:#ff6b6b !important; }
