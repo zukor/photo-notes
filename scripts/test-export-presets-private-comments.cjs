@@ -9,6 +9,6 @@ let source=fs.readFileSync(filename,'utf8');
 source=source.replace('postgresql://localhost/pn_export_presets_output_test',url.href);
 const marker=' const req=async';assert(source.includes(marker));
 source=source.replace(marker," await pool.query('INSERT INTO photo_comments(capture_id,author_id,author_name,text) VALUES($1,$2,$3,$4)',[ids[0],user.id,'Fixture','PRIVATE_COMMENT_SENTINEL_78465']);\n"+marker);
-const checkpoint=" if(format==='pdf')assert.equal";assert(source.includes(checkpoint));
+const checkpoint=" if(format==='pdf'){assert.equal";assert(source.includes(checkpoint));
 source=source.replace(checkpoint," const contents=format==='pdf'?require('node:child_process').execFileSync('pdftotext',['-','-'],{input:b}).toString():Object.values(new Zip(b).files).filter(f=>!f.dir&&/\\.(xml|md|txt|html)$/.test(f.name)).map(f=>f.asText()).join('\\n');assert(!contents.includes('PRIVATE_COMMENT_SENTINEL_78465'),format+' must exclude internal discussion');\n"+checkpoint);
 const fixture=new Module(filename,module);fixture.filename=filename;fixture.paths=module.paths;fixture._compile(source,filename);
