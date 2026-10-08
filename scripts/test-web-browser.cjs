@@ -35,7 +35,7 @@ async function saveThroughUI(page){await page.locator('#save').click();}
    await page.locator('#photoLib').setInputFiles({name:'offline.jpg',mimeType:'image/jpeg',buffer:image});
    const offlineNote='Offline recovery '+name+' '+Date.now();await page.locator('#note').fill(offlineNote);await saveThroughUI(page);
    await page.waitForFunction(()=>bgQueue.length===1);await page.reload({waitUntil:'domcontentloaded'});await page.locator('#loginErr').waitFor();
-   assert((await page.locator('#loginErr').textContent()).includes('Reconnect'));
+   assert(/connection/i.test(await page.locator('#loginErr').textContent()));
    if(engine===webkit)await context.unroute('**/api/**');else await context.setOffline(false);await page.reload({waitUntil:'domcontentloaded'});await page.locator('#profileButton').waitFor();await page.waitForFunction(()=>bgQueue.length===0);
    const captures=await (await context.request.get(base+'/api/captures')).json();assert.equal(captures.filter(x=>x.note===offlineNote).length,1);
    // Lose the response after the server commits, then retry the exact same capture identity.

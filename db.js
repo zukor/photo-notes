@@ -709,6 +709,7 @@ async function init() {
   await pool.query(`ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS fix_summary TEXT`);
   await pool.query(`ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS release_reference TEXT`);
   await pool.query(`ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS retest_instructions TEXT`);
+  await pool.query(`ALTER TABLE IF EXISTS issue_notification_settings ADD COLUMN IF NOT EXISTS email_notifications_enabled boolean NOT NULL DEFAULT true; ALTER TABLE IF EXISTS issue_notification_settings ADD COLUMN IF NOT EXISTS email_notifications_updated_at timestamptz`);
   await pool.query(`ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS tester_notification_status TEXT`);
   await pool.query(`ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS tester_notification_error TEXT`);
   await pool.query(`ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS tester_notified_at TIMESTAMPTZ`);
