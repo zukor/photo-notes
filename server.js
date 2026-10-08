@@ -614,7 +614,7 @@ app.get('/api/me', requireAuth, async (req, res) => {
   res.setHeader('X-Photo-Notes-Upload-Receipts','1');
   const row = (await pool.query(`SELECT name,email,role,plan,pro_type,feature_access,edition_access,is_tester,is_testing_manager FROM users WHERE id=$1 AND active=true`, [req.user.id])).rows[0];
   if (!row) return res.status(401).json({ error:'not authenticated' });
-  res.json({ authed:true, ramo_intake_access:require('./ramo-intake').allowed(req.user), is_super_admin:isSuperAdmin(req.user), is_tester:row.is_tester, is_testing_manager:row.is_testing_manager, edition_access:editionAccess(row), name:row.name, role:row.role, email:row.email, plan:row.plan === 'pro' ? 'pro' : 'free', pro_type:normalizeProType(row.pro_type), feature_access:await currentFeatureAccess(req.user.id) });
+  res.json({ authed:true, id:req.user.id, ramo_intake_access:require('./ramo-intake').allowed(req.user), is_super_admin:isSuperAdmin(req.user), is_tester:row.is_tester, is_testing_manager:row.is_testing_manager, edition_access:editionAccess(row), name:row.name, role:row.role, email:row.email, plan:row.plan === 'pro' ? 'pro' : 'free', pro_type:normalizeProType(row.pro_type), feature_access:await currentFeatureAccess(req.user.id) });
 });
 
 const photoFollowUps=require('./photo-follow-ups');
