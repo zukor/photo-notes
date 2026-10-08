@@ -21,10 +21,20 @@ test('imprecise Google results cannot become a street address', () => {
 });
 
 test('remote locations fall back to a named geographic area, not a road', () => {
-  assert.match(server, /function geographicAreaLabel\(data\)/);
+  assert.match(server, /function geographicAreaLabel\(data, lat, lng\)/);
   for (const key of ['forest', 'nature_reserve', 'park', 'river', 'waterway']) {
     assert.match(server, new RegExp(`'${key}'`));
   }
   assert.match(server, /zoom=14&addressdetails=1&namedetails=1&extratags=1/);
-  assert.match(server, /return geographicAreaLabel\(await areaResponse\.json\(\)\)/);
+  assert.match(server, /return geographicAreaLabel\(await areaResponse\.json\(\), lat, lng\)/);
 });
+
+ test('distant point-place names do not replace the photo locality', () => {
+ const vm=require('node:vm');
+ const source=server.slice(server.indexOf('function geographicAreaLabel('),server.indexOf('async function reverseGeocode('));
+ const label=vm.runInNewContext(source+';geographicAreaLabel',{geocodeCandidateIsNearby:(lat,lng,y,x)=>Math.hypot(lat-Number(y),lng-Number(x))*111000<=35});
+ const point={category:'place',name:'Puti',lat:'10.3116231',lon:'123.8544703',address:{hamlet:'Puti',city:'Cebu City',region:'Central Visayas'}};
+ assert.equal(label(point,10.30156,123.86880),'Cebu City, Central Visayas');
+ assert.equal(label(point,10.3116231,123.8544703),'Puti, Cebu City, Central Visayas');
+ assert.equal(label({category:'boundary',name:'Tisa',address:{suburb:'Tisa',city:'Cebu City',region:'Central Visayas'}},10.30156,123.86880),'Tisa, Central Visayas');
+ });
