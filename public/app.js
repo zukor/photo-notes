@@ -47,7 +47,7 @@ function recordDictationEvent(event, detail = '') {
   try {
     const key='photoNotesSpeechDiagnostics';
     const history=JSON.parse(localStorage.getItem(key)||'[]');
-    history.push({at:new Date().toISOString(),version:356,event,detail,generation:dictationGeneration,active:dictationActive,pending:dictationPending,finishing:!!dictationFinish,language:uiSpeechLanguage(),edition:state.proType||state.plan,mode:navigator.standalone||window.matchMedia?.('(display-mode: standalone)').matches?'installed':'browser',online:navigator.onLine,visibility:document.visibilityState});
+    history.push({at:new Date().toISOString(),version:Number(document.querySelector?.('script[src*="/app.js"]')?.src?.match(/[?&]v=(\d+)/)?.[1])||0,event,detail,generation:dictationGeneration,active:dictationActive,pending:dictationPending,finishing:!!dictationFinish,language:uiSpeechLanguage(),edition:state.proType||state.plan,mode:navigator.standalone||window.matchMedia?.('(display-mode: standalone)').matches?'installed':'browser',online:navigator.onLine,visibility:document.visibilityState});
     localStorage.setItem(key,JSON.stringify(history.slice(-200)));
   } catch(e) {}
 }
@@ -546,11 +546,22 @@ async function renderMyIssueReports(){
   box.querySelectorAll('[data-retest-unable]').forEach(b=>b.onclick=()=>submitIssueRetest(Number(b.dataset.retestUnable),'unable_to_test',b));
   box.querySelectorAll('[data-retest-broken]').forEach(b=>b.onclick=()=>submitIssueRetest(Number(b.dataset.retestBroken),'still_happening',b));
 }
+function speechRetestEvidence(notes) {
+  if(!/record|speech|microphone|dictat/i.test(notes))return notes;
+  try {
+    const history=JSON.parse(localStorage.getItem('photoNotesSpeechDiagnostics')||'[]');
+    if(!Array.isArray(history))return notes;
+    const recent=history.filter(e=>e&&Date.now()-Date.parse(e.at)<3600000).slice(-30).map(e=>({at:e.at,version:e.version,event:e.event,generation:e.generation,active:e.active,pending:e.pending,finishing:e.finishing,mode:e.mode}));
+    const heading='\n\nSpeech event diagnostics (no note text or audio):\n';
+    while(recent.length&&notes.length+heading.length+JSON.stringify(recent).length>5000)recent.shift();
+    return recent.length?notes+heading+JSON.stringify(recent):notes;
+  }catch{return notes;}
+}
 async function submitIssueRetest(id,result,button){
   const notes=((document.getElementById(`retestNotes-${id}`)||{}).value||'').trim();
   if(result!=='fixed'&&!notes){toast('Explain what still happens or what prevented the test, including the steps and result.');document.getElementById(`retestNotes-${id}`)?.focus();return;}
   button.disabled=true;
-  try{const r=await api(`/api/issues/${id}/retest`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({result,notes})});
+  try{const r=await api(`/api/issues/${id}/retest`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({result,notes:result==='still_happening'?speechRetestEvidence(notes):notes})});
   if(r.ok){toast(result==='fixed'?'Thank you. The fix is confirmed.':'Thank you. Your result and comments were sent for review.');renderMyIssueReports();refreshIssueAttention();}
   else{toast('Your retest result could not be saved');button.disabled=false;}}catch{toast('Your retest result could not be saved');button.disabled=false;}
 }
