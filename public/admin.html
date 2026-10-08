@@ -162,7 +162,7 @@
   </style>
   <link rel="stylesheet" href="/testing-hub.css?v=277">
   <script src="/testing-hub.js?v=350"></script>
-<link rel="stylesheet" href="/theme.css?v=389"><script src="/theme.js?v=389"></script><link rel="stylesheet" href="/help.css?v=376"><script src="/help-catalog.js?v=398" defer></script><script src="/help.js?v=350" defer></script></head>
+<link rel="stylesheet" href="/theme.css?v=389"><script src="/theme.js?v=389"></script><link rel="stylesheet" href="/help.css?v=376"><script src="/help-catalog.js?v=400" defer></script><script src="/help.js?v=350" defer></script></head>
 <body>
   <div id="app"></div>
   <script src="/admin-ai.js?v=1"></script>
@@ -494,7 +494,7 @@
           <div class="issue-toolbar issue-primary">
             <label>Version<select id="issueVersionFilter"><option value="all">All Versions</option>${Object.entries(editionLabels).map(([key,label])=>`<option value="${key}">${esc(label)}</option>`).join('')}<option value="unknown">Unknown Version</option></select></label>
             <label>Issue Type<select id="issueTypeFilter"><option value="all" selected>All Report Types</option><option value="bug_problem">Bug/Problem</option><option value="ui_improvement">UI Improvement</option><option value="feature_improvement">Feature Improvement Idea</option><option value="new_feature">New Feature Idea</option></select></label>
-            <label>Work Queue<select id="issueStatusFilter"><option value="open" selected>Open Issues</option><option value="decision">Needs My Decision</option><option value="waiting">Waiting for Tester</option><option value="ideas">Ideas</option><option value="developer">Developer Investigation</option><option value="completed">Completed, Fixed and Verified</option><option value="closed">Closed Without Verified Fix</option><option value="closed_all">All Closed Issues</option><option value="wont_fix">Closed Without a Fix</option><option value="closed_other">Closed Without Verified Repair</option>${issueOptions(issueStatusOrder,issueStatusLabels,'')}</select></label>
+            <label>Work Queue<select id="issueStatusFilter"><option value="open" selected>Open Issues</option><option value="decision">Needs My Decision</option><option value="waiting">Waiting for Tester</option><option value="ideas">Ideas</option><option value="developer">Developer Investigation</option><option value="working">Awaiting Developer Repair</option><option value="completed">Completed, Fixed and Verified</option><option value="closed">Closed Without Verified Fix</option><option value="closed_all">All Closed Issues</option><option value="wont_fix">Closed Without a Fix</option><option value="closed_other">Closed Without Verified Repair</option>${issueOptions(issueStatusOrder,issueStatusLabels,'')}</select></label>
             <label>Priority<select id="issuePriorityFilter"><option value="all">All Priorities</option><option value="urgent">Urgent</option><option value="high">High</option><option value="normal">Normal</option><option value="low">Low</option></select></label>
             <label for="issueDateSort"><span>Date Reported</span><select id="issueDateSort" aria-label="Date Reported"><option value="newest">Newest first</option><option value="oldest" selected>Oldest first</option></select></label>
           </div>
@@ -625,7 +625,7 @@
       const df=(document.getElementById('issueDeviceFilter')||{}).value||'all';
       const closed=new Set(['resolved','wont_fix','tester_confirmed']);
       const scope=allIssues.filter(i=>(recommendedAction==='all'||window.PhotoNotesReviewGuidance.explain(i).action===recommendedAction)&&(version==='all'||(Object.hasOwn(editionLabels,i.reported_edition)?i.reported_edition:'unknown')===version)&&matchesIssueType(i,category)&&(pf==='all'||(i.priority||'normal')===pf)&&(tf==='all'||String(i.user_id)===tf)&&(df==='all'||issueDevice(i).key===df));
-      const rows=scope.filter(i=>(['decision','waiting','ideas','developer','completed'].includes(sf)&&(PhotoNotesIssueRouting.disposition(i)===sf))||(sf==='closed_all'&&closed.has(i.management_status))||(sf==='closed_other'&&PhotoNotesIssueRouting.disposition(i)==='closed'&&i.management_status!=='wont_fix')||(sf==='open'&&!closed.has(i.management_status||'new'))||(sf==='closed'&&PhotoNotesIssueRouting.disposition(i)==='closed')||(sf==='resolved'&&i.management_status==='tester_confirmed')||(sf==='blocked'&&['ui_improvement','feature_improvement','new_feature'].includes(i.issue_type)&&i.management_status==='new'&&!i.review_decision)||(i.management_status===sf&&!(sf==='blocked'&&['ui_improvement','feature_improvement','new_feature'].includes(i.issue_type)&&i.review_decision==='clarify')));
+      const rows=scope.filter(i=>(['decision','working','waiting','ideas','developer','completed'].includes(sf)&&(PhotoNotesIssueRouting.disposition(i)===sf))||(sf==='closed_all'&&closed.has(i.management_status))||(sf==='closed_other'&&PhotoNotesIssueRouting.disposition(i)==='closed'&&i.management_status!=='wont_fix')||(sf==='open'&&!closed.has(i.management_status||'new'))||(sf==='closed'&&PhotoNotesIssueRouting.disposition(i)==='closed')||(sf==='resolved'&&i.management_status==='tester_confirmed')||(sf==='blocked'&&['ui_improvement','feature_improvement','new_feature'].includes(i.issue_type)&&i.management_status==='new'&&!i.review_decision)||(i.management_status===sf&&!(sf==='blocked'&&['ui_improvement','feature_improvement','new_feature'].includes(i.issue_type)&&i.review_decision==='clarify')));
       const direction=document.getElementById('issueDateSort').value==='oldest'?1:-1;
       rows.sort((a,b)=>{
         const score=PhotoNotesIssueRouting.priority(b).score-PhotoNotesIssueRouting.priority(a).score;if(score)return score;const ad=Date.parse(a.created_at),bd=Date.parse(b.created_at);
@@ -637,7 +637,7 @@
       const closedView=['closed_all','completed','closed','closed_other','wont_fix','resolved','tester_confirmed'].includes(sf);
       const openCount=scope.filter(i=>!closed.has(i.management_status)).length;
       const closedCounts={closed_all:scope.length-openCount,completed:lanes.completed,wont_fix:scope.filter(i=>i.management_status==='wont_fix').length,closed_other:scope.filter(i=>PhotoNotesIssueRouting.disposition(i)==='closed'&&i.management_status!=='wont_fix').length};
-      const openLabels={open:'Open Issues',decision:'Needs My Decision',waiting:'Waiting for Tester',ideas:'Ideas',developer:'Developer Investigation'};
+      const openLabels={open:'Open Issues',decision:'Needs My Decision',waiting:'Waiting for Tester',ideas:'Ideas',developer:'Developer Investigation',working:'Awaiting Developer Repair'};
       const closedLabels={closed_all:'All Closed Issues',completed:'Completed, Fixed and Verified',wont_fix:'Closed Without a Fix',closed_other:'Closed Without Verified Repair'};
       const queueLabels=closedView?closedLabels:openLabels;
       document.getElementById('issueViewHeading').textContent=closedView?'Closed Issues':'Open Issues';
