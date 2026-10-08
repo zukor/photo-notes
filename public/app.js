@@ -2197,7 +2197,7 @@ async function renderList() {
   body.innerHTML = `
     <div class="library-heading"><h1>Library</h1>${window.PhotoNotesFollowUps?.allowed()?'<button type="button" class="btn secondary slim" id="fuOpen">Scheduled Photos</button>':''}</div>
 
-    <details id="organizeJobSection" class="organize-workspace-section organize-context-section">
+    <details id="organizeJobSection" class="organize-workspace-section organize-context-section" open>
       <summary class="organize-step-head"><div><h2>Projects</h2></div></summary>
       <div class="organize-job-builder">
         <div class="organize-form-grid"><section class="organize-panel"><label>Current Job</label><select id="jobFilter"><option value="">All Jobs</option><option value="unassigned">Unassigned</option>${state.jobs.map(j=>`<option value="${j.id}">${esc(j.job_number?j.job_number+' — '+j.name:j.name)} (${j.photo_count||0})</option>`).join('')}</select><button class="btn secondary slim" id="timelineBtn" type="button">View Job Timeline</button><button class="btn secondary slim" id="requestProjectPhotos" type="button">Request Project Photos</button><button class="btn secondary slim" id="deleteJobBtn" type="button">Delete Job</button>${isPavingClient()?`<div id="pavingReadiness" class="evidence-readiness">Choose a job to check its photo evidence.</div><div class="row compact" style="margin-top:8px"><button class="btn secondary slim" id="pavingJobPdf" type="button">Job Evidence PDF</button><button class="btn secondary slim" id="pavingJobWord" type="button">Job Evidence Word</button></div>`:''}</section>
@@ -2216,7 +2216,7 @@ async function renderList() {
       <div class="status" id="photoSearchStatus"></div>
     </details>
 
-    <details id="organizeWorkSection" class="organize-workspace-section organize-actions-section">
+    <details id="organizeWorkSection" class="organize-workspace-section organize-actions-section" ${state.selectedIds.size?'open':''}>
       <summary class="organize-step-head"><div><h2>Selected PhotoNotes</h2></div></summary>
       <div class="organize-selection-toolbar" aria-label="Photo Note selection controls">
         <strong>Selection</strong>
@@ -2437,7 +2437,7 @@ async function renderEdit() {
 async function renderLibraryPhoto(){
   const body=document.getElementById('body');body.className='workflow-edit library-photo-detail';
   body.innerHTML='<button type="button" class="backlink" id="libraryBack">‹ Back to Library</button><div id="cards"><p class="status">Loading PhotoNote...</p></div>';
-  document.getElementById('libraryBack').onclick=()=>{state._libraryOpenId=null;state.view='organize';renderApp();};
+  document.getElementById('libraryBack').onclick=()=>{state._libraryOpenId=null;state.view=isHoaClient()?'photo-library':'organize';renderApp();};
   const r=await api('/api/captures');
   if(!r.ok||!document.getElementById('cards')){body.querySelector('#cards').innerHTML='<p class="status">PhotoNote could not be loaded.</p>';return;}
   const rows=await r.json(),photo=rows.find(c=>Number(c.id)===Number(state._libraryOpenId));
@@ -2445,7 +2445,7 @@ async function renderLibraryPhoto(){
   window._lastCards=[photo];body.querySelector('#cards').innerHTML=captureCardHtml(photo);wireCards(body.querySelector('#cards'),[photo]);retryPhotoImages(body.querySelector('#cards'));
 }
 
-function updateAnnotationSelection(){const p=document.getElementById('batchAnnotationSelected');if(p)p.textContent=`${selectedCaptureIds().length} photos selected, including selections retained across filters.`;}
+function updateAnnotationSelection(){const count=selectedCaptureIds().length,p=document.getElementById('batchAnnotationSelected'),panel=document.getElementById('organizeWorkSection');if(p)p.textContent=`${count} photos selected, including selections retained across filters.`;if(count&&panel&&!panel.open)panel.open=true;}
 function wireBatchAnnotations(){
  void loadSavedAnnotationTemplates();
  updateAnnotationSelection();

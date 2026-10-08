@@ -21,7 +21,7 @@ const {chromium,webkit}=require('playwright');
  await page.goto(origin);await page.waitForFunction(()=>state.me&&document.getElementById('body'));
  for(const edition of ['general','property','hoa','paving','concrete','contractor','roofer']){
   await page.evaluate(edition=>{state.plan='pro';state.proType=edition;state.view='organize';renderApp();},edition);
-  await page.locator('#prOpen').click();await page.locator('#prTitle').waitFor();assert.equal(await page.locator('.photo-requests p').first().evaluate(el=>getComputedStyle(el).color),'rgb(255, 255, 255)');
+  await page.evaluate(()=>{state.view='photo-requests';renderApp();});await page.locator('#prTitle').waitFor();assert.equal(await page.locator('.photo-requests p').first().evaluate(el=>getComputedStyle(el).color),'rgb(255, 255, 255)');
   await page.locator('#prTitle').fill('Equipment photos');await page.locator('#prInstructions').fill('Photograph the unit.');await page.locator('#prViews').fill('Overall\nEquipment Plate');
   await page.locator('#prCreate').click();await page.waitForFunction(()=>document.getElementById('prCreateStatus').textContent.includes('Request created'));
   await page.locator('[data-pr-copy]').first().waitFor({state:'visible'});assert.equal(await page.locator('[data-pr-copy]').count()>0,true);

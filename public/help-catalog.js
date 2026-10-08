@@ -493,7 +493,7 @@ const terms={
  'Selection':'The Photo Notes chosen for an action. In Send, changing filters keeps this set, including hidden records. Check the total and outside-filter counts before delivery.',
  'Filter':'A view restriction that narrows displayed results without deleting records.',
  'Document link':'A seven-day download link to a saved document snapshot. Anyone with the link can download it until it expires or its owner revokes it.',
- 'Document':'A named, ordered report made from photo copies, captions, and supporting details. A nonblank title is required when creating or renaming it. Start with the Organize selection or review photos from a job or topic in Create.',
+ 'Document':'A named, ordered report made from photo copies, captions, and supporting details. A nonblank title is required when creating or renaming it. Start with the Library selection or review photos from a project or topic in Create.',
  'Caption':'Text explaining an individual photo in a report or grouped submission.',
  'PDF':'A document format preserving the finished page layout for viewing and printing.',
  'Word':'An editable .docx document that can be opened in Word or compatible software.',

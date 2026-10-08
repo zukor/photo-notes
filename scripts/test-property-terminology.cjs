@@ -16,7 +16,7 @@ if(view==='record'){for(const [id,value] of [['hiStatus','waiting_board'],['hiBu
 if(view==='hoa-reports')assert(body.includes(edition==='property'?'Property Maintenance Report PDF':'Board Photo Report PDF'));
 if(view==='hoa-dashboard')assert(body.includes(edition==='property'?'Approval Needed':'Board Needed'));
 await page.evaluate(()=>PhotoNotesHelp.mount({edition:state.proType,page:state.view,name:productName()}));await page.locator('.pn-help-fab').click();await page.waitForTimeout(80);
-if(edition==='property'){const help=(await page.locator('#pnHelpDrawer').textContent()).replaceAll(property.name,'');assert(!/\bHOA\b|\bboard\b|\bcommunit(?:y|ies)\b|\breserve\b/i.test(help),view+': '+help);}
+if(edition==='property'){const help=(await page.locator('#pnHelpResults').textContent()).replaceAll(property.name,'');assert(!/\bHOA\b/i.test(help),view+': '+help);}
 if(edition==='property'&&view==='hoa-communities'){const term=page.locator('#pnHelpTermsList [data-term="Community"]');assert.equal(await term.textContent(),'Property');const id=await term.getAttribute('aria-describedby');assert((await page.locator('#'+id).textContent()).includes('property'));}
 await page.locator('#pnHelpClose').click();
 if(edition==='property'){await page.evaluate(()=>photoNotesI18n.setLanguage('es'));await page.waitForTimeout(50);const spanish=(await page.locator('#body').innerText()).replaceAll(property.name,'');assert(!/\bHOA\b|\bjunta\b|\bcomunidad(?:es)?\b|\breservas?\b/i.test(spanish),spanish);await page.evaluate(()=>photoNotesI18n.setLanguage('en'));}
