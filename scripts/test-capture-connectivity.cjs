@@ -1,0 +1,20 @@
+const fs=require('fs'),vm=require('vm'),assert=require('assert/strict');
+const s=fs.readFileSync(require('path').join(__dirname,'../public/app.js'),'utf8');
+(async()=>{
+let calls=0,late;
+const ctx={AbortController,console,setTimeout:(f,n)=>setTimeout(f,n>1000?10:n),clearTimeout,navigator:{geolocation:{getCurrentPosition(ok,err){calls++;late=ok;}}},api:async()=>({status:503,ok:false})};vm.createContext(ctx);
+vm.runInContext(s.slice(s.indexOf('function browserPosition('),s.indexOf('function correctCaptureAddress(')),ctx);
+await assert.rejects(ctx.browserPosition({timeout:12000}),e=>e.code===3);late({coords:{latitude:9}});assert.equal(calls,1);
+ctx.navigator.geolocation.getCurrentPosition=(ok,err)=>err({code:1});await assert.rejects(ctx.browserPosition({timeout:12000}),e=>e.code===1);
+const elements={gps:{},addr:{},retryLocation:{}};Object.assign(ctx,{state:{photoFile:{},location:null,address:null},document:{getElementById:id=>elements[id]},persistCaptureDraft:async()=>{}});
+vm.runInContext('let captureLocationGeneration=0;'+s.slice(s.indexOf('function acquireLocation('),s.indexOf('function cleanupDictation(')),ctx);
+ctx.navigator.geolocation.getCurrentPosition=()=>{};await ctx.acquireLocation(true);assert.equal(elements.retryLocation.disabled,false);assert.match(elements.gps.textContent,/timed out/);
+let gpsAttempts=0;ctx.navigator.geolocation.getCurrentPosition=(ok,err)=>{if(++gpsAttempts===1)return;ok({coords:{latitude:41,longitude:-87}})};ctx.api=async()=>({ok:true,json:async()=>({address:'Test address'})});await ctx.acquireLocation(true);assert.equal(gpsAttempts,2);assert.equal(ctx.state.address,'Test address');assert.equal(elements.retryLocation.disabled,false);
+ctx.navigator.geolocation.getCurrentPosition=ok=>ok({coords:{latitude:41,longitude:-87}});ctx.api=async(path,{signal})=>new Promise((resolve,reject)=>signal.addEventListener('abort',()=>reject(Error('deadline'))));await ctx.acquireLocation(true);assert.equal(ctx.state.location.lat,41);assert.equal(elements.retryLocation.disabled,false);assert.match(elements.addr.textContent,/GPS coordinates will still be saved/);
+vm.runInContext(s.slice(s.indexOf('async function loadStartupSession('),s.indexOf('async function boot(')),ctx);
+let requests=0;ctx.api=async()=>++requests===1?{status:503,ok:false}:{status:200,ok:true,json:async()=>({id:7})};assert.equal((await ctx.loadStartupSession()).id,7);assert.equal(requests,2);
+requests=0;ctx.api=async()=>{requests++;return{status:401,ok:false}};assert.equal(await ctx.loadStartupSession(),null);assert.equal(requests,1);
+requests=0;ctx.api=async()=>{requests++;throw Error('network')};await assert.rejects(ctx.loadStartupSession(),/network/);assert.equal(requests,2);
+ctx.api=async(path,{signal})=>new Promise((resolve,reject)=>signal.addEventListener('abort',()=>reject(Error('deadline'))));await assert.rejects(ctx.loadStartupSession(),/deadline/);
+console.log('GPS missing callbacks, permission denial, stale callback, session retry, unauthorized session and request deadlines PASS');
+})().catch(e=>{console.error(e);process.exit(1)});

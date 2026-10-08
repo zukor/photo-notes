@@ -33,6 +33,7 @@ function measurementOn(){return isConcreteClient()||featureOn('measurements');}
 function beforeAfterOn(){return featureOn('before_after');}
 function isMacClient() { return /Macintosh|MacIntel/.test(navigator.userAgent + ' ' + navigator.platform) && !isIOS(); }
 let recognizer = null;
+let iosDictationSession=null,iosDictationConstructor=null;
 let dictationActive = false;
 let dictationRestartTimer = null;
 let dictationWatchdog = null;
@@ -183,14 +184,22 @@ async function api(path, opts = {}) {
   return r;
 }
 
+async function loadStartupSession(){
+ for(let attempt=0;attempt<2;attempt++){
+  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),15000);
+  try{const r=await api('/api/me',{signal:controller.signal});if(r.status===401)return null;if(!r.ok)throw Error('Session service '+r.status);const me=await r.json();if(!me||!me.id)throw Error('Invalid session response');return me;}
+  catch(error){if(attempt===1)throw error;await new Promise(resolve=>setTimeout(resolve,250));}
+  finally{clearTimeout(timer);}
+ }
+}
+
 async function boot() {
   try {
-  const r = await api('/api/me');
-  if (r.ok) {
-    try { const me = await r.json(); state.me = me; state.plan = me.plan || 'free'; state.proType=me.pro_type||'paving'; } catch (e) {}
-    await Promise.all([loadAreas(),loadJobs(),loadHoaContext()]);
-    await restoreOfflineQueue();
-    await restoreCaptureDraft();
+  const session=await loadStartupSession();
+  if (session) {
+    state.me=session;state.plan=session.plan||'free';state.proType=session.pro_type||'paving';
+    await Promise.allSettled([loadAreas(),loadJobs(),loadHoaContext()]);
+    try{await restoreOfflineQueue();await restoreCaptureDraft();}catch(error){console.warn('Local capture recovery unavailable');toast('Local capture recovery is unavailable. Your cloud account is still signed in. Keep this browser’s data until pending captures are recovered.');}
     // Start loading documents as soon as the user signs in. By the time they
     // open Create, existing documents can be shown immediately instead of
     // appearing only after another action refreshes the list.
@@ -199,7 +208,7 @@ async function boot() {
     renderApp();
     setTimeout(()=>{if(window.PhotoNotesFirstUse?.offer(state.me))installOfferShown=true;else maybeOfferInstall();},700);
   } else renderLogin();
-  } catch(error) {renderLogin();document.getElementById('loginErr').textContent='Connection unavailable. Reconnect and sign in to resume pending uploads. Saved captures remain in this browser.';}
+  } catch(error) {renderLogin();document.getElementById('loginErr').textContent='Photo Notes could not reach its sign-in service. This does not mean your Wi-Fi is disconnected. Retry the connection; pending captures stay in this browser.';const retry=document.createElement('button');retry.id='retryConnection';retry.className='btn secondary';retry.textContent='Retry Connection';retry.onclick=()=>{retry.disabled=true;void boot();};document.getElementById('loginErr').append(retry);}
 }
 
 function isInstalledApp() {
@@ -1282,7 +1291,7 @@ async function confirmPhotoQuality(){
 }
 
 function browserPosition(options) {
-  return new Promise((resolve,reject) => navigator.geolocation.getCurrentPosition(resolve,reject,options));
+  return new Promise((resolve,reject)=>{let settled=false;const finish=(fn,value)=>{if(settled)return;settled=true;clearTimeout(timer);fn(value);};const timer=setTimeout(()=>finish(reject,{code:3,message:'Device location request timed out'}),(options.timeout||15000)+1000);try{navigator.geolocation.getCurrentPosition(p=>finish(resolve,p),e=>finish(reject,e),options);}catch(e){finish(reject,e);}});
 }
 
 function correctCaptureAddress(){
@@ -1329,9 +1338,10 @@ function acquireLocation(force=false) {
       if (gps) gps.textContent = state.location.lat.toFixed(5) + ', ' + state.location.lng.toFixed(5);
       if (addr) addr.textContent = 'Looking up address...';
       try {
-        const r = await api(`/api/geocode?lat=${state.location.lat}&lng=${state.location.lng}`);
+        const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),12000);
+        let r,d;try{r=await api(`/api/geocode?lat=${state.location.lat}&lng=${state.location.lng}`,{signal:controller.signal});if(r.ok)d=await r.json();}finally{clearTimeout(timer);}
         if (!isCurrent()) return;
-        if (r.ok) { const d = await r.json(); if (!isCurrent()) return; state.address = d.address || null; if (addr) addr.textContent = d.address || 'Exact address not found. GPS coordinates will still be saved.'; }
+        if (r.ok) { if (!isCurrent()) return; state.address = d.address || null; if (addr) addr.textContent = d.address || 'Exact address not found. GPS coordinates will still be saved.'; }
         else if (addr) addr.textContent = 'Address lookup failed. GPS coordinates will still be saved.';
       } catch (e) { if (isCurrent() && addr) addr.textContent = 'Address lookup failed. GPS coordinates will still be saved.'; }
     } finally { if(isCurrent())void persistCaptureDraft().catch(()=>{});if (isCurrent() && retry) retry.disabled=false; }
@@ -1367,7 +1377,7 @@ function stopCaptureDictation(){
   dictationRestartTimer=null;dictationWatchdog=null;dictationActive=false;
   // Hard cancellation must release the browser engine, even when stop never
   // delivers onend. Graceful Stop/Save still waits for final words above.
-  const current=recognizer;recognizer=null;if(current)try{current.abort();recordDictationEvent('abort');}catch(e){try{current.stop();}catch(ignore){}}
+  const current=recognizer;recognizer=null;iosDictationSession=null;iosDictationConstructor=null;if(current)try{current.abort();recordDictationEvent('abort');}catch(e){try{current.stop();}catch(ignore){}}
   const btn=document.getElementById('dictate');if(btn){btn.disabled=false;btn.textContent='Record Notes';btn.classList.remove('on');}
 }
 
@@ -1444,9 +1454,9 @@ async function toggleDictation() {
 function startDictationSession(SR) {
   if (!dictationActive) return;
   const noteEl = document.getElementById('note');
-  let session;
-  try{session=new SR();}catch(error){cleanupDictation();const status=document.getElementById('dictationStatus');if(status)status.textContent='Speech could not start. Use the keyboard microphone to dictate your notes.';return;}
-  const generation=++dictationGeneration, photoForSession=state.photoFile, ios=isIOS();
+  let session;const ios=isIOS();
+  try{if(ios&&iosDictationSession&&iosDictationConstructor===SR){session=iosDictationSession;recordDictationEvent('session-reused');}else{session=new SR();if(ios){iosDictationSession=session;iosDictationConstructor=SR;}}}catch(error){cleanupDictation();const status=document.getElementById('dictationStatus');if(status)status.textContent='Speech could not start. Use the keyboard microphone to dictate your notes.';return;}
+  const generation=++dictationGeneration, photoForSession=state.photoFile;
   recognizer = session;
   session.lang = uiSpeechLanguage();
   session.continuous = !ios;
@@ -1531,9 +1541,9 @@ function startDictationSession(SR) {
       dictationRestartTimer=setTimeout(()=>startDictationSession(SR),300);
     } else {
       cleanupDictation();
-      // Invalidate callbacks before explicitly releasing a Safari session.
-      // Some engines report end while retaining their recognition resource.
-      if(ios)try{session.abort();recordDictationEvent('session-released');}catch(e){}
+      // Reuse the ended Safari recognizer on the next tap. Aborting an already
+      // ended session can invalidate the browser's underlying speech service.
+      if(ios){if(sessionError&&!['aborted','no-speech'].includes(sessionError)){iosDictationSession=null;iosDictationConstructor=null;}recordDictationEvent('session-ready');}
     }
   };
   try { session.start(); }
