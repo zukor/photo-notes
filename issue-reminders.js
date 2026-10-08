@@ -10,6 +10,8 @@ async function initReminders(pool){
  id integer PRIMARY KEY CHECK(id=1),email_reminders_enabled boolean NOT NULL DEFAULT true,
  email_interval_minutes integer NOT NULL DEFAULT 240 CHECK(email_interval_minutes BETWEEN 15 AND 10080),
  schedule_version integer NOT NULL DEFAULT 0,updated_at timestamptz,updated_by integer REFERENCES users(id) ON DELETE SET NULL);
+ ALTER TABLE issue_notification_settings ADD COLUMN IF NOT EXISTS email_notifications_enabled boolean NOT NULL DEFAULT true;
+ ALTER TABLE issue_notification_settings ADD COLUMN IF NOT EXISTS email_notifications_updated_at timestamptz;
  INSERT INTO issue_notification_settings(id) VALUES(1) ON CONFLICT DO NOTHING;
  ALTER TABLE issue_retest_reminders ADD COLUMN IF NOT EXISTS schedule_version integer NOT NULL DEFAULT 0;
  ALTER TABLE issue_retest_reminders DROP CONSTRAINT IF EXISTS issue_retest_reminders_issue_id_user_id_request_at_cycle_key;
