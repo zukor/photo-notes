@@ -651,7 +651,7 @@ function geocodeCandidateIsNearby(lat, lng, candidateLat, candidateLng) {
   const distance = haversineMeters(lat, lng, candidateLat, candidateLng);
   return distance != null && distance <= MAX_ADDRESS_DISTANCE_METERS;
 }
-function geographicAreaLabel(data) {
+function geographicAreaLabel(data, lat, lng) {
   const a = data && data.address ? data.address : {};
   const naturalKeys = [
     'forest', 'nature_reserve', 'protected_area', 'wood', 'park',
@@ -662,7 +662,11 @@ function geographicAreaLabel(data) {
   if (!feature && nonStreetCategories.includes(String(data && data.category || '').toLowerCase())) {
     feature = data.name || (data.namedetails && data.namedetails.name) || '';
   }
-  const locality = a.suburb || a.neighbourhood || a.city || a.town || a.village || a.hamlet || a.county || '';
+  // Point places are nearest-name matches, not proof the photo is in that locality.
+  const remotePlace = String(data && data.category || '').toLowerCase() === 'place'
+    && !geocodeCandidateIsNearby(lat, lng, data.lat, data.lon);
+  if (remotePlace) feature = '';
+  const locality = (remotePlace ? '' : a.suburb || a.neighbourhood) || a.city || a.town || a.county || (remotePlace ? '' : a.village || a.hamlet) || '';
   const region = a.state || a.region || '';
   return [...new Set([feature, locality, region].filter(Boolean))].join(', ') || null;
 }
@@ -745,7 +749,7 @@ async function reverseGeocode(lat, lng) {
     const areaUrl = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=14&addressdetails=1&namedetails=1&extratags=1&lat=${lat}&lon=${lng}`;
     const areaResponse = await fetch(areaUrl, { headers: { 'User-Agent': 'PhotoNotes/1.0 (turcotte@zukor.com)' } });
     if (!areaResponse.ok) return null;
-    return geographicAreaLabel(await areaResponse.json());
+    return geographicAreaLabel(await areaResponse.json(), lat, lng);
   } catch {
     return null;
   }
