@@ -284,7 +284,7 @@ function renderLogin() {
       <label for="pw">Password</label>
       <input id="pw" type="password" autocomplete="current-password" />
       <button class="btn" id="loginBtn">Sign In</button>
-      <p class="status" id="loginErr"></p>
+      <p class="status login-error-message" id="loginErr" role="alert" aria-live="assertive"></p>
       <div class="footer">&copy; ${new Date().getFullYear()} Zukor AI. All Rights Reserved.<br><a href="/install.html" target="_blank" rel="noopener">Install Photo Notes on your device</a></div>
     </div>`;
   document.getElementById('loginBtn').onclick = doLogin;
