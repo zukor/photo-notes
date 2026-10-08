@@ -3272,8 +3272,8 @@ async function buildDocumentWord(req,resolved){
     const pro = await currentPlan(req.user.id) === 'pro';
     const font=layout.font,children=[],logo=await documentLogoAsset(logoPath,220,90);
     if(!templatePath&&logo)children.push(new Paragraph({alignment:AlignmentType.CENTER,children:[new ImageRun({type:'png',data:logo.buffer,transformation:{width:logo.width,height:logo.height}})]}));
-    if(!templatePath&&branding.company_name)children.push(new Paragraph({alignment:AlignmentType.CENTER,children:[new TextRun({text:branding.company_name,bold:true,color:layout.accent.replace('#',''),font,size:26})]}));
-    if(!templatePath)children.push(new Paragraph({ heading: HeadingLevel.HEADING_1, alignment:AlignmentType.CENTER, children: [new TextRun({ text: heading, bold: true, color: '000000', font, size:layout.cover_page?50:40 })] }));
+    if(!templatePath&&branding.company_name)children.push(new Paragraph({alignment:AlignmentType.CENTER,children:[new TextRun({text:branding.company_name,bold:false,color:layout.accent.replace('#',''),font,size:26})]}));
+    if(!templatePath)children.push(new Paragraph({ heading: HeadingLevel.HEADING_1, alignment:AlignmentType.CENTER, children: [new TextRun({ text: heading, bold: false, color: '000000', font, size:layout.cover_page?50:40 })] }));
     if (!templatePath&&desc) children.push(new Paragraph({ alignment:AlignmentType.CENTER,children: [new TextRun({ text: desc, color: '000000', font })] }));
     if(!templatePath&&layout.cover_page)children.push(new Paragraph({children:[new PageBreak()]}));
     const pairsD = pro ? await userPairs(req.user.id) : [];
@@ -3282,7 +3282,7 @@ async function buildDocumentWord(req,resolved){
     const imageSize=async(buffer,width,height)=>{const m=await sharp(buffer).metadata(),scale=Math.min(width/m.width,height/m.height);return {width:Math.round(m.width*scale),height:Math.round(m.height*scale)};};
     const detailParagraphs=c=>documentPhotoDetails(c,pro).flatMap(value=>String(value).split('\n')).map(text=>{const field=/^(Instrument Type|Equipment Name|Reading|Unit|Observed At|Notes):\s*(.*)$/.exec(text);return new Paragraph({children:field?[new TextRun({text:field[1]+': ',bold:true,font,color:'000000',size:24}),new TextRun({text:field[2],font,color:'000000',size:24})]:[new TextRun({text,font,color:'000000',size:24})]});});
     const compactCell=async(c)=>{
-      const kids=[new Paragraph({children:[new TextRun({text:c.photo_title||'Untitled Photo',bold:true,font,color:'000000',size:26})]})];
+      const kids=[new Paragraph({children:[new TextRun({text:c.photo_title||'Untitled Photo',bold:false,font,color:'000000',size:26})]})];
       const img=localPhoto(c.photo_path);
       if(img){const r=await renderForEmbedStamped(img,imgRes,imgFmt,c);if(r)kids.push(new Paragraph({alignment:AlignmentType.CENTER,children:[new ImageRun({type:r.ext==='.png'?'png':'jpg',data:r.buffer,transformation:await imageSize(r.buffer,688,240)})]}));}
       kids.push(...detailParagraphs(c));
@@ -3300,6 +3300,7 @@ async function buildDocumentWord(req,resolved){
           const kids = [new Paragraph({ children: [new TextRun({ text: lbl, bold: true, color: '000000', font })] })];
           const img = localPhoto(c.photo_path);
           if (img) { const r = await renderForEmbedStamped(img, imgRes, imgFmt, c); if (r) { try { kids.push(new Paragraph({ alignment:AlignmentType.CENTER, children: [new ImageRun({ type: r.ext === '.png' ? 'png' : 'jpg', data: r.buffer, transformation: await imageSize(r.buffer,328,320) })] })); } catch (e) {} } }
+          if(c.photo_title)kids.push(new Paragraph({children:[new TextRun({text:c.photo_title,font,color:'000000',size:24})]}));
           kids.push(...detailParagraphs(c));
           return arialCell(kids);
         };
@@ -3309,7 +3310,7 @@ async function buildDocumentWord(req,resolved){
         continue;
       }
       const c = u.single;
-      children.push(new Paragraph({children:[new TextRun({text:c.photo_title||'Untitled Photo',bold:true,font,color:'000000',size:26})]}));
+      children.push(new Paragraph({children:[new TextRun({text:c.photo_title||'Untitled Photo',bold:false,font,color:'000000',size:26})]}));
       const img = localPhoto(c.photo_path);
       if (img) {
         const r = await renderForEmbedStamped(img, imgRes, imgFmt, c);
