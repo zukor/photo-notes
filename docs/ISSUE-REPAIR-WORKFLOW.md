@@ -50,7 +50,7 @@ Owner review displays a plain-language explanation followed by Recommended Cours
 
 ## Work queues and automatic follow-up
 
-Admin opens on Needs My Decision. Being Worked On contains queued repairs, active leases and developer investigations; a developer blocker explicitly says no cloud worker can resolve it. Waiting for Tester contains clarification questions and verified or explicitly requested retests. Ideas contains unapproved product suggestions. Closed contains tester-confirmed resolutions and closures without a fix. All Issues remains the complete record.
+Admin opens on Needs Sam's Review. Being Worked On contains queued repairs, active leases and developer investigations; a developer blocker explicitly says no cloud worker can resolve it. Waiting for Tester contains clarification questions and verified or explicitly requested retests. Ideas contains unapproved product suggestions. Closed contains tester-confirmed resolutions and closures without a fix. All Issues remains the complete record.
 
 Every issue shows the problem, recorded repair attempt, deployed-fix evidence, latest tester reply, next responsible person and specific action. Priority ranks possible data loss or wrong-job evidence first, then blocked core workflows, repeated failures, exact matching reports from multiple testers, and age. Original evidence and technical history remain available.
 
@@ -58,7 +58,7 @@ Routine failure holds are retried automatically while fewer than two unsuccessfu
 
 Workers may supply blocked_kind as decision, developer, evidence or retry with their concrete blocked_reason. A decision must name the specific choice and why it cannot be inferred from established behavior. Developer Investigation is an explicit Admin action with required investigation instructions. It pauses cloud repairs and identifies the developer as the next actor.
 
-For an authorized desktop investigation of a technical hold, `node scripts/issue-agent.mjs resume ISSUE_ID --updated TIMESTAMP` atomically claims the unchanged blocked bug. Substantive product decisions and missing-evidence holds cannot be resumed this way. A repeated_failure hold can be claimed for an explicitly authorized developer investigation; it remains in Needs My Decision until that investigation is claimed. It does not change cloud scope, grant access, approve ideas or claim a fix. Use the normal ready command only after tests and live deployment verification. Two failed attempts is an escalation rule, not proof that a report cannot be repaired.
+For an authorized desktop investigation of a technical hold, `node scripts/issue-agent.mjs resume ISSUE_ID --updated TIMESTAMP` atomically claims the unchanged blocked bug. Substantive product decisions and missing-evidence holds cannot be resumed this way. A repeated_failure hold can be claimed for an explicitly authorized developer investigation; it remains in Needs Sam's Review until that investigation is claimed. It does not change cloud scope, grant access, approve ideas or claim a fix. Use the normal ready command only after tests and live deployment verification. Two failed attempts is an escalation rule, not proof that a report cannot be repaired.
 
 ## Completion and responsibility
 

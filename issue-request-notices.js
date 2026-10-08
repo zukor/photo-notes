@@ -10,20 +10,23 @@ async function notifyRequests(pool,{fetcher=fetch,env=process.env}={}){
  const c=await pool.connect();let locked=false;
  try{
   locked=(await c.query('SELECT pg_try_advisory_lock(740195) AS locked')).rows[0].locked;if(!locked)return;
+  const settings=(await c.query('SELECT email_notifications_enabled,email_notifications_updated_at FROM issue_notification_settings WHERE id=1')).rows[0];
+  if(settings?.email_notifications_enabled===false)return;
+  const since=settings?.email_notifications_updated_at||null;
   await c.query(`INSERT INTO issue_request_notices(event_id,user_id,notice_type)
    SELECT e.id,u.id,CASE WHEN e.event LIKE '%clarif%' THEN 'clarification' ELSE 'retest' END
    FROM issue_reports i CROSS JOIN LATERAL (SELECT id,event,created_at FROM issue_repair_events WHERE issue_id=i.id AND event IN (${requestEvents}) ORDER BY created_at DESC,id DESC LIMIT 1) e
    JOIN users u ON u.active=true AND (u.id=i.user_id OR u.is_testing_manager=true)
-   WHERE ${awaiting} AND (i.tester_retested_at IS NULL OR i.tester_retested_at<e.created_at)
+   WHERE ${awaiting} AND ($1::timestamptz IS NULL OR e.created_at>=$1) AND (i.tester_retested_at IS NULL OR i.tester_retested_at<e.created_at)
    AND NOT EXISTS(SELECT 1 FROM issue_repair_events reply WHERE reply.issue_id=i.id AND reply.event='reporter_details' AND reply.created_at>e.created_at)
-   ON CONFLICT DO NOTHING`);
+   ON CONFLICT DO NOTHING`,[since]);
   if(!env.RESEND_API_KEY)return;
   const rows=(await c.query(`SELECT d.*,u.email,e.issue_id,e.created_at,e.event,i.user_id reporter_id,i.review_note,i.retest_instructions
    FROM issue_request_notices d JOIN issue_repair_events e ON e.id=d.event_id JOIN issue_reports i ON i.id=e.issue_id JOIN users u ON u.id=d.user_id
    WHERE d.sent_at IS NULL AND d.next_try<=now() AND u.active=true AND (u.id=i.user_id OR u.is_testing_manager=true)
-   AND ${awaiting} AND (i.tester_retested_at IS NULL OR i.tester_retested_at<e.created_at)
+   AND ${awaiting} AND ($1::timestamptz IS NULL OR e.created_at>=$1) AND (i.tester_retested_at IS NULL OR i.tester_retested_at<e.created_at)
    AND NOT EXISTS(SELECT 1 FROM issue_repair_events newer WHERE newer.issue_id=i.id AND ((newer.event IN (${requestEvents}) AND (newer.created_at>e.created_at OR (newer.created_at=e.created_at AND newer.id>e.id))) OR (newer.event='reporter_details' AND newer.created_at>e.created_at)))
-   ORDER BY d.event_id,d.user_id LIMIT 2`)).rows;
+   ORDER BY d.event_id,d.user_id LIMIT 2`,[since])).rows;
   for(const d of rows){let error=null;
    try{
     const manager=d.user_id!==d.reporter_id,clarify=d.notice_type==='clarification';
