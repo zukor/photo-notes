@@ -19,9 +19,9 @@ test('accounts with multiple assigned versions see the compact switcher',()=>{
   assert.match(app,/editionSwitcher.onchange=async/);
 });
 
-test('every edition uses Organize for the shared workflow tab',()=>{
-  assert.match(app,/id="tabOrganize"[^>]*>Organize<\/button>/);
-  assert.doesNotMatch(app,/id="tabOrganize"[^>]*>\$\{isHoaClient\(\)\?'Visits':isConcreteClient\(\)\?'Projects':'Organize'\}<\/button>/);
+test('shared editions use Library while property editions retain specialist Organize and Assets',()=>{
+  assert.match(app,/id="tabOrganize"[^>]*>\$\{isHoaClient\(\)\?'Organize':'Library'\}<\/button>/);
+  assert.match(app,/isHoaClient\(\)\?`<button[^`]+id="tabEdit"[^`]+>Assets<\/button>`:''/);
 });
 
 test('Concrete keeps Create as the flexible document-building workflow',()=>{

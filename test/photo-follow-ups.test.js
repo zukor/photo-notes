@@ -14,9 +14,10 @@ test('local date semantics across midnight and daylight saving',()=>{
  for(const instant of ['2026-03-08T07:59:00Z','2026-03-08T08:01:00Z'])assert.equal(f.today('America/Chicago',new Date(instant)),'2026-03-08');
 });
 test('rejects malformed dates and recurrence',()=>{
- const valid={title:'Crack',due_date:'2026-12-15',timezone:'America/Chicago'};
+ const valid={title:'Crack',scheduling_reason:'Check whether the crack has changed',due_date:'2026-12-15',timezone:'America/Chicago'};
  assert.equal(f.validate(valid).recurrence,null);
- for(const extra of [{due_date:'2026-02-30'},{timezone:'server-local'},{recurrence:{unit:'month',interval:0}},{recurrence:{unit:'month',interval:1.5}},{reminder_days:2}])assert.throws(()=>f.validate({...valid,...extra}));
+ for(const extra of [{due_date:'2026-02-30'},{timezone:'server-local'},{recurrence:{unit:'month',interval:0}},{recurrence:{unit:'month',interval:1.5}},{reminder_days:366},{scheduling_reason:''}])assert.throws(()=>f.validate({...valid,...extra}));
+ assert.equal(f.validate({...valid,reminder_days:14}).reminder_days,14);
 });
 test('edition rollout excludes Basic and reporters',()=>{
  for(const key of f.EDITIONS)assert(f.eligible({plan:'pro',pro_type:key==='pro'?'general':key}));
