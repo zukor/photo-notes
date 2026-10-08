@@ -28,7 +28,7 @@ function registerVisualAnalysis(app,dependencies){
  const ai=await visionJSON(local,adapter.prompt,{maxTokens:2200});
  if(!ai.data)return res.status(503).json({error:ai.message,ai_error:ai.error});
  let result;try{result=adapter.normalize(ai.data);}catch{return res.status(502).json({error:'Analysis returned invalid suggestions. Retry or continue manually.'});}
- const run=(await pool.query(`INSERT INTO visual_analysis_runs(user_id,capture_id,domain,analyzer_version,provider,model,raw_response,structured_result,confidence) SELECT $1,id,$3,$4,$5,$6,$7,$8,$9 FROM captures WHERE id=$2 AND user_id=$1 RETURNING *`,[req.user.id,photo.id,adapter.id,adapter.version,'anthropic',visionJSON.status().model,JSON.stringify(ai.data),JSON.stringify(result),result.confidence])).rows[0];
+ const run=(await pool.query(`INSERT INTO visual_analysis_runs(user_id,capture_id,domain,analyzer_version,provider,model,raw_response,structured_result,confidence) SELECT $1,id,$3,$4,$5,$6,$7,$8,$9 FROM captures WHERE id=$2 AND user_id=$1 RETURNING *`,[req.user.id,photo.id,adapter.id,adapter.version,ai.provider||'anthropic',ai.model||visionJSON.status().model,JSON.stringify(ai.data),JSON.stringify(result),result.confidence])).rows[0];
  if(!run)return res.status(404).json({error:'Photo not found'});res.json(run);
  }catch{res.status(500).json({error:'Analysis could not be saved. Retry or continue manually.'});}});
  app.post(`/api/visual-analysis/${domain}/:id/review/:run`,...guards,async(req,res)=>{

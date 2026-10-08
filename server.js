@@ -213,6 +213,9 @@ function trimNum(n) {
 
 // Shared vision calls report service failures separately from unreadable photos.
 const {visionJSON,visionFeedback}=require('./vision');
+const aiSettings=require('./ai-settings').createAISettings({pool});
+visionJSON.useSettings(aiSettings);
+aiSettings.register(app,requireAdmin);
 
 // ---- defect classification vocabulary + severity presentation ----
 const DEFECT_TYPES = ['pothole', 'alligator_cracking', 'transverse_cracking', 'longitudinal_cracking', 'rutting', 'raveling', 'edge_cracking', 'joint_failure', 'utility_cut_failure', 'surface_deformation', 'drainage_damage', 'base_failure', 'other', 'none'];
@@ -1680,9 +1683,10 @@ app.get('/api/admin/health', requireAdmin, async (req, res) => {
   } catch (e) { services.push({ id:'uploads', name:'Photo Upload Storage', status:'down', detail:'Storage is not writable' }); }
   services.push({ id:'addresses', name:'Address Lookup', status:'available', detail:`ArcGIS and OpenStreetMap fallbacks${process.env.GOOGLE_MAPS_API_KEY || process.env.MAPBOX_TOKEN ? '; configured provider also available' : ''}` });
   services.push({ id:'upload_persistence', name:'Persistent Photo Storage', status:process.env.UPLOAD_PERSISTENCE_CONFIRMED==='true' ? 'confirmed' : 'needs_confirmation', detail:process.env.UPLOAD_PERSISTENCE_CONFIRMED==='true' ? 'Railway volume or persistent storage confirmed' : 'Writable storage is not proof of persistence across deployments' });
-  const aiStatus=visionJSON.status();
+  const aiSelection=await aiSettings.selection();
+  const aiStatus={...visionJSON.status(),...aiSelection,configured:require('./ai-settings').configured(aiSelection.provider,process.env)};
   services.push({ id:'ai', name:'AI Photo Tools', status:aiStatus.configured ? 'configured' : 'not_configured',
-    detail:aiStatus.configured ? `Configured (${aiStatus.model}); ${aiStatus.last_result ? 'last scan: '+aiStatus.last_result.status+' at '+aiStatus.last_result.checked_at : 'live extraction not yet verified'}` : 'Anthropic API key is missing',
+    detail:aiStatus.configured ? `Configured (${aiStatus.model}); ${aiStatus.last_result ? 'last scan: '+aiStatus.last_result.status+' at '+aiStatus.last_result.checked_at : 'live extraction not yet verified'}` : 'AI provider API key is missing',
     last_result:aiStatus.last_result });
   services.push({ id:'issue_email', name:'Issue Report Email', status:process.env.RESEND_API_KEY ? 'configured' : 'not_configured', detail:process.env.RESEND_API_KEY ? 'Email delivery configured' : 'Resend API key is missing' });
   services.push({ id:'exports', name:'PDF, Word & ZIP Exports', status:'healthy', detail:'Export libraries loaded' });
