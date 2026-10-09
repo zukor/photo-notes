@@ -1470,7 +1470,7 @@ function startDictationSession(SR) {
   if (!dictationActive) return;
   const noteEl = document.getElementById('note');
   let session;const ios=isIOS();
-  try{if(ios&&iosDictationSession&&iosDictationConstructor===SR){session=iosDictationSession;recordDictationEvent('session-reused');}else{session=new SR();if(ios){iosDictationSession=session;iosDictationConstructor=SR;}}}catch(error){cleanupDictation();const status=document.getElementById('dictationStatus');if(status)status.textContent='Speech could not start. Use the keyboard microphone to dictate your notes.';return;}
+  try{if(ios&&iosDictationSession){const completed=iosDictationSession;iosDictationSession=null;iosDictationConstructor=null;try{completed.abort();recordDictationEvent('completed-session-reset');}catch{}}session=new SR();if(ios){iosDictationSession=session;iosDictationConstructor=SR;}}catch(error){cleanupDictation();const status=document.getElementById('dictationStatus');if(status)status.textContent='Speech could not start. Use the keyboard microphone to dictate your notes.';return;}
   const generation=++dictationGeneration, photoForSession=state.photoFile;
   recognizer = session;
   session.lang = uiSpeechLanguage();

@@ -12,7 +12,7 @@ const {chromium,webkit}=require('playwright');
  await page.evaluate(edition=>{stopCaptureDictation();state.plan=['basic','roads','issue'].includes(edition)?'free':'pro';state.proType=edition;state.view='capture';renderApp();},edition);
  if(!await page.locator('#dictate').count()){console.log(edition,await page.locator('#body').innerText());throw Error('Capture note missing: '+edition);}
  const instancesBefore=await page.evaluate(()=>speechSessions.length);for(let cycle=1;cycle<=10;cycle++){await page.evaluate(cycle=>{window.speechPhrase='Recording'+cycle;},cycle);await page.locator('#dictate').click();await page.locator('#dictate').click();await page.waitForFunction(()=>document.getElementById('dictate').textContent==='Record Notes');assert.equal(await page.locator('#note').inputValue(),Array.from({length:cycle},(_,i)=>'Recording'+(i+1)).join(' '),edition+' cycle '+cycle); }
- assert.equal(await page.evaluate(()=>speechSessions.length),instancesBefore+1,'iPhone reuses one recognizer through ten start/stop cycles');
+ assert.equal(await page.evaluate(()=>speechSessions.length),instancesBefore+10,'iPhone creates a fresh recognizer on each new recording tap');
  assert(await page.locator('#dictate').evaluate(el=>el.getBoundingClientRect().right<=innerWidth),`${edition} button fits`);
  await page.evaluate(()=>{state._note='';});
  }
