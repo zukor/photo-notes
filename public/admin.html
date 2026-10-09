@@ -162,10 +162,10 @@
   </style>
   <link rel="stylesheet" href="/testing-hub.css?v=277">
   <script src="/testing-hub.js?v=350"></script>
-<link rel="stylesheet" href="/theme.css?v=389"><script src="/theme.js?v=389"></script><link rel="stylesheet" href="/help.css?v=376"><script src="/help-catalog.js?v=409" defer></script><script src="/help.js?v=350" defer></script></head>
+<link rel="stylesheet" href="/theme.css?v=389"><script src="/theme.js?v=389"></script><link rel="stylesheet" href="/help.css?v=376"><script src="/help-catalog.js?v=410" defer></script><script src="/help.js?v=350" defer></script></head>
 <body>
   <div id="app"></div>
-  <script src="/admin-ai.js?v=1"></script>
+  <script src="/admin-ai.js?v=1"></script><script src="/admin-user-usage.js?v=1"></script>
   <script src="/account-menu.js?v=277"></script>
   <script src="/issue-retest-guidance.js?v=320"></script>
   <script src="/issue-review-guidance.js?v=277"></script>
@@ -446,7 +446,7 @@
 
           <h1 class="admin-page-title">${currentUser?.is_super_admin?'Super Admin':'Admin'}</h1>
           <h2 class="admin-tools-heading">Admin Tools</h2>
-          ${currentUser?.is_super_admin?'<div id="aiAdminHost"></div>':''}
+          ${currentUser?.is_super_admin?'<div id="aiAdminHost"></div><div id="userUsageHost"></div>':''}
           <details id="usersSection" class="admin-section" data-admin-tool="users"><summary id="usersHeading">Users</summary><div class="admin-section-body">
             <div class="users-heading"><div><p class="helper">${currentUser?.is_super_admin?'Select a user to edit their details, password, and version access.':'Select a user to view their details and change version access.'}</p></div><button class="btn" type="button" id="addUser" aria-expanded="false" aria-controls="createUserPanel">Add User</button></div>
             <div id="createUserPanel" class="admin-panel" hidden>          <h2>Create User</h2>
@@ -543,6 +543,7 @@
         ${issueReporterMarkup()}`;
       if(!currentUser?.is_super_admin&&!currentUser?.is_testing_manager)document.querySelectorAll('[data-admin-tool="issues"],[data-admin-tool="system-status"],[data-admin-tool="health"],[data-admin-tool="billing"],[data-admin-tool="activity"],.issue-diagnostics,#issueSystemNotice,#addUser,#createUserPanel,#userTotals').forEach(section=>section.remove());
       if(currentUser?.is_testing_manager&&!currentUser?.is_super_admin){document.querySelectorAll('[data-admin-tool]').forEach(section=>{if(!['issues','testing'].includes(section.dataset.adminTool))section.remove();});document.querySelector('.admin-page-title').textContent='Testing Management';document.querySelector('.admin-tools-heading').textContent='Issues and Testing';}
+      if(currentUser?.is_super_admin)PhotoNotesAdminUsage.mount(document.getElementById('userUsageHost'),api);
       if(currentUser?.is_super_admin)PhotoNotesAdminAI.mount(document.getElementById('aiAdminHost'),api);
       window.PhotoNotesAccountMenu.sort();
       const tools=[...document.querySelectorAll('[data-admin-tool]')];
