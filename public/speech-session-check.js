@@ -16,7 +16,7 @@
   try{
    if(el('Audio').value==='play-and-record'){if(!audioSession){event(row,'audio-session-unavailable');finish(row);el('Status').textContent='Audio session control is unavailable. Reload and use Browser default.';return;}audioSession.type='play-and-record';}
    event(row,'audio-session',audioInfo());
-   if(row.method==='frame'){const FrameSR=frame.contentWindow.SpeechRecognition||frame.contentWindow.webkitSpeechRecognition;if(!FrameSR)throw Error('Speech unavailable in frame');recognizer=new FrameSR();event(row,'fresh-document');}else if(row.method==='fresh'||!recognizer)recognizer=new SR();
+   if(row.method==='frame'){const FrameSR=frame.contentWindow.SpeechRecognition||frame.contentWindow.webkitSpeechRecognition;if(!FrameSR){event(row,'frame-unavailable');finish(row);el('Status').textContent='Speech recognition is unavailable in the test frame. Download timing metadata; no recording started.';return;}recognizer=new FrameSR();event(row,'fresh-document');}else if(row.method==='fresh'||!recognizer)recognizer=new SR();
    const session=recognizer;session.lang='en-US';session.continuous=false;session.interimResults=true;
    for(const name of ['start','audiostart','soundstart','speechstart','speechend','soundend','audioend','nomatch'])session['on'+name]=()=>{if(active!==row)return;event(row,name);if(name==='start')el('Status').textContent='Listening. Speak harmless test words.';};
    session.onresult=()=>{if(active!==row)return;row.results++;event(row,'result');el('Status').textContent='Words detected. Pause until the attempt ends.';render();};
@@ -24,7 +24,7 @@
    session.onend=()=>{if(active!==row)return;event(row,'end',audioInfo());finish(row);};
    timer=setTimeout(()=>{if(active!==row)return;event(row,'timeout');finish(row);try{session.abort();}catch{}},45000);
    session.start();
-  }catch{event(row,'start-failed');finish(row);}
+  }catch(e){event(row,'start-failed',{code:['SecurityError','NotAllowedError','InvalidStateError','TypeError'].includes(e?.name)?e.name:'other'});finish(row);el('Status').textContent='Speech could not initialize. Download timing metadata; this is not a completed recording.';}
  };
  el('Stop').onclick=()=>{if(!active)return;event(active,'stop');try{recognizer.stop();}catch{finish(active);}};
  el('Clear').onclick=()=>location.reload();
