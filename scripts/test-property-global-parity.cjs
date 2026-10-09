@@ -22,7 +22,7 @@ const {chromium,webkit}=require('playwright');
     for(const edition of ['general','contractor','paving','concrete','roofer','hoa','property']){
      if(['hoa','property'].includes(edition)&&section==='organize')continue;
      await page.evaluate(({edition,section})=>{state.plan='pro';state.proType=edition;state.view=section;state.groupId=null;state.ewrId=null;state.me.ramo_intake_access=true;renderApp();},{edition,section});
-     await page.locator(section==='organize'?'#photoSearch':section==='edit'?'#delbtn':section==='create'?'#gcreate':'#sharephotos').waitFor();
+     await page.locator(section==='organize'?'#photoSearch':section==='edit'?'#delbtn':section==='create'?'#newDocument':'#sendSource').waitFor();
      // Export Presets mounts after its API request; inspect the completed shared UI.
      if(['send','organize'].includes(section))await page.locator('#epChoose').waitFor({state:'attached'});
      const toolBoxes=await page.locator('#fuOpen,#requestProjectPhotos').evaluateAll(nodes=>nodes.map(n=>{const r=n.getBoundingClientRect();return {top:r.top,width:r.width,right:r.right};}));

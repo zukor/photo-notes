@@ -26,12 +26,13 @@ test('Create provides a focused document composer and paginated preview',()=>{
   assert.match(app,/Upload Logo/);
   assert.match(app,/Import Word Template/);
   assert.match(app,/Download Starter Template/);
-  assert.match(app,/One photo per page/);
-  assert.match(app,/Two photos per page/);
+  assert.match(app,/2 Vertical/);
+  assert.match(app,/6/);
+  assert.match(app,/3 Horizontal/);
   assert.match(app,/Cover page/);
   assert.match(app,/Header/);
   assert.match(app,/Footer/);
-  assert.match(app,/Page numbers/);
+  assert.match(app,/Page Numbers/);
   assert.match(app,/function renderDocumentPreview\(/);
   assert.match(css,/\.document-preview-page \{[^}]*min-height:880px/);
   assert.match(css,/\.document-preview-photos\.two-up/);
@@ -42,7 +43,8 @@ test('PDF and Word exports use branding, layouts, and structured templates',()=>
   assert.match(server,/\{\{PHOTO_NOTES_CONTENT\}\}/);
   assert.match(server,/documentLogoAsset\(logoPath/);
   assert.match(server,/layout\.cover_page/);
-  assert.match(server,/layout\.photo_layout==='two_per_page'/);
+  assert.match(server,/const photosPerPage=/);
+  assert.match(server,/three_horizontal:3/);
   assert.match(server,/new Header\(/);
   assert.match(server,/new Footer\(/);
   assert.match(server,/PageNumber\.CURRENT/);
