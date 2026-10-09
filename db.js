@@ -124,6 +124,7 @@ CREATE INDEX IF NOT EXISTS jobs_user_idx ON jobs (user_id, status, created_at DE
 CREATE TABLE IF NOT EXISTS groups (
   id          SERIAL PRIMARY KEY,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
   title       TEXT,
   description TEXT,
   layout JSONB NOT NULL DEFAULT '{}'::jsonb
@@ -700,6 +701,7 @@ async function init() {
   await pool.query(`ALTER TABLE groups ADD COLUMN IF NOT EXISTS word_template_path TEXT`);
   await pool.query(`ALTER TABLE groups ADD COLUMN IF NOT EXISTS word_template_name TEXT`);
   await pool.query(`ALTER TABLE groups ADD COLUMN IF NOT EXISTS layout JSONB NOT NULL DEFAULT '{}'::jsonb`);
+  await pool.query(`ALTER TABLE groups ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now()`);
   await pool.query(`UPDATE groups SET user_id = $1 WHERE user_id IS NULL`, [adminId]);
   // Tester issue triage. These ALTERs upgrade existing production databases
   // without changing or losing previously submitted reports.

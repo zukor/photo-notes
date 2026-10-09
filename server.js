@@ -1070,7 +1070,7 @@ app.post('/api/hoa/items/:id',requireAuth,requireHoa,async(req,res)=>{try{const 
 app.get('/api/hoa/notifications',requireAuth,requireHoa,async(req,res)=>{try{res.json((await pool.query(`SELECT * FROM hoa_notifications WHERE user_id=$1 ORDER BY created_at DESC LIMIT 100`,[req.user.id])).rows);}catch(e){res.status(500).json({error:'notifications failed'});}});
 app.post('/api/hoa/notifications/read',requireAuth,requireHoa,async(req,res)=>{try{await pool.query(`UPDATE hoa_notifications SET read_at=now() WHERE user_id=$1 AND read_at IS NULL`,[req.user.id]);res.json({ok:true});}catch(e){res.status(500).json({error:'notifications failed'});}});
 
-app.get('/completion-photos/:token',async(req,res)=>{try{const row=(await pool.query(`SELECT q.*,i.title,i.description,c.name community_name,cap.photo_path original_photo FROM hoa_completion_photo_requests q JOIN hoa_maintenance_items i ON i.id=q.item_id JOIN hoa_communities c ON c.id=i.community_id LEFT JOIN captures cap ON cap.id=i.capture_id WHERE q.token=$1`,[req.params.token])).rows[0];if(!row)return res.status(404).send('Photo request not found.');if(row.status!=='open'||new Date(row.expires_at)<new Date())return res.status(410).send('This photo request is no longer open.');res.send(`<!doctype html><html><head><meta name="viewport" content="width=device-width"><link rel="stylesheet" href="/help.css?v=376"><script src="/help-catalog.js?v=411" defer></script><script src="/help.js?v=350" defer></script><title>Submit Completion Photos</title><style>body{font-family:Arial,sans-serif;max-width:720px;margin:auto;padding:20px;color:#111}img{width:100%;max-height:480px;object-fit:contain;border-radius:10px;background:#eee}input,textarea,button{box-sizing:border-box;width:100%;padding:14px;margin:7px 0;font-size:16px}button{background:#2455d9;color:#fff;border:0;border-radius:9px;font-weight:700}.box{background:#eef3ff;border-radius:10px;padding:14px}</style></head><body><h1>Submit Completion Photos</h1><div class="box"><b>${escXml(row.community_name)}</b><h2>${escXml(row.title)}</h2><p>${escXml(row.description||'')}</p></div>${row.original_photo?`<h3>Original issue</h3><img src="${escXml(row.original_photo)}" alt="Original maintenance issue">`:''}<h3>Show the completed work</h3><p>Take clear overview and close-up photos. These photos will be added directly to this maintenance record.</p><form method="post" action="/completion-photos/${row.token}" enctype="multipart/form-data"><input name="submitter_name" value="${escXml(row.recipient_name||'')}" placeholder="Your name" required><input type="file" name="photos" accept="image/*" capture="environment" multiple required><textarea name="note" placeholder="What work was completed?"></textarea><button>Send Completion Photos</button></form></body></html>`);}catch(e){res.status(500).send('Photo request unavailable.');}});
+app.get('/completion-photos/:token',async(req,res)=>{try{const row=(await pool.query(`SELECT q.*,i.title,i.description,c.name community_name,cap.photo_path original_photo FROM hoa_completion_photo_requests q JOIN hoa_maintenance_items i ON i.id=q.item_id JOIN hoa_communities c ON c.id=i.community_id LEFT JOIN captures cap ON cap.id=i.capture_id WHERE q.token=$1`,[req.params.token])).rows[0];if(!row)return res.status(404).send('Photo request not found.');if(row.status!=='open'||new Date(row.expires_at)<new Date())return res.status(410).send('This photo request is no longer open.');res.send(`<!doctype html><html><head><meta name="viewport" content="width=device-width"><link rel="stylesheet" href="/help.css?v=376"><script src="/help-catalog.js?v=412" defer></script><script src="/help.js?v=412" defer></script><title>Submit Completion Photos</title><style>body{font-family:Arial,sans-serif;max-width:720px;margin:auto;padding:20px;color:#111}img{width:100%;max-height:480px;object-fit:contain;border-radius:10px;background:#eee}input,textarea,button{box-sizing:border-box;width:100%;padding:14px;margin:7px 0;font-size:16px}button{background:#2455d9;color:#fff;border:0;border-radius:9px;font-weight:700}.box{background:#eef3ff;border-radius:10px;padding:14px}</style></head><body><h1>Submit Completion Photos</h1><div class="box"><b>${escXml(row.community_name)}</b><h2>${escXml(row.title)}</h2><p>${escXml(row.description||'')}</p></div>${row.original_photo?`<h3>Original issue</h3><img src="${escXml(row.original_photo)}" alt="Original maintenance issue">`:''}<h3>Show the completed work</h3><p>Take clear overview and close-up photos. These photos will be added directly to this maintenance record.</p><form method="post" action="/completion-photos/${row.token}" enctype="multipart/form-data"><input name="submitter_name" value="${escXml(row.recipient_name||'')}" placeholder="Your name" required><input type="file" name="photos" accept="image/*" capture="environment" multiple required><textarea name="note" placeholder="What work was completed?"></textarea><button>Send Completion Photos</button></form></body></html>`);}catch(e){res.status(500).send('Photo request unavailable.');}});
 app.post('/completion-photos/:token',(req,res,next)=>require('./external-photo-submission').externalPhotoUpload(UPLOAD_DIR)(req,res,async error=>{if(error){await require('./external-photo-submission').removeUploads(req.files);return res.status(400).send('Use at most 8 photographs, up to 25 MB each.');}next();}),async(req,res)=>{
  const {inspectPhotos,saveExternalPhoto,removeUploads}=require('./external-photo-submission');
  let db,committed=false;
@@ -1086,7 +1086,7 @@ app.post('/completion-photos/:token',(req,res,next)=>require('./external-photo-s
   await hoaHistory(q.item_id,null,'completion_photos_submitted',{submitted_by:name,photo_count:req.files.length},db);
   await hoaNotifyCompany(q.company_id,q.item_id,'Completion photos submitted',0,db);
   await db.query('COMMIT');committed=true;
-  res.send('<!doctype html><meta name="viewport" content="width=device-width"><link rel="stylesheet" href="/help.css?v=376"><script src="/help-catalog.js?v=411" defer></script><script src="/help.js?v=350" defer></script><style>body{font-family:Arial;color:#000;text-align:left;padding:30px 20px}</style><h1>Photos received</h1><p>Thank you. The completion photos were added to the maintenance record.</p>');
+  res.send('<!doctype html><meta name="viewport" content="width=device-width"><link rel="stylesheet" href="/help.css?v=376"><script src="/help-catalog.js?v=412" defer></script><script src="/help.js?v=412" defer></script><style>body{font-family:Arial;color:#000;text-align:left;padding:30px 20px}</style><h1>Photos received</h1><p>Thank you. The completion photos were added to the maintenance record.</p>');
  }catch(e){if(db&&!committed)await db.query('ROLLBACK');await removeUploads(req.files);res.status(400).send('Photos could not be submitted. Use supported photographs and try again.');}
  finally{if(db)db.release();}
 });
@@ -1115,7 +1115,7 @@ app.get('/review/:token/photos/:id',async(req,res)=>{
     res.setHeader('Cache-Control','private, no-store');res.type('jpeg').send(rendered.buffer);
   }catch(e){res.sendStatus(500);}
 });
-app.get('/review/:token',async(req,res)=>{try{const p=(await pool.query(`SELECT * FROM approval_packages WHERE token=$1`,[req.params.token])).rows[0];if(!p)return res.status(404).send('Review link not found.');if(new Date(p.expires_at)<new Date())return res.status(410).send('This review link has expired.');const photos=(await pool.query(`SELECT id,photo_path,note,address,created_at FROM captures WHERE user_id=$1 AND id=ANY($2) ORDER BY created_at`,[p.user_id,p.capture_ids])).rows;const cards=photos.map(c=>`<article><img src="/review/${encodeURIComponent(p.token)}/photos/${c.id}" alt="Project photo"><p><b>${escXml(c.address||'')}</b></p><p>${escXml(c.note||'')}</p><small>${new Date(c.created_at).toLocaleString()}</small></article>`).join('');res.send(`<!doctype html><html><head><meta name="viewport" content="width=device-width"><link rel="stylesheet" href="/help.css?v=376"><script src="/help-catalog.js?v=411" defer></script><script src="/help.js?v=350" defer></script><title>${escXml(p.title)}</title><style>body{font-family:Arial;margin:auto;max-width:850px;padding:20px;color:#111}article{border:1px solid #ccc;border-radius:10px;padding:12px;margin:18px 0}img{width:100%;max-height:650px;object-fit:contain}textarea,input,button{box-sizing:border-box;width:100%;padding:12px;margin:6px 0;font-size:16px}button{background:#2455d9;color:white;border:0;border-radius:8px;font-weight:bold}.changes{background:#555}.status{padding:12px;background:#eef3ff}</style></head><body><h1>${escXml(p.title)}</h1>${p.message?`<p>${escXml(p.message)}</p>`:''}<div class="status">Status: ${escXml(p.status)}</div>${cards}${p.status==='pending'?`<form method="post" action="/review/${p.token}"><input name="customer_name" placeholder="Your name" required><textarea name="comment" placeholder="Comment (optional)"></textarea><button name="decision" value="approved">Approve Photos</button><button class="changes" name="decision" value="changes_requested">Request Changes</button></form>`:`<p><b>Response received. Thank you.</b></p>`}</body></html>`);}catch(e){res.status(500).send('Review unavailable.');}});
+app.get('/review/:token',async(req,res)=>{try{const p=(await pool.query(`SELECT * FROM approval_packages WHERE token=$1`,[req.params.token])).rows[0];if(!p)return res.status(404).send('Review link not found.');if(new Date(p.expires_at)<new Date())return res.status(410).send('This review link has expired.');const photos=(await pool.query(`SELECT id,photo_path,note,address,created_at FROM captures WHERE user_id=$1 AND id=ANY($2) ORDER BY created_at`,[p.user_id,p.capture_ids])).rows;const cards=photos.map(c=>`<article><img src="/review/${encodeURIComponent(p.token)}/photos/${c.id}" alt="Project photo"><p><b>${escXml(c.address||'')}</b></p><p>${escXml(c.note||'')}</p><small>${new Date(c.created_at).toLocaleString()}</small></article>`).join('');res.send(`<!doctype html><html><head><meta name="viewport" content="width=device-width"><link rel="stylesheet" href="/help.css?v=376"><script src="/help-catalog.js?v=412" defer></script><script src="/help.js?v=412" defer></script><title>${escXml(p.title)}</title><style>body{font-family:Arial;margin:auto;max-width:850px;padding:20px;color:#111}article{border:1px solid #ccc;border-radius:10px;padding:12px;margin:18px 0}img{width:100%;max-height:650px;object-fit:contain}textarea,input,button{box-sizing:border-box;width:100%;padding:12px;margin:6px 0;font-size:16px}button{background:#2455d9;color:white;border:0;border-radius:8px;font-weight:bold}.changes{background:#555}.status{padding:12px;background:#eef3ff}</style></head><body><h1>${escXml(p.title)}</h1>${p.message?`<p>${escXml(p.message)}</p>`:''}<div class="status">Status: ${escXml(p.status)}</div>${cards}${p.status==='pending'?`<form method="post" action="/review/${p.token}"><input name="customer_name" placeholder="Your name" required><textarea name="comment" placeholder="Comment (optional)"></textarea><button name="decision" value="approved">Approve Photos</button><button class="changes" name="decision" value="changes_requested">Request Changes</button></form>`:`<p><b>Response received. Thank you.</b></p>`}</body></html>`);}catch(e){res.status(500).send('Review unavailable.');}});
 app.post('/review/:token',express.urlencoded({extended:false}),async(req,res)=>{try{const decision=req.body.decision==='approved'?'approved':'changes_requested';const row=(await pool.query(`UPDATE approval_packages SET status=$1,customer_name=$2,customer_comment=$3,responded_at=now() WHERE token=$4 AND status='pending' AND expires_at>now() RETURNING token`,[decision,ticketText(req.body.customer_name,200),ticketText(req.body.comment,1000),req.params.token])).rows[0];if(!row)return res.status(400).send('This review can no longer be changed.');res.redirect(`/review/${row.token}`);}catch(e){res.status(500).send('Response could not be saved.');}});
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
@@ -2121,13 +2121,17 @@ app.post('/api/captures/:id/restore-original', requireAuth, async (req, res) => 
 });
 
 // ---- groups (per-user) ----
-const DOCUMENT_FONTS = ['Arial', 'Aptos', 'Calibri', 'Georgia', 'Times New Roman'];
-const DOCUMENT_LAYOUTS = ['one_per_page', 'two_per_page'];
-const DEFAULT_DOCUMENT_LAYOUT = Object.freeze({ cover_page:true, header:true, footer:true, page_numbers:true, font:'Arial', photo_layout:'one_per_page', accent:'#1d4ed8' });
+const DOCUMENT_FONTS = ['Arial', 'Helvetica', 'Aptos', 'Calibri', 'Georgia', 'Times New Roman'];
+const DOCUMENT_LAYOUTS = ['one_per_page','two_vertical','two_horizontal','two_per_page','three_vertical','three_horizontal','four_per_page','five_per_page','six_per_page'];
+const DEFAULT_DOCUMENT_LAYOUT = Object.freeze({ document_type:'standard', orientation:'portrait', cover_page:false, header:false, footer:false, page_numbers:true, page_number_position:'bottom_right', font:'Arial', photo_layout:'four_per_page', accent:'#1d4ed8', header_text:'', footer_text:'', company_name:'' });
 function cleanDocumentLayout(value) {
   const v = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
   const out = { ...DEFAULT_DOCUMENT_LAYOUT };
   for (const key of ['cover_page','header','footer','page_numbers']) if (typeof v[key] === 'boolean') out[key] = v[key];
+  if (['standard','exhibit'].includes(v.document_type)) out.document_type=v.document_type;
+  if (['portrait','landscape'].includes(v.orientation)) out.orientation=v.orientation;
+  if (['bottom_left','bottom_center','bottom_right'].includes(v.page_number_position)) out.page_number_position=v.page_number_position;
+  for(const key of ['header_text','footer_text','company_name'])if(typeof v[key]==='string')out[key]=ticketText(v[key],240);
   if (DOCUMENT_FONTS.includes(v.font)) out.font = v.font;
   if (DOCUMENT_LAYOUTS.includes(v.photo_layout)) out.photo_layout = v.photo_layout;
   if (/^#[0-9a-f]{6}$/i.test(String(v.accent || ''))) out.accent = String(v.accent).toLowerCase();
@@ -2208,7 +2212,7 @@ app.get('/api/groups', requireAuth, async (req, res) => {
       FROM groups g
       LEFT JOIN (SELECT group_id, COUNT(*) n FROM group_items GROUP BY group_id) cnt ON cnt.group_id = g.id
       WHERE g.user_id = $1
-      ORDER BY g.created_at DESC`, [req.user.id]);
+      ORDER BY g.title ASC, g.id ASC`, [req.user.id]);
     // Attach a condition score per group (defect data only; one extra query).
     const defs = (await pool.query(`
       SELECT gi.group_id, c.defect_type, c.defect_severity
@@ -2228,7 +2232,9 @@ app.post('/api/groups', requireAuth, async (req, res) => {
     if (!title) return res.status(400).json({ error: 'Enter a document title.' });
     const description = b.description ? String(b.description) : null;
     const ids = Array.isArray(b.ids) ? b.ids.map((n) => parseInt(n, 10)).filter(Number.isInteger) : [];
-    const { rows } = await pool.query(`INSERT INTO groups (user_id, title, description) VALUES ($1,$2,$3) RETURNING *`, [req.user.id, title, description]);
+    if (!ids.length) return res.status(400).json({ error: 'Choose at least one PhotoNote.' });
+    const layout=cleanDocumentLayout(b.layout);
+    const { rows } = await pool.query(`INSERT INTO groups (user_id, title, description, layout) VALUES ($1,$2,$3,$4) RETURNING *`, [req.user.id, title, description, JSON.stringify(layout)]);
     const group = rows[0];
     let added = 0;
     if (ids.length) added = await addToGroup(group.id, req.user.id, ids);
@@ -2274,6 +2280,7 @@ app.post('/api/groups/:id', requireAuth, async (req, res) => {
     if (!sets.length) return res.status(400).json({ error: 'nothing to update' });
     vals.push(id);
     vals.push(req.user.id);
+    sets.push('updated_at = now()');
     const { rows } = await pool.query(`UPDATE groups SET ${sets.join(', ')} WHERE id = $${vals.length - 1} AND user_id = $${vals.length} RETURNING *`, vals);
     if (!rows.length) return res.status(404).json({ error: 'not found' });
     res.json(rows[0]);
@@ -2295,6 +2302,7 @@ app.post('/api/groups/:id/add', requireAuth, async (req, res) => {
     const ids = Array.isArray(req.body && req.body.ids) ? req.body.ids.map((n) => parseInt(n, 10)).filter(Number.isInteger) : [];
     if (!ids.length) return res.status(400).json({ error: 'no ids' });
     const added = await addToGroup(id, req.user.id, ids);
+    if (added) await pool.query('UPDATE groups SET updated_at=now() WHERE id=$1 AND user_id=$2',[id,req.user.id]);
     logEvent(req.user.id, 'group_add', { count: added });
     res.json({ ok: true, added });
   } catch (err) { console.error('[groups.add]', err); res.status(500).json({ error: 'add failed' }); }
@@ -2307,6 +2315,7 @@ app.post('/api/groups/:id/remove', requireAuth, async (req, res) => {
     const ids = Array.isArray(req.body && req.body.ids) ? req.body.ids.map((n) => parseInt(n, 10)).filter(Number.isInteger) : [];
     if (!ids.length) return res.status(400).json({ error: 'no ids' });
     await pool.query(`DELETE FROM group_items WHERE group_id = $1 AND capture_id = ANY($2)`, [id, ids]);
+    await pool.query('UPDATE groups SET updated_at=now() WHERE id=$1 AND user_id=$2',[id,req.user.id]);
     res.json({ ok: true });
   } catch (err) { console.error('[groups.remove]', err); res.status(500).json({ error: 'remove failed' }); }
 });
@@ -2320,6 +2329,7 @@ app.post('/api/groups/:id/reorder', requireAuth, async (req, res) => {
     for (let i = 0; i < order.length; i++) {
       await pool.query(`UPDATE group_items SET position = $1 WHERE group_id = $2 AND capture_id = $3`, [i, id, order[i]]);
     }
+    await pool.query('UPDATE groups SET updated_at=now() WHERE id=$1 AND user_id=$2',[id,req.user.id]);
     logEvent(req.user.id, 'group_reorder', {});
     res.json({ ok: true });
   } catch (err) { console.error('[groups.reorder]', err); res.status(500).json({ error: 'reorder failed' }); }
@@ -3207,27 +3217,30 @@ app.get('/api/export/pdf', requireAuth, async (req, res) => {
     logEvent(req.user.id, 'export', { format: 'pdf', scope, count: rows.length, res: imgRes, fmt: imgFmt });
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${fnameBase}.pdf"`);
-    const doc = new PDFDocument({ size: 'LETTER', margin: 48 });
+    const doc = new PDFDocument({ size: 'LETTER', layout: layout.orientation === 'landscape' ? 'landscape' : 'portrait', margin: 48 });
     doc.pipe(res);
     const pdfFont=['Georgia','Times New Roman'].includes(layout.font)?path.join(__dirname,'assets/annotation-fonts/LiberationSerif-Regular.ttf'):PdfEvidence.fontPath;doc.font(pdfFont);
-    const logo=await documentLogoAsset(logoPath,220,90);let pageNumber=0;
-    const drawChrome=()=>{pageNumber++;const oldY=doc.y,oldX=doc.x;if(layout.header&&branding.header_text){doc.font(pdfFont).fontSize(9).fillColor('#000').text(branding.header_text,48,24,{width:516,align:'center'});}if(layout.footer||layout.page_numbers){const bits=[];if(layout.footer&&branding.footer_text)bits.push(branding.footer_text);if(layout.page_numbers)bits.push(`Page ${pageNumber}`);doc.font(pdfFont).fontSize(8).fillColor('#000').text(bits.join('  |  '),48,730,{width:516,height:12,align:'center',lineBreak:false});}doc.y=oldY;doc.x=oldX;};
-    if(layout.cover_page){
-      if(logo)doc.image(logo.buffer,306-logo.width/2,120,{width:logo.width,height:logo.height});
-      doc.y=logo?235:170;if(branding.company_name)doc.fontSize(13).fillColor(layout.accent).text(branding.company_name,{align:'center'}).moveDown(.8);
-      doc.fontSize(25).fillColor('#000').text(heading||'Document',{align:'center'});if(desc)doc.moveDown(.5).fontSize(13).text(desc,{align:'center'});
-      if(layout.footer&&branding.footer_text)doc.fontSize(9).fillColor('#000').text(branding.footer_text,48,720,{width:516,align:'center'});
-    }else if(heading){if(logo)doc.image(logo.buffer,48,48,{fit:[150,55]});doc.y=logo?115:48;if(branding.company_name)doc.fontSize(13).fillColor(layout.accent).text(branding.company_name,{align:'center'}).moveDown(.4);doc.fontSize(20).fillColor('#000').text(heading,{align:'center'});if(desc)doc.moveDown(.3).fontSize(12).text(desc,{align:'center'});doc.moveDown(1);drawChrome();}
-    doc.on('pageAdded',drawChrome);
     const pairs = pro ? await userPairs(req.user.id) : [];
     const units = buildRenderUnits(rows, pairs);
+    const photosPerPage=({one_per_page:1,two_vertical:2,two_horizontal:2,two_per_page:2,three_vertical:3,three_horizontal:3,four_per_page:4,five_per_page:5,six_per_page:6})[layout.photo_layout]||4;
+    const contentPages=units.reduce((total,u)=>total+(u.pair?1:1/photosPerPage),0);
+    const totalPages=(layout.cover_page?1:0)+Math.max(1,Math.ceil(contentPages));
+    const pageWidth=doc.page.width,pageHeight=doc.page.height,contentWidth=pageWidth-96;
+    const logo=await documentLogoAsset(logoPath,220,90);let pageNumber=0;
+    const drawChrome=()=>{pageNumber++;const oldY=doc.y,oldX=doc.x;if(layout.header&&branding.header_text){doc.font(pdfFont).fontSize(9).fillColor('#000').text(branding.header_text,48,24,{width:contentWidth,align:'center'});}if(layout.footer||layout.page_numbers&&totalPages>1){const bits=[];if(layout.footer&&branding.footer_text)bits.push(branding.footer_text);if(layout.page_numbers&&totalPages>1)bits.push(`Page ${pageNumber}`);const align=layout.page_number_position==='bottom_left'?'left':layout.page_number_position==='bottom_center'?'center':'right';doc.font(pdfFont).fontSize(8).fillColor('#000').text(bits.join('  |  '),48,pageHeight-62,{width:contentWidth,height:12,align,lineBreak:false});}doc.y=oldY;doc.x=oldX;};
+    if(layout.cover_page){
+      if(logo)doc.image(logo.buffer,pageWidth/2-logo.width/2,120,{width:logo.width,height:logo.height});
+      doc.y=logo?235:170;if(branding.company_name)doc.fontSize(13).fillColor(layout.accent).text(branding.company_name,{align:'center'}).moveDown(.8);
+      doc.fontSize(25).fillColor('#000').text(heading||'Document',{align:'center'});if(desc)doc.moveDown(.5).fontSize(13).text(desc,{align:'center'});
+      if(layout.footer&&branding.footer_text)doc.fontSize(9).fillColor('#000').text(branding.footer_text,48,pageHeight-72,{width:contentWidth,align:'center'});
+    }else if(heading){if(logo)doc.image(logo.buffer,48,48,{fit:[150,55]});doc.y=logo?115:48;if(branding.company_name)doc.fontSize(13).fillColor(layout.accent).text(branding.company_name,{align:'center'}).moveDown(.4);doc.fontSize(20).fillColor('#000').text(heading,{align:'center'});if(desc)doc.moveDown(.3).fontSize(12).text(desc,{align:'center'});doc.moveDown(1);drawChrome();}
+    doc.on('pageAdded',drawChrome);
+    let singlesOnPage=0;
     for (let i = 0; i < units.length; i++) {
       const u = units[i];
-      const two=layout.photo_layout==='two_per_page'&&!u.pair;
-      const needsPage=(layout.cover_page&&i===0)||(i>0&&(!two||i%2===0));
-      if(needsPage){doc.addPage();}
-      else if(two&&i%2===1){if(doc.y>377)doc.addPage();else doc.y=397;doc.x=48;}
       if (u.pair) {
+        if((layout.cover_page&&i===0)||singlesOnPage||i>0)doc.addPage();
+        singlesOnPage=0;
         const { before, after } = u.pair;
         const entries=[];
         for(const [label,c] of [['Before',before],['After',after]]){
@@ -3235,10 +3248,13 @@ app.get('/api/export/pdf', requireAuth, async (req, res) => {
           entries.push({label,image:rendered?.buffer,details:[c.photo_title,...documentPhotoDetails(c,pro)].filter(Boolean)});
         }
         await PdfEvidence.pair(doc,entries);
+        singlesOnPage=photosPerPage;
         continue;
       }
       const c = u.single;
-      doc.font(pdfFont).fontSize(two?11:13).fillColor('#000').text((c.photo_title||'Untitled Photo') + (c.kind === 'task' ? '   [TASK]' : ''), { width: 516 });
+      if((layout.cover_page&&i===0)||singlesOnPage>=photosPerPage){doc.addPage();singlesOnPage=0;}
+      const compact=photosPerPage>1;
+      doc.font(pdfFont).fontSize(compact?10:13).fillColor('#000').text((c.photo_title||'Untitled Photo') + (c.kind === 'task' ? '   [TASK]' : ''), { width: contentWidth });
       doc.moveDown(0.3);
       const img = localPhoto(c.photo_path);
       if (img) {
@@ -3246,8 +3262,8 @@ app.get('/api/export/pdf', requireAuth, async (req, res) => {
         if (r) {
           try {
             const meta = await sharp(r.buffer).metadata();
-            const maxW = 516;
-            const maxH = Math.min(two ? 180 : (/^Instrument Type:/im.test(c.note||'')?300:(scope === 'selection' ? 520 : 455)), Math.max(80, 640-doc.y));
+            const maxW = contentWidth;
+            const maxH = Math.min(compact ? Math.max(72,360/photosPerPage) : (/^Instrument Type:/im.test(c.note||'')?300:(scope === 'selection' ? 520 : 455)), Math.max(72,pageHeight-120-doc.y));
             const scale = Math.min(maxW / meta.width, maxH / meta.height);
             const drawW = Math.round(meta.width * scale);
             const drawH = Math.round(meta.height * scale);
@@ -3260,6 +3276,7 @@ app.get('/api/export/pdf', requireAuth, async (req, res) => {
         }
       }
       for(const line of documentPhotoDetails(c,pro))await PdfEvidence.text(doc,line,{size:12});
+      singlesOnPage++;
     }
     if (!rows.length) doc.fontSize(12).fillColor('#000').text('No captures yet.');
     doc.end();
@@ -3284,6 +3301,9 @@ async function buildDocumentWord(req,resolved){
     if(!templatePath&&layout.cover_page)children.push(new Paragraph({children:[new PageBreak()]}));
     const pairsD = pro ? await userPairs(req.user.id) : [];
     const unitsD = buildRenderUnits(rows, pairsD);
+    const photosPerPageD=({one_per_page:1,two_vertical:2,two_horizontal:2,two_per_page:2,three_vertical:3,three_horizontal:3,four_per_page:4,five_per_page:5,six_per_page:6})[layout.photo_layout]||4;
+    const estimatedContentPagesD=Math.max(1,Math.ceil(unitsD.reduce((total,u)=>total+(u.pair?1:1/photosPerPageD),0)));
+    const totalPagesD=estimatedContentPagesD+(layout.cover_page?1:0);
     const arialCell = (runs) => new TableCell({ children: runs });
     const imageSize=async(buffer,width,height)=>{const m=await sharp(buffer).metadata(),scale=Math.min(width/m.width,height/m.height);return {width:Math.round(m.width*scale),height:Math.round(m.height*scale)};};
     const detailParagraphs=c=>documentPhotoDetails(c,pro).flatMap(value=>String(value).split('\n')).map(text=>{const field=/^(Instrument Type|Equipment Name|Reading|Unit|Observed At|Notes):\s*(.*)$/.exec(text);return new Paragraph({children:field?[new TextRun({text:field[1]+': ',bold:true,font,color:'000000',size:24}),new TextRun({text:field[2],font,color:'000000',size:24})]:[new TextRun({text,font,color:'000000',size:24})]});});
@@ -3295,11 +3315,11 @@ async function buildDocumentWord(req,resolved){
       return kids;
     };
 
+    let singlesOnPageD=0;
     for (let unitIndex=0;unitIndex<unitsD.length;unitIndex++) {
       const u=unitsD[unitIndex];
-      if(unitIndex>0)children.push(new Paragraph({children:[new PageBreak()]}));
-      if(layout.photo_layout==='two_per_page'&&u.single){children.push(...await compactCell(u.single));if(unitsD[unitIndex+1]?.single)children.push(...await compactCell(unitsD[++unitIndex].single));continue;}
       if (u.pair) {
+        if(unitIndex>0)children.push(new Paragraph({children:[new PageBreak()]}));
         const { before, after } = u.pair;
         children.push(new Paragraph({ spacing: { before: 160 }, children: [new TextRun({ text: before.address || after.address || 'No location', bold: true, color: '000000', font })] }));
         const cellFor = async (lbl, c) => {
@@ -3313,9 +3333,12 @@ async function buildDocumentWord(req,resolved){
         const row = new TableRow({ children: [await cellFor('BEFORE', before), await cellFor('AFTER', after)] });
         children.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: [row] }));
         children.push(new Paragraph({ children: [new TextRun({ text: '' })] }));
+        singlesOnPageD=photosPerPageD;
         continue;
       }
       const c = u.single;
+      if(singlesOnPageD>=photosPerPageD){children.push(new Paragraph({children:[new PageBreak()]}));singlesOnPageD=0;}
+      if(photosPerPageD>1){children.push(...await compactCell(c));singlesOnPageD++;continue;}
       children.push(new Paragraph({children:[new TextRun({text:c.photo_title||'Untitled Photo',bold:false,font,color:'000000',size:26})]}));
       const img = localPhoto(c.photo_path);
       if (img) {
@@ -3324,12 +3347,15 @@ async function buildDocumentWord(req,resolved){
       }
       children.push(...detailParagraphs(c));
       children.push(new Paragraph({ children: [new TextRun({ text: '' })] }));
+      singlesOnPageD++;
     }
     if (!rows.length) children.push(new Paragraph({ children: [new TextRun({ text: 'No captures yet.', color: '000000', font })] }));
     const headers=layout.header&&branding.header_text?{default:new Header({children:[new Paragraph({alignment:AlignmentType.CENTER,children:[new TextRun({text:branding.header_text,font,size:18})]})]})}:undefined;
-    const footerRuns=[];if(layout.footer&&branding.footer_text)footerRuns.push(new TextRun({text:branding.footer_text,font,size:16}));if(layout.page_numbers){if(footerRuns.length)footerRuns.push(new TextRun({text:'  |  ',font,size:16}));footerRuns.push(new TextRun({children:['Page ',PageNumber.CURRENT],font,size:16}));}
-    const footers=footerRuns.length?{default:new Footer({children:[new Paragraph({alignment:AlignmentType.CENTER,children:footerRuns})]})}:undefined;
-    const doc = new Document({ styles:{default:{document:{run:{font,color:'000000',size:22},paragraph:{spacing:{after:80}}}}}, sections: [{ properties:{page:{size:{width:12240,height:15840},margin:{top:960,bottom:960,left:960,right:960}}},headers,footers,children }] });
+    const footerRuns=[];if(layout.footer&&branding.footer_text)footerRuns.push(new TextRun({text:branding.footer_text,font,size:16}));if(layout.page_numbers&&totalPagesD>1){if(footerRuns.length)footerRuns.push(new TextRun({text:'  |  ',font,size:16}));footerRuns.push(new TextRun({children:['Page ',PageNumber.CURRENT],font,size:16}));}
+    const footerAlignment=layout.page_number_position==='bottom_left'?AlignmentType.LEFT:layout.page_number_position==='bottom_center'?AlignmentType.CENTER:AlignmentType.RIGHT;
+    const footers=footerRuns.length?{default:new Footer({children:[new Paragraph({alignment:footerAlignment,children:footerRuns})]})}:undefined;
+    const landscape=layout.orientation==='landscape';
+    const doc = new Document({ styles:{default:{document:{run:{font,color:'000000',size:22},paragraph:{spacing:{after:80}}}}}, sections: [{ properties:{page:{size:{width:landscape?15840:12240,height:landscape?12240:15840},margin:{top:960,bottom:960,left:960,right:960}}},headers,footers,children }] });
     let buf = await Packer.toBuffer(doc);
     if(templatePath)buf=applyStructuredWordTemplate(buf,templatePath,{title:heading,description:desc,company_name:branding.company_name});
     return buf;

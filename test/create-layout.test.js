@@ -7,9 +7,9 @@ const root = path.join(__dirname, '..');
 const app = fs.readFileSync(path.join(root, 'public', 'app.js'), 'utf8');
 const css = fs.readFileSync(path.join(root, 'public', 'styles.css'), 'utf8');
 
-test('Create Document uses a compact content-width button', () => {
-  assert.match(app, /class="btn slim" id="gcreate" disabled>Create Document<\/button>/);
-  assert.match(css, /\.workflow-create #gcreate \{[^}]*width:max-content;[^}]*max-width:100%;[^}]*padding-left:20px;[^}]*padding-right:20px/);
+test('Save New Document is centered after photo selection', () => {
+  assert.match(app, /id="gcreate" disabled>Save New Document<\/button>/);
+  assert.match(css, /\.new-document-final-actions #gcreate\{[^}]*grid-column:2;[^}]*justify-self:center/);
 });
 
 test('Create edits document contents while downloads and sharing stay on Send', () => {

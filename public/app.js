@@ -3754,13 +3754,14 @@ function wireZonePopup(e, z) {
 }
 
 // ---- Send: deliver individual captures or completed documents ----
+let sendSource='documents',sendDocumentSort='alpha',sendDocumentSearch='';
 async function renderSend() {
   window._sendCaptures=[];window._sendMatchedCaptures=[];
   const body = document.getElementById('body');
   body.className = 'workflow-send';
   body.innerHTML = `
-    <div class="workflow-intro"><strong>Send your finished work</strong><span>Share or download the selected file format, or share original photos below.</span></div>
-    <div class="formhead">Share or Download Selected Captures</div>
+    <div class="send-source-heading"><h1>Send</h1><select id="sendSource" aria-label="Send"><option value="documents"${sendSource==='documents'?' selected':''}>Documents</option><option value="photos"${sendSource==='photos'?' selected':''}>PhotoNotes</option></select></div>
+    <div id="sendPhotoWorkflow"${sendSource==='photos'?'':' hidden'}><div class="formhead">Share or Download Selected PhotoNotes</div>
     ${isMacClient() ? `<div class="share-requirement"><strong>Texting an Android phone from this Mac?</strong><span>Your iPhone must have Settings → Apps → Messages → Text Message Forwarding enabled for this Mac, plus MMS or RCS messaging.</span></div>` : ''}
     <div class="send-selection-bar">
       <div class="status" id="sendSelection">Loading captures...</div>
@@ -3795,10 +3796,12 @@ async function renderSend() {
       <input id="approvalTitle" placeholder="Review title"><textarea id="approvalMessage" placeholder="Message to customer (optional)"></textarea>
       <button class="btn slim send-feature-action" id="createApproval">Create Customer Review Link</button><div id="approvalResult"></div><div id="approvalList"></div>
     </section>
-    <div class="formhead" style="margin-top:30px">Send a Document</div>
-    <div id="sendDocs"><p class="status">Loading documents...</p></div>
+    </div><div id="sendDocumentWorkflow"${sendSource==='documents'?'':' hidden'}><label for="sendDocumentSearch">Search Documents</label><input id="sendDocumentSearch" type="search" placeholder="Search document titles" value="${esc(sendDocumentSearch)}"><section class="available-documents"><div class="available-documents-heading"><h2>Available Documents</h2><label for="sendDocumentSort">Sort<select id="sendDocumentSort"><option value="alpha"${sendDocumentSort==='alpha'?' selected':''}>A to Z</option><option value="reverse-alpha"${sendDocumentSort==='reverse-alpha'?' selected':''}>Z to A</option><option value="newest"${sendDocumentSort==='newest'?' selected':''}>Newest First</option><option value="oldest"${sendDocumentSort==='oldest'?' selected':''}>Oldest First</option></select></label></div><div id="sendDocs"><p class="status">Loading documents...</p></div></section>
     <details id="sharedDocumentLinks"><summary>Shared document links</summary><div id="sharedDocumentLinksList"></div></details>
-    <div id="billingOffers"></div>`;
+    </div><div id="billingOffers"></div>`;
+  document.getElementById('sendSource').onchange=e=>{sendSource=e.target.value;renderSend();};
+  document.getElementById('sendDocumentSearch').oninput=e=>{sendDocumentSearch=e.target.value;renderSendDocuments(window._sendGroups||[]);};
+  document.getElementById('sendDocumentSort').onchange=e=>{sendDocumentSort=e.target.value;renderSendDocuments(window._sendGroups||[]);};
   document.getElementById('closeSendPhotoSelection').onclick=()=>{document.getElementById('sendPhotoSelection').open=false;const summary=document.getElementById('sendPhotoSelectionSummary');summary.focus();summary.scrollIntoView({block:'nearest'});};
   document.getElementById('sharedDocumentLinks').ontoggle = event => { if(event.target.open) window.PhotoNotesDocumentLinks?.manage(document.getElementById('sharedDocumentLinksList')); };
   document.getElementById('sharephotos').onclick = () => deliverExport(document.getElementById('sendformat').value, null, 'share');
@@ -3860,37 +3863,10 @@ async function loadSendCenter() {
   window._sendGroups = groups;
   fillSendPhotoFilters(captures);
   renderSendPhotoLibrary();
-  const docs = document.getElementById('sendDocs');
-  docs.innerHTML = groups.length ? groups.map(g => `
-    <div class="card delivery-card">
-      <div><strong>${esc(g.title || 'Untitled document')}</strong><div class="meta">${g.item_count} photo${g.item_count === 1 ? '' : 's'}</div></div>
-      <div class="document-delivery-controls" data-group="${g.id}">
-        <label for="documentFormat${g.id}">File format</label>
-        <select class="document-delivery-format" id="documentFormat${g.id}" aria-label="File format for ${esc(g.title || 'Untitled document')}">
-          <option value="pdf">PDF</option>
-          <option value="docx">Word</option>
-          <option value="bundle">Markdown + Photos (.zip)</option>
-        </select>
-        <div class="document-format-help">Markdown + Photos downloads one ZIP file containing an AI-readable Markdown document and the original photos.</div>
-        <div class="document-delivery-actions">
-          <button class="btn slim" data-document-action="share">Share</button>
-          <button class="btn secondary slim" data-document-action="download">Download</button>
-          <button class="btn secondary slim" data-document-action="print">Print</button>
-        </div>
-      </div>
-    </div>`).join('') : '<p class="empty">Create a document first, or send selected captures above.</p>';
-  docs.querySelectorAll('.document-delivery-controls').forEach(control => {
-    const format = control.querySelector('.document-delivery-format');
-    const print = control.querySelector('[data-document-action="print"]');
-    const syncActions = () => {
-      print.disabled = false;
-      print.title = 'Open the printable PDF version';
-    };
-    format.onchange = syncActions;
-    syncActions();
-    control.querySelectorAll('[data-document-action]').forEach(button => button.onclick = () => deliverExport(format.value, control.dataset.group, button.dataset.documentAction));
-  });
+  renderSendDocuments(groups);
 }
+
+function renderSendDocuments(groups){const docs=document.getElementById('sendDocs');if(!docs)return;const rows=[...groups].filter(g=>String(g.title||'').trim()&&Number(g.item_count)>0&&String(g.title).toLowerCase().includes(sendDocumentSearch.toLowerCase())).sort((a,b)=>sendDocumentSort==='alpha'?a.title.localeCompare(b.title):sendDocumentSort==='reverse-alpha'?b.title.localeCompare(a.title):sendDocumentSort==='newest'?(Date.parse(b.updated_at||b.created_at)||0)-(Date.parse(a.updated_at||a.created_at)||0):(Date.parse(a.updated_at||a.created_at)||0)-(Date.parse(b.updated_at||b.created_at)||0));if(!rows.length){docs.innerHTML='<p class="empty">No matching documents are ready to send.</p>';return;}docs.innerHTML=`<ul class="compact-document-list send-document-list">${rows.map(g=>`<li><div><strong>${esc(g.title)}</strong><span>${g.item_count} PhotoNote${g.item_count===1?'':'s'} · Last Modified: ${esc(documentModifiedLabel(g))}</span></div><div class="compact-document-actions"><button class="btn slim" data-use-document="${g.id}">Use This Document</button><button class="btn secondary slim" data-edit-document="${g.id}">Edit Draft</button></div><div class="document-send-options" data-send-options="${g.id}" hidden><label>File Format<select class="document-delivery-format"><option value="pdf">PDF</option><option value="docx">Word</option><option value="bundle">Markdown + Photos (.zip)</option></select></label><div class="compact-document-actions"><button class="btn slim" data-document-action="share">Share</button><button class="btn secondary slim" data-document-action="download">Download</button><button class="btn secondary slim" data-document-action="print">Print</button></div></div></li>`).join('')}</ul>`;docs.querySelectorAll('[data-use-document]').forEach(button=>button.onclick=()=>{docs.querySelectorAll('[data-send-options]').forEach(x=>x.hidden=x.dataset.sendOptions!==button.dataset.useDocument);});docs.querySelectorAll('[data-edit-document]').forEach(button=>button.onclick=()=>{state.groupId=Number(button.dataset.editDocument);state.view='create';renderApp();});docs.querySelectorAll('[data-send-options]').forEach(control=>{const format=control.querySelector('select');control.querySelectorAll('[data-document-action]').forEach(button=>button.onclick=()=>deliverExport(format.value,control.dataset.sendOptions,button.dataset.documentAction));});}
 
 async function deleteSendCapture(id, button) {
   if (!id || !confirm(uiT(`Delete this Photo Note? This can't be undone.`))) return;
@@ -4139,104 +4115,40 @@ let preparedPhotoShare = { signature: '', files: [], text: '' };
 
 // ---- Create (ordered documents, stored as groups) ----
 let documentCreationPending=false;
-let documentSource={select:null,loading:false,ids:new Set(),request:0};
-function updateDocumentCreateButton(){const button=document.getElementById('gcreate'),title=document.getElementById('gtitle');if(button&&title)button.disabled=documentCreationPending||!title.value.trim()||documentSource.loading||(documentSource.select?.isConnected&&documentSource.select.value!==''&&!documentSource.ids.size);}
-async function reviewDocumentSource(){
- const select=document.getElementById('documentPhotoSource'),box=document.getElementById('documentSourcePhotos'),status=document.getElementById('documentSourceStatus'),value=select.value,request=++documentSource.request,owner=state.me?.id;
- documentSource={select,loading:!!value,ids:new Set(),request};document.getElementById('documentOrganizeSelection').hidden=!!value;box.replaceChildren();status.textContent=value?'Loading matching photos...':'';updateDocumentCreateButton();if(!value)return;
- try{const r=await api('/api/captures');if(!r.ok)throw Error();const rows=await r.json();if(documentSource.request!==request||!select.isConnected||state.me?.id!==owner)return;
- const photos=rows.filter(c=>c.photo_path&&(value.startsWith('job:')?String(c.job_id)===value.slice(4):(c.area_tags||[]).includes(value.slice(6))));documentSource.ids=new Set(photos.map(c=>String(c.id)));documentSource.loading=false;
- box.innerHTML=photos.map(c=>`<label class="document-source-photo"><input type="checkbox" data-document-source-photo="${c.id}" checked><img loading="lazy" src="${capturePhotoSrc(c)}" alt="${esc(c.photo_title||'Photo')}"><span>${esc(c.photo_title||'Photo')}<br>${esc(c.address||'')}<br>${esc(new Date(c.created_at).toLocaleString(uiLocale()))}</span></label>`).join('');
- const count=()=>{status.textContent=photos.length?uiT(documentSource.ids.size===1?'1 photo selected for this document.':'{count} photos selected for this document.').replace('{count}',documentSource.ids.size):uiT('No photos match this job or topic. Choose another source, or use the Organize selection to create an empty document.');updateDocumentCreateButton();};
- box.querySelectorAll('[data-document-source-photo]').forEach(input=>input.onchange=()=>{if(input.checked)documentSource.ids.add(input.dataset.documentSourcePhoto);else documentSource.ids.delete(input.dataset.documentSourcePhoto);count();});count();
- }catch{if(documentSource.request!==request||!select.isConnected)return;documentSource.loading=false;status.textContent=uiT('Photos could not be loaded. Choose the source again to retry.');updateDocumentCreateButton();}
-}
-
+let documentCreateStep='list',documentListSort='alpha',documentListQuery='',newDocumentPhotos=[],newDocumentPhotoIds=new Set(),newDocumentSetup=null;
+const builtInDocumentSetup=()=>({title:'',description:'',layout:{document_type:'standard',orientation:'portrait',photo_layout:'four_per_page',font:'Arial',accent:'#1d4ed8',header:false,header_text:'',footer:false,footer_text:'',page_numbers:true,page_number_position:'bottom_right',cover_page:false,company_name:''}});
+const documentSettingsStorageKey=kind=>`pn-document-${kind}-${state.me?.id||'local'}`;
+function readDocumentSetting(kind,fallback){try{return JSON.parse(localStorage.getItem(documentSettingsStorageKey(kind)))||fallback}catch{return fallback}}
+function writeDocumentSetting(kind,value){localStorage.setItem(documentSettingsStorageKey(kind),JSON.stringify(value))}
+function documentSetupDefault(){return structuredClone(readDocumentSetting('default',builtInDocumentSetup()));}
+function documentPresets(){return readDocumentSetting('presets',[])}
+function documentModifiedLabel(group){const value=group.updated_at||group.created_at;if(!value)return 'Not Recorded';const date=new Date(value);return Number.isNaN(+date)?'Not Recorded':date.toLocaleDateString(uiLocale(),{year:'numeric',month:'short',day:'numeric'});}
+function sortedDocuments(groups){return [...groups].filter(g=>String(g.title||'').trim()&&String(g.title).toLowerCase().includes(documentListQuery.toLowerCase())).sort((a,b)=>documentListSort==='alpha'?a.title.localeCompare(b.title):documentListSort==='reverse-alpha'?b.title.localeCompare(a.title):documentListSort==='newest'?(Date.parse(b.updated_at||b.created_at)||0)-(Date.parse(a.updated_at||a.created_at)||0):(Date.parse(a.updated_at||a.created_at)||0)-(Date.parse(b.updated_at||b.created_at)||0));}
 async function renderGroups() {
   if (state.ewrId != null) { renderEwrDetail(); return; }
   if (state.groupId) { renderGroupDetail(state.groupId); return; }
-  const body = document.getElementById('body');
-  body.className = 'workflow-create';
-  body.innerHTML = `
-    <div class="workflow-intro"><strong>Create a document</strong><span>Build an ordered report from organized captures. PDF and Word documents include the title, description, photos, captions, dates, topics, and locations.</span></div>
-    <div class="formhead">Start a New Document</div>
-    <input id="gtitle" type="text" required aria-label="Document Title" aria-describedby="documentTitleRequirement" placeholder="Document Title" style="font-size:18px;font-weight:bold" />
-    <textarea id="gdesc" placeholder="Subtitle or description (optional)" style="min-height:60px;margin-top:8px"></textarea>
-    <div class="status" id="documentOrganizeSelection">${state.selectedIds.size ? `${state.selectedIds.size} selected capture${state.selectedIds.size === 1 ? '' : 's'} will be added.` : 'You can create an empty document, then add captures from Organize.'}</div>
-    <label for="documentPhotoSource">Photos from Job or Topic (optional)</label>
-    <select id="documentPhotoSource"><option value="">Use current Organize selection</option>${state.jobs.length?`<optgroup label="${uiT('Jobs')}">${state.jobs.map(j=>`<option value="job:${j.id}">${esc(j.job_number?j.job_number+' - '+j.name:j.name)}</option>`).join('')}</optgroup>`:''}${filterTopics().length?`<optgroup label="${uiT('Topics')}">${filterTopics().map(topic=>`<option value="topic:${esc(topic)}">${esc(topic)}</option>`).join('')}</optgroup>`:''}</select>
-    <p>Choose a job or topic to review its photos here. Uncheck any photo you do not want included. This replaces the Organize selection for this document only.</p>
-    <p id="documentSourceStatus" role="status" aria-live="polite"></p><div id="documentSourcePhotos" class="document-source-photos"></div>
-    <p id="documentTitleRequirement">Enter a document title to enable Create Document.</p>
-    <button class="btn slim" id="gcreate" disabled>Create Document</button>
-
-    <div class="formhead" style="margin-top:30px">Your Documents</div>
-    <div id="glist"></div>`;
-  document.getElementById('gcreate').onclick = createGroup;
-  titleCaseInput(document.getElementById('gtitle'));
-  documentSource={select:document.getElementById('documentPhotoSource'),loading:false,ids:new Set(),request:documentSource.request+1};
-  documentSource.select.onchange=reviewDocumentSource;
-  document.getElementById('gtitle').addEventListener('input', updateDocumentCreateButton);
+  if(documentCreateStep==='setup')return renderNewDocumentSetup();
+  if(documentCreateStep==='photos')return renderNewDocumentPhotos();
+  const body=document.getElementById('body');body.className='workflow-create';
+  body.innerHTML=`<div class="create-heading"><h1>Create</h1><button class="btn" id="newDocument">New Document</button></div><label for="documentSearch">Search Document Title</label><input id="documentSearch" type="search" placeholder="Search document titles" value="${esc(documentListQuery)}"><section class="available-documents"><div class="available-documents-heading"><h2>Available Documents</h2><label for="createDocumentSort">Sort<select id="createDocumentSort"><option value="alpha"${documentListSort==='alpha'?' selected':''}>A to Z</option><option value="reverse-alpha"${documentListSort==='reverse-alpha'?' selected':''}>Z to A</option><option value="newest"${documentListSort==='newest'?' selected':''}>Newest First</option><option value="oldest"${documentListSort==='oldest'?' selected':''}>Oldest First</option></select></label></div><div id="glist"><p class="status">Loading documents...</p></div></section>`;
+  document.getElementById('newDocument').onclick=()=>{newDocumentSetup=documentSetupDefault();newDocumentSetup.title='';newDocumentSetup.description='';documentCreateStep='setup';renderGroups();};
+  document.getElementById('documentSearch').oninput=e=>{documentListQuery=e.target.value;renderGroupCards(document.getElementById('glist'),state.groups||[]);};
+  document.getElementById('createDocumentSort').onchange=e=>{documentListSort=e.target.value;renderGroupCards(document.getElementById('glist'),state.groups||[]);};
   loadGroups();
 }
-
-async function createGroup() {
-  if(documentCreationPending)return;
-  const title = document.getElementById('gtitle').value.trim();
-  if (!title) { toast('Enter a document title.'); document.getElementById('gtitle').focus(); return; }
-  const source=document.getElementById('documentPhotoSource');
-  if(source?.value&&(documentSource.loading||!documentSource.ids.size)){toast('Choose and review photos before creating the document.');return;}
-  const usesSource=!!source?.value;
-  const ids=usesSource?Array.from(documentSource.ids):Array.from(state.selectedIds);
-  const description = document.getElementById('gdesc').value.trim();
-  const btn = document.getElementById('gcreate');
-  documentCreationPending=true;
-  btn.disabled = true;
-  try {
-    const r = await api('/api/groups', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title, description, ids }),
-    });
-    if (!r.ok) throw new Error('bad');
-    const created = await r.json();
-    if(!usesSource)state.selectedIds.clear();
-    state.groups = null;
-    state.groupId = created.id;
-    toast('Document created. Add or review its contents below.');
-    await renderGroups();
-  } catch (e) { toast('Could not create group'); }
-  finally { documentCreationPending=false; if (btn.isConnected) updateDocumentCreateButton(); }
-}
-
-async function loadGroups() {
-  const list = document.getElementById('glist');
-  if (!list) return;
-  if (Array.isArray(state.groups)) renderGroupCards(list, state.groups);
-  else list.innerHTML = '<p class="status">Loading your documents...</p>';
-  const r = await api('/api/groups');
-  if (!r.ok) { list.innerHTML = '<p class="status">Could not load.</p>'; return; }
-  const groups = await r.json();
-  state.groups = groups;
-  // The user may have changed sections while this request was running.
-  if (!list.isConnected) return;
-  renderGroupCards(list, groups);
-}
-
-function renderGroupCards(list, groups) {
-  if (!groups.length) { list.innerHTML = '<p class="empty">No documents yet. Select captures in Organize, then create your first document above.</p>'; return; }
-  list.innerHTML = groups.map(g => `
-    <article class="card document-card">
-      <div style="font-weight:bold;font-size:17px">${esc(g.title || 'Untitled group')}</div>
-      ${g.description ? `<div style="margin:4px 0">${esc(g.description)}</div>` : ''}
-      <div class="meta">${g.item_count} photo${g.item_count === 1 ? '' : 's'}${(isIndustryProClient() && g.score != null) ? ` <span class="scorechip" style="background:${scoreColor(g.score)}">Score ${g.score} · ${esc(g.band)}</span>` : ''}</div>
-      <div class="row" style="margin-top:8px">
-        <button class="btn slim gopen" data-id="${g.id}">Edit Document</button>
-        <button class="btn secondary slim" data-id="${g.id}" data-del="1" style="color:var(--pn-text-c1121f,#c1121f)">Delete</button>
-      </div>
-    </article>`).join('');
-  list.querySelectorAll('.gopen').forEach(b => b.onclick = () => { state.groupId = parseInt(b.getAttribute('data-id'), 10); renderGroups(); });
-  list.querySelectorAll('[data-del]').forEach(b => b.onclick = () => deleteGroup(parseInt(b.getAttribute('data-id'), 10)));
-}
+function documentSetupFields(){const l=newDocumentSetup.layout,presets=documentPresets();return `<label class="document-title-field" for="gtitle">Document Title<input id="gtitle" required placeholder="Document title" value="${esc(newDocumentSetup.title)}"></label><label for="gdesc">Document Description (Optional)<textarea id="gdesc" placeholder="Document description">${esc(newDocumentSetup.description)}</textarea></label><div class="document-preset-row"><label for="documentSetupPreset">Document Settings Presets<select id="documentSetupPreset"><option value="">No Preset</option>${presets.map(p=>`<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select></label><p>The default settings are shown below. If a preset is selected, the settings below will show that preset instead.</p></div><section class="new-document-settings"><div class="document-settings-title"><h2>Document Settings</h2><strong>Changes are automatically saved.</strong></div><details><summary>Layout &amp; Style</summary><div class="document-layout-grid"><label>Document Type<select id="newDocumentType"><option value="standard"${l.document_type==='standard'?' selected':''}>Standard Document</option><option value="exhibit"${l.document_type==='exhibit'?' selected':''}>Proposal Exhibit</option></select></label><label>Page Orientation<select id="newDocumentOrientation"><option value="portrait"${l.orientation==='portrait'?' selected':''}>Portrait</option><option value="landscape"${l.orientation==='landscape'?' selected':''}>Landscape</option></select></label><label>Photos per Page<select id="newDocumentPhotoLayout">${[['one_per_page','1'],['two_vertical','2 Vertical'],['two_horizontal','2 Horizontal'],['three_vertical','3 Vertical'],['three_horizontal','3 Horizontal'],['four_per_page','4'],['five_per_page','5'],['six_per_page','6']].map(([v,t])=>`<option value="${v}"${l.photo_layout===v?' selected':''}>${t}</option>`).join('')}</select></label><label>Font<select id="newDocumentFont" class="document-font-select">${['Arial','Helvetica','Aptos','Calibri','Georgia','Times New Roman'].map(f=>`<option style="font-family:${f}"${l.font===f?' selected':''}>${f}</option>`).join('')}</select></label><label>Accent Color <span class="setting-explanation">Used for document headings, lines, and highlights.</span><input id="newDocumentAccent" type="color" value="${esc(l.accent)}"></label><label class="document-layout-check"><input id="newDocumentHeader" type="checkbox"${l.header?' checked':''}> Header</label><label>Header Text<input id="newDocumentHeaderText" value="${esc(l.header_text||'')}"></label><label class="document-layout-check"><input id="newDocumentFooter" type="checkbox"${l.footer?' checked':''}> Footer</label><label>Footer Text<input id="newDocumentFooterText" value="${esc(l.footer_text||'')}"></label><label class="document-layout-check"><input id="newDocumentNumbers" type="checkbox"${l.page_numbers?' checked':''}> Page Numbers (Not Shown on One-Page Documents)</label><label>Page Number Position<select id="newDocumentPagePosition"><option value="bottom_left"${l.page_number_position==='bottom_left'?' selected':''}>Bottom Left</option><option value="bottom_center"${l.page_number_position==='bottom_center'?' selected':''}>Bottom Center</option><option value="bottom_right"${l.page_number_position==='bottom_right'?' selected':''}>Bottom Right</option></select></label></div></details><details><summary>Cover Page (Title Page)</summary><label class="document-layout-check"><input id="newDocumentCover" type="checkbox"${l.cover_page?' checked':''}> Use Cover Page</label><p>Adds a separate title page before the photos.</p><div class="cover-page-options"><h3>Company and Branding</h3><p>The company name and logo appear on the Cover Page.</p><label>Company Name<input id="newDocumentCompany" value="${esc(l.company_name||'')}"></label></div></details><details><summary>Word Template (Optional)</summary><p>Use a Word template when downloaded Word documents should follow an existing company design.</p><ol><li>Download the Word Starter Template.</li><li>Open it in Word and add the company design without removing the PhotoNotes content area.</li><li>Save it and upload the completed template below.</li></ol><a class="btn secondary slim" id="newDocumentStarterTemplate" href="/api/document-settings/template-starter">Download Word Starter Template</a><label>Upload Completed Word Template<input id="newDocumentTemplate" type="file" accept=".docx"></label></details><div class="document-setting-actions"><button class="btn" id="useDocumentSettings">Use for This Document</button><button class="btn secondary" id="saveDefaultSettings">Save as Default and Use for This Document</button><button class="btn secondary" id="savePresetSettings">Save as Preset and Use for This Document</button><button class="btn secondary" id="cancelNewDocument">Cancel</button></div></section><p class="new-document-save-note"><strong>After choosing photos, save the new document.</strong></p>`;}
+function renderNewDocumentSetup(){const body=document.getElementById('body');body.className='workflow-create';body.innerHTML=`<div class="create-heading"><h1>Create Document</h1></div><section class="new-document-setup">${documentSetupFields()}</section>`;wireNewDocumentSetup();}
+function readNewDocumentSetup(){const l=newDocumentSetup.layout;newDocumentSetup.title=document.getElementById('gtitle').value;newDocumentSetup.description=document.getElementById('gdesc').value;l.document_type=document.getElementById('newDocumentType').value;l.orientation=document.getElementById('newDocumentOrientation').value;l.photo_layout=document.getElementById('newDocumentPhotoLayout').value;l.font=document.getElementById('newDocumentFont').value;l.accent=document.getElementById('newDocumentAccent').value;l.header=document.getElementById('newDocumentHeader').checked;l.header_text=document.getElementById('newDocumentHeaderText').value;l.footer=document.getElementById('newDocumentFooter').checked;l.footer_text=document.getElementById('newDocumentFooterText').value;l.page_numbers=document.getElementById('newDocumentNumbers').checked;l.page_number_position=document.getElementById('newDocumentPagePosition').value;l.cover_page=document.getElementById('newDocumentCover').checked;l.company_name=document.getElementById('newDocumentCompany').value;}
+function validateNewDocumentTitle(){readNewDocumentSetup();if(!newDocumentSetup.title.trim()){toast('Enter a document title.');document.getElementById('gtitle').focus();return false;}return true;}
+function wireNewDocumentSetup(){const sections=[...document.querySelectorAll('.new-document-settings details')];sections.forEach(section=>section.ontoggle=()=>{if(section.open)sections.forEach(other=>{if(other!==section)other.open=false;});});document.querySelectorAll('.new-document-setup input,.new-document-setup textarea,.new-document-setup select').forEach(el=>{if(el.id!=='documentSetupPreset'&&el.id!=='newDocumentTemplate')el.oninput=readNewDocumentSetup;});document.getElementById('documentSetupPreset').onchange=e=>{const p=documentPresets().find(p=>p.id===e.target.value);if(p){const title=newDocumentSetup.title,description=newDocumentSetup.description;newDocumentSetup={title,description,layout:structuredClone(p.layout)};renderGroups();}};document.getElementById('newDocumentTemplate').onchange=e=>newDocumentSetup.template=e.target.files[0]||null;const next=()=>{if(!validateNewDocumentTitle())return;documentCreateStep='photos';renderGroups();};document.getElementById('useDocumentSettings').onclick=next;document.getElementById('saveDefaultSettings').onclick=()=>{if(!validateNewDocumentTitle())return;writeDocumentSetting('default',{title:'',description:'',layout:structuredClone(newDocumentSetup.layout)});toast('Default document settings saved.');next();};document.getElementById('savePresetSettings').onclick=()=>{if(!validateNewDocumentTitle())return;const name=prompt(uiT('Preset name:'));if(!name?.trim())return;const rows=documentPresets();rows.push({id:crypto.randomUUID(),name:name.trim(),layout:structuredClone(newDocumentSetup.layout)});writeDocumentSetting('presets',rows);toast('Document settings preset saved.');next();};document.getElementById('cancelNewDocument').onclick=()=>{documentCreateStep='list';renderGroups();};}
+async function renderNewDocumentPhotos(){const body=document.getElementById('body');body.className='workflow-create';body.innerHTML=`<div class="create-heading"><h1>Choose Photos</h1></div><div class="document-photo-toolbar"><input id="newDocumentPhotoSearch" type="search" placeholder="Search PhotoNotes and details"><button class="btn secondary slim" id="selectAllDocumentPhotos">Select All</button><button class="btn secondary slim" id="clearDocumentPhotos">Clear All</button></div><div id="newDocumentPhotoList" class="document-source-photos"><p class="status">Loading PhotoNotes...</p></div><div class="new-document-final-actions"><button class="btn secondary" id="backDocumentSetup">Back to Document Setup</button><button class="btn" id="gcreate" disabled>Save New Document</button></div>`;document.getElementById('backDocumentSetup').onclick=()=>{documentCreateStep='setup';renderGroups();};document.getElementById('gcreate').onclick=createGroup;try{const r=await api('/api/captures');if(!r.ok)throw Error();newDocumentPhotos=(await r.json()).filter(p=>p.photo_path);if(!newDocumentPhotoIds.size)for(const id of state.selectedIds)newDocumentPhotoIds.add(String(id));renderNewDocumentPhotoList();document.getElementById('newDocumentPhotoSearch').oninput=renderNewDocumentPhotoList;document.getElementById('selectAllDocumentPhotos').onclick=()=>{for(const p of visibleNewDocumentPhotos())newDocumentPhotoIds.add(String(p.id));renderNewDocumentPhotoList();};document.getElementById('clearDocumentPhotos').onclick=()=>{newDocumentPhotoIds.clear();renderNewDocumentPhotoList();};}catch{document.getElementById('newDocumentPhotoList').innerHTML='<p class="status">PhotoNotes could not be loaded. Return and try again.</p>';}}
+function visibleNewDocumentPhotos(){const q=document.getElementById('newDocumentPhotoSearch')?.value.toLowerCase()||'';return newDocumentPhotos.filter(p=>`${p.photo_title||''} ${p.note||''} ${p.address||''}`.toLowerCase().includes(q));}
+function renderNewDocumentPhotoList(){const box=document.getElementById('newDocumentPhotoList');if(!box)return;const photos=visibleNewDocumentPhotos();box.innerHTML=photos.length?photos.map(p=>`<label class="document-source-photo"><input type="checkbox" data-document-source-photo="${p.id}"${newDocumentPhotoIds.has(String(p.id))?' checked':''}><img loading="lazy" src="${capturePhotoSrc(p)}" alt="${esc(p.photo_title||'PhotoNote')}"><span><strong>${esc(p.photo_title||'PhotoNote')}</strong><br>${esc(p.note||'')}</span></label>`).join(''):'<p class="empty">No PhotoNotes match this search.</p>';box.querySelectorAll('[data-document-source-photo]').forEach(input=>input.onchange=()=>{if(input.checked)newDocumentPhotoIds.add(input.dataset.documentSourcePhoto);else newDocumentPhotoIds.delete(input.dataset.documentSourcePhoto);updateNewDocumentSave();});updateNewDocumentSave();}
+function updateNewDocumentSave(){const button=document.getElementById('gcreate');if(button)button.disabled=documentCreationPending||!newDocumentPhotoIds.size;}
+async function createGroup(){if(documentCreationPending||!newDocumentSetup?.title.trim()||!newDocumentPhotoIds.size)return;const btn=document.getElementById('gcreate');documentCreationPending=true;btn.disabled=true;try{const r=await api('/api/groups',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:newDocumentSetup.title.trim(),description:newDocumentSetup.description.trim(),ids:[...newDocumentPhotoIds],layout:newDocumentSetup.layout})});const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.error||'Could not save document');if(newDocumentSetup.template){const fd=new FormData();fd.append('template',newDocumentSetup.template);fd.append('group',String(d.id));await api('/api/document-settings/template',{method:'POST',body:fd});}state.selectedIds.clear();newDocumentPhotoIds.clear();state.groups=null;state.groupId=d.id;documentCreateStep='list';toast('New document saved.');renderGroups();}catch(e){toast(e.message||'Could not save document');}finally{documentCreationPending=false;if(btn.isConnected)updateNewDocumentSave();}}
+async function loadGroups(){const list=document.getElementById('glist');if(!list)return;const r=await api('/api/groups');if(!r.ok){list.innerHTML='<p class="status">Could not load documents.</p>';return;}state.groups=await r.json();if(list.isConnected)renderGroupCards(list,state.groups);}
+function renderGroupCards(list,groups){const rows=sortedDocuments(groups);if(!rows.length){list.innerHTML='<p class="empty">No matching documents.</p>';return;}list.innerHTML=`<ul class="compact-document-list">${rows.map(g=>`<li><div><strong>${esc(g.title)}</strong><span>${g.item_count} PhotoNote${g.item_count===1?'':'s'} · Last Modified: ${esc(documentModifiedLabel(g))}</span></div><button class="btn secondary slim gopen" data-id="${g.id}">Open Document</button></li>`).join('')}</ul>`;list.querySelectorAll('.gopen').forEach(b=>b.onclick=()=>{state.groupId=Number(b.dataset.id);renderGroups();});}
+async function deleteGroup(id){if(!confirm(uiT('Delete this document? The photos themselves are kept.')))return;const r=await api(`/api/groups/${id}/delete`,{method:'POST'});if(r.ok){toast('Document deleted');loadGroups();}else toast('Delete failed');}
 
 // Condition-score color: green good -> red failed (pins/badges only, never text).
 function scoreColor(score) {
@@ -4630,7 +4542,8 @@ function renderEwrView(body, data) {
   });
 }
 
-function normalizedDocumentLayout(){return{cover_page:true,header:true,footer:true,page_numbers:true,font:'Arial',photo_layout:'one_per_page',accent:'#1d4ed8',...(currentGroup&&currentGroup.layout||{})};}
+function normalizedDocumentLayout(){return{document_type:'standard',orientation:'portrait',cover_page:false,header:false,footer:false,page_numbers:true,page_number_position:'bottom_right',font:'Arial',photo_layout:'four_per_page',accent:'#1d4ed8',header_text:'',footer_text:'',company_name:'',...(currentGroup&&currentGroup.layout||{})};}
+function documentPhotosPerPage(layout){return({one_per_page:1,two_vertical:2,two_horizontal:2,two_per_page:2,three_vertical:3,three_horizontal:3,four_per_page:4,five_per_page:5,six_per_page:6})[layout?.photo_layout]||4;}
 function renderDocumentSetup(){
   const box=document.getElementById('documentSetup');if(!box)return;const b=currentDocumentSettings.branding||{};
   box.innerHTML=`
@@ -4657,19 +4570,22 @@ async function saveDocumentBranding(){const payload={company_name:document.getEl
 async function uploadDocumentAsset(kind,file){if(!file)return;const fd=new FormData();fd.append(kind,file);fd.append('group',String(currentGroup.id));const r=await api(`/api/document-settings/${kind}`,{method:'POST',body:fd});const d=await r.json().catch(()=>({}));if(!r.ok){toast(d.error||'Upload failed');return;}if(kind==='logo'){currentDocumentSettings.logo_path=d.logo_path;currentDocumentSettings.logo_name=d.logo_name;}else{currentDocumentSettings.template_name=d.template_name;currentDocumentSettings.template_ready=true;}toast(kind==='logo'?'Logo uploaded':'Word template imported');renderDocumentSetup();renderDocumentPreview();}
 async function removeDocumentAsset(kind){const r=await api('/api/document-settings/remove-asset',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({kind,group:currentGroup.id})});if(!r.ok){toast('Remove failed');return;}if(kind==='logo'){currentDocumentSettings.logo_path=null;currentDocumentSettings.logo_name=null;}else{currentDocumentSettings.template_name=null;currentDocumentSettings.template_ready=false;}renderDocumentSetup();renderDocumentPreview();toast(kind==='logo'?'Logo removed':'Template removed');}
 function renderDocumentLayoutControls(){const box=document.getElementById('documentLayoutControls');if(!box)return;const l=normalizedDocumentLayout();box.innerHTML=`<div class="document-layout-grid">
-  <label>Typeface<select id="documentFont">${['Arial','Aptos','Calibri','Georgia','Times New Roman'].map(f=>`<option${l.font===f?' selected':''}>${f}</option>`).join('')}</select></label>
-  <label>Photo Arrangement<select id="documentPhotoLayout"><option value="one_per_page"${l.photo_layout==='one_per_page'?' selected':''}>One photo per page</option><option value="two_per_page"${l.photo_layout==='two_per_page'?' selected':''}>Two photos per page</option></select></label>
-  <label>Accent Color<input type="color" id="documentAccent" value="${esc(l.accent)}"></label>
+  <label>Document Type<select id="documentType"><option value="standard"${l.document_type==='standard'?' selected':''}>Standard Document</option><option value="exhibit"${l.document_type==='exhibit'?' selected':''}>Proposal Exhibit</option></select></label>
+  <label>Page Orientation<select id="documentOrientation"><option value="portrait"${l.orientation==='portrait'?' selected':''}>Portrait</option><option value="landscape"${l.orientation==='landscape'?' selected':''}>Landscape</option></select></label>
+  <label>Font<select id="documentFont" class="document-font-select">${['Arial','Helvetica','Aptos','Calibri','Georgia','Times New Roman'].map(f=>`<option style="font-family:${f}"${l.font===f?' selected':''}>${f}</option>`).join('')}</select></label>
+  <label>Photos per Page<select id="documentPhotoLayout">${[['one_per_page','1'],['two_vertical','2 Vertical'],['two_horizontal','2 Horizontal'],['three_vertical','3 Vertical'],['three_horizontal','3 Horizontal'],['four_per_page','4'],['five_per_page','5'],['six_per_page','6']].map(([v,t])=>`<option value="${v}"${l.photo_layout===v?' selected':''}>${t}</option>`).join('')}</select></label>
+  <label>Accent Color <span class="setting-explanation">Used for document headings, lines, and highlights.</span><input type="color" id="documentAccent" value="${esc(l.accent)}"></label>
   <label class="document-layout-check"><input type="checkbox" id="documentCover"${l.cover_page?' checked':''}> Cover page</label>
   <label class="document-layout-check"><input type="checkbox" id="documentHeader"${l.header?' checked':''}> Header</label>
   <label class="document-layout-check"><input type="checkbox" id="documentFooter"${l.footer?' checked':''}> Footer</label>
-  <label class="document-layout-check"><input type="checkbox" id="documentPageNumbers"${l.page_numbers?' checked':''}> Page numbers</label>
+  <label class="document-layout-check"><input type="checkbox" id="documentPageNumbers"${l.page_numbers?' checked':''}> Page Numbers (Not Shown on One-Page Documents)</label>
+  <label>Page Number Position<select id="documentPagePosition"><option value="bottom_left"${l.page_number_position==='bottom_left'?' selected':''}>Bottom Left</option><option value="bottom_center"${l.page_number_position==='bottom_center'?' selected':''}>Bottom Center</option><option value="bottom_right"${l.page_number_position==='bottom_right'?' selected':''}>Bottom Right</option></select></label>
   </div><button class="btn slim document-compact-action" id="saveDocumentLayout">Save Layout</button>`;document.getElementById('saveDocumentLayout').onclick=saveDocumentLayout;box.querySelectorAll('input,select').forEach(el=>el.onchange=renderDocumentPreviewFromControls);}
-function layoutFromControls(){return{cover_page:document.getElementById('documentCover').checked,header:document.getElementById('documentHeader').checked,footer:document.getElementById('documentFooter').checked,page_numbers:document.getElementById('documentPageNumbers').checked,font:document.getElementById('documentFont').value,photo_layout:document.getElementById('documentPhotoLayout').value,accent:document.getElementById('documentAccent').value};}
+function layoutFromControls(){const prior=normalizedDocumentLayout();return{...prior,document_type:document.getElementById('documentType').value,orientation:document.getElementById('documentOrientation').value,cover_page:document.getElementById('documentCover').checked,header:document.getElementById('documentHeader').checked,footer:document.getElementById('documentFooter').checked,page_numbers:document.getElementById('documentPageNumbers').checked,page_number_position:document.getElementById('documentPagePosition').value,font:document.getElementById('documentFont').value,photo_layout:document.getElementById('documentPhotoLayout').value,accent:document.getElementById('documentAccent').value};}
 function renderDocumentPreviewFromControls(){renderDocumentPreview(layoutFromControls());}
 async function saveDocumentLayout(){const layout=layoutFromControls(),r=await api(`/api/groups/${currentGroup.id}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({layout})});if(r.ok){currentGroup.layout=layout;toast('Layout saved');renderDocumentPreview(layout);}else toast('Layout could not be saved');}
 function documentPreviewItems(){return currentGroupItems;}
-function renderDocumentPreview(layoutOverride){const box=document.getElementById('documentPreview');if(!box)return;if(currentDocumentSettings.template_ready&&window.PhotoNotesWordPreview){const target=document.createElement('div');box.replaceChildren(target);window.PhotoNotesWordPreview.render(target,currentGroup.id);return;}const l=layoutOverride||normalizedDocumentLayout(),b=window.PhotoNotesExportPresets?.previewBranding()||currentDocumentSettings.branding||{},perPage=l.photo_layout==='two_per_page'?2:1,pages=[],previewItems=documentPreviewItems();const used=new Set(),byId=new Map(previewItems.map(c=>[Number(c.id),c]));let pending=[];const flush=()=>{if(pending.length){pages.push(pending);pending=[];}};for(const c of previewItems){if(used.has(Number(c.id)))continue;const pair=currentGroupPairs.find(p=>(Number(p.before_id)===Number(c.id)||Number(p.after_id)===Number(c.id))&&byId.has(Number(p.before_id))&&byId.has(Number(p.after_id)));if(pair){flush();const page=[byId.get(Number(pair.before_id)),byId.get(Number(pair.after_id))];page.isPair=true;pages.push(page);page.forEach(c=>used.add(Number(c.id)));}else{pending.push(c);used.add(Number(c.id));if(pending.length===perPage)flush();}}flush();let pageNo=0;const chrome=(content)=>{pageNo++;return `<article class="document-preview-page" style="font-family:${esc(l.font)}"><div class="document-preview-header">${l.header?esc(b.header_text||b.company_name||''):''}</div><div class="document-preview-content">${content}</div><div class="document-preview-footer">${l.footer?esc(b.footer_text||''):''}${l.page_numbers?`${l.footer&&b.footer_text?' · ':''}Page ${pageNo}`:''}</div></article>`;};let html='';if(l.cover_page)html+=chrome(`<div class="document-preview-cover">${currentDocumentSettings.logo_path&&window.PhotoNotesExportPresets?.includeLogo()!==false?`<img src="${esc(currentDocumentSettings.logo_path)}" alt="Company logo">`:''}<div class="document-preview-company" style="color:${esc(l.accent)}">${esc(b.company_name||'')}</div><h2>${esc(currentGroup.title||'Untitled Document')}</h2><p>${esc(currentGroup.description||'')}</p></div>`);if(!pages.length)html+=chrome(`<div class="document-preview-empty">Add photos from Organize to preview the document.</div>`);for(const page of pages)html+=chrome(`<div class="document-preview-photos ${perPage===2||page.isPair?'two-up':''}">${page.map((c,index)=>`<section>${page.isPair?`<strong>${index===0?'BEFORE':'AFTER'}</strong>`:''}<h3>${esc(String(c.photo_title||'').trim()?c.photo_title:'Photo '+(previewItems.indexOf(c)+1))}</h3>${c.photo_path?`<img src="${capturePhotoSrc(c)}" alt="${esc(c.photo_title||'Photo')}">`:''}${photoLocationHtml(c)}<div>${esc(new Date(c.created_at).toLocaleString(uiLocale()))}</div><div>${esc((c.area_tags||[]).join(', '))}</div>${c.gauge_record?.generated_note?'':`<p>${esc(c.note||'No notes')}</p>`}${photoEvidencePreview(c,true)}${window.PhotoNotesCustomFields?.html(c)||''}</section>`).join('')}</div>`);box.innerHTML=html;}
+function renderDocumentPreview(layoutOverride){const box=document.getElementById('documentPreview');if(!box)return;if(currentDocumentSettings.template_ready&&window.PhotoNotesWordPreview){const target=document.createElement('div');box.replaceChildren(target);window.PhotoNotesWordPreview.render(target,currentGroup.id);return;}const l=layoutOverride||normalizedDocumentLayout(),b=window.PhotoNotesExportPresets?.previewBranding()||currentDocumentSettings.branding||{},perPage=documentPhotosPerPage(l),pages=[],previewItems=documentPreviewItems();const used=new Set(),byId=new Map(previewItems.map(c=>[Number(c.id),c]));let pending=[];const flush=()=>{if(pending.length){pages.push(pending);pending=[];}};for(const c of previewItems){if(used.has(Number(c.id)))continue;const pair=currentGroupPairs.find(p=>(Number(p.before_id)===Number(c.id)||Number(p.after_id)===Number(c.id))&&byId.has(Number(p.before_id))&&byId.has(Number(p.after_id)));if(pair){flush();const page=[byId.get(Number(pair.before_id)),byId.get(Number(pair.after_id))];page.isPair=true;pages.push(page);page.forEach(c=>used.add(Number(c.id)));}else{pending.push(c);used.add(Number(c.id));if(pending.length===perPage)flush();}}flush();const totalPreviewPages=pages.length+(l.cover_page?1:0)||1;let pageNo=0;const chrome=(content)=>{pageNo++;return `<article class="document-preview-page ${l.orientation==='landscape'?'landscape':''}" style="font-family:${esc(l.font)}"><div class="document-preview-header">${l.header?esc(b.header_text||b.company_name||''):''}</div><div class="document-preview-content">${content}</div><div class="document-preview-footer">${l.footer?esc(b.footer_text||''):''}${l.page_numbers&&totalPreviewPages>1?`${l.footer&&b.footer_text?' · ':''}Page ${pageNo}`:''}</div></article>`;};let html='';if(l.cover_page)html+=chrome(`<div class="document-preview-cover">${currentDocumentSettings.logo_path&&window.PhotoNotesExportPresets?.includeLogo()!==false?`<img src="${esc(currentDocumentSettings.logo_path)}" alt="Company logo">`:''}<div class="document-preview-company" style="color:${esc(l.accent)}">${esc(b.company_name||'')}</div><h2>${esc(currentGroup.title||'Untitled Document')}</h2><p>${esc(currentGroup.description||'')}</p></div>`);if(!pages.length)html+=chrome(`<div class="document-preview-empty">Add photos from Organize to preview the document.</div>`);for(const page of pages)html+=chrome(`<div class="document-preview-photos photos-${page.isPair?2:perPage} ${page.isPair?'two-up':''}">${page.map((c,index)=>`<section>${page.isPair?`<strong>${index===0?'BEFORE':'AFTER'}</strong>`:''}<h3>${esc(String(c.photo_title||'').trim()?c.photo_title:'Photo '+(previewItems.indexOf(c)+1))}</h3>${c.photo_path?`<img src="${capturePhotoSrc(c)}" alt="${esc(c.photo_title||'Photo')}">`:''}${photoLocationHtml(c)}<div>${esc(new Date(c.created_at).toLocaleString(uiLocale()))}</div><div>${esc((c.area_tags||[]).join(', '))}</div>${c.gauge_record?.generated_note?'':`<p>${esc(c.note||'No notes')}</p>`}${photoEvidencePreview(c,true)}${window.PhotoNotesCustomFields?.html(c)||''}</section>`).join('')}</div>`);box.innerHTML=html;}
 
 function renderTitleView() {
   const box = document.getElementById('titleview');

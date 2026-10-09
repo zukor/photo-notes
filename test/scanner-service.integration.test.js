@@ -113,7 +113,7 @@ test('scanner routes retain photos, extract fields, save reviews and report serv
   let listed=await(await request('/api/captures')).json();assert.equal(listed.find(c=>c.id===capture.id).footprints.length,1);assert.equal(listed.find(c=>c.id===linked.capture_id).gauge_record.fields.reading,'83');
   const edited=await request('/api/camera-readings/'+gauge.id,{title:'Thermometer',fields:{...fields,reading:'84'}});assert.equal(edited.status,200);
   assert.match((await pool.query('SELECT note FROM captures WHERE id=$1',[linked.capture_id])).rows[0].note,/Reading: 84/);
-  const group=await(await request('/api/groups',{title:'LINKED SOURCE REPORT'})).json();await request('/api/groups/'+group.id+'/add',{ids:[capture.id,linked.capture_id]});
+  const group=await(await request('/api/groups',{title:'LINKED SOURCE REPORT',ids:[capture.id,linked.capture_id]})).json();
   const document=await(await request('/api/groups/'+group.id)).json();assert.equal(document.items.find(c=>c.id===capture.id).footprints[0].name,'SOURCE AREA');
   for(const format of ['pdf','docx']){const r=await request('/api/export/'+format+'?group='+group.id);assert.equal(r.status,200);const bytes=Buffer.from(await r.arrayBuffer());let text;if(format==='docx')text=new(require('pizzip'))(bytes).file('word/document.xml').asText();else{const file=path.join(os.tmpdir(),'pn-linked-source.pdf');fs.writeFileSync(file,bytes);text=require('node:child_process').execFileSync('pdftotext',[file,'-'],{encoding:'utf8'});}for(const value of ['SOURCE AREA','1,200','AREA SOURCE NOTE','GAUGE SOURCE','84','LONG SOURCE NOTE'])assert(text.includes(value),format+': '+value);}
   // User-authored notes survive scanner corrections.
