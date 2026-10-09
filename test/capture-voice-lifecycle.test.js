@@ -61,7 +61,7 @@ test('Android empty sessions stop after three attempts instead of looping foreve
 });
 
 test('Safari completed recognizer is released on the next user tap, after final results',async()=>{
- const h=harness({exclusive:true,retainOnEnd:true,abortEvents:true});
+ const h=harness({exclusive:true,abortEvents:true});
  for(let i=0;i<10;i++){await h.run('toggleDictation()');const s=h.sessions.at(-1);assert.equal(h.run('dictationActive'),true);s.onresult({results:[[{transcript:'Recording '+i}]]});const stopping=h.run('toggleDictation()');s.onend();await stopping;assert.notEqual(s.aborted,true);}
- assert.equal(h.sessions.length,10);for(const s of h.sessions.slice(0,-1))assert.equal(s.aborted,true);assert(h.elements.note.value.includes('Recording 9'));
+ assert.equal(h.sessions.length,10);for(const s of h.sessions.slice(0,-1))assert.notEqual(s.aborted,true);assert(h.elements.note.value.includes('Recording 9'));
 });

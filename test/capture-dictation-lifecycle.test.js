@@ -43,3 +43,10 @@ test('terminal speech errors release controls even when Safari never emits onend
   await h.run('toggleDictation()');assert.equal(h.sessions.length,2);h.sessions[0].onend();assert.equal(h.run('dictationActive'),true);
  }
 });
+
+test('an ended iPhone session is released without aborting it before the next recording',async()=>{
+ const h=harness();await h.run('toggleDictation()');const first=h.sessions[0];let aborts=0;first.abort=()=>{aborts++;};
+ h.result('first phrase');first.onend();await h.run('toggleDictation()');assert.equal(aborts,0,'do not reset an already-ended browser speech service');
+ assert.equal(h.sessions.length,2);first.onend();assert.equal(h.run('dictationActive'),true,'old completion cannot stop the new recording');
+ h.result('second phrase');h.sessions[1].onend();assert.equal(h.elements.note.value,'Existing note first phrase second phrase');
+});
