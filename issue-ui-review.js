@@ -1,6 +1,7 @@
 const retestGuidance=require('./public/issue-retest-guidance');
 const {isSuperAdmin}=require('./super-admin');
 // Only a recorded owner approval admits an improvement idea to the implementation worker.
+function approvedImplementation(row){return ['ui_improvement','feature_improvement','new_feature'].includes(row.issue_type)&&row.review_decision==='implement'&&!!row.reviewed_by&&!!String(row.implementation_instructions||'').trim();}
 function eligibleIssueSql(alias=''){
  const p=alias?alias+'.':'';
  return `(${p}issue_type='bug_problem' OR (${p}issue_type IN ('ui_improvement','feature_improvement','new_feature') AND ${p}review_decision='implement' AND ${p}reviewed_by IS NOT NULL AND length(trim(COALESCE(${p}implementation_instructions,'')))>0))`;
@@ -28,4 +29,4 @@ function registerUiReview(app,{pool,requireAuth}){
   }catch(e){await c.query('ROLLBACK');console.error('[ui-review]',e.message);res.status(500).json({error:'Decision could not be saved'});}finally{c.release();}
  });
 }
-module.exports={eligibleIssueSql,registerUiReview};
+module.exports={eligibleIssueSql,registerUiReview,approvedImplementation};
