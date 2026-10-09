@@ -19,6 +19,24 @@ const {chromium,webkit}=require('playwright');
     await page.waitForFunction(()=>{const r=document.querySelector('.pn-help-drawer').getBoundingClientRect();return r.x>=-1&&r.right<=innerWidth+1;});
     const drawer=await page.locator('.pn-help-drawer').boundingBox();assert(drawer.x>=-1&&drawer.x+drawer.width<=width+1);
     assert.equal(await page.locator('#pnHelpSearch').evaluate(n=>getComputedStyle(n).color),'rgb(0, 0, 0)');
+    if(view==='capture'){
+     await page.locator('[data-pn-help-scope="general"]').click();
+     await page.locator('#pnHelpSearch').fill('');
+     const titles=await page.locator('.pn-help-article summary').allTextContents();
+     const pro=!['basic','issue','roads'].includes(edition);
+     assert.equal(titles.includes('Custom Fields and Additional Details'),pro,edition+' shared workflow guidance');
+     assert.equal(titles.includes('Document Damage / Incident'),edition==='property',edition+' incident availability');
+     assert.equal(titles.includes('Property Areas, routes and photographic history'),['hoa','property'].includes(edition),edition+' property availability');
+     assert.equal(titles.includes('Concrete photo analysis and review'),edition==='concrete',edition+' analysis availability');
+     if(pro){
+      await page.locator('#pnHelpSearch').fill('Related Photos');assert(await page.locator('.pn-help-article').count()>0);
+      await page.evaluate(()=>{state.me.feature_access={camera_readers:false};PhotoNotesHelp.refresh();});
+      await page.locator('#pnHelpSearch').fill('');assert(!(await page.locator('.pn-help-article summary').allTextContents()).includes('Camera Readers and Scanners'));
+      await page.evaluate(()=>{state.me.feature_access={};PhotoNotesHelp.refresh();});
+      assert.equal((await page.locator('.pn-help-article summary').allTextContents()).includes('Camera Readers and Scanners'),edition!=='general');
+     }
+     await page.locator('[data-pn-help-scope="page"]').click();
+    }
     await page.locator('#pnHelpClose').click();assert.equal(await help.getAttribute('aria-expanded'),'false');
    }
   }
