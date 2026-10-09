@@ -553,7 +553,7 @@ function speechRetestEvidence(notes) {
   try {
     const history=JSON.parse(localStorage.getItem('photoNotesSpeechDiagnostics')||'[]');
     if(!Array.isArray(history))return notes;
-    const recent=history.filter(e=>e&&Date.now()-Date.parse(e.at)<3600000).slice(-30).map(e=>({at:e.at,version:e.version,event:e.event,generation:e.generation,active:e.active,pending:e.pending,finishing:e.finishing,mode:e.mode}));
+    const recent=history.filter(e=>e&&Date.now()-Date.parse(e.at)<3600000).slice(-30).map(e=>({at:e.at,version:e.version,event:e.event,generation:e.generation,active:e.active,pending:e.pending,finishing:e.finishing,mode:e.mode,...(['error','start-error','stop-error','permission-error'].includes(e.event)&&['aborted','no-speech','audio-capture','network','not-allowed','service-not-allowed','language-not-supported','InvalidStateError','NotAllowedError','NotFoundError','NotReadableError'].includes(e.detail)?{error:e.detail}:{})}));
     const heading='\n\nSpeech event diagnostics (no note text or audio):\n';
     while(recent.length&&notes.length+heading.length+JSON.stringify(recent).length>5000)recent.shift();
     return recent.length?notes+heading+JSON.stringify(recent):notes;
