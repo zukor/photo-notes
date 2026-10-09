@@ -39,7 +39,7 @@ async function run(feature, args, overrides = {}, timeout = 180000) {
 const browserSuites = [
  'automation-edition-browser','proposal-exhibit','capture-draft-recovery','issue-report-display',
  'complete-help','admin-help','all-edition-help','shared-workflow-parity','location-intelligence',
- 'investigation-repairs','linked-photo-records','shared-camera-readers','specialist-scanner-reports','capture-voice','issue-completion-browser','issue-result-screenshot','sticky-workflow-menu','batch-annotations-browser','custom-annotation-templates','document-title','document-photo-source','crop-context-browser','testing-dashboard','record-notes-check','capture-templates','property-incidents',
+ 'investigation-repairs','linked-photo-records','shared-camera-readers','specialist-scanner-reports','capture-voice','issue-completion-browser','issue-result-screenshot','sticky-workflow-menu','batch-annotations-browser','custom-annotation-templates','document-title','create-photo-filters','document-photo-source','crop-context-browser','testing-dashboard','record-notes-check','capture-templates','property-incidents',
  'property-incident-report','property-terminology','photo-markers','send-shortcuts','send-photo-selection','send-photo-filters','review-share-organize','capture-job-library',
  'visual-analysis-browser','photo-requests-browser','qr-codes-browser','related-photos-browser',
  'photo-comments-browser','photo-comments-app','bulk-metadata-browser','custom-fields-browser',
