@@ -1470,7 +1470,10 @@ function startDictationSession(SR) {
   if (!dictationActive) return;
   const noteEl = document.getElementById('note');
   let session;const ios=isIOS();
-  try{if(ios&&iosDictationSession){const completed=iosDictationSession;iosDictationSession=null;iosDictationConstructor=null;try{completed.abort();recordDictationEvent('completed-session-reset');}catch{}}session=new SR();if(ios){iosDictationSession=session;iosDictationConstructor=SR;}}catch(error){cleanupDictation();const status=document.getElementById('dictationStatus');if(status)status.textContent='Speech could not start. Use the keyboard microphone to dictate your notes.';return;}
+  // The prior session has ended. Aborting it here can reset Safari's shared
+  // speech service just as the next session starts. Active cancellation still
+  // aborts through stopCaptureDictation; completed sessions are only released.
+  try{if(ios&&iosDictationSession){iosDictationSession=null;iosDictationConstructor=null;recordDictationEvent('completed-session-released');}session=new SR();if(ios){iosDictationSession=session;iosDictationConstructor=SR;}}catch(error){cleanupDictation();const status=document.getElementById('dictationStatus');if(status)status.textContent='Speech could not start. Use the keyboard microphone to dictate your notes.';return;}
   const generation=++dictationGeneration, photoForSession=state.photoFile;
   recognizer = session;
   session.lang = uiSpeechLanguage();
@@ -1556,7 +1559,7 @@ function startDictationSession(SR) {
       dictationRestartTimer=setTimeout(()=>startDictationSession(SR),300);
     } else {
       cleanupDictation();
-      // Reuse the ended Safari recognizer on the next tap. Aborting an already
+      // Release the ended Safari recognizer on the next tap. Aborting an already
       // ended session can invalidate the browser's underlying speech service.
       if(ios){if(sessionError&&!['aborted','no-speech'].includes(sessionError)){iosDictationSession=null;iosDictationConstructor=null;}recordDictationEvent('session-ready');}
     }
