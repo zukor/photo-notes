@@ -91,6 +91,7 @@ async function openIssueReporter(testingContext=null) {
   document.getElementById('issueClose').onclick=closeIssueReporter;
   document.getElementById('issueRecord').onclick=toggleIssueDictation;
   document.getElementById('issueSend').onclick=submitIssueReport;
+  document.getElementById('issueResultChoose').onclick=()=>document.getElementById('issueResultScreenshot').click();
   document.getElementById('issueResultScreenshot').onchange=selectIssueResultScreenshot;
   document.getElementById('issueResultRemove').onclick=clearIssueResultScreenshot;
   if(issueTestingContext){document.getElementById('issueDescription').value=issueTestingContext.notes||'';}
@@ -124,6 +125,7 @@ function clearIssueResultScreenshot(resetInput=true){
   const input=document.getElementById('issueResultScreenshot');if(input&&resetInput)input.value='';
   const preview=document.getElementById('issueResultPreview');if(preview){preview.removeAttribute('src');preview.hidden=true;}
   const remove=document.getElementById('issueResultRemove');if(remove)remove.hidden=true;
+  const filename=document.getElementById('issueResultFilename');if(filename)filename.textContent=uiPushText('No result screenshot selected.');
   const status=document.getElementById('issueResultStatus');if(status)status.textContent='';
 }
 async function selectIssueResultScreenshot(){
@@ -135,6 +137,7 @@ async function selectIssueResultScreenshot(){
   try{
     await image.decode();if(selection!==issueResultSelection||generation!==issueGeneration){URL.revokeObjectURL(url);return;}
     if(image.naturalWidth*image.naturalHeight>40000000)throw Error('Image too large');
+    document.getElementById('issueResultFilename').textContent=file.name;
     issueResultFile=file;issueResultURL=url;const preview=document.getElementById('issueResultPreview');preview.src=url;preview.hidden=false;
     document.getElementById('issueResultRemove').hidden=false;status.textContent=uiPushText('Result screenshot attached.');
   }catch{URL.revokeObjectURL(url);if(selection===issueResultSelection&&generation===issueGeneration)status.textContent=uiPushText('This screenshot could not be read. Choose another image.');}
@@ -278,7 +281,7 @@ function issueReporterMarkup(){return `<a id="issueUpdates" class="issue-updates
         <label for="issueFrequency">How often does it happen?</label>
         <select id="issueFrequency"><option value="">Choose one</option><option>Every time</option><option>Sometimes</option><option>Only happened once</option><option>Not sure</option></select>
         <section class="issue-evidence"><h3>Page screenshot</h3>${typeof IssueMarkup!=='undefined'?IssueMarkup.markup():''}<div class="issue-screenshot-scroll"><img id="issueScreenshot" alt="Screenshot of the page being reported" hidden></div><div class="status" id="issueShotStatus" role="status"></div></section>
-        <section class="issue-evidence"><h3>Result Screenshot (optional)</h3><p>Attach a screenshot of the downloaded document, saved photo, or result received in another app. The page screenshot above is kept separately.</p><label for="issueResultScreenshot">Choose Result Screenshot</label><input id="issueResultScreenshot" type="file" accept="image/jpeg,image/png,image/webp"><p>JPEG, PNG, or WebP, up to 8 MB. Annotated screenshots are welcome.</p><img id="issueResultPreview" alt="Preview of the result screenshot" hidden style="max-width:100%;height:auto"><button class="btn secondary" id="issueResultRemove" type="button" hidden>Remove Result Screenshot</button><div id="issueResultStatus" class="status" role="status" aria-live="polite"></div></section>
+        <section class="issue-evidence"><h3>Result Screenshot (optional)</h3><p>Attach a screenshot of the downloaded document, saved photo, or result received in another app. The page screenshot above is kept separately.</p><button class="btn secondary" id="issueResultChoose" type="button">Choose Result Screenshot</button><input id="issueResultScreenshot" type="file" accept="image/jpeg,image/png,image/webp" aria-label="Choose Result Screenshot" hidden><p id="issueResultFilename">No result screenshot selected.</p><p>JPEG, PNG, or WebP, up to 8 MB. Annotated screenshots are welcome.</p><img id="issueResultPreview" alt="Preview of the result screenshot" hidden style="max-width:100%;height:auto"><button class="btn secondary" id="issueResultRemove" type="button" hidden>Remove Result Screenshot</button><div id="issueResultStatus" class="status" role="status" aria-live="polite"></div></section>
         <button class="btn" id="issueSend" type="button">Send Issue Report</button>
         <div class="status" id="issueStatus" role="status" aria-live="polite"></div></section></div>
       </div>
