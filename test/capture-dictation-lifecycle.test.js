@@ -9,7 +9,7 @@ function harness(ios=true){
 }
 test('iPhone Stop accepts delayed final words before ending, then can record again',async()=>{
  const h=harness();await h.run('toggleDictation()');const s=h.sessions[0];const done=h.run('toggleDictation()');assert(s.stopped);assert.equal(h.elements.dictate.disabled,true);h.result('final iPhone words');s.onend();await done;
- assert.equal(h.elements.note.value,'Existing note final iPhone words');assert.equal(h.elements.dictate.disabled,false);assert.equal(h.timers.size,0);await h.run('toggleDictation()');assert.equal(h.sessions.length,1);
+ assert.equal(h.elements.note.value,'Existing note final iPhone words');assert.equal(h.elements.dictate.disabled,false);assert.equal(h.timers.size,0);await h.run('toggleDictation()');assert.equal(h.sessions.length,2);assert.equal(h.elements.note.value,'Existing note final iPhone words');
 });
 test('Save waits for the same delayed final result',async()=>{
  const h=harness();await h.run('toggleDictation()');let done=false;const finish=h.run('finishCaptureDictation()').then(()=>done=true);await Promise.resolve();assert.equal(done,false);h.result('saved final words');h.sessions[0].onend();await finish;assert.equal(h.elements.note.value,'Existing note saved final words');

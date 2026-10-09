@@ -1,8 +1,8 @@
 const test=require('node:test'),assert=require('node:assert/strict'),vm=require('node:vm'),fs=require('node:fs');
 const source=fs.readFileSync('public/app.js','utf8');
-function harness({ios=true,pending=false,exclusive=false,retainOnEnd=false}={}){
+function harness({ios=true,pending=false,exclusive=false,retainOnEnd=false,abortEvents=false}={}){
  const elements={},sessions=[],timers=new Map(),logs={};let next=0,permission,tracksStopped=0,owner;
- class Speech{constructor(){sessions.push(this);}start(){if(exclusive&&owner&&owner!==this)throw new Error('Microphone still owned');owner=this;}stop(){this.stopped=true;}abort(){this.aborted=true;if(owner===this)owner=null;}set onend(handler){this.end=()=>{if(owner===this&&!retainOnEnd)owner=null;handler();};}get onend(){return this.end;}}
+ class Speech{constructor(){sessions.push(this);}start(){if(exclusive&&owner&&owner!==this)throw new Error('Microphone still owned');owner=this;}stop(){this.stopped=true;}abort(){this.aborted=true;if(owner===this)owner=null;if(abortEvents){this.onerror?.({error:"aborted"});this.onend?.();}}set onend(handler){this.end=()=>{if(owner===this&&!retainOnEnd)owner=null;handler();};}get onend(){return this.end;}}
  const stream={getTracks:()=>[{stop:()=>tracksStopped++}]};
  const context=vm.createContext({Date,Promise,JSON,navigator:{userAgent:ios?'iPhone':'Android',onLine:true,mediaDevices:{getUserMedia:()=>pending?new Promise(r=>permission=r):Promise.resolve(stream)}},window:{SpeechRecognition:Speech},document:{visibilityState:'visible',getElementById:id=>elements[id]||=( {value:'',textContent:'',focus(){},classList:{add(){},remove(){}}})},localStorage:{getItem:k=>logs[k],setItem:(k,v)=>logs[k]=v},state:{photoFile:{}},uiSpeechLanguage:()=> 'en-US',isIndustryProClient:()=>false,toast(){},persistCaptureDraft:async()=>{},setTimeout:(fn,ms)=>{timers.set(++next,{fn,ms});return next;},clearTimeout:id=>timers.delete(id)});
  vm.runInContext("let iosDictationSession=null,iosDictationConstructor=null,recognizer=null,dictationActive=false,dictationRestartTimer=null,dictationWatchdog=null,dictationGeneration=0,dictationBase='',dictationFinish=null;"+source.slice(source.indexOf('let dictationEmptySessions'),source.indexOf('let currentGroupItems'))+"function combineSpeechResults(parts){return parts.join(' ');}function mergeSpeechTranscript(a,b){return (a+' '+b).trim();}"+source.slice(source.indexOf('function cleanupDictation()'),source.indexOf('// ================= Pro dimension fields')),context);
@@ -60,8 +60,8 @@ test('Android empty sessions stop after three attempts instead of looping foreve
  const h=harness({ios:false});await h.run('toggleDictation()');for(let i=0;i<3;i++){h.sessions[i].onend();h.fire(300);}assert.equal(h.sessions.length,3);assert.equal(h.run('dictationActive'),false);assert.equal(h.elements.dictate.textContent,'Record Notes');
 });
 
-test('Safari completed recognizer can be reused without aborting its speech service',async()=>{
- const h=harness({exclusive:true,retainOnEnd:true});
+test('Safari completed recognizer is released on the next user tap, after final results',async()=>{
+ const h=harness({exclusive:true,retainOnEnd:true,abortEvents:true});
  for(let i=0;i<10;i++){await h.run('toggleDictation()');const s=h.sessions.at(-1);assert.equal(h.run('dictationActive'),true);s.onresult({results:[[{transcript:'Recording '+i}]]});const stopping=h.run('toggleDictation()');s.onend();await stopping;assert.notEqual(s.aborted,true);}
- assert.equal(h.sessions.length,1);assert(h.elements.note.value.includes('Recording 9'));
+ assert.equal(h.sessions.length,10);for(const s of h.sessions.slice(0,-1))assert.equal(s.aborted,true);assert(h.elements.note.value.includes('Recording 9'));
 });
