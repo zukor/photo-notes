@@ -2466,13 +2466,15 @@ async function renderLibraryPhoto(){
   const body=document.getElementById('body');body.className='workflow-edit library-photo-detail';
   body.innerHTML='<button type="button" class="backlink" id="libraryBack">‹ Back to Library</button><div id="cards"><p class="status">Loading PhotoNote...</p></div>';
   document.getElementById('libraryBack').onclick=()=>{state._libraryOpenId=null;state.view=isHoaClient()?'photo-library':'organize';renderApp();};
+  const detailCards=body.querySelector('#cards'),openedId=Number(state._libraryOpenId);
   const r=await api('/api/captures');
+  if(!detailCards.isConnected||Number(state._libraryOpenId)!==openedId)return;
   if(!r.ok||!document.getElementById('cards')){body.querySelector('#cards').innerHTML='<p class="status">PhotoNote could not be loaded.</p>';return;}
   const rows=await r.json(),photo=rows.find(c=>Number(c.id)===Number(state._libraryOpenId));
   if(!photo){body.querySelector('#cards').innerHTML='<p class="status">This PhotoNote is no longer available.</p>';return;}
   let pair=null,partner=null;
   if(beforeAfterOn())try{const response=await api('/api/pairs');if(response.ok){const pairs=await response.json();pair=pairs.find(p=>Number(p.before_id)===Number(photo.id)||Number(p.after_id)===Number(photo.id));if(pair)partner=rows.find(c=>Number(c.id)===Number(Number(pair.before_id)===Number(photo.id)?pair.after_id:pair.before_id));}}catch(e){}
-  if(state._libraryOpenId!==Number(photo.id)||!body.isConnected)return;
+  if(Number(state._libraryOpenId)!==openedId||!detailCards.isConnected)return;
   const shown=partner?[rows.find(c=>Number(c.id)===Number(pair.before_id)),rows.find(c=>Number(c.id)===Number(pair.after_id))]:[photo];
   window._lastCards=shown;
   body.querySelector('#cards').innerHTML=(partner?`<p class="status">Saved Before / After pair. Both original photos are shown below.</p><button class="btn secondary" type="button" data-view-pair="${pair.id}" data-before="${pair.before_id}" data-after="${pair.after_id}" data-opacity="${pair.comparison_opacity??''}">View Before &amp; After</button>`:'')+shown.map((c,index)=>(partner?`<div class="formhead">${index===0?'BEFORE':'AFTER'}</div>`:'')+captureCardHtml(c)).join('');
