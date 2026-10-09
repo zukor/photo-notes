@@ -24,9 +24,11 @@ const {chromium,webkit}=require('playwright');
      await page.locator('#pnHelpSearch').fill('');
      const titles=await page.locator('.pn-help-article summary').allTextContents();
      const pro=!['basic','issue','roads'].includes(edition);
+     assert(titles.includes('Recover an unfinished capture and finish Record Notes'),edition+' capture recovery guidance');
+     assert(titles.includes('Result Screenshots and issue retesting'),edition+' issue guidance');
      assert.equal(titles.includes('Custom Fields and Additional Details'),pro,edition+' shared workflow guidance');
      assert.equal(titles.includes('Document Damage / Incident'),edition==='property',edition+' incident availability');
-     assert.equal(titles.includes('Property Areas, routes and photographic history'),['hoa','property'].includes(edition),edition+' property availability');
+     assert.equal(titles.includes('Property Areas, routes and photographic history'),edition==='property',edition+' property availability');
      assert.equal(titles.includes('Concrete photo analysis and review'),edition==='concrete',edition+' analysis availability');
      if(pro){
       await page.locator('#pnHelpSearch').fill('Related Photos');assert(await page.locator('.pn-help-article').count()>0);
