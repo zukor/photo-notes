@@ -625,4 +625,3 @@ Object.assign(terms,{'AI API model':'The server model selected by Super Admin fo
 Object.assign(terms,{'Active time':'Estimated time with the app visible, ending after one minute without interaction. It is not total time signed in.','Session':'A browser-tab visit with an authenticated user, including return visits using an existing sign-in.','Screen visit':'Navigation to an app area, grouped by user and edition. Screen tracking begins with this release.'});
 window.PhotoNotesHelpCatalog={rules,terms,textRules};
 })();
-
