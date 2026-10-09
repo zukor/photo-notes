@@ -3006,6 +3006,8 @@ function overlayTextClient(item, c) {
     default: return item.text || '';
   }
 }
+function missingLocationMarking(t,c){return ['address','gps'].includes(t)&&!overlayTextClient({t},c||{}).trim();}
+function locationMarkingMessage(t){return t==='address'?'This photo has no saved address. Go back to Edit, use Edit Address, then reopen Mark Up Photo.':'This photo has no saved GPS coordinates. GPS markings require coordinates saved with that photo.';}
 function renderStampEditor(c) {
   editorCapture = c;
   editorOverlays = Array.isArray(c.overlays) ? JSON.parse(JSON.stringify(c.overlays)) : [];
@@ -3039,6 +3041,7 @@ function renderStampEditor(c) {
     <button type="button" class="btn secondary" id="saveAnnotationTemplate">Save as New Template</button>
     <p>Templates reuse your text, styles and placement. Date, address, GPS and other photo fields use each destination photo's details. Save Changes separately to save markings on this photo.</p>
     <p id="annotationTemplateStatus" role="status" aria-live="polite"></p>
+    <p id="stampLocationStatus" role="status" style="color:#000">${['address','gps'].filter(t=>missingLocationMarking(t,c)).map(t=>locationMarkingMessage(t)).join(' ')}</p>
     <div id="stampCtl"></div>
     <div class="row" style="margin-top:14px">
       <button class="btn" id="stampSave">Save Changes</button>
@@ -3050,7 +3053,7 @@ function renderStampEditor(c) {
   document.getElementById('stampBack').onclick = backToEdit;
   document.getElementById('stampBackBottom').onclick = backToEdit;
   document.getElementById('stampAdd').onclick = (e) => { const p = e.target.closest('[data-add]'); if (p) addOverlayItem(p.getAttribute('data-add')); };
-  document.getElementById('applySingleTemplate').onclick=()=>{const mode=document.getElementById('singleTemplateMode').value;if(mode==='replace'&&editorOverlays.length&&!confirm('Replace all existing markings on this photo?'))return;const source=annotationTemplateItems(document.getElementById('singleTemplate').value);if(!source)return toast('Saved template is unavailable. Reload and choose another template.');const items=JSON.parse(JSON.stringify(source));const next=mode==='add'?[...editorOverlays,...items]:items;if(next.length>20)return toast('A photo can have up to 20 markings. Remove some or choose Replace existing markings.');editorOverlays=next;editorSel=editorOverlays.length?0:-1;drawOverlayItems();renderStampCtl();toast('Template applied. Review placement, then Save Changes.');};
+  document.getElementById('applySingleTemplate').onclick=()=>{const mode=document.getElementById('singleTemplateMode').value;if(mode==='replace'&&editorOverlays.length&&!confirm('Replace all existing markings on this photo?'))return;const source=annotationTemplateItems(document.getElementById('singleTemplate').value);if(!source)return toast('Saved template is unavailable. Reload and choose another template.');const missing=source.filter(it=>missingLocationMarking(it.t,editorCapture));const items=JSON.parse(JSON.stringify(source.filter(it=>!missingLocationMarking(it.t,editorCapture))));if(missing.length){const status=document.getElementById('stampLocationStatus');if(status)status.textContent='Template skipped missing photo details. '+[...new Set(missing.map(it=>it.t))].map(locationMarkingMessage).join(' ');}const next=mode==='add'?[...editorOverlays,...items]:items;if(next.length>20)return toast('A photo can have up to 20 markings. Remove some or choose Replace existing markings.');editorOverlays=next;editorSel=editorOverlays.length?0:-1;drawOverlayItems();renderStampCtl();toast(missing.length?'Template applied without missing location details. Review placement, then Save Changes.':'Template applied. Review placement, then Save Changes.');};
   document.getElementById('saveAnnotationTemplate').onclick=saveAnnotationTemplate;
   document.getElementById('deleteAnnotationTemplate').onclick=deleteAnnotationTemplate;
   document.getElementById('singleTemplate').onchange=updateSavedAnnotationDelete;
@@ -3067,6 +3070,7 @@ function stageSize() {
   return st ? { w: st.clientWidth, h: st.clientHeight } : { w: 1, h: 1 };
 }
 function addOverlayItem(t) {
+  if(missingLocationMarking(t,editorCapture)){const status=document.getElementById('stampLocationStatus');if(status)status.textContent=locationMarkingMessage(t);toast(locationMarkingMessage(t));return;}
   let item;
   if (t === 'rect') {
     // Box annotation. Geometry + thickness in percent so preview == burn.
@@ -3198,6 +3202,7 @@ function renderStampCtl() {
   }
   box.innerHTML = `
     <label style="margin-top:12px">Selected: ${OVERLAY_FIELD_LABELS[it.t]}</label>
+    ${missingLocationMarking(it.t,editorCapture)?`<p style="color:#000">${locationMarkingMessage(it.t)} This saved marking is not visible until the photo has the required details. You can delete it below.</p>`:''}
     ${(it.t === 'custom' || it.t === 'copyright') ? `<input type="text" id="ovText" value="${esc(it.text || '')}" placeholder="Text" />` : ''}
     <label style="margin-top:8px">Position (corners)</label>
     <div class="row compact">
