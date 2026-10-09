@@ -156,6 +156,7 @@ CREATE TABLE IF NOT EXISTS events (
 );
 CREATE INDEX IF NOT EXISTS events_user_idx ON events (user_id);
 CREATE INDEX IF NOT EXISTS events_action_idx ON events (action);
+CREATE INDEX IF NOT EXISTS events_created_user_idx ON events (created_at,user_id);
 -- Minimal, content-free Stripe webhook ledger. The event ID primary key makes
 -- retries idempotent without storing customer or payment details locally.
 CREATE TABLE IF NOT EXISTS stripe_events (
