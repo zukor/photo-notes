@@ -7,14 +7,24 @@ const {chromium,webkit}=require('playwright');
  const editions=['basic','issue','roads','general','contractor','paving','hoa','property','concrete','roofer'];
  const evidence={id:1,user_id:1,user_name:'Fixture tester',issue_type:'bug_problem',description:'Output differs from preview',management_status:'new',created_at:new Date().toISOString(),screenshot_path:'/favicon-32.png',result_screenshot_path:'/icon-192.png'};
  try{for(const engine of [chromium,webkit]){const browser=await engine.launch();try{for(const width of [390,1440]){
-  const page=await browser.newPage({viewport:{width,height:950},serviceWorkers:'block'});let postCount=0;
+  const page=await browser.newPage({viewport:{width,height:950},serviceWorkers:'block',locale:'es-PE'});let postCount=0;
   await page.route('**/api/**',route=>{const p=new URL(route.request().url()).pathname;if(p==='/api/issues'&&route.request().method()==='POST'){postCount++;const body=route.request().postDataBuffer().toString('latin1');assert(body.includes('name="screenshot"'));assert(body.includes('name="result_screenshot"'));return route.fulfill({status:postCount===1?500:200,json:postCount===1?{error:'Fixture retry required'}:{ok:true,id:2,email_status:'pending'}});}return route.fulfill({json:p==='/api/me'?{id:1,name:'Fixture',role:'admin',is_super_admin:true,plan:'pro',pro_type:'general',edition_access:['pro']}:['/api/admin/issues','/api/issues/mine'].includes(p)?[evidence]:p==='/api/billing/config'?{checkout_enabled:false}:[]});});
-  await page.goto(base);await page.waitForFunction(()=>state.me);
+  await page.goto(base);await page.waitForFunction(()=>typeof state!=='undefined'&&state.me);
   await page.evaluate(bytes=>{window.resultFixtureBytes=bytes;captureIssueScreenshot=async()=>new Blob([new Uint8Array(bytes)],{type:'image/png'});},[...png]);
   for(const edition of editions){
    await page.evaluate(edition=>{state.plan=['basic','issue','roads'].includes(edition)?'free':'pro';state.proType=edition==='basic'?'general':edition;state.view='capture';renderApp();},edition);
    await page.locator('#issueFab').click();await page.locator('#issueMarkupCanvas').waitFor();
-   await page.locator('#issueResultScreenshot').setInputFiles({name:'result.png',mimeType:'image/png',buffer:png});await page.locator('#issueResultPreview').waitFor({state:'visible'});
+   assert.equal(await page.locator('#issueResultChoose').textContent(),'Choose Result Screenshot');
+   assert.equal(await page.locator('#issueResultScreenshot').isVisible(),false);
+   assert.equal(await page.locator('#issueResultFilename').textContent(),'No result screenshot selected.');
+   await page.evaluate(()=>photoNotesI18n.setLanguage('es'));
+   await page.waitForFunction(()=>document.getElementById('issueResultChoose').textContent==='Elegir captura del resultado');
+   assert.equal(await page.locator('#issueResultFilename').textContent(),'No se ha seleccionado una captura del resultado.');
+   await page.evaluate(()=>photoNotesI18n.setLanguage('en'));
+   await page.waitForFunction(()=>document.getElementById('issueResultChoose').textContent==='Choose Result Screenshot');
+   const picker=page.waitForEvent('filechooser');await page.locator('#issueResultChoose').click();
+   await (await picker).setFiles({name:'result.png',mimeType:'image/png',buffer:png});await page.locator('#issueResultPreview').waitFor({state:'visible'});
+   assert.equal(await page.locator('#issueResultFilename').textContent(),'result.png');
    assert.equal(await page.locator('#issueResultScreenshot').evaluate(e=>e.files[0].name),'result.png');
    assert.equal(await page.evaluate(()=>document.querySelector('.issue-dialog').scrollWidth<=document.querySelector('.issue-dialog').clientWidth),true,edition+' dialog fits');
    const original=await page.evaluate(()=>issueScreenshotBlob);assert(original);

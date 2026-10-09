@@ -76,6 +76,7 @@
     'Template applied. Review placement, then Save Changes.':'Plantilla aplicada. Revisa la ubicación y luego guarda los cambios.',
 
     'Result Screenshot (optional)': 'Captura del resultado (opcional)',
+    'No result screenshot selected.': 'No se ha seleccionado una captura del resultado.',
     'Choose Result Screenshot': 'Elegir captura del resultado',
     'Remove Result Screenshot': 'Quitar captura del resultado',
     'Show Result Screenshot': 'Mostrar captura del resultado',
