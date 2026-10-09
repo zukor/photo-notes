@@ -275,6 +275,7 @@ async function prefetchGroups() {
 }
 
 function renderLogin() {
+  window.PhotoNotesUsage?.screen(null,null,null);
   window.PhotoNotesHelp.reset();
   el.innerHTML = `
     <div class="wrap">
@@ -329,6 +330,7 @@ function photoToolWorkflowView() {
   return 'organize';
 }
 function renderApp() {
+  window.PhotoNotesUsage?.screen(state.view,selectedEdition(),state.me);
   cropReturnContext=null;
   const photoToolOpen=['photo-follow-ups','photo-requests'].includes(state.view);
   const workflowView=photoToolOpen?photoToolWorkflowView():state.view;
