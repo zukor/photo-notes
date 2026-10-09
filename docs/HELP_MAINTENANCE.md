@@ -13,3 +13,5 @@ Detailed instructions and 73 Key Terms live in `public/help-catalog.js`. Definit
 5. Bump changed assets and service-worker cache together. After deployment verify the live release, health, assets, and UI.
 
 The renderer automatically updates structural Help as the UI changes. Detailed semantics are authored, not invented by a generator. Release gates prevent shipping a new source control without that authored guidance; browser fixtures cover dynamic construction that a source scan cannot fully evaluate.
+
+The Using PhotoNotes scope includes current shared tools and specialist workflows from `generalGuidance` in the catalog. Restrict specialist articles with `editions` and account-gated tools with `feature`. Keep This page tied to actual controls. Verify both scopes, including exclusion from editions or accounts without access. Workflow articles can reuse the latest authored control rules by stable key.

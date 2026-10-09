@@ -21,6 +21,11 @@ function inventory(){const records=[],seen=new Set();for(const file of sources){
  }
 }return records;}
 const records=inventory(),missing=records.filter(r=>!r.covered);
+for(const article of catalog.generalGuidance||[]){
+ if(!article.title||!article.text||!article.editions?.length)throw Error('Workflow Help needs a title, authored explanation and edition scope.');
+ for(const term of article.terms||[])if(!catalog.terms[term])throw Error(`Workflow Help has an undefined Key Term: ${term}`);
+}
+
 if(require.main===module){
  if(process.argv.includes('--inventory')){fs.writeFileSync('/tmp/pn-help-coverage-inventory.json',JSON.stringify(records,null,2));console.log(`${records.length} distinct source controls`);}
  if(missing.length){console.error('Help is missing authored guidance for these controls:');for(const r of missing)console.error(`${r.file}: ${r.tag} ${r.id||r.classes} ${r.label.slice(0,120)}`);process.exitCode=1;}
