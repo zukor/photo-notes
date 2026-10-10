@@ -162,7 +162,7 @@
   </style>
   <link rel="stylesheet" href="/testing-hub.css?v=277">
   <script src="/testing-hub.js?v=350"></script>
-<link rel="stylesheet" href="/theme.css?v=389"><script src="/theme.js?v=389"></script><link rel="stylesheet" href="/help.css?v=376"><script src="/help-catalog.js?v=441" defer></script><script src="/help.js?v=441" defer></script></head>
+<link rel="stylesheet" href="/theme.css?v=389"><script src="/theme.js?v=389"></script><link rel="stylesheet" href="/help.css?v=376"><script src="/help-catalog.js?v=442" defer></script><script src="/help.js?v=442" defer></script></head>
 <body>
   <div id="app"></div>
   <script src="/admin-ai.js?v=1"></script><script src="/admin-user-usage.js?v=2"></script>
@@ -238,6 +238,8 @@
       return arr;
     }
 
+    const userCategories={development_testing:'Development & Testing',user_testers:'User Testers',customers:'Customers'};
+    function categoryOptions(value='user_testers'){return Object.entries(userCategories).map(([key,label])=>`<option value="${key}" ${key===value?'selected':''}>${esc(label)}</option>`).join('');}
     function renderUserList(){
       const box = document.getElementById('users');
       if (!box) return;
@@ -245,8 +247,9 @@
       document.getElementById('userListTools').hidden=!!selectedUserId;
       if(!selectedUserId){
         const query=document.getElementById('userSearch').value.trim().toLowerCase();
-        const users=sortUsers(mode).filter(u=>[u.name,u.email].join(' ').toLowerCase().includes(query));
-        box.innerHTML=users.length?users.map(u=>`<button class="user-list-item" type="button" data-open-user="${u.id}"><span class="user-avatar" aria-hidden="true">${esc(userInitials(u))}</span><span class="user-list-copy"><strong>${esc(u.name||u.email)}</strong><span>${esc(u.email)}</span><small>${esc(allowedVersions(u).length>2?allowedVersions(u).length+' versions':allowedVersions(u).map(k=>editionLabels[k]).join(' · '))}</small></span><span class="user-list-status">${u.active?'Active':'Inactive'}<span aria-hidden="true"> →</span></span></button>`).join(''):'<p class="status">No users found.</p>';
+        const category=document.getElementById('categoryFilter').value;
+        const users=sortUsers(mode).filter(u=>!category||(u.user_category||'user_testers')===category).filter(u=>[u.name,u.email,userCategories[u.user_category]].join(' ').toLowerCase().includes(query));
+        box.innerHTML=users.length?users.map(u=>`<button class="user-list-item" type="button" data-open-user="${u.id}"><span class="user-avatar" aria-hidden="true">${esc(userInitials(u))}</span><span class="user-list-copy"><strong>${esc(u.name||u.email)}</strong><span>${esc(u.email)}</span><small style="color:#000">${esc(userCategories[u.user_category]||'User Testers')}</small><small>${esc(allowedVersions(u).length>2?allowedVersions(u).length+' versions':allowedVersions(u).map(k=>editionLabels[k]).join(' · '))}</small></span><span class="user-list-status">${u.active?'Active':'Inactive'}<span aria-hidden="true"> →</span></span></button>`).join(''):'<p class="status">No users found.</p>';
         box.querySelectorAll('[data-open-user]').forEach(b=>b.onclick=()=>showUser(Number(b.dataset.openUser)));return;
       }
       const user=allUsers.find(u=>u.id===selectedUserId);if(!user){selectedUserId=null;return renderUserList();}
@@ -281,7 +284,7 @@
             ${u.role==='admin' ? '<span class="pill role">Administrator Access</span>' : '<span class="pill basic">Standard Access</span>'}
             <span class="pill basic">Currently using: ${esc(editionLabels[u.plan==='pro'?(u.pro_type==='general'?'pro':u.pro_type):u.pro_type==='security'?'security':u.pro_type==='roads'?'roads':'basic'])}</span>
           </div>
-          <div class="muted">${esc(u.email)}${u.industry ? ' · Industry: ' + esc(u.industry) : ''}</div>
+          <div style="color:#000">${esc(userCategories[u.user_category]||'User Testers')}</div><div class="muted">${esc(u.email)}${u.industry ? ' · Industry: ' + esc(u.industry) : ''}</div>
           <div class="muted">Joined ${fdate(u.created_at)} · Last login ${fdatetime(u.last_login_at)} · Login count ${num(u.logins)} · Last active ${fdatetime(u.last_activity)}</div>
 
           <div class="account-actions" data-super-admin-only>
@@ -294,7 +297,7 @@
               <button class="btn delete-user-button" type="button" data-delete-user="${u.id}">Delete User</button>
             </div>
             <div class="admin-panel delete-user-panel" id="delete-user-${u.id}" hidden></div>
-            <div class="admin-panel" id="edit-user-${u.id}" hidden><h4>Edit User</h4><div class="edit-user-grid"><label>First and Last Name<input id="edit-name-${u.id}" value="${esc(u.name||'')}"></label><label>Email<input id="edit-email-${u.id}" type="email" value="${esc(u.email||'')}"></label><label>Industry<input id="edit-industry-${u.id}" value="${esc(u.industry||'')}"></label></div><button class="btn" type="button" data-save-user="${u.id}" style="margin-top:8px">Save User</button></div>
+            <div class="admin-panel" id="edit-user-${u.id}" hidden><h4>Edit User</h4><div class="edit-user-grid"><label>First and Last Name<input id="edit-name-${u.id}" value="${esc(u.name||'')}"></label><label>Email<input id="edit-email-${u.id}" type="email" value="${esc(u.email||'')}"></label><label>User Category<select id="edit-category-${u.id}">${categoryOptions(u.user_category)}</select></label><label>Industry<input id="edit-industry-${u.id}" value="${esc(u.industry||'')}"></label></div><button class="btn" type="button" data-save-user="${u.id}" style="margin-top:8px">Save User</button></div>
             ${allowedVersions(u).includes('paving')?`<div class="admin-panel"><h4>Paving Pro Options</h4><div class="helper">Optional Paving Pro features. These settings apply whenever this user opens Paving Pro.</div><div class="feature-grid">${featureToggle(u.id,'ticket_scanner','Paving Ticket Scanner',features)}${featureToggle(u.id,'camera_readers','Camera Readers & Scanners',features)}${featureToggle(u.id,'before_after','Before & After Matching',features)}${featureToggle(u.id,'measurements','Measurements, Map & AI Classification',features)}${featureToggle(u.id,'extra_work','Extra Work Records',features)}</div><button class="btn" type="button" data-save-features="${u.id}">Save Feature Access</button></div>`:''}
             <div class="reset-password-panel" id="reset-panel-${u.id}" hidden>
               <label for="reset-password-${u.id}">New Password</label>
@@ -453,6 +456,7 @@
           <div class="helper">Create access for a person. First name, last name, email, and password are required; industry is optional.</div>
           <label for="cname">First and Last Name</label><input id="cname" type="text" placeholder="First and last name" autocomplete="name" />
           <label for="cemail">Email</label><input id="cemail" type="email" placeholder="Email" inputmode="email" autocomplete="email" style="margin-top:8px" />
+          <label for="ccategory">User Category</label><select id="ccategory">${categoryOptions()}</select>
           <label for="cindustry">Industry (optional)</label><input id="cindustry" type="text" placeholder="Industry (optional)" style="margin-top:8px" />
           <fieldset class="version-access"><legend>Versions</legend><div class="feature-grid">${versionChecks('new',['basic'])}</div></fieldset>
           <label for="cpass">Password</label><div class="password-row">
@@ -469,7 +473,7 @@
           <div id="summary"></div>
 
           </div></details>
-            <div id="userListTools" class="user-list-tools"><label for="userSearch">Find a user<input id="userSearch" type="search" placeholder="Search name or email"></label><label for="sortsel">Sort<select id="sortsel"><option value="name">Name (A–Z)</option><option value="active">Recently active</option><option value="newest">Newest login</option><option value="captures">Most captures</option></select></label></div>
+            <div id="userListTools" class="user-list-tools"><label for="userSearch">Find a user<input id="userSearch" type="search" placeholder="Search name or email"></label><label for="categoryFilter">User Category<select id="categoryFilter"><option value="">All Categories</option>${categoryOptions('')}</select></label><label for="sortsel">Sort<select id="sortsel"><option value="name">Name (A–Z)</option><option value="active">Recently active</option><option value="newest">Newest login</option><option value="captures">Most captures</option></select></label></div>
             <div id="users" aria-live="polite"></div>
           </div></details>
 <details class="admin-section" data-admin-tool="issues"><summary>Issue Management Center</summary><div class="admin-section-body">
@@ -873,7 +877,7 @@
       if (!email || !password) { toast('Email and password are required'); return; }
       const btn = document.getElementById('createbtn'); btn.disabled = true; btn.textContent = 'Creating...';
       try {
-        const r = await api('/api/admin/users', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name, email, industry, password, edition_access }) });
+        const r = await api('/api/admin/users', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name, email, industry, password, edition_access, user_category:document.getElementById('ccategory').value }) });
         if (r.status === 409) { toast('That email already has a login'); }
         else if (!r.ok) { toast('Could not create login'); }
         else {
@@ -898,6 +902,7 @@
       if(ur.ok){const rows=await ur.json();usageByUser=Object.fromEntries(rows.map(x=>[x.user_id,x]));}
       renderSummary(allUsers);
       const sortsel = document.getElementById('sortsel');
+      document.getElementById('categoryFilter').onchange=renderUserList;
       if (sortsel && !sortsel._wired) { sortsel._wired = true; sortsel.onchange = renderUserList; }
       renderUserList();
       }catch(e){box.innerHTML='<p class="status">Users could not be loaded. <button type="button" id="retryUsers">Retry</button></p>';document.getElementById('retryUsers').onclick=loadUsers;}
@@ -907,7 +912,7 @@
     function featureToggle(id,key,label,features){const checked=features[key]!==false;return `<label class="feature-item"><input type="checkbox" data-feature-key="${key}" data-feature-owner="${id}"${checked?' checked':''}><span>${label}</span></label>`;}
     function toggleAdminPanel(id){const p=document.getElementById(id);if(p)p.hidden=!p.hidden;}
     async function saveUserDetails(id,btn){
-      const body={name:document.getElementById(`edit-name-${id}`).value.trim(),email:document.getElementById(`edit-email-${id}`).value.trim(),industry:document.getElementById(`edit-industry-${id}`).value.trim()};
+      const body={user_category:document.getElementById(`edit-category-${id}`).value,name:document.getElementById(`edit-name-${id}`).value.trim(),email:document.getElementById(`edit-email-${id}`).value.trim(),industry:document.getElementById(`edit-industry-${id}`).value.trim()};
       if(body.name.split(/\s+/).filter(Boolean).length<2){toast('First and last name are required');return;}
       if(!body.email){toast('Email is required');return;}btn.disabled=true;btn.textContent='Saving...';
       try{const r=await api(`/api/admin/users/${id}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});if(r.status===409){toast('That email already has a login');return;}if(!r.ok)throw new Error();toast('User saved');await loadUsers();await loadActivity();}catch(e){toast('User could not be saved');}finally{btn.disabled=false;btn.textContent='Save User';}

@@ -756,6 +756,9 @@ async function init() {
   // NULL preserves existing account access until explicitly assigned.
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS edition_access TEXT[]`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_tester BOOLEAN NOT NULL DEFAULT false`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS user_category TEXT CHECK (user_category IN ('development_testing','user_testers','customers'))`);
+  await pool.query(`UPDATE users SET user_category='user_testers' WHERE user_category IS NULL`);
+  await pool.query(`ALTER TABLE users ALTER COLUMN user_category SET DEFAULT 'user_testers', ALTER COLUMN user_category SET NOT NULL`);
   await pool.query(`ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS issue_type TEXT NOT NULL DEFAULT 'bug_problem'`);
   await pool.query(`ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS review_decision TEXT, ADD COLUMN IF NOT EXISTS implementation_instructions TEXT, ADD COLUMN IF NOT EXISTS review_note TEXT, ADD COLUMN IF NOT EXISTS reviewed_by INTEGER REFERENCES users(id), ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMPTZ`);
 
