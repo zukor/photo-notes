@@ -1182,7 +1182,8 @@ button:disabled {
 .status:empty { display:none; }
 #qualityStatus,
 #gps,
-#addr {
+#addr,
+#dictationStatus {
   padding:0;
   border:0;
   border-radius:0;

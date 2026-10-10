@@ -789,7 +789,6 @@ function renderCapture() {
 
     <label>Notes</label>
     <button type="button" class="btn" id="dictate" style="margin-bottom:8px">Record Notes</button>
-    ${isIOS()?'<button type="button" class="btn secondary" id="keyboardDictation">Use keyboard microphone</button>':''}
     <div class="status" id="dictationStatus" aria-live="polite"></div>
     <textarea id="note" placeholder="Your recorded notes will appear here as words."></textarea>
     ${isConcreteClient()?concreteCaptureDetailsMarkup():''}
@@ -850,9 +849,7 @@ function renderCapture() {
 
   const dictateBtn = document.getElementById('dictate');
   if (dictateBtn) dictateBtn.onclick = toggleDictation;
-  if(isIOS()&&window.PhotoNotesSpeechDocument)window.PhotoNotesSpeechDocument.prepare(({ready,failed})=>{if(document.getElementById('dictate')!==dictateBtn||dictationActive||dictationPending||dictationFinish)return;const restart=document.getElementById('dictationRestart');if(restart)restart.disabled=!ready&&!failed;dictateBtn.disabled=!ready&&!failed;dictateBtn.textContent=ready||failed?'Record Notes':'Preparing microphone...';if(failed){const status=document.getElementById('dictationStatus');if(status)status.textContent='Speech could not initialize. Use Keyboard Microphone or reload Photo Notes to try again.';}});
-  const keyboardDictation=document.getElementById('keyboardDictation');
-  if(keyboardDictation)keyboardDictation.onclick=()=>{stopCaptureDictation();document.getElementById('note').focus();document.getElementById('dictationStatus').textContent='Tap the microphone on your iPhone keyboard and speak. If it is missing, enable Dictation in Settings > General > Keyboard.';};
+  if(isIOS()&&window.PhotoNotesSpeechDocument)window.PhotoNotesSpeechDocument.prepare(({ready,failed})=>{if(document.getElementById('dictate')!==dictateBtn||dictationActive||dictationPending||dictationFinish)return;const restart=document.getElementById('dictationRestart');if(restart)restart.disabled=!ready&&!failed;dictateBtn.disabled=!ready&&!failed;dictateBtn.textContent=ready||failed?'Record Notes':'Preparing microphone...';if(failed){const status=document.getElementById('dictationStatus');if(status)status.textContent='Speech could not initialize. Reload Photo Notes and try Record Notes again.';}});
 
   // preserve any typed note across re-renders
   if (state._note) document.getElementById('note').value = state._note;
@@ -1465,9 +1462,9 @@ async function toggleDictation() {
     await finishCaptureDictation();
     return;
   }
-  if(isIOS()&&window.PhotoNotesSpeechDocument&&!window.PhotoNotesSpeechDocument.constructor()){const status=document.getElementById('dictationStatus');if(status)status.textContent='Speech is not ready. Use Keyboard Microphone or reload Photo Notes to try again.';return;}
+  if(isIOS()&&window.PhotoNotesSpeechDocument&&!window.PhotoNotesSpeechDocument.constructor()){const status=document.getElementById('dictationStatus');if(status)status.textContent='Speech is not ready. Reload Photo Notes and try Record Notes again.';return;}
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    toast('This browser cannot access the microphone. Type the note or use the keyboard microphone');
+    toast('This browser cannot access the microphone. Type the note or reload Photo Notes and try again.');
     return;
   }
   const requestGeneration=++dictationGeneration;
@@ -1505,7 +1502,7 @@ function startDictationSession(SR) {
   // The prior session has ended. Aborting it here can reset Safari's shared
   // speech service just as the next session starts. Active cancellation still
   // aborts through stopCaptureDictation; completed sessions are only released.
-  try{if(ios&&iosDictationSession){iosDictationSession=null;iosDictationConstructor=null;recordDictationEvent('completed-session-released');}const SessionSR=ios&&window.PhotoNotesSpeechDocument?window.PhotoNotesSpeechDocument.constructor():SR;if(!SessionSR)throw Error('Speech document unavailable');session=new SessionSR();if(ios){if(window.PhotoNotesSpeechDocument)recordDictationEvent('fresh-document');iosDictationSession=session;iosDictationConstructor=SR;}}catch(error){stopCaptureDictation();showDictationInterruption('The microphone could not start. You can use the keyboard microphone.');return;}
+  try{if(ios&&iosDictationSession){iosDictationSession=null;iosDictationConstructor=null;recordDictationEvent('completed-session-released');}const SessionSR=ios&&window.PhotoNotesSpeechDocument?window.PhotoNotesSpeechDocument.constructor():SR;if(!SessionSR)throw Error('Speech document unavailable');session=new SessionSR();if(ios){if(window.PhotoNotesSpeechDocument)recordDictationEvent('fresh-document');iosDictationSession=session;iosDictationConstructor=SR;}}catch(error){stopCaptureDictation();showDictationInterruption('The microphone could not start. Type your note or reload Photo Notes and try again.');return;}
   const generation=++dictationGeneration, photoForSession=state.photoFile;
   recognizer = session;
   session.lang = uiSpeechLanguage();
@@ -1578,7 +1575,7 @@ function startDictationSession(SR) {
     }
   };
   try { session.start(); }
-  catch (e) { stopCaptureDictation(); showDictationInterruption('The microphone could not start. You can use the keyboard microphone.'); }
+  catch (e) { stopCaptureDictation(); showDictationInterruption('The microphone could not start. Type your note or reload Photo Notes and try again.'); }
 }
 
 // ================= Pro dimension fields =================

@@ -31,7 +31,7 @@ test('unresponsive speech service releases the Stop button after a bounded wait'
 test('unavailable speech constructors and failed startup show an actionable fallback',async()=>{
  for(const constructorFails of [true,false]){
   const h=harness();h.run(constructorFails?'window.SpeechRecognition=class{constructor(){throw Error("unavailable")}}':'window.SpeechRecognition=class{start(){throw Error("unavailable")}}');
-  await h.run('toggleDictation()');assert.equal(h.run('dictationActive'),false);assert.equal(h.elements.dictate.disabled,false);assert.match(h.elements.dictationStatus.textContent,/keyboard microphone/);assert.equal(h.elements.note.value,'Existing note');assert.equal(h.timers.size,0);
+  await h.run('toggleDictation()');assert.equal(h.run('dictationActive'),false);assert.equal(h.elements.dictate.disabled,false);assert.match(h.elements.dictationStatus.textContent,/reload Photo Notes/);assert.equal(h.elements.note.value,'Existing note');assert.equal(h.timers.size,0);
  }
 });
 
