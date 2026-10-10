@@ -25,3 +25,7 @@
 - Do not publish stale copies of shared files from an older branch. Integrate the latest main before releasing global changes and preserve the Property Manager edition registry, access grants, branding, and HOA endpoint authorization.
 - Update Help when changing a screen or control. Verify Property Manager's searchable and contextual Help for shared tools and its capture, communities/team, assets/history, inspection routes, guided visits, maintenance/evidence, completion links, dashboard/notifications, and reports.
 - Run `node scripts/test-property-global-parity.cjs` and `node scripts/test-all-edition-help.cjs` for shared UI or Help changes, along with the standard tests. Preserve specialist navigation and actions.
+
+## Immediate deployment
+
+- After completing fixes or changes, immediately deploy them after the required checks pass and verify the live release. Do not ask for deployment approval again unless the user explicitly requests a hold or a separate approval requirement applies.
