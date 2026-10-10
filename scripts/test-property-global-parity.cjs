@@ -24,7 +24,7 @@ const {chromium,webkit}=require('playwright');
      await page.evaluate(({edition,section})=>{state.plan='pro';state.proType=edition;state.view=section;state.groupId=null;state.ewrId=null;state.me.ramo_intake_access=true;renderApp();},{edition,section});
      await page.locator(section==='organize'?'#photoSearch':section==='edit'?'#delbtn':section==='create'?'#newDocument':'#sendSource').waitFor();
      // Export Presets mounts after its API request; inspect the completed shared UI.
-     if(['send','organize'].includes(section))await page.locator('#epChoose').waitFor({state:'attached'});
+     if(section==='send')await page.locator('#epChoose').waitFor({state:'attached'});
      const toolBoxes=await page.locator('#fuOpen,#requestProjectPhotos').evaluateAll(nodes=>nodes.map(n=>{const r=n.getBoundingClientRect();return {top:r.top,width:r.width,right:r.right};}));
      assert.equal(toolBoxes.length,section==='organize'?2:0,edition+' scheduled and requested photo actions belong to Library');
      const controls=await page.locator('#body button[id],#body input[id],#body select[id],#body textarea[id]').evaluateAll(nodes=>nodes.map(n=>{const s=getComputedStyle(n);return {id:n.id,label:n.tagName==='BUTTON'?n.textContent.trim():n.getAttribute('placeholder'),font:s.fontFamily,size:s.fontSize,color:s.color,background:s.backgroundColor,radius:s.borderRadius};}));

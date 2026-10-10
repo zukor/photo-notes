@@ -71,7 +71,7 @@ async function filters(options){
  try{
   const defs=(await request('/api/custom-fields')).filter(d=>['choice','boolean'].includes(d.type));if(!defs.length||!anchor.isConnected)return;
   const box=document.createElement('section');box.className='cf-section';box.id='cfFilterBox';box.innerHTML=`<label for="cfFilterField">Additional Details filter</label><select id="cfFilterField"><option value="">All values</option>${defs.map(d=>`<option value="${d.id}">${escape(d.name)}${d.active?'':' (inactive)'}</option>`).join('')}</select><label for="cfFilterValue">Saved value</label><select id="cfFilterValue" disabled><option value="">Choose a field first</option></select>`;
-  anchor.closest('.row')?.after(box);
+  (anchor.closest('.row')||anchor.parentElement)?.after(box);
   const field=box.querySelector('#cfFilterField'),value=box.querySelector('#cfFilterValue');
   field.onchange=()=>{const d=defs.find(d=>d.id===field.value);value.disabled=!d;const choices=!d?[]:d.type==='boolean'?['Yes','No']:[...new Set([...d.options,...Object.values(d.versions||{}).flatMap(v=>v.options||[])])];value.innerHTML='<option value="">All values</option>'+choices.map(v=>`<option value="${escape(d?.type==='boolean'?v==='Yes'?'true':'false':v)}">${escape(v)}</option>`).join('');options.search();};value.onchange=options.search;
  }catch{}

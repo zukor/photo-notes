@@ -1,5 +1,6 @@
 :root { --accent:#1d4ed8; --line:#000; }
 * { box-sizing: border-box; }
+[hidden] { display:none !important; }
 html, body { max-width: 100%; overflow-x: clip; }
 body {
   margin: 0;
@@ -299,7 +300,8 @@ textarea { min-height: 96px; resize: vertical; }
 .organize-library-heading p { max-width:480px; text-align:right; }
 .organize-library-kicker { display:block; margin-bottom:3px; color:var(--pn-text-1254a3,#1254a3); font-size:12px; font-weight:800; letter-spacing:.8px; text-transform:uppercase; }
 .map-filter-row { align-items:flex-end; }
-.workflow-organize, .workflow-edit, .workflow-create, .workflow-send { max-width:980px !important; }
+.workflow-organize { max-width:1500px !important; }
+.workflow-edit, .workflow-create, .workflow-send { max-width:980px !important; }
 .workflow-organize #cards { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:14px; }
 .workflow-edit #cards, #glist, .workflow-create #gitems, .send-capture-list { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
 .workflow-organize #cards .card, .workflow-edit #cards .card, #glist .card, .workflow-create #gitems .card { margin-bottom:0; }
@@ -310,9 +312,34 @@ textarea { min-height: 96px; resize: vertical; }
 .workflow-organize .organize-step-head h2 { color:#000; }
 .library-photo-card { position:relative; text-align:left; color:#000; }
 .library-photo-card img { aspect-ratio:4/3; object-fit:cover; width:100%; }
-.library-photo-select { position:absolute; top:10px; left:10px; z-index:2; margin:0; padding:0; background:#fff; border:1px solid #000; }
+.library-photo-select { position:absolute; top:10px; left:10px; z-index:2; margin:0; padding:0; background:transparent; border:0; }
 .library-photo-select input { width:22px; height:22px; margin:0; display:block; }
 .library-note,.library-membership { margin-top:7px; color:#000; overflow-wrap:anywhere; }
+.library-details { line-height:1.25; }
+.library-photo-card .photo-title { margin-top:5px; margin-bottom:2px; }
+.library-photo-card .library-note,.library-photo-card .library-membership { margin-top:3px; font-size:max(14px,.88rem); }
+.library-photo-card .library-open { width:auto; min-height:30px; padding:4px 10px; margin-top:6px; }
+.library-project-controls,.library-search-row,.library-filter-panel,.library-selection-panel,.library-specialty-actions { display:flex; align-items:end; flex-wrap:wrap; gap:10px; margin:10px 0; color:#000; }
+.library-project-controls > label { flex:0 1 320px; margin:0; }
+.library-project-controls .btn,.library-project-actions .btn,.library-search-row .btn,.library-filter-panel .btn,.library-specialty-actions .btn,.library-heading .btn { width:auto; min-height:34px; margin:0; padding:6px 11px; font-size:14px; }
+.library-project-actions { display:flex; align-items:center; flex-wrap:wrap; gap:8px; }
+.library-search-row input { flex:1 1 420px; margin:0; }
+.library-filter-panel { align-items:center; padding:10px 0; border-top:1px solid #000; border-bottom:1px solid #000; }
+.library-filter-panel > label { flex:0 1 190px; margin:0; }
+.library-filter-panel .plain-check { display:flex; align-items:center; gap:6px; min-height:36px; text-transform:none; letter-spacing:0; }
+.library-filter-panel .plain-check input { width:20px; height:20px; margin:0; }
+.library-saved-search-panel { margin:8px 0 12px; }
+.library-selection-panel { padding:12px; background:var(--pn-bg-f4faff,#f4faff); border:1.5px solid #000; }
+.library-selection-panel > strong { align-self:center; }
+.library-selection-panel > label { flex:1 1 220px; margin:0; }
+.library-specialty-actions { padding:8px 0; border-bottom:1px solid #000; }
+.delete-text { color:#b3261e; background:transparent; border:0; padding:6px; font:inherit; font-weight:700; cursor:pointer; }
+.library-simple-dialog { color:#000; border:1.5px solid #000; border-radius:8px; padding:20px; width:min(440px,calc(100vw - 32px)); }
+.library-simple-dialog::backdrop { background:rgba(0,0,0,.35); }
+.library-simple-dialog h2 { margin-top:0; }
+.library-simple-dialog .dialog-actions { display:flex; gap:8px; margin-top:12px; }
+.organize-library-heading { padding:4px 0 8px; border-left:0; border-bottom:1px solid #000; background:#fff; }
+.organize-library-heading h2 { color:#000; }
 .library-photo-detail #cards { display:block; max-width:900px; margin:16px auto; }
 @media (min-width:1440px){.workflow-organize #cards{grid-template-columns:repeat(5,minmax(0,1fr));}}
 @media (min-width:1680px){.workflow-organize #cards{grid-template-columns:repeat(6,minmax(0,1fr));}}
