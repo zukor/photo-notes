@@ -14,8 +14,8 @@ test('iPhone Stop accepts delayed final words before ending, then can record aga
 test('Save waits for the same delayed final result',async()=>{
  const h=harness();await h.run('toggleDictation()');let done=false;const finish=h.run('finishCaptureDictation()').then(()=>done=true);await Promise.resolve();assert.equal(done,false);h.result('saved final words');h.sessions[0].onend();await finish;assert.equal(h.elements.note.value,'Existing note saved final words');
 });
-test('iPhone startup watchdog clears when microphone starts and silence never arms it',async()=>{
- const h=harness();await h.run('toggleDictation()');assert.equal([...h.timers.values()][0].ms,30000);h.sessions[0].onaudiostart();assert.equal(h.timers.size,0);h.sessions[0].onspeechstart();h.result('a long phrase');assert.equal(h.timers.size,0);const done=h.run('finishCaptureDictation()');h.sessions[0].onend();await done;assert.equal(h.timers.size,0);
+test('iPhone first-result watchdog clears when words arrive and stays clear through pauses',async()=>{
+ const h=harness();await h.run('toggleDictation()');assert.equal([...h.timers.values()][0].ms,30000);h.sessions[0].onaudiostart();assert.equal(h.timers.size,1);h.sessions[0].onspeechstart();h.result('a long phrase');assert.equal(h.timers.size,0);const done=h.run('finishCaptureDictation()');h.sessions[0].onend();await done;assert.equal(h.timers.size,0);
 });
 test('changing photo cancels old words and stale errors',async()=>{
  const h=harness();await h.run('toggleDictation()');await h.run('stopCaptureDictation();state.photoFile={name:"next photo"}');await h.run('toggleDictation()');h.sessions[0].onresult({results:[[{transcript:'OLD WORDS'}]]});h.sessions[0].onerror({error:'not-allowed'});assert.equal(h.elements.note.value,'Existing note');assert.equal(h.run('dictationActive'),true);

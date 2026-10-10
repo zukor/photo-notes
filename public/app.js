@@ -554,7 +554,7 @@ function speechRetestEvidence(notes) {
   try {
     const history=JSON.parse(localStorage.getItem('photoNotesSpeechDiagnostics')||'[]');
     if(!Array.isArray(history))return notes;
-    const recent=history.filter(e=>e&&Date.now()-Date.parse(e.at)<3600000).slice(-30).map(e=>({at:e.at,version:e.version,event:e.event,generation:e.generation,active:e.active,pending:e.pending,finishing:e.finishing,mode:e.mode,...(['error','start-error','stop-error','permission-error'].includes(e.event)&&['aborted','no-speech','audio-capture','network','not-allowed','service-not-allowed','language-not-supported','InvalidStateError','NotAllowedError','NotFoundError','NotReadableError'].includes(e.detail)?{error:e.detail}:{})}));
+    const recent=history.filter(e=>e&&Date.now()-Date.parse(e.at)<3600000).slice(-120).filter((e,i,rows)=>!['result','started'].includes(e.event)||i===0||i===rows.length-1||rows[i-1].event!==e.event||rows[i+1].event!==e.event||rows[i-1].generation!==e.generation||rows[i+1].generation!==e.generation).map(e=>({at:e.at,version:e.version,event:e.event,generation:e.generation,active:e.active,pending:e.pending,finishing:e.finishing,mode:e.mode,...(['error','start-error','stop-error','permission-error'].includes(e.event)&&['aborted','no-speech','audio-capture','network','not-allowed','service-not-allowed','language-not-supported','InvalidStateError','NotAllowedError','NotFoundError','NotReadableError'].includes(e.detail)?{error:e.detail}:{})}));
     const heading='\n\nSpeech event diagnostics (no note text or audio):\n';
     while(recent.length&&notes.length+heading.length+JSON.stringify(recent).length>5000)recent.shift();
     return recent.length?notes+heading+JSON.stringify(recent):notes;
@@ -1506,19 +1506,20 @@ function startDictationSession(SR) {
   session.lang = uiSpeechLanguage();
   session.continuous = true;
   session.interimResults = true;
-  let sessionText = '';
+  let sessionText = '', microphoneStarted = false;
   const started=()=>{
     if(generation!==dictationGeneration||!dictationActive)return;
-    if(dictationWatchdog)clearTimeout(dictationWatchdog);dictationWatchdog=null;
+    microphoneStarted = true;
     recordDictationEvent('started');
     const status=document.getElementById('dictationStatus');if(status)status.textContent=ios?'Listening. On iPhone, words may appear after you pause.':'Listening...';
     const btn=document.getElementById('dictate');if(btn)btn.textContent='Recording... tap to stop';
   };
-  // Detect a microphone that never starts, never use silence as a stop signal.
+  // Starting audio is not proof of transcription. Bound a session that never
+  // receives its first result, while allowing pauses after words arrive.
   dictationWatchdog=setTimeout(()=>{
     if(generation!==dictationGeneration||!dictationActive)return;
-    recordDictationEvent('start-timeout');stopCaptureDictation();
-    showDictationInterruption('The microphone did not start.');
+    recordDictationEvent(microphoneStarted?'no-result-timeout':'start-timeout');stopCaptureDictation();
+    showDictationInterruption(microphoneStarted?'The microphone started, but no words were received.':'The microphone did not start.');
   },30000);
   session.onstart=started;
   session.onaudiostart=started;
