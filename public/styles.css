@@ -1172,3 +1172,36 @@ button:disabled {
   .btn.slim,.library-photo-card .library-open { min-height:44px; padding:8px 12px; }
   .delete-text,.destructive,.danger-link { min-height:44px; padding:8px 6px; }
 }
+
+/* Capture corrections after the shared visual-system rollout. */
+#tabCapture.on {
+  color:#fff;
+  background:var(--pn-capture-blue);
+  border-color:#000;
+}
+.status:empty { display:none; }
+#qualityStatus,
+#gps,
+#addr {
+  padding:0;
+  border:0;
+  border-radius:0;
+  background:transparent;
+  color:#000;
+}
+#locwrap > label { margin-bottom:3px; }
+#gps,
+#addr { margin:0 0 12px; line-height:1.35; overflow-wrap:anywhere; }
+.capture-preview > img {
+  position:relative;
+  z-index:0;
+  width:100%;
+  height:auto;
+  margin:0 0 10px;
+}
+.capture-preview-actions {
+  position:relative;
+  z-index:1;
+  clear:both;
+  background:#fff;
+}
