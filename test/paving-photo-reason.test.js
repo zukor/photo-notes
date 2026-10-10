@@ -12,7 +12,7 @@ function scanner(kind,api){
 test('Paving reasons start with proposal and obey feature permissions',()=>{
  const context={state:{proType:'paving',_pavingReason:'business_card'},PhotoNotesScannerAvailability:require('../public/scanner-availability'),featureOn:()=>false};vm.createContext(context);vm.runInContext(app.slice(app.indexOf('const PAVING_PHOTO_REASONS='),app.indexOf('function pavingPhotoReasonMarkup')),context);
  assert.deepEqual(Array.from(context.pavingPhotoReasons(),r=>r.id),['proposal']);assert.equal(context.pavingPhotoReason().id,'proposal');
- context.featureOn=()=>true;assert.equal(context.pavingPhotoReasons().length,7);assert.equal(context.pavingPhotoReasons()[0].label,'Proposal Photo');
+ context.featureOn=()=>true;assert.equal(context.pavingPhotoReasons().length,8);assert.equal(context.pavingPhotoReasons()[0].label,'Proposal Photo');
 });
 for(const kind of ['reader','ticket']){
  test(kind+' scans once and displays the returned review',async()=>{let calls=0,resolve;const waiting=new Promise(r=>resolve=r);const s=scanner(kind,async()=>{calls++;await waiting;return {ok:true,json:async()=>({ai_read:true,reading:{id:5},ticket:{id:6}})};});const pending=s.scan();await s.scan();assert.equal(calls,1);resolve();await pending;assert.equal(s.state.review,true);});
