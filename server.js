@@ -2553,7 +2553,7 @@ app.post('/api/ewr', requireAuth, async (req, res) => {
     if (groupId != null && !(await ownsGroup(groupId, req.user.id))) groupId = null;
     let jobId=b.job_id?Number(b.job_id):null;
     if(jobId!==null&&(!Number.isInteger(jobId)||jobId<=0))return res.status(400).json({error:'Invalid job'});
-    if(jobId&&!(await pool.query('SELECT id FROM jobs WHERE id=$1 AND user_id=$2 FOR KEY SHARE',[jobId,req.user.id])).rowCount)return res.status(400).json({error:'Choose one of your jobs'});
+    if(jobId&&!(await pool.query('SELECT id FROM jobs WHERE id=$1 AND user_id=$2',[jobId,req.user.id])).rowCount)return res.status(400).json({error:'Choose one of your jobs'});
     if(!jobId&&groupId){const inferred=(await pool.query(`SELECT min(c.job_id) AS id FROM group_items gi JOIN captures c ON c.id=gi.capture_id WHERE gi.group_id=$1 HAVING count(*)>0 AND bool_and(c.user_id=$2 AND c.job_id IS NOT NULL) AND count(DISTINCT c.job_id)=1`,[groupId,req.user.id])).rows[0];jobId=inferred?.id||null;}
     const lat = b.latitude != null && b.latitude !== '' ? parseFloat(b.latitude) : null;
     const lng = b.longitude != null && b.longitude !== '' ? parseFloat(b.longitude) : null;
@@ -2611,7 +2611,7 @@ app.post('/api/ewr/:id', requireAuth, async (req, res) => {
     const b = req.body || {};
     const sets = [], vals = [];
     const add = (col, val) => { vals.push(val); sets.push(`${col} = $${vals.length}`); };
-    if(b.job_id!==undefined){const jobId=b.job_id?Number(b.job_id):null;if(jobId!==null&&(!Number.isInteger(jobId)||jobId<=0))return res.status(400).json({error:'Invalid job'});if(jobId&&!(await pool.query('SELECT id FROM jobs WHERE id=$1 AND user_id=$2 FOR KEY SHARE',[jobId,req.user.id])).rowCount)return res.status(400).json({error:'Choose one of your jobs'});add('job_id',jobId);}
+    if(b.job_id!==undefined){const jobId=b.job_id?Number(b.job_id):null;if(jobId!==null&&(!Number.isInteger(jobId)||jobId<=0))return res.status(400).json({error:'Invalid job'});if(jobId&&!(await pool.query('SELECT id FROM jobs WHERE id=$1 AND user_id=$2',[jobId,req.user.id])).rowCount)return res.status(400).json({error:'Choose one of your jobs'});add('job_id',jobId);}
     if (typeof b.customer === 'string') add('customer', b.customer.trim() || null);
     if (b.status !== undefined && EWR_STATUSES.includes(b.status)) add('status', b.status);
     if (b.reason_category !== undefined && EWR_REASONS.includes(b.reason_category)) add('reason_category', b.reason_category);
