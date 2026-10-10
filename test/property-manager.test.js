@@ -2,7 +2,7 @@ const test=require('node:test'),assert=require('node:assert/strict'),fs=require(
 const app=fs.readFileSync('public/app.js','utf8'),server=fs.readFileSync('server.js','utf8');
 test('Property Manager opens the HOA workflow with its own product name',()=>{
   const context=vm.createContext({state:{plan:'pro',proType:'property'}});
-  for(const name of ['isProClient','isIssueReporterClient','isRoadIssuesClient','isGeneralProClient','isGeneralContractorClient','isHoaClient','productName']){
+  for(const name of ['isProClient','isSecurityClient','isIssueReporterClient','isRoadIssuesClient','isGeneralProClient','isGeneralContractorClient','isHoaClient','productName']){
     vm.runInContext(app.match(new RegExp(`function ${name}\\(\\)\\s*\\{[^\\n]+`))[0],context);
   }
   assert.equal(vm.runInContext('isHoaClient()',context),true);

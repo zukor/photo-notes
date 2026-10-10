@@ -10,9 +10,10 @@ const {chromium,webkit}=require('playwright');
   await page.route('**/api/**',r=>{const path=new URL(r.request().url()).pathname;return r.fulfill({json:path==='/api/me'?{id:1,name:'Test',role:'user',plan:'pro',pro_type:'general',edition_access:['pro']} :path==='/api/billing/config'?{checkout_enabled:false}:[]});});
   await page.addInitScript(()=>{localStorage.setItem('pn_install_prompt_dismissed_v1','dismissed');localStorage.setItem('pn_first_use_v1:'+encodeURIComponent(''),'done');});
   await page.goto(`http://127.0.0.1:${server.address().port}`);await page.waitForFunction(()=>state.me&&document.getElementById('body'));
-  for(const edition of ['basic','issue','roads','general','contractor','paving','hoa','property','concrete','roofer']){
-   for(const view of ['basic','issue','roads'].includes(edition)?['capture']:['capture','organize','edit','create','send']){
-    await page.evaluate(({edition,view})=>{state.plan=['basic','issue','roads'].includes(edition)?'free':'pro';state.proType=edition==='basic'?'general':edition;state.view=view;state.groupId=null;state.ewrId=null;renderApp();},{edition,view});
+  for(const edition of ['basic','security','issue','roads','general','contractor','paving','hoa','property','concrete','roofer']){
+   for(const view of ['basic','security','issue','roads'].includes(edition)?['capture']:['capture','organize','edit','create','send']){
+    await page.evaluate(({edition,view})=>{state.plan=['basic','security','issue','roads'].includes(edition)?'free':'pro';state.proType=edition==='basic'?'general':edition;state.view=view;state.groupId=null;state.ewrId=null;renderApp();},{edition,view});
+    if(edition==='security'){assert.equal(await page.locator('.photonotes-tier').textContent(),'Security Issue Reporter Pro');assert.equal(await page.locator('#captureTopicHeading').textContent(),'Topic (optional)');assert.equal(await page.locator('.workflow-tabs').count(),0);assert.equal(await page.locator('#save').count(),0);}
     const help=page.locator('.pn-help-fab'),issue=page.locator('#issueFab');assert(await help.isVisible());assert(await issue.isVisible());
     const h=await help.boundingBox(),i=await issue.boundingBox();assert.equal(h.width,i.height-4,edition+' Help dot is smaller than Report Issue');assert.equal(h.height,h.width);assert(Math.abs(h.y+h.height/2-i.y-i.height/2)<0.5,edition+' floating controls share horizontal centerline');assert.equal(await help.locator('span').evaluate(n=>getComputedStyle(n).fontSize),'25px');assert(i.x<width/2&&h.x>width/2);assert(i.x+i.width<h.x);assert(h.y>700&&i.y>700);
     await help.click();await page.locator('#pnHelpSearch').fill('photo');assert(await page.locator('.pn-help-article').count()>0);
@@ -23,7 +24,7 @@ const {chromium,webkit}=require('playwright');
      await page.locator('[data-pn-help-scope="general"]').click();
      await page.locator('#pnHelpSearch').fill('');
      const titles=await page.locator('.pn-help-article summary').allTextContents();
-     const pro=!['basic','issue','roads'].includes(edition);
+     const pro=!['basic','security','issue','roads'].includes(edition);
      assert(titles.includes('Recover an unfinished capture and finish Record Notes'),edition+' capture recovery guidance');
      assert(titles.includes('Result Screenshots and issue retesting'),edition+' issue guidance');
      assert.equal(titles.includes('Custom Fields and Additional Details'),pro,edition+' shared workflow guidance');

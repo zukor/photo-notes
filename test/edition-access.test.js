@@ -86,3 +86,15 @@ test('Testing Hub offers every current edition in its shared version controls',(
  for(const [edition,details] of Object.entries(require('../editions').EDITIONS))assert.equal(context.names[edition],details.label);
  assert.equal((source.match(/Object.keys\(editionNames\).map/g)||[]).length,2);
 });
+
+test('Security Issue Reporter Pro uses Basic access with a persisted version identity',async()=>{
+ const {EDITIONS,currentEdition}=require('../editions');
+ assert.deepEqual(EDITIONS.security,{plan:'free',pro_type:'security',label:'Security Issue Reporter Pro'});
+ const h=harness({edition_access:['basic','security']});
+ assert.equal((await h.call('/api/switch-edition',{edition:'security'})).code,200);
+ assert.equal(h.record.plan,'free');assert.equal(currentEdition(h.record),'security');
+ assert.equal((await h.call('/api/switch-edition',{edition:'basic'})).code,200);
+ assert.equal(currentEdition(h.record),'basic');
+ const denied=harness({edition_access:['basic']});
+ assert.equal((await denied.call('/api/switch-edition',{edition:'security'})).code,403);
+});
