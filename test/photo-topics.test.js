@@ -17,11 +17,10 @@ test('Capture does not silently assign the first topic',()=>{
   assert.match(app,/state\.area\?\[state\.area\]:\[\]/);
 });
 
-test('Organize and Edit cards can replace photo topics',()=>{
+test('Opened Library PhotoNotes can replace photo topics',()=>{
   assert.match(app,/\['organize','edit'\]\.includes\(state\.view\)/);
   assert.match(app,/Change Topics/);
   assert.match(app,/function startEditTopics\(id, rows\)/);
   assert.match(app,/JSON\.stringify\(\{area_tags\}\)/);
-  assert.match(app,/id="replacetopic">Replace Topics/);
-  assert.match(app,/JSON\.stringify\(\{area_tags:\[topic\]\}\)/);
+  assert.match(app,/Save Topics/);
 });

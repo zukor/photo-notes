@@ -121,6 +121,28 @@ CREATE TABLE IF NOT EXISTS jobs (
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS jobs_user_idx ON jobs (user_id, status, created_at DESC);
+CREATE TABLE IF NOT EXISTS capture_project_memberships (
+  user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  capture_id  INTEGER NOT NULL REFERENCES captures(id) ON DELETE CASCADE,
+  job_id      INTEGER NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (capture_id, job_id)
+);
+CREATE INDEX IF NOT EXISTS capture_project_memberships_user_idx ON capture_project_memberships (user_id, job_id, capture_id);
+CREATE TABLE IF NOT EXISTS project_groups (
+  id          SERIAL PRIMARY KEY,
+  user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  job_id      INTEGER NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+  name        TEXT NOT NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (user_id, job_id, name)
+);
+CREATE TABLE IF NOT EXISTS project_group_items (
+  group_id    INTEGER NOT NULL REFERENCES project_groups(id) ON DELETE CASCADE,
+  capture_id  INTEGER NOT NULL REFERENCES captures(id) ON DELETE CASCADE,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (group_id, capture_id)
+);
 CREATE TABLE IF NOT EXISTS groups (
   id          SERIAL PRIMARY KEY,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -685,6 +707,11 @@ async function init() {
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS subject_latitude DOUBLE PRECISION, ADD COLUMN IF NOT EXISTS subject_longitude DOUBLE PRECISION, ADD COLUMN IF NOT EXISTS location_description TEXT, ADD COLUMN IF NOT EXISTS camera_direction DOUBLE PRECISION, ADD COLUMN IF NOT EXISTS camera_direction_source TEXT`);
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS overlays JSONB`);
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS job_id INTEGER REFERENCES jobs(id) ON DELETE SET NULL`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS capture_project_memberships (user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,capture_id INTEGER NOT NULL REFERENCES captures(id) ON DELETE CASCADE,job_id INTEGER NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,created_at TIMESTAMPTZ NOT NULL DEFAULT now(),PRIMARY KEY(capture_id,job_id))`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS capture_project_memberships_user_idx ON capture_project_memberships (user_id,job_id,capture_id)`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS project_groups (id SERIAL PRIMARY KEY,user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,job_id INTEGER NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,name TEXT NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT now(),UNIQUE(user_id,job_id,name))`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS project_group_items (group_id INTEGER NOT NULL REFERENCES project_groups(id) ON DELETE CASCADE,capture_id INTEGER NOT NULL REFERENCES captures(id) ON DELETE CASCADE,created_at TIMESTAMPTZ NOT NULL DEFAULT now(),PRIMARY KEY(group_id,capture_id))`);
+  await pool.query(`INSERT INTO capture_project_memberships(user_id,capture_id,job_id) SELECT user_id,id,job_id FROM captures WHERE user_id IS NOT NULL AND job_id IS NOT NULL ON CONFLICT DO NOTHING`);
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS perceptual_hash TEXT`);
   await pool.query(`ALTER TABLE extra_work_records ADD COLUMN IF NOT EXISTS job_id INTEGER REFERENCES jobs(id) ON DELETE SET NULL`);
   await pool.query(`CREATE INDEX IF NOT EXISTS ewr_job_idx ON extra_work_records (user_id,job_id)`);

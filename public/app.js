@@ -2289,114 +2289,108 @@ async function renderList() {
   body.className = 'workflow-organize';
   body.innerHTML = `
     <div class="library-heading"><h1>Library</h1>${window.PhotoNotesFollowUps?.allowed()?'<button type="button" class="btn secondary slim" id="fuOpen">Scheduled Photos</button>':''}</div>
-
-    <details id="organizeJobSection" class="organize-workspace-section organize-context-section" open>
-      <summary class="organize-step-head"><div><h2>Projects</h2></div></summary>
-      <div class="organize-job-builder">
-        <div class="organize-form-grid"><section class="organize-panel"><label>Current Job</label><select id="jobFilter"><option value="">All Jobs</option><option value="unassigned">Unassigned</option>${state.jobs.map(j=>`<option value="${j.id}">${esc(j.job_number?j.job_number+' — '+j.name:j.name)} (${j.photo_count||0})</option>`).join('')}</select><button class="btn secondary slim" id="timelineBtn" type="button">View Job Timeline</button><button class="btn secondary slim" id="requestProjectPhotos" type="button">Request Project Photos</button><button class="btn secondary slim" id="deleteJobBtn" type="button">Delete Job</button>${isPavingClient()?`<div id="pavingReadiness" class="evidence-readiness">Choose a job to check its photo evidence.</div><div class="row compact" style="margin-top:8px"><button class="btn secondary slim" id="pavingJobPdf" type="button">Job Evidence PDF</button><button class="btn secondary slim" id="pavingJobWord" type="button">Job Evidence Word</button></div>`:''}</section>
-        <section class="organize-panel"><label>Create a New Job</label><input id="newJobName" placeholder="Job name"><div class="row compact"><input id="newJobNumber" placeholder="Job number"><input id="newJobCustomer" placeholder="Customer"></div><input id="newJobAddress" placeholder="Job address"><button class="btn secondary slim" id="createJobBtn" type="button">Create Job</button></section></div>
-      </div>
-    </details>
-
-    <details id="organizeFindSection" class="organize-workspace-section organize-search-section" open>
-      <summary class="organize-step-head"><div><h2>Search</h2></div></summary>
-      <div class="organize-search-grid">
-        <div><label>Filter by Topic</label><select id="filter"><option value="">All Topics</option>${filterTopics().map(a => `<option value="${esc(a)}">${esc(a)}</option>`).join('')}</select></div>
-        <div class="organize-search-box"><label>Search PhotoNotes</label><div class="row compact"><input id="photoSearch" type="search" placeholder="Search photo titles, notes, and details"><button class="btn" id="photoSearchBtn" type="button">Search</button><button class="btn secondary" id="photoSearchClear" type="button">Clear Search &amp; Filters</button></div></div>
-      </div>
-      <details class="organize-search-filters"><summary>More search filters</summary><div class="row compact"><input id="searchFrom" type="date" title="From date"><input id="searchTo" type="date" title="To date"></div><label style="text-transform:none;letter-spacing:0"><input id="searchMissingAddress" type="checkbox" style="width:auto"> Missing address only</label></details>
-      ${photoMarkersOn()?`<div class="row photo-marker-filters"><label style="color:var(--pn-text-000,#000);min-height:44px;display:flex;align-items:center;gap:8px"><input type="checkbox" id="markerFavorites" style="width:22px;height:22px"> Favorites</label><label style="color:var(--pn-text-000,#000);min-height:44px;display:flex;align-items:center;gap:8px"><input type="checkbox" id="markerFlagged" style="width:22px;height:22px"> Flagged</label></div>`:''}
-      <div class="status" id="photoSearchStatus"></div>
-    </details>
-
-    <details id="organizeWorkSection" class="organize-workspace-section organize-actions-section" ${state.selectedIds.size?'open':''}>
-      <summary class="organize-step-head"><div><h2>Selected PhotoNotes</h2></div></summary>
-      <div class="organize-selection-toolbar" aria-label="Photo Note selection controls">
-        <strong>Selection</strong>
-        <div class="organize-action-row"><button class="btn secondary" id="selall">Select All</button><button class="btn secondary" id="selnone">Clear Selection</button><button class="btn secondary" id="compareSelected">Compare 2 Photos</button>${window.PhotoNotesBulkMetadata?.enabled(state)?`<button type="button" class="btn secondary" id="editSelected">Edit Selected</button>`:''}${featureOn('measurements') ? `<button class="btn secondary" id="classifybatch">Classify Selected (AI)</button>` : ''}</div>
-      </div>
-      ${isConcreteClient()&&state.me.ramo_intake_access?`<div class="organize-action-row"><button class="btn secondary" id="ramoIntakeSend">Send to Ramo Optimizer</button><button class="btn secondary" id="ramoIntakeHistory">Ramo Submission History</button></div>`:''}
-    ${beforeAfterOn() ? `<div class="status" id="classifyprog"></div><details class="pair-builder"><summary><span>Before &amp; After Photos</span><span class="pair-expand">Create a comparison</span></summary><p>When work is complete, select one photo from before the job and one photo from after the job. The older photo will be marked Before by default.</p><button class="btn secondary slim" id="pairbtn">Create Before &amp; After</button></details>` : ''}
-
-    <div class="organize-form-grid organize-batch-grid">
-      <section class="organize-panel">
-        <label>File Selected Under a Topic</label>
-        <div class="row compact organize-topic-actions">
-          <select id="bulktopic"><option value="">Choose Topic</option>${state.areas.map(a => `<option value="${esc(a)}">${esc(a)}</option>`).join('')}</select>
-          <button class="btn secondary" id="applytopic">Add Topic</button>
-          <button class="btn secondary" id="replacetopic">Replace Topics</button>
-        </div>
-        <div class="row compact" style="margin-top:8px">
-          <input id="organizenewtopic" type="text" placeholder="Create a new topic...">
-          <button class="btn secondary" id="createtopic">Create</button>
-        </div>
-      </section>
-
-      <section class="organize-panel">
-        <label>Add Selected to a Document</label>
-        <div class="row compact">
-          <select id="groupsel" style="flex:1"><option value="">Choose Document</option></select>
-          <button class="btn secondary" id="addtogroup">Add</button>
-        </div>
-        <input id="newgroupname" type="text" placeholder="...or type a new document title" style="margin-top:8px" />
-      </section>
-
-      <section class="organize-panel">
-        <label>Apply Batch Changes</label>
-        <select id="batchJob"><option value="">Move to Job...</option>${state.jobs.map(j=>`<option value="${j.id}">${esc(j.name)}</option>`).join('')}</select>
-
-        <button class="btn secondary slim" id="openAnnotationEditing" type="button">Edit Photo Markings</button>
-        ${photoMarkersOn()?`<label for="batchMarker">Favorite / Flag selected photos</label><select id="batchMarker"><option value="">Choose marker change...</option><option value="favorite:true">Mark as Favorite</option><option value="favorite:false">Remove Favorite</option><option value="flagged:true">Flag</option><option value="flagged:false">Remove Flag</option></select><button type="button" class="btn secondary" id="applyMarkers">Apply Markers</button>`:''}
-        <button class="btn secondary slim" id="runBatch" type="button">Apply Batch Changes</button>
-      </section>
+    <section class="library-project-controls" aria-label="Project and group filters">
+      <label for="jobFilter">Project<select id="jobFilter"><option value="">All Projects</option><option value="unassigned">No Project</option>${state.jobs.map(j=>`<option value="${j.id}">${esc(j.job_number?j.job_number+' - '+j.name:j.name)} (${j.photo_count||0})</option>`).join('')}</select></label>
+      <button class="btn secondary slim" id="createJobBtn" type="button">New Project</button>
+      <label for="libraryGroupFilter" id="libraryGroupFilterLabel" hidden>Group<select id="libraryGroupFilter"><option value="">All Groups</option></select></label>
+      <button class="btn secondary slim" id="createProjectGroup" type="button" hidden>New Group</button>
+      <div class="library-project-actions" id="libraryProjectActions" hidden><button class="btn secondary slim" id="timelineBtn" type="button">Project Details</button><button class="btn secondary slim" id="requestProjectPhotos" type="button">Request Photos</button><button class="delete-text" id="deleteJobBtn" type="button">Delete Project</button></div>
+    </section>
+    <div class="library-search-row">
+      <input id="photoSearch" type="search" placeholder="Search photo titles, notes, and details" aria-label="Search PhotoNotes">
+      <button class="btn secondary slim" id="libraryFilters" type="button" aria-expanded="false">Filters</button>
+      <button class="btn secondary slim" id="librarySavedSearches" type="button" aria-expanded="false">Saved Searches</button>
     </div>
-    </details>
-
-    ${isConcreteClient()?'<div class="organize-footer-actions"><button class="btn secondary" id="concreteAreas">Patio &amp; Foundation Areas</button></div>':''}
-    ${featureOn('measurements') ? `<div class="organize-footer-actions"><button class="btn secondary" id="openmap">Open Job Site Map</button></div>` : ''}
-
-    <div class="organize-library-heading"><div><h2>Saved PhotoNotes</h2></div><div class="row compact"><button class="btn secondary slim" id="librarySelectAll">Select All</button><button class="btn secondary slim" id="libraryClearSelection">Clear Selection</button></div></div>
-    ${isProClient()?'<details class="organize-panel" id="epLibrary"><summary>Export Presets</summary><p style="color:var(--pn-text-000,#000);text-align:left">Package selected Photo Notes using reusable export settings.</p><section id="exportPresetLibrary"></section></details>':''}
+    <section id="libraryFilterPanel" class="library-filter-panel" hidden>
+      <label for="filter">Topic<select id="filter"><option value="">All Topics</option>${filterTopics().map(a=>`<option value="${esc(a)}">${esc(a)}</option>`).join('')}</select></label>
+      <label>From<input id="searchFrom" type="date"></label><label>To<input id="searchTo" type="date"></label>
+      <label class="plain-check"><input id="searchMissingAddress" type="checkbox"> Missing Address</label>
+      ${photoMarkersOn()?'<label class="plain-check"><input type="checkbox" id="markerFavorites"> Favorites</label><label class="plain-check"><input type="checkbox" id="markerFlagged"> Flagged</label>':''}
+      <button class="btn secondary slim" id="photoSearchClear" type="button">Clear Filters</button>
+    </section>
+    <section id="librarySavedSearchPanel" class="library-saved-search-panel" hidden><div id="photoSearchStatus"></div></section>
+    <section id="organizeWorkSection" class="library-selection-panel" ${state.selectedIds.size?'':'hidden'}>
+      <strong id="librarySelectionCount">${state.selectedIds.size} PhotoNote${state.selectedIds.size===1?'':'s'} Selected</strong>
+      <label for="libraryAssignProject">Add to Project<select id="libraryAssignProject"><option value="">Choose Project</option>${state.jobs.map(j=>`<option value="${j.id}">${esc(j.name)}</option>`).join('')}</select></label>
+      <label for="libraryAssignGroup" id="libraryAssignGroupLabel" hidden>Group (Optional)<select id="libraryAssignGroup"><option value="">No Group</option></select></label>
+      <button class="btn" id="libraryAssign" type="button">Add to Project</button>
+      <button class="btn secondary" id="libraryCreateAndAssign" type="button">Create New Project</button>
+    </section>
+    <div class="organize-library-heading"><h2>Saved PhotoNotes</h2><div class="row compact"><button class="btn secondary slim" id="librarySelectAll">Select All</button><button class="btn secondary slim" id="libraryClearSelection">Clear Selection</button></div></div>
+    <section class="library-specialty-actions" id="librarySpecialtyActions" hidden>
+      ${isPavingClient()?'<div id="pavingReadiness" class="evidence-readiness"></div><button class="btn secondary slim" id="pavingJobPdf">Job Evidence PDF</button><button class="btn secondary slim" id="pavingJobWord">Job Evidence Word</button>':''}
+      ${isConcreteClient()?'<button class="btn secondary slim" id="concreteAreas">Patio &amp; Foundation Areas</button>':''}
+      ${featureOn('measurements')?'<button class="btn secondary slim" id="openmap">Open Job Site Map</button>':''}
+      ${isConcreteClient()&&state.me.ramo_intake_access?'<button class="btn secondary slim" id="ramoIntakeSend">Send to Ramo Optimizer</button><button class="btn secondary slim" id="ramoIntakeHistory">Ramo Submission History</button>':''}
+    </section>
     <div id="cards"></div>`;
-  for(const id of ['organizeJobSection','organizeFindSection','organizeWorkSection']){const panel=document.getElementById(id),key=state.me?.id+':'+selectedEdition()+':'+id;if(organizeSectionStates.has(key))panel.open=organizeSectionStates.get(key);panel.ontoggle=()=>organizeSectionStates.set(key,panel.open);}
-  document.getElementById('filter').onchange = e => runSmartSearch();
+  document.getElementById('filter').onchange=runSmartSearch;
   ['markerFavorites','markerFlagged'].forEach(id=>{const e=document.getElementById(id);if(e)e.onchange=()=>runSmartSearch();});
-  const markers=document.getElementById('applyMarkers');if(markers)markers.onclick=batchPhotoMarkers;
-  const runSearch=()=>runSmartSearch();
-  document.getElementById('photoSearchBtn').onclick=runSearch;
   for(const id of ['searchFrom','searchTo','searchMissingAddress'])document.getElementById(id).onchange=runSmartSearch;
-  document.getElementById('photoSearch').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();runSearch();}};
-  void window.PhotoNotesCustomFields?.filters({edition:selectedEdition(),search:runSmartSearch});
+  let searchTimer;document.getElementById('photoSearch').oninput=()=>{clearTimeout(searchTimer);searchTimer=setTimeout(runSmartSearch,180);};
+  void window.PhotoNotesCustomFields?.filters({edition:state.proType==='general'?'pro':selectedEdition(),search:runSmartSearch});
   document.getElementById('photoSearchClear').onclick=()=>{globalThis.PhotoNotesCustomFields?.resetFilter();document.getElementById('photoSearch').value='';document.getElementById('filter').value='';document.getElementById('jobFilter').value='';document.getElementById('searchFrom').value='';document.getElementById('searchTo').value='';document.getElementById('searchMissingAddress').checked=false;['markerFavorites','markerFlagged'].forEach(id=>{const e=document.getElementById(id);if(e)e.checked=false;});runSmartSearch();};
-  document.getElementById('selall').onclick = () => {document.querySelectorAll('.capchk').forEach(c => { c.checked = true; state.selectedIds.add(String(c.value)); });updateAnnotationSelection();};
-  document.getElementById('selnone').onclick = () => { state.selectedIds.clear(); document.querySelectorAll('.capchk').forEach(c => c.checked = false);updateAnnotationSelection(); };
-  document.getElementById('librarySelectAll').onclick=document.getElementById('selall').onclick;
-  document.getElementById('libraryClearSelection').onclick=document.getElementById('selnone').onclick;
+  document.getElementById('librarySelectAll').onclick=()=>{document.querySelectorAll('.capchk').forEach(c=>{c.checked=true;state.selectedIds.add(String(c.value));});updateAnnotationSelection();};
+  document.getElementById('libraryClearSelection').onclick=()=>{state.selectedIds.clear();document.querySelectorAll('.capchk').forEach(c=>c.checked=false);updateAnnotationSelection();};
   const scheduledPhotos=document.getElementById('fuOpen');if(scheduledPhotos)scheduledPhotos.onclick=()=>window.PhotoNotesFollowUps.open();
   document.getElementById('requestProjectPhotos').onclick=()=>{const id=document.getElementById('jobFilter').value;if(!id||id==='unassigned')return toast('Choose a project first');state._photoRequestProjectId=id;rememberPhotoToolReturn();state.view='photo-requests';renderApp();};
   const ramoSend=document.getElementById('ramoIntakeSend');if(ramoSend)ramoSend.onclick=()=>openRamoIntake();
   const ramoHistory=document.getElementById('ramoIntakeHistory');if(ramoHistory)ramoHistory.onclick=()=>openRamoIntake(true);
-  document.getElementById('applytopic').onclick = applyTopicToSelected;
-  document.getElementById('replacetopic').onclick = replaceTopicsOnSelected;
-  document.getElementById('createtopic').onclick = createOrganizeTopic;
-  document.getElementById('addtogroup').onclick = addSelectedToGroup;
-  document.getElementById('createJobBtn').onclick=createJob;
-  document.getElementById('jobFilter').onchange=()=>{runSmartSearch();loadPavingReadiness();};
+  document.getElementById('createJobBtn').onclick=()=>openLibraryProjectDialog(false);
+  document.getElementById('libraryCreateAndAssign').onclick=()=>openLibraryProjectDialog(true);
+  document.getElementById('libraryAssign').onclick=assignSelectedToProject;
+  document.getElementById('libraryAssignProject').onchange=()=>loadLibraryGroups('assign');
+  document.getElementById('createProjectGroup').onclick=openLibraryGroupDialog;
+  document.getElementById('libraryFilters').onclick=()=>toggleLibraryPanel('libraryFilterPanel','libraryFilters');
+  document.getElementById('librarySavedSearches').onclick=()=>toggleLibraryPanel('librarySavedSearchPanel','librarySavedSearches');
+  document.getElementById('jobFilter').onchange=()=>{updateLibraryProjectControls();runSmartSearch();loadPavingReadiness();};
+  document.getElementById('libraryGroupFilter').onchange=filterLibraryCardsByGroup;
   document.getElementById('timelineBtn').onclick=showSelectedJobTimeline;document.getElementById('deleteJobBtn').onclick=deleteSelectedJob;
   const pavingPdf=document.getElementById('pavingJobPdf');if(pavingPdf)pavingPdf.onclick=()=>exportPavingJobEvidence('pdf');
   const pavingWord=document.getElementById('pavingJobWord');if(pavingWord)pavingWord.onclick=()=>exportPavingJobEvidence('docx');
-  document.getElementById('compareSelected').onclick=compareSelectedPhotos;
-  document.getElementById('runBatch').onclick=runBatchChanges;document.getElementById('openAnnotationEditing').onclick=()=>{state.view='edit';renderApp();};
-  const editSelected=document.getElementById('editSelected');if(editSelected)editSelected.onclick=()=>window.PhotoNotesBulkMetadata.open({ids:selectedCaptureIds(),jobs:state.jobs,topics:state.areas,api,esc,toast,refresh:async()=>{await loadAreas();runSmartSearch();}});
-  const cb = document.getElementById('classifybatch');
-  if (cb) cb.onclick = classifySelected;
-  const pb = document.getElementById('pairbtn');
-  if (pb) pb.onclick = pairSelected;
   const concreteAreas=document.getElementById('concreteAreas');if(concreteAreas)concreteAreas.onclick=()=>openConcreteFootprints();
   const om = document.getElementById('openmap'); if (om) om.onclick = () => { state.view = 'map'; renderApp(); };
-  window.PhotoNotesExportPresets?.mount(document.getElementById('exportPresetLibrary'));
-  loadGroupOptions();
+  updateLibraryProjectControls();
   if(!await PhotoNotesSavedViews.mount('organize',document.getElementById('photoSearchStatus'),runSmartSearch))loadCards('');
+}
+
+function toggleLibraryPanel(panelId,buttonId){
+  const panel=document.getElementById(panelId),button=document.getElementById(buttonId),next=panel.hidden;
+  panel.hidden=!next;button.setAttribute('aria-expanded',String(next));
+}
+async function updateLibraryProjectControls(){
+  const value=document.getElementById('jobFilter')?.value||'',selected=value&&value!=='unassigned';
+  for(const id of ['libraryProjectActions','librarySpecialtyActions']){const node=document.getElementById(id);if(node)node.hidden=!selected;}
+  const label=document.getElementById('libraryGroupFilterLabel'),button=document.getElementById('createProjectGroup');
+  if(label)label.hidden=!selected;if(button)button.hidden=!selected;
+  if(selected)await loadLibraryGroups('filter');else if(document.getElementById('libraryGroupFilter'))document.getElementById('libraryGroupFilter').innerHTML='<option value="">All Groups</option>';
+}
+async function loadLibraryGroups(mode){
+  const projectId=mode==='assign'?document.getElementById('libraryAssignProject')?.value:document.getElementById('jobFilter')?.value;
+  const label=document.getElementById(mode==='assign'?'libraryAssignGroupLabel':'libraryGroupFilterLabel'),select=document.getElementById(mode==='assign'?'libraryAssignGroup':'libraryGroupFilter');
+  if(!select)return;if(!projectId||projectId==='unassigned'){select.innerHTML=`<option value="">${mode==='assign'?'No Group':'All Groups'}</option>`;if(label&&mode==='assign')label.hidden=true;return;}
+  const response=await api(`/api/projects/${projectId}/groups`),groups=response.ok?await response.json():[];
+  select.innerHTML=`<option value="">${mode==='assign'?'No Group':'All Groups'}</option>`+groups.map(group=>`<option value="${group.id}">${esc(group.name)}</option>`).join('');
+  if(label)label.hidden=false;
+}
+function openLibraryProjectDialog(assignAfterCreate){
+  const dialog=document.createElement('dialog');dialog.className='library-simple-dialog';
+  dialog.innerHTML=`<form method="dialog"><h2>Create New Project</h2><input id="libraryNewProjectName" placeholder="Project name" aria-label="Project name"><div class="dialog-actions"><button class="btn" id="libraryCreateProjectConfirm" value="save">Create Project</button><button class="btn secondary" value="cancel">Cancel</button></div><p role="status"></p></form>`;
+  document.body.appendChild(dialog);dialog.addEventListener('close',async()=>{if(dialog.returnValue!=='save'){dialog.remove();return;}const name=dialog.querySelector('#libraryNewProjectName').value.trim();if(!name){dialog.querySelector('[role=status]').textContent='Enter a project name.';dialog.showModal();return;}const response=await api('/api/jobs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});if(!response.ok){dialog.querySelector('[role=status]').textContent='Project could not be created.';dialog.showModal();return;}const project=await response.json();await loadJobs();dialog.remove();if(assignAfterCreate){document.getElementById('libraryAssignProject').innerHTML='<option value="">Choose Project</option>'+state.jobs.map(job=>`<option value="${job.id}">${esc(job.name)}</option>`).join('');document.getElementById('libraryAssignProject').value=String(project.id);await loadLibraryGroups('assign');await assignSelectedToProject();}else{renderList();}});dialog.showModal();dialog.querySelector('input').focus();
+}
+function openLibraryGroupDialog(){
+  const projectId=document.getElementById('jobFilter')?.value;if(!projectId||projectId==='unassigned')return toast('Choose a project first');
+  const dialog=document.createElement('dialog');dialog.className='library-simple-dialog';dialog.innerHTML=`<form method="dialog"><h2>Create New Group</h2><input id="libraryNewGroupName" placeholder="Group name" aria-label="Group name"><div class="dialog-actions"><button class="btn" id="libraryCreateGroupConfirm" value="save">Create Group</button><button class="btn secondary" value="cancel">Cancel</button></div><p role="status"></p></form>`;document.body.appendChild(dialog);dialog.addEventListener('close',async()=>{if(dialog.returnValue!=='save'){dialog.remove();return;}const name=dialog.querySelector('input').value.trim();if(!name){dialog.querySelector('[role=status]').textContent='Enter a group name.';dialog.showModal();return;}const response=await api(`/api/projects/${projectId}/groups`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});if(!response.ok){dialog.querySelector('[role=status]').textContent='Group could not be created.';dialog.showModal();return;}dialog.remove();await loadLibraryGroups('filter');});dialog.showModal();dialog.querySelector('input').focus();
+}
+async function assignSelectedToProject(){
+  const ids=selectedCaptureIds(),projectId=document.getElementById('libraryAssignProject')?.value,groupId=document.getElementById('libraryAssignGroup')?.value;
+  if(!ids.length)return toast('Select at least one PhotoNote');if(!projectId)return toast('Choose a project');
+  const button=document.getElementById('libraryAssign');button.disabled=true;
+  try{const response=await api('/api/library/assign',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids,project_id:Number(projectId),group_id:groupId?Number(groupId):null})});if(!response.ok)throw Error();state.selectedIds.clear();toast(`Added ${ids.length} PhotoNote${ids.length===1?'':'s'} to the project`);await loadJobs();renderList();}catch{toast('PhotoNotes could not be added to the project');button.disabled=false;}
+}
+function filterLibraryCardsByGroup(){
+  const groupId=Number(document.getElementById('libraryGroupFilter')?.value||0);
+  document.querySelectorAll('[data-library-photo]').forEach(card=>{const row=(window._lastCards||[]).find(item=>Number(item.id)===Number(card.dataset.libraryPhoto));card.hidden=!!groupId&&!((row?.project_memberships||[]).some(project=>(project.groups||[]).some(group=>Number(group.id)===groupId)));});
 }
 
 function photoMarkersOn(){return isProClient()&&['general','pro','paving','asphalt','concrete','property','hoa','contractor','roofer'].includes(state.proType);}
@@ -2419,8 +2413,8 @@ function runSmartSearch(){
 async function exportPavingJobEvidence(format){const id=(document.getElementById('jobFilter')||{}).value;if(!id||id==='unassigned'){toast('Choose a job first');return;}const button=document.getElementById(format==='docx'?'pavingJobWord':'pavingJobPdf');if(button){button.disabled=true;button.textContent='Preparing...';}try{const r=await api(`/api/paving/jobs/${id}/report?doc=${format}`);if(!r.ok)throw new Error();const blob=await r.blob(),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`paving-job-evidence.${format==='docx'?'docx':'pdf'}`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);toast('Paving job evidence report ready');}catch(e){toast('Paving job report could not be created');}finally{if(button){button.disabled=false;button.textContent=format==='docx'?'Job Evidence Word':'Job Evidence PDF';}}}
 async function loadPavingReadiness(){const box=document.getElementById('pavingReadiness'),id=(document.getElementById('jobFilter')||{}).value;if(!box)return;if(!id||id==='unassigned'){box.textContent='Choose a job to check its photo evidence.';return;}const r=await api(`/api/paving/jobs/${id}/completeness`);if(!r.ok){box.textContent='Photo evidence readiness could not be checked.';return;}const d=await r.json();box.innerHTML=`<strong>Photo evidence readiness: ${d.complete}/${d.total}</strong>${d.checks.map(x=>`<div class="${x.complete?'evidence-ok':'evidence-missing'}">${x.complete?'✓':'○'} ${esc(x.label)}</div>`).join('')}`;}
 async function createJob(){const name=document.getElementById('newJobName').value.trim();if(!name){toast('Enter a job name');return;}const body={name,job_number:document.getElementById('newJobNumber').value.trim(),customer:document.getElementById('newJobCustomer').value.trim(),address:document.getElementById('newJobAddress').value.trim()};const r=await api('/api/jobs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});if(!r.ok){toast('Job could not be created');return;}const job=await r.json();await loadJobs();state.jobId=String(job.id);toast('Job created');renderList();}
-async function deleteSelectedJob(){const id=document.getElementById('jobFilter').value,job=state.jobs.find(j=>String(j.id)===id);if(!job)return toast('Choose a job first');if(!confirm(uiT('Delete job')+' '+job.name+'? '+uiT('Photos, tickets and other records are kept without this job assignment.')))return;const button=document.getElementById('deleteJobBtn');button.disabled=true;try{const r=await api('/api/jobs/'+id,{method:'DELETE'});if(!r.ok)throw Error();await loadJobs();state.jobId='';toast('Job deleted. Photos and records were kept.');renderList();}catch{toast('Job could not be deleted');button.disabled=false;}}
-async function showSelectedJobTimeline(){const id=(document.getElementById('jobFilter')||{}).value;if(!id||id==='unassigned'){toast('Choose a job first');return;}const r=await api(`/api/jobs/${id}/timeline`);if(!r.ok){toast('Timeline could not be loaded');return;}const d=await r.json(),body=document.getElementById('body');body.innerHTML=`<button class="backlink" id="timelineBack">← Back to Organize</button><div class="workflow-intro"><strong>${esc(d.job.name)} Timeline</strong><span>${esc([d.job.job_number,d.job.customer,d.job.address].filter(Boolean).join(' · '))}</span></div><div class="row"><span class="badge">${esc(d.job.status)}</span><button class="btn secondary slim" id="jobStatusBtn">${d.job.status==='active'?'Mark Job Complete':'Reopen Job'}</button></div><div>${d.captures.length?d.captures.map((c,i)=>`<div style="display:grid;grid-template-columns:90px 1fr;gap:12px;border-left:3px solid var(--pn-border-2455d9,#2455d9);padding:0 0 20px 16px"><div><strong>${new Date(c.created_at).toLocaleDateString(uiLocale())}</strong><div class="meta">${new Date(c.created_at).toLocaleTimeString(uiLocale(),{hour:'numeric',minute:'2-digit'})}</div></div><div class="card" style="margin:0"><div class="photo-title">${esc(c.photo_title||'Untitled photo')}</div>${c.photo_path?`<img src="${capturePhotoSrc(c)}" alt="Timeline photo">`:''}${photoLocationHtml(c)}${window.PhotoComments?.enabled()&&c.photo_path?`<button class="btn secondary slim" data-html2canvas-ignore="true" data-comments-id="${c.id}">Comments</button>`:''}<div>${esc(c.note||'(no note)')}</div></div></div>`).join(''):'<p class="empty">No photos are assigned to this job yet.</p>'}</div>`;document.getElementById('timelineBack').onclick=renderList;document.getElementById('jobStatusBtn').onclick=async()=>{const u=await api(`/api/jobs/${id}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:d.job.status==='active'?'completed':'active'})});if(u.ok){toast('Job status updated');await loadJobs();renderList();}else toast('Job status could not be updated');};}
+async function deleteSelectedJob(){const id=document.getElementById('jobFilter').value,job=state.jobs.find(j=>String(j.id)===id);if(!job)return toast('Choose a project first');if(!confirm('Delete project '+job.name+'? PhotoNotes and other records will be kept without this project assignment.'))return;const button=document.getElementById('deleteJobBtn');button.disabled=true;try{const r=await api('/api/jobs/'+id,{method:'DELETE'});if(!r.ok)throw Error();await loadJobs();state.jobId='';toast('Project deleted. PhotoNotes and records were kept.');renderList();}catch{toast('Project could not be deleted');button.disabled=false;}}
+async function showSelectedJobTimeline(){const id=(document.getElementById('jobFilter')||{}).value;if(!id||id==='unassigned'){toast('Choose a project first');return;}const r=await api(`/api/jobs/${id}/timeline`);if(!r.ok){toast('Project details could not be loaded');return;}const d=await r.json(),body=document.getElementById('body');body.innerHTML=`<button class="backlink" id="timelineBack">← Back to Library</button><div class="workflow-intro"><strong>${esc(d.job.name)}</strong><span>${esc([d.job.job_number,d.job.customer,d.job.address].filter(Boolean).join(' · '))}</span></div><div class="row"><span class="badge">${esc(d.job.status)}</span><button class="btn secondary slim" id="jobStatusBtn">${d.job.status==='active'?'Mark Project Complete':'Reopen Project'}</button></div><div>${d.captures.length?d.captures.map(c=>`<div style="display:grid;grid-template-columns:90px 1fr;gap:12px;padding:0 0 20px 16px"><div><strong>${new Date(c.created_at).toLocaleDateString(uiLocale())}</strong><div class="meta">${new Date(c.created_at).toLocaleTimeString(uiLocale(),{hour:'numeric',minute:'2-digit'})}</div></div><div class="card" style="margin:0"><div class="photo-title">${esc(c.photo_title||'Untitled PhotoNote')}</div>${c.photo_path?`<img src="${capturePhotoSrc(c)}" alt="Project PhotoNote">`:''}${photoLocationHtml(c)}${window.PhotoComments?.enabled()&&c.photo_path?`<button class="btn secondary slim" data-html2canvas-ignore="true" data-comments-id="${c.id}">Comments</button>`:''}<div>${esc(c.note||'No notes added.')}</div></div></div>`).join(''):'<p class="empty">No PhotoNotes are assigned to this project yet.</p>'}</div>`;document.getElementById('timelineBack').onclick=renderList;document.getElementById('jobStatusBtn').onclick=async()=>{const u=await api(`/api/jobs/${id}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:d.job.status==='active'?'completed':'active'})});if(u.ok){toast('Project status updated');await loadJobs();renderList();}else toast('Project status could not be updated');};}
 const ANNOTATION_TEMPLATES=window.PhotoNotesAnnotationTemplates;
 let savedAnnotationTemplates=[],savedAnnotationLoad=0;
 function annotationTemplateItems(key){return key.startsWith('saved:')?savedAnnotationTemplates.find(t=>String(t.id)===key.slice(6))?.overlays:ANNOTATION_TEMPLATES[key];}
@@ -2546,7 +2540,7 @@ async function renderLibraryPhoto(){
   wireCards(body.querySelector('#cards'),shown);retryPhotoImages(body.querySelector('#cards'));
 }
 
-function updateAnnotationSelection(){const count=selectedCaptureIds().length,p=document.getElementById('batchAnnotationSelected'),panel=document.getElementById('organizeWorkSection');if(p)p.textContent=`${count} photos selected, including selections retained across filters.`;if(count&&panel&&!panel.open)panel.open=true;}
+function updateAnnotationSelection(){const count=selectedCaptureIds().length,p=document.getElementById('batchAnnotationSelected'),panel=document.getElementById('organizeWorkSection'),label=document.getElementById('librarySelectionCount');if(p)p.textContent=`${count} photos selected, including selections retained across filters.`;if(panel)panel.hidden=!count;if(label)label.textContent=`${count} PhotoNote${count===1?'':'s'} Selected`;}
 function wireBatchAnnotations(){
  void loadSavedAnnotationTemplates();
  updateAnnotationSelection();
@@ -2835,6 +2829,7 @@ async function loadCards(area, query = '', filters = {}) {
   cards.innerHTML = html.join('');
   wireCards(cards, rows);
   retryPhotoImages(cards);
+  if(['organize','photo-library'].includes(state.view))filterLibraryCardsByGroup();
   cards.querySelectorAll('.capchk').forEach(c => { c.checked = state.selectedIds.has(String(c.value)); });
   if (state._focusCapture) {
     const chk = cards.querySelector(`.capchk[value="${state._focusCapture}"]`);
@@ -2852,8 +2847,9 @@ function photoLocationHtml(c,addressFallback='No address'){
 function gaugePhotoHtml(c,full=false){if(!c.gauge_record||!['contractor','paving','concrete','hoa','property'].includes(state.proType))return '';const f=c.gauge_record.fields||{},field=(key,label)=>f[key]?`<div><b>${label}:</b> ${esc(f[key])}</div>`:'';return `<section class="gauge-photo-details"><strong>Gauge &amp; Instrument</strong><div class="${full?'':'specialist-record-summary'}">${field('reading','Reading')}${field('unit','Unit')}${field('instrument_type','Instrument Type')}${field('equipment_name','Equipment Name')}</div>${full?`${field('observed_at','Observed At')}${f.notes?`<strong>Additional Details</strong>${field('notes','Notes')}`:''}`:`<details data-gauge-photo-details><summary>Show More</summary>${field('observed_at','Observed At')}${field('notes','Notes')}</details>`}</section>`;}
 function photoEvidencePreview(c,full=false){return gaugePhotoHtml(c,full)+(isConcreteClient()?(c.footprints||[]).map(f=>`<section class="concrete-evidence"><strong>Saved Area: ${esc(f.name)}</strong><p>${esc(concreteAreaText(f))}</p>${f.notes?`<p>${esc(f.notes)}</p>`:''}</section>`).join(''):'');}
 function libraryCardHtml(c){
-  const projects=c.job_name?esc(c.job_number?c.job_number+' - '+c.job_name:c.job_name):'None';
-  const groups=(c.group_names||c.groups||[]).map(g=>esc(typeof g==='string'?g:g.name)).join(', ')||'None';
+  const memberships=c.project_memberships||[];
+  const projects=memberships.length?memberships.map(project=>esc(project.job_number?project.job_number+' - '+project.name:project.name)).join(', '):(c.job_name?esc(c.job_number?c.job_number+' - '+c.job_name:c.job_name):'None');
+  const groups=memberships.flatMap(project=>(project.groups||[]).map(group=>esc(project.name+': '+group.name))).join(', ')||'None';
   return `<article class="card library-photo-card" data-library-photo="${c.id}">
     <label class="library-photo-select"><input type="checkbox" class="capchk" value="${c.id}" aria-label="Select ${esc(c.photo_title||'Untitled PhotoNote')}"></label>
     ${c.photo_path?`<img data-capture-photo="${c.id}" src="${capturePhotoSrc(c)}" alt="${esc(c.photo_title||'PhotoNote')}">`:''}
