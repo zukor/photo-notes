@@ -845,6 +845,7 @@ function renderCapture() {
 
   const dictateBtn = document.getElementById('dictate');
   if (dictateBtn) dictateBtn.onclick = toggleDictation;
+  if(isIOS()&&window.PhotoNotesSpeechDocument)window.PhotoNotesSpeechDocument.prepare(({ready,failed})=>{if(document.getElementById('dictate')!==dictateBtn||dictationActive||dictationPending||dictationFinish)return;const restart=document.getElementById('dictationRestart');if(restart)restart.disabled=!ready&&!failed;dictateBtn.disabled=!ready&&!failed;dictateBtn.textContent=ready||failed?'Record Notes':'Preparing microphone...';if(failed){const status=document.getElementById('dictationStatus');if(status)status.textContent='Speech could not initialize. Use Keyboard Microphone or reload Photo Notes to try again.';}});
   const keyboardDictation=document.getElementById('keyboardDictation');
   if(keyboardDictation)keyboardDictation.onclick=()=>{stopCaptureDictation();document.getElementById('note').focus();document.getElementById('dictationStatus').textContent='Tap the microphone on your iPhone keyboard and speak. If it is missing, enable Dictation in Settings > General > Keyboard.';};
 
@@ -1379,6 +1380,7 @@ function showDictationInterruption(reason) {
   dialog.setAttribute('aria-labelledby','dictationInterruptedTitle');
   dialog.innerHTML='<h2 id="dictationInterruptedTitle">Recording stopped early</h2><p id="dictationInterruptedReason" style="color:#000"></p><p style="color:#000">Your captured words are kept. Restart to continue your note.</p><button class="btn" id="dictationRestart" type="button">Restart Recording</button><button class="btn secondary" id="dictationStop" type="button">Stop</button>';
   dialog.querySelector('#dictationInterruptedReason').textContent=reason;
+  if(isIOS()&&window.PhotoNotesSpeechDocument)dialog.querySelector('#dictationRestart').disabled=!window.PhotoNotesSpeechDocument.constructor();
   const close=()=>{dialog.close();if(document.getElementById('note')===note)document.getElementById('dictate')?.focus();};
   dialog.querySelector('#dictationRestart').onclick=()=>{const current=generation===dictationGeneration&&state.photoFile===photo&&document.getElementById('note')===note;close();if(current)void toggleDictation();};
   dialog.querySelector('#dictationStop').onclick=close;
@@ -1398,6 +1400,7 @@ function cleanupDictation() {
   recognizer = null;
   const btn = document.getElementById('dictate');
   if (btn) { btn.disabled = false; btn.textContent = 'Record Notes'; btn.classList.remove('on'); }
+  if(isIOS())window.PhotoNotesSpeechDocument?.reset();
 }
 
 function stopCaptureDictation(){
@@ -1412,6 +1415,7 @@ function stopCaptureDictation(){
   // delivers onend. Graceful Stop/Save still waits for final words above.
   const current=recognizer;recognizer=null;iosDictationSession=null;iosDictationConstructor=null;if(current)try{current.abort();recordDictationEvent('abort');}catch(e){try{current.stop();}catch(ignore){}}
   const btn=document.getElementById('dictate');if(btn){btn.disabled=false;btn.textContent='Record Notes';btn.classList.remove('on');}
+  if(isIOS())window.PhotoNotesSpeechDocument?.reset();
 }
 
 // Stop listening, but keep this session valid until Safari delivers its final result.
@@ -1453,6 +1457,7 @@ async function toggleDictation() {
     await finishCaptureDictation();
     return;
   }
+  if(isIOS()&&window.PhotoNotesSpeechDocument&&!window.PhotoNotesSpeechDocument.constructor()){const status=document.getElementById('dictationStatus');if(status)status.textContent='Speech is not ready. Use Keyboard Microphone or reload Photo Notes to try again.';return;}
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
     toast('This browser cannot access the microphone. Type the note or use the keyboard microphone');
     return;
@@ -1488,10 +1493,12 @@ async function toggleDictation() {
 function startDictationSession(SR) {
   if (!dictationActive) return;
   const noteEl = document.getElementById('note');
-  let session;
-  try{session=new SR();}catch(error){stopCaptureDictation();showDictationInterruption('The microphone could not start. You can use the keyboard microphone.');return;}
-  const generation=++dictationGeneration, photoForSession=state.photoFile, ios=isIOS();
-  if(ios){iosDictationSession=session;iosDictationConstructor=SR;}
+  let session;const ios=isIOS();
+  // The prior session has ended. Aborting it here can reset Safari's shared
+  // speech service just as the next session starts. Active cancellation still
+  // aborts through stopCaptureDictation; completed sessions are only released.
+  try{if(ios&&iosDictationSession){iosDictationSession=null;iosDictationConstructor=null;recordDictationEvent('completed-session-released');}const SessionSR=ios&&window.PhotoNotesSpeechDocument?window.PhotoNotesSpeechDocument.constructor():SR;if(!SessionSR)throw Error('Speech document unavailable');session=new SessionSR();if(ios){if(window.PhotoNotesSpeechDocument)recordDictationEvent('fresh-document');iosDictationSession=session;iosDictationConstructor=SR;}}catch(error){stopCaptureDictation();showDictationInterruption('The microphone could not start. You can use the keyboard microphone.');return;}
+  const generation=++dictationGeneration, photoForSession=state.photoFile;
   recognizer = session;
   session.lang = uiSpeechLanguage();
   session.continuous = true;
