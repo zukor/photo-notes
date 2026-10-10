@@ -1,7 +1,7 @@
 const el = document.getElementById('app');
 // Phones/tablets open to Capture (grab a photo fast); computers open to the Library (review the photos).
 const IS_HANDHELD = (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) || window.innerWidth < 768;
-let state = { view: IS_HANDHELD ? 'capture' : 'organize', location: null, address: null, photoFile: null, kind: 'note', area: '', urgency:'standard', areas: [], jobs: [], jobId: '', hoaCompany:null, hoaMembers:[], hoaUnread:0, communities:[], communityId:'', groups: null, groupId: null, imgv: Date.now(), plan: 'free', proType:'paving', me: null, ewrId: null, selectedIds: new Set() };
+let state = { view: IS_HANDHELD ? 'capture' : 'organize', location: null, address: null, photoFile: null, kind: 'note', area: '', urgency:'standard', securityIssueType:'Security Issue', areas: [], jobs: [], jobId: '', hoaCompany:null, hoaMembers:[], hoaUnread:0, communities:[], communityId:'', groups: null, groupId: null, imgv: Date.now(), plan: 'free', proType:'paving', me: null, ewrId: null, selectedIds: new Set() };
 
 // Pro gating on the client. Mirrors isPro(user) on the server. Pro-only UI must
 // not render at all for free users (no disabled teaser).
@@ -410,7 +410,7 @@ function renderApp() {
       const r=await api('/api/switch-edition',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({edition})});
       if(!r.ok)throw new Error();
       stopCaptureDictation();
-      state.view=edition==='roads'?'road-report':'capture';state._captureShareSave=null;state.photoFile=null;state._note='';state._captureTemplateName='';state._concreteCapture=null;state._pavingReason=null;state._duplicateContext=null;
+      state.securityIssueType='Security Issue';state.view=edition==='roads'?'road-report':'capture';state._captureShareSave=null;state.photoFile=null;state._note='';state._captureTemplateName='';state._concreteCapture=null;state._pavingReason=null;state._duplicateContext=null;
       clearIssueDeepLink();
       await boot();toast('Version switched');
     }catch(e){toast('Version could not be switched. Please try again.');}
@@ -795,6 +795,7 @@ function renderCapture() {
 
     ${isProClient()&&Object.keys(readerConfigs).some(type=>PhotoNotesScannerAvailability.allowed(state.proType,type))?'<button type="button" class="backlink" id="openSavedScanners">Saved Scanner Records</button>':''}
     <section id="captureSettings" class="capture-settings">
+    ${isSecurityClient()?`<label for="securityIssueType">Issue Type</label><select id="securityIssueType">${['Security Issue','Maintenance Issue','Urgent Issue','Emergency'].map(type=>`<option value="${type}" ${state.securityIssueType===type?'selected':''}>${type}</option>`).join('')}</select>`:''}
     ${isHoaClient()?`<label>Maintenance Category</label><select id="hoaArea">${HOA_AREAS.map(a=>`<option value="${esc(a)}">${esc(a)}</option>`).join('')}</select><div id="hoaDirectedWrap" style="display:none"><label>Directed To</label><input id="hoaDirected" placeholder="Person expected to answer"></div>`:`<details id="captureTopic"><summary id="captureTopicHeading" data-topic-heading="${isIssueReporterClient()?'Topic':'Topic (optional)'}">${isIssueReporterClient()?'Topic':'Topic (optional)'}</summary>
     <div class="pill-group" id="areas">${areaChips()}</div>
     <div class="row compact" style="margin-top:10px">
@@ -814,6 +815,8 @@ function renderCapture() {
     setTopic:value=>{state.area=value;document.getElementById('areas').innerHTML=areaChips();},
     active:name=>{state._captureTemplateName=name;},activeName:()=>state._captureTemplateName||''
   });
+  const securityIssueType=document.getElementById('securityIssueType');
+  if(securityIssueType)securityIssueType.onchange=()=>{state.securityIssueType=securityIssueType.value;void persistCaptureDraft().catch(()=>{});};
   const urgencySelect=document.getElementById('captureUrgency');
   if(urgencySelect)urgencySelect.onchange=()=>{state.urgency=urgencySelect.value;document.getElementById('captureUrgencyHeading').textContent=uiT('Urgency (optional)')+': '+uiT(state.urgency==='urgent'?'Urgent':'Standard');};
   if(isProClient())window.PhotoNotesCustomFields?.mount({user:state.me?.id,edition:selectedEdition(),toast});
@@ -1210,7 +1213,7 @@ function persistCaptureDraft(clear=false){
   if(!email)return Promise.resolve();
   const photo=state.photoFile;
   const draft={photo,note:state._note||'',location:state.location,address:state.address,
-    context:Object.fromEntries(['area','jobId','communityId','urgency','_concreteCapture','_pavingReason','_duplicateContext','_captureTemplateName','_dims','_measure','_followUp'].map(k=>[k,state[k]]))};
+    context:Object.fromEntries(['area','jobId','communityId','urgency','securityIssueType','_concreteCapture','_pavingReason','_duplicateContext','_captureTemplateName','_dims','_measure','_followUp'].map(k=>[k,state[k]]))};
   if(!photo&&!clear)return captureDraftWrites;
   const write=captureDraftWrites.then(async()=>{
     const account=await PhotoNotesQueue.accountKey(email);
@@ -2063,7 +2066,7 @@ async function showPendingPhotos(){
   const ticker=setInterval(()=>{if(!dialog.isConnected){clearInterval(ticker);return;}update();},1000);dialog.addEventListener('close',()=>{clearInterval(ticker);dialog.remove();});document.body.append(dialog);dialog.showModal();update();
 
 }
-function payloadFormData(p){const fd=new FormData();if(p.photo)fd.append('photo',p.photo,p.photoName||'offline-photo.jpg');fd.append('note',p.note||'');fd.append('area_tags',p.area_tags||'[]');fd.append('kind',p.kind||'note');if(p.custom_fields)fd.append('custom_fields',p.custom_fields);if(p.context_source_id)fd.append('context_source_id',p.context_source_id);if(Object.prototype.hasOwnProperty.call(p,'job_id'))fd.append('job_id',p.job_id||'');if(p.follow_up_occurrence_id)fd.append('follow_up_occurrence_id',p.follow_up_occurrence_id);for(const k of ['urgency','paving_photo_reason','concrete_phase','concrete_purpose','concrete_element','concrete_stage','concrete_condition','concrete_severity','concrete_location','concrete_mix','hoa_community_id','hoa_title','hoa_item_type','hoa_priority','hoa_area','hoa_directed_to','hoa_budget_source','hoa_photo_stage','hoa_target_date','property_area_id','incident_id','incident_view'])if(p[k])fd.append(k,p[k]);if(p.latitude!=null)fd.append('latitude',p.latitude);if(p.longitude!=null)fd.append('longitude',p.longitude);if(p.address)fd.append('address',p.address);return fd;}
+function payloadFormData(p){const fd=new FormData();if(p.photo)fd.append('photo',p.photo,p.photoName||'offline-photo.jpg');fd.append('note',p.note||'');fd.append('area_tags',p.area_tags||'[]');fd.append('kind',p.kind||'note');if(p.custom_fields)fd.append('custom_fields',p.custom_fields);if(p.context_source_id)fd.append('context_source_id',p.context_source_id);if(Object.prototype.hasOwnProperty.call(p,'job_id'))fd.append('job_id',p.job_id||'');if(p.follow_up_occurrence_id)fd.append('follow_up_occurrence_id',p.follow_up_occurrence_id);for(const k of ['security_issue_type','urgency','paving_photo_reason','concrete_phase','concrete_purpose','concrete_element','concrete_stage','concrete_condition','concrete_severity','concrete_location','concrete_mix','hoa_community_id','hoa_title','hoa_item_type','hoa_priority','hoa_area','hoa_directed_to','hoa_budget_source','hoa_photo_stage','hoa_target_date','property_area_id','incident_id','incident_view'])if(p[k])fd.append(k,p[k]);if(p.latitude!=null)fd.append('latitude',p.latitude);if(p.longitude!=null)fd.append('longitude',p.longitude);if(p.address)fd.append('address',p.address);return fd;}
 
 function bgIndicator() {
   document.getElementById('bgstatus')?.remove();
@@ -2155,6 +2158,7 @@ async function saveCaptureDurably(options = {}) {
   // Build the payload from the CURRENT state before we clear the form.
   const payload={photo:state.photoFile||null,photoName:state.photoFile&&state.photoFile.name||'offline-photo.jpg',note,area_tags:JSON.stringify(isHoaClient()?[document.getElementById('hoaArea').value]:(state.area?[state.area]:[])),kind:'note'};
   if(state._duplicateContext){payload.context_source_id=state._duplicateContext.sourceId;if(state.jobId)payload.job_id=state.jobId;}
+  if(isSecurityClient())payload.security_issue_type=document.getElementById('securityIssueType').value;
   if(document.getElementById('captureUrgency'))payload.urgency=state.urgency==='urgent'?'urgent':'standard';
   try{const fields=globalThis.PhotoNotesCustomFields?.payload();if(fields)payload.custom_fields=fields;}catch(e){toast(e.message);return false;}
   if(isHoaClient()){Object.assign(payload,{hoa_community_id:state.communityId,hoa_title:document.getElementById('hoaTitle').value.trim(),hoa_item_type:document.getElementById('hoaType').value,hoa_priority:document.getElementById('hoaPriority').value,hoa_area:document.getElementById('hoaArea').value,hoa_directed_to:(document.getElementById('hoaDirected')||{}).value||'',hoa_budget_source:'unassigned',hoa_photo_stage:'initial'});}
@@ -2193,7 +2197,7 @@ function clearCompletedCapture() {
   captureLocationGeneration++;
   globalThis.PhotoNotesIncidents?.advance();
   globalThis.PhotoNotesCustomFields?.clear();
-  state._captureTemplateName=''; state.urgency='standard'; state.photoFile = null; state._note = ''; state.location = null; state.address = null; state._locationPromise = null;
+  state._captureTemplateName=''; state.securityIssueType='Security Issue'; state.urgency='standard'; state.photoFile = null; state._note = ''; state.location = null; state.address = null; state._locationPromise = null;
   state._dims = freshDims(); state._measure = null;
   if(isConcreteClient()){const d=concreteCaptureDraft();state._concreteCapture={phase:d.phase,purpose:d.purpose,element:d.element,jobId:d.jobId};}
   renderCapture();
