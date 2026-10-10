@@ -549,8 +549,9 @@ body:has(.issue-fab) { padding-bottom:calc(80px + env(safe-area-inset-bottom)); 
   .app-header .brandrow .brand,
   .app-header .brandrow .brand.pro-edition-brand,
   .app-header .brandrow .brand.road-issues-brand { width:100%; max-width:calc(100vw - 28px); height:var(--product-logo-height) !important; }
-  .workflow-tabs { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:4px; overflow:visible; padding-bottom:0; }
+  .workflow-tabs { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:4px; overflow:visible; padding-bottom:0; }
   .workflow-tabs .tab { min-width:0; padding:9px 2px; font-size:12px; }
+  .workflow-tabs.hoa-tabs { grid-template-columns:repeat(5,minmax(0,1fr)); }
   .workflow-tabs.hoa-tabs .tab { font-size:10px; line-height:1.15; overflow-wrap:anywhere; }
   .workflow-organize #cards { grid-template-columns:repeat(2,minmax(0,1fr)); }
   .workflow-edit #cards, #glist, .workflow-create #gitems, .send-capture-list { grid-template-columns:1fr; }

@@ -22,7 +22,7 @@ test('actual reader routes preserve ownership, review, photo, publishing and man
    if(sql.includes('SET capture_id')){records.get(p[1]).capture_id=p[0];return {rows:[]};}
    if(sql.includes('UPDATE camera_readings SET title')){assert(sql.includes('AND user_id=$4'));const row=records.get(p[2]);if(!row||row.user_id!==p[3])return {rows:[]};Object.assign(row,{title:p[0],fields:JSON.parse(p[1]),status:'saved'});return {rows:[row]};}
    if(sql.includes('WHERE id=$1 AND user_id=$2')){const row=records.get(p[0]);const found=row&&row.user_id===p[1]&&(!sql.includes("status='saved'")||row.status==='saved');if(sql.startsWith('DELETE')&&found)records.delete(p[0]);return {rows:found?[row]:[],rowCount:found?1:0};}
-   if(sql.includes('SELECT * FROM camera_readings WHERE')){assert(sql.includes('user_id=$1'));return {rows:[...records.values()].filter(r=>r.user_id===p[0]&&r.status==='saved'&&(!p[1]||r.reading_type===p[1]))};}
+   if(sql.includes('SELECT r.*,')){assert(sql.includes('r.user_id=$1'));return {rows:[...records.values()].filter(r=>r.user_id===p[0]&&r.status==='saved'&&(!p[1]||r.reading_type===p[1]))};}
    throw Error(sql);
   };
   Object.assign(g,{app:Object.fromEntries(['post','get','delete'].map(method=>[method,(url,...handlers)=>{assert.equal(handlers[0],g.requireAuth);routes[method+' '+url]=handlers.at(-1);} ])),requireAuth:()=>{},upload:{single:()=>()=>{}},pool:{query,connect:async()=>({query,release(){}})},ticketText:v=>v==null?null:String(v),visionJSON:async()=>({data:null}),visionFeedback:()=>({}),logEvent:()=>{},path:require('node:path'),fs,localPhoto:x=>x,imageDims:async()=>({w:100,h:100}),console,currentProduct:async()=>pro_type,require:x=>x==='./gauge-reader'?require('../gauge-reader'):require('../public/scanner-availability'),fs:{...fs,unlinkSync:()=>{}}});
@@ -40,3 +40,9 @@ test('actual reader routes preserve ownership, review, photo, publishing and man
   assert.equal(captures.length,['equipment_plate','gauge','plan_sketch','material_label','business_card'].filter(t=>require('../public/scanner-availability').allowed(pro_type,t)).length);assert.equal((await call('get','/api/camera-readings',2)).data.length,0);
  }
 });
+
+ test('business cards are available in every industry Pro edition, excluding ordinary Pro and free editions',()=>{
+ const availability=require('../public/scanner-availability');
+ for(const edition of ['contractor','paving','asphalt','concrete','hoa','property','roofer'])assert.equal(availability.allowed(edition,'business_card'),true,edition);
+ for(const edition of ['general','pro','basic','issue','roads','unknown'])assert.equal(availability.allowed(edition,'business_card'),false,edition);
+ });

@@ -20,7 +20,7 @@ test('small Android widths keep header logo, tabs, and forms inside the viewport
   assert.match(css, /@media \(max-width: 380px\)/);
   assert.match(css, /grid-template-columns:auto minmax\(0,1fr\) auto/);
   assert.match(css, /\.app-header \.brandrow \.brand,[\s\S]*\.brand\.pro-edition-brand,[\s\S]*\.brand\.road-issues-brand \{ width:100%; max-width:calc\(100vw - 28px\)/);
-  assert.match(css, /\.workflow-tabs \{ display:grid; grid-template-columns:repeat\(5,minmax\(0,1fr\)\)/);
+  assert.match(css, /\.workflow-tabs \{ display:grid; grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);
   assert.match(css, /\.workflow-organize #cards[\s\S]*grid-template-columns:1fr/);
 });
 
