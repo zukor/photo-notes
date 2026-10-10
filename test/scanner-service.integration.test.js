@@ -123,6 +123,21 @@ test('scanner routes retain photos, extract fields, save reviews and report serv
   const foreign=(await pool.query("INSERT INTO users(email,password_hash,plan,pro_type) VALUES($1,'none','pro','general') RETURNING id",['job-foreign-'+Date.now()+'@example.invalid'])).rows[0],foreignCookie='pn_token='+require('jsonwebtoken').sign({id:foreign.id},process.env.SESSION_SECRET);
   assert.equal((await fetch(base+'/api/jobs/'+job.id,{method:'DELETE',headers:{Cookie:foreignCookie}})).status,404);
   assert.equal((await request('/api/jobs/'+job.id,null,'DELETE')).status,200);assert.equal((await pool.query('SELECT job_id FROM captures WHERE id=$1',[capture.id])).rows[0].job_id,null);assert.equal((await pool.query('SELECT job_id FROM asphalt_tickets WHERE id=$1',[ticket.ticket.id])).rows[0].job_id,null);assert.equal((await request('/api/jobs/'+job.id,null,'DELETE')).status,404);await pool.query('DELETE FROM users WHERE id=$1',[foreign.id]);
+  // Scanner job filtering preserves legacy links and supports explicit assignment without moving photos.
+  const jobA=await(await request('/api/jobs',{name:'Scanner Job A'})).json(),jobB=await(await request('/api/jobs',{name:'Scanner Job B'})).json();
+  await pool.query('UPDATE captures SET job_id=$1 WHERE id=$2',[jobA.id,linked.capture_id]);
+  const listJob=async job=>(await(await request('/api/camera-readings?type=gauge&job_id='+job)).json());
+  assert((await listJob(jobA.id)).some(r=>r.id===gauge.id),'legacy linked photo job is visible');
+  assert(!(await listJob('unassigned')).some(r=>r.id===gauge.id));
+  assert.equal((await request('/api/camera-readings/'+gauge.id,{title:'Thermometer',fields:{...fields,reading:'85'},job_id:jobB.id})).status,200);
+  assert(!(await listJob(jobA.id)).some(r=>r.id===gauge.id));assert((await listJob(jobB.id)).some(r=>r.id===gauge.id));
+  assert.equal((await pool.query('SELECT job_id,note FROM captures WHERE id=$1',[linked.capture_id])).rows[0].job_id,jobA.id,'scanner reassignment does not move the Photo Note');
+  assert.equal((await request('/api/camera-readings/'+gauge.id,{title:'Thermometer',fields,job_id:null})).status,200);assert((await listJob('unassigned')).some(r=>r.id===gauge.id));
+  const foreignOwner=(await pool.query("INSERT INTO users(email,password_hash,plan,pro_type) VALUES($1,'none','pro','general') RETURNING id",['scanner-job-foreign-'+Date.now()+'@example.invalid'])).rows[0];
+  const foreignJob=(await pool.query("INSERT INTO jobs(user_id,name) VALUES($1,'Private Job') RETURNING id",[foreignOwner.id])).rows[0];
+  assert.equal((await request('/api/camera-readings/'+gauge.id,{title:'Thermometer',fields,job_id:foreignJob.id})).status,400);
+  assert.equal((await listJob(foreignJob.id)).length,0);assert.equal((await request('/api/camera-readings?job_id=invalid')).status,400);
+  await pool.query('DELETE FROM users WHERE id=$1',[foreignOwner.id]);
   const legacy=await(await fetch(base+'/api/camera-readings?type=business_card',{headers:{Cookie:cookie}})).json();assert(legacy.length>0);
  } catch(error){console.error(error.stack);throw error;} finally {
   global.fetch=nativeFetch;
