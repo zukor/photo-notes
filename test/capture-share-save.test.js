@@ -7,7 +7,7 @@ test('failed or declined saving never opens sharing',async()=>{for(const save of
 function saveFixture(){
   const photo={name:'wall.jpg'},note={value:'Raise the wall one foot'},state={photoFile:photo,_note:note.value,me:{email:'owner@example.invalid'},location:{lat:1,lng:2}};
   let saves=0,renders=0;
-  const context={state,document:{getElementById:()=>note},finishCaptureDictation:async()=>{},stopCaptureDictation(){},toast(){},isHoaClient:()=>false,isConcreteClient:()=>false,isPavingClient:()=>false,selectedEdition:()=> 'pro',confirmPhotoQuality:async()=>true,enqueueUpload:async()=>{saves++;},freshDims:()=>({}),renderCapture:()=>{renders++;note.value='';},captureLocationGeneration:0};
+  const context={state,document:{getElementById:()=>note},finishCaptureDictation:async()=>{},stopCaptureDictation(){},toast(){},isSecurityClient:()=>false,isHoaClient:()=>false,isConcreteClient:()=>false,isPavingClient:()=>false,selectedEdition:()=> 'pro',confirmPhotoQuality:async()=>true,enqueueUpload:async()=>{saves++;},freshDims:()=>({}),renderCapture:()=>{renders++;note.value='';},captureLocationGeneration:0};
   context.persistCaptureDraft=async()=>{};vm.createContext(context);const app=fs.readFileSync('public/app.js','utf8');vm.runInContext(app.slice(app.indexOf('async function saveCaptureDurably('),app.indexOf('// ================= HOA Maintenance Pro')),context);
   return {context,state,note,photo,saves:()=>saves,renders:()=>renders};
 }
@@ -80,4 +80,14 @@ test('Capture sharing includes GPS and address together plus PhotoNote metadata'
  const text=c.caption();assert.match(text,/GPS Coordinates: 29.55655, -98.55486/);assert.match(text,/Address: 47 Villa Jardin/);assert.match(text,/Notes: Somebody/);assert.match(text,/Topic: Pool drainage/);assert.match(text,/Urgency: Standard/);
  c.state.location={lat:0,lng:0};assert.match(c.caption(),/GPS Coordinates: 0, 0/);
  c.state.location=null;nodes.gps.textContent='Getting location...';assert.doesNotMatch(c.caption(),/GPS Coordinates:/);
+});
+
+test('Security Issue Type is included in shared details and changes the prepared-share identity',()=>{
+ const field={id:'securityIssueType',tagName:'SELECT',type:'select-one',value:'Security Issue',selectedOptions:[{textContent:'Security Issue'}],labels:[{textContent:'Issue Type'}]};
+ const c={state:{securityIssueType:'Security Issue',proType:'security'},q:()=>null,noteVal:()=> 'Observed condition',tr:x=>x,locale:()=> 'en-US',document:{querySelectorAll:()=>[field]}};
+ vm.createContext(c);vm.runInContext(source.slice(source.indexOf('  function caption()'),source.indexOf('  function toast')),c);
+ vm.runInContext(source.match(/  function shareKey\(\)[^\n]+/)[0],c);
+ const before=c.shareKey();assert.match(c.caption(),/Issue Type: Security Issue/);
+ c.state.securityIssueType='Emergency';field.value='Emergency';field.selectedOptions=[{textContent:'Emergency'}];
+ assert.notEqual(c.shareKey(),before);assert.match(c.caption(),/Issue Type: Emergency/);
 });
