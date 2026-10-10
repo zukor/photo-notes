@@ -660,5 +660,9 @@ generalGuidance.push(
  workflowArticle('Recover an unfinished capture and finish Record Notes',['takephoto','dictate'],allEditions),
  workflowArticle('Result Screenshots and issue retesting',['issueSend'],allEditions)
 );
+
+add('readerJobFilter','Choose All Jobs to see saved scanner records across your jobs, one job to show only its records, or Unassigned for records without a job. Filtering does not move or change records. Older records linked to a Photo Note retain that photo’s job association until you explicitly save a Record job choice.',['Job','Evidence']);
+add('readerJobAssignment','Choose the job for this scanner record, or Unassigned, then Save Record. This changes only the scanner record job assignment. A Photo Note first created through Open Photo inherits the selected job. Changing this choice does not move an existing linked Photo Note or change source photos, notes or reviewed fields.',['Job','Evidence']);
+
 window.PhotoNotesHelpCatalog={rules,terms,textRules,generalGuidance};
 })();
