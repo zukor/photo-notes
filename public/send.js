@@ -29,17 +29,31 @@
   }
 
   function caption() {
-    var parts = [];
-    if (typeof isIssueReporterClient==='function' && isIssueReporterClient() && state.area) parts.push(tr('Topic') + ': ' + state.area);
-    var addr = q('addr') ? q('addr').textContent.trim() : '';
-    if (addr && addr.indexOf('...') === -1 && !/^(address not found|address lookup)/i.test(addr)) {
-      parts.push(shortState(addr));
-    } else {
-      var g = q('gps') ? q('gps').textContent.trim() : '';
-      if (g && /\d/.test(g) && !/blocked|not available|getting/i.test(g)) parts.push(g);
-    }
-    var n = noteVal(); if (n) parts.push(n);
-    parts.push(new Date().toLocaleString(locale()));
+    var parts=[],current=typeof state!=='undefined'?state:{};
+    function add(label,value){if(value!==undefined&&value!==null&&String(value).trim())parts.push(tr(label)+': '+String(value).trim());}
+    var location=current.location;
+    var gps=location&&Number.isFinite(location.lat)&&Number.isFinite(location.lng)?location.lat+', '+location.lng:(q('gps')?.textContent||'').trim();
+    if(/^-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?$/.test(gps))add('GPS Coordinates',gps);
+    var address=current.address||(q('addr')?.textContent||'').trim();
+    if(address&&!/\.\.\.|^(waiting|getting|looking up|address lookup|address not found|exact address not found|no address|tap retry|you can still)/i.test(address))add('Address',address);
+    add('Notes',noteVal());
+    add('Topic',current.area);
+    add('Saved Capture Settings',current._captureTemplateName);
+    if(current.jobId){var job=(current.jobs||[]).find(function(row){return String(row.id)===String(current.jobId);});add('Job',job?.name||current.jobId);}
+    // Include the PhotoNote fields, including specialist and custom details,
+    // without including photo pickers or template-management configuration.
+    var fields=typeof document!=='undefined'?document.querySelectorAll('#body input,#body select,#body textarea'):[];
+    Array.from(fields).forEach(function(el){
+      if(['note','newarea','photoCam','photoLib'].includes(el.id)||['file','password','button','submit','hidden'].includes(el.type)||/^ct/.test(el.id))return;
+      if(['checkbox','radio'].includes(el.type)&&!el.checked)return;
+      if(el.tagName==='SELECT'&&!el.value)return;
+      var value=el.tagName==='SELECT'?(el.selectedOptions?.[0]?.textContent||el.value):el.value;
+      if(!value)return;
+      var previous=el.previousElementSibling;
+      var label=el.labels?.[0]?.textContent||el.getAttribute('aria-label')||(previous?.tagName==='LABEL'?previous.textContent:'');
+      if(label)add(label,value);
+    });
+    add('Shared at',new Date().toLocaleString(locale()));
     return parts.join('\n');
   }
 
@@ -50,13 +64,17 @@
   }
 
   async function share(file, text) {
+    share.lastOutcome='prepared';
     try {
       if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
         await navigator.share({ files: [file], text: text, title: tr('Photo Note') });
-        return;
+        share.lastOutcome='shared';return true;
       }
-      if (navigator.share) { await navigator.share({ text: text, title: tr('Photo Note') }); return; }
-    } catch (e) { if (e && e.name === 'AbortError') return; throw e; }
+      if (navigator.share) { await navigator.share({ text: text, title: tr('Photo Note') }); share.lastOutcome='shared';return true; }
+    } catch (e) {
+      share.lastOutcome=e&&e.name==='AbortError'?'canceled':'failed';
+      return false;
+    }
     // Fallback: download the photo (to attach) and open a pre-filled email.
     if (file) {
       try {
@@ -71,9 +89,29 @@
     toast(file ? 'Opened email; photo downloaded to attach' : 'Opened email');
   }
 
+  function showCaptureResult(modal, receipt, outcome) {
+    var messages={shared:'The device reported that sharing completed. It does not identify the destination app or confirm email delivery.',canceled:'Sharing was canceled. Your photo and notes remain in Capture.',failed:'Sharing failed. Your photo and notes remain in Capture.',prepared:'An email draft was opened. Sending is not confirmed. Attach the downloaded photo and send it from your email app. Your photo and notes remain in Capture.'};
+    modal.innerHTML='<section class="export-share-dialog" role="alertdialog" aria-modal="true" aria-labelledby="captureResultTitle" aria-describedby="captureDeliveryResult captureSaveResult" style="background:#fff;color:#000;text-align:left;font-family:Arial,Helvetica,sans-serif"><h2 id="captureResultTitle">'+tr('PhotoNote result')+'</h2><p id="captureDeliveryResult" style="color:#000"></p><p id="captureSaveResult" aria-live="polite" style="color:#000"></p><button class="btn" id="captureResultOK" type="button">'+tr('OK')+'</button></section>';
+    modal.querySelector('#captureDeliveryResult').textContent=tr(messages[outcome]||messages.failed);
+    function update(){if(!modal.isConnected){clearInterval(timer);return;}modal.querySelector('#captureSaveResult').textContent=tr(receipt?.uploaded?'Also saved to your Photo Notes account. Find it in Library.':'Also saved on this device in the pending upload queue. It will appear in Library after upload succeeds.');}
+    update();var timer=setInterval(update,500),ok=modal.querySelector('#captureResultOK');
+    ok.onclick=function(){clearInterval(timer);modal.remove();q('send')?.focus();};
+    modal.onkeydown=function(e){if(e.key==='Escape'){e.preventDefault();e.stopPropagation();}if(e.key==='Tab'){e.preventDefault();ok.focus();}};
+    ok.focus();
+  }
+  function showSavedShare(file, text) {
+    var capture = typeof state !== 'undefined' ? {photo:state.photoFile,note:noteVal(),account:state.me?.email,edition:selectedEdition()} : null;
+    var receipt=typeof state!=='undefined'?state._captureShareSave?.receipt:null;
+    document.getElementById('captureShareDialog')?.remove();
+    var modal = document.createElement('div');modal.id='captureShareDialog';modal.className='export-share-modal';
+    modal.innerHTML='<section class="export-share-dialog" role="dialog" aria-modal="true" aria-labelledby="captureShareTitle"><h2 id="captureShareTitle">'+tr('Photo saved on this device')+'</h2><p>'+tr('After successful sharing, Capture clears for the next photo. Canceling keeps your photo and notes here.')+'</p><button class="btn" data-share>'+tr('Share')+'</button><button class="btn secondary" data-close>'+tr('Close')+'</button></section>';
+    var close=function(){modal.remove();q('send')?.focus();};
+    modal.querySelector('[data-close]').onclick=close;
+    modal.querySelector('[data-share]').onclick=async function(){this.disabled=true;try{if(await share(file,text)){if(capture&&state.view==='capture'&&state.photoFile===capture.photo&&noteVal()===capture.note&&state.me?.email===capture.account&&selectedEdition()===capture.edition){clearCompletedCapture();lastFile=null;}}showCaptureResult(modal,receipt,share.lastOutcome);}finally{this.disabled=false;}};
+    modal.onkeydown=function(e){if(e.key==='Escape')close();if(e.key==='Tab'){var buttons=modal.querySelectorAll('button');if(e.shiftKey&&document.activeElement===buttons[0]){e.preventDefault();buttons[1].focus();}else if(!e.shiftKey&&document.activeElement===buttons[1]){e.preventDefault();buttons[0].focus();}}};
+    document.body.appendChild(modal);modal.querySelector('[data-share]').focus();
+  }
   var sending = false;
-  // Reuse the prepared share on a fresh tap if a browser requires user activation.
-  var readyShare=null;
   function shareKey(){return JSON.stringify([noteVal(),q('addr')?.textContent,q('gps')?.textContent,typeof state==='undefined'?null:state.me?.email,typeof state==='undefined'?null:state.proType,typeof state==='undefined'?null:state.area,locale()]);}
   var basicShare=null;
   function basicMode(){return typeof isBasicClient==='function'&&isBasicClient();}
@@ -98,30 +136,26 @@
     if(!basicShare.original&&!noteVal()){toast('Take a photo or add a note first');return;}
     if(basicShare.failed){basicShare=null;toast('Could not share. Your photo and notes are still here.');return;}
     sending=true;q('send').disabled=true;
-    try{await share(basicShare.file,basicShare.text);}
+    try{var before={photo:state.photoFile,note:noteVal()};if(await share(basicShare.file,basicShare.text)){if(state.photoFile===before.photo&&noteVal()===before.note){clearCompletedCapture();lastFile=null;basicShare=null;}}}
     catch(e){toast('Could not share. Your photo and notes are still here.');}
     finally{sending=false;prepareBasicShare();}
   }
   async function onSend() {
     if(basicMode())return sendBasic();
     if(sending)return;
-    var f=typeof state!=='undefined'?state.photoFile:lastFile,t=caption();
+    var f=typeof state!=='undefined'?state.photoFile:lastFile,t;
     if (!f && !noteVal()) { toast('Take a photo or add a note first'); return; }
     sending=true;var button=q('send'),save=q('save');if(button)button.disabled=true;if(save)save.disabled=true;
     try {
-      var key=shareKey();
-      if(!readyShare||readyShare.original!==f||readyShare.key!==key||readyShare.receipt!==(typeof state==='undefined'?null:state._captureShareSave)){
-        var saved=await saveCapture({requireDurable:true,preserveDraft:true});
-        if(!saved)return;
-        t=caption();key=shareKey();
-        var original=f;
-        if(f&&window.PhotoNotesShareImage)f=await window.PhotoNotesShareImage.withDetails(f,t);
-        if(typeof state!=='undefined'&&state.view&&state.view!=='capture')return;
-        if(shareKey()!==key||(typeof state!=='undefined'&&state.photoFile!==original)){toast('Photo or notes changed. Tap Send/Share again.');return;}
-        readyShare={original:original,key:key,file:f,text:t,receipt:typeof state==='undefined'?null:state._captureShareSave};
-      }
-      await share(readyShare.file,readyShare.text);
-    } catch(e){toast(e&&e.name==='NotAllowedError'?'Ready to share. Tap Send/Share again.':'Could not share. Your photo and notes are still here.');}
+      var saved=await saveCapture({requireDurable:true,preserveDraft:true});
+      if(!saved)return;
+      t=caption();
+      var original=f,key=shareKey();
+      if(f&&window.PhotoNotesShareImage){try{f=await window.PhotoNotesShareImage.withDetails(f,t);}catch(e){toast(e.message);}}
+      if(typeof state!=='undefined'&&state.view&&state.view!=='capture')return;
+      if(shareKey()!==key||(typeof state!=='undefined'&&state.photoFile!==original)){toast('Photo or notes changed. Tap Send/Share again.');return;}
+      showSavedShare(f,t);
+    } catch(e){toast('Could not save this photo. Your draft is still here.');}
     finally{sending=false;if(q('send'))q('send').disabled=false;if(q('save'))q('save').disabled=false;}
   }
   function injectButtons() {

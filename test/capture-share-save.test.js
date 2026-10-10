@@ -1,16 +1,8 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const source=fs.readFileSync('public/send.js','utf8');
-function fixture(save){const buttons={send:{},save:{}},events=[];const c={window:{},q:id=>buttons[id],state:{photoFile:{name:'actual.jpg'}},lastFile:{name:'stale.jpg'},caption:()=> 'caption',noteVal:()=> 'note',saveCapture:save,locale:()=> 'en',share:async(file,text)=>events.push({file,text}),toast:m=>events.push(m)};c.persistCaptureDraft=async()=>{};vm.createContext(c);vm.runInContext(source.slice(source.indexOf('  var sending'),source.indexOf('  function injectButtons')),c);return {c,events,buttons};}
+function fixture(save){const buttons={send:{},save:{}},events=[];const c={window:{},q:id=>buttons[id],state:{photoFile:{name:'actual.jpg'}},lastFile:{name:'stale.jpg'},caption:()=> 'caption',noteVal:()=> 'note',saveCapture:save,locale:()=> 'en',share:async(file,text)=>{events.push({file,text});return false;},toast:m=>events.push(m)};c.persistCaptureDraft=async()=>{};vm.createContext(c);vm.runInContext(source.slice(source.indexOf('  var sending'),source.indexOf('  function injectButtons')),c);c.showSavedShare=(file,text)=>events.push({file,text});return {c,events,buttons};}
 test('capture sharing waits for durable save, suppresses double taps, and uses current photo',async()=>{let finish,calls=0;const f=fixture(async options=>{calls++;assert.equal(options.requireDurable,true);assert.equal(options.preserveDraft,true);return await new Promise(r=>finish=r);});const pending=f.c.onSend();await f.c.onSend();assert.equal(calls,1);assert.equal(f.events.length,0);assert.equal(f.buttons.save.disabled,true);finish(true);await pending;assert.equal(f.events[0].file.name,'actual.jpg');assert.equal(f.buttons.save.disabled,false);});
 test('failed or declined saving never opens sharing',async()=>{for(const save of [async()=>false,async()=>{throw Error('storage');}]){const f=fixture(save);await f.c.onSend();assert(!f.events.some(e=>e.file));assert.equal(f.buttons.send.disabled,false);}});
-
-test('browser activation retry uses the same button without repeating the durable save',async()=>{
- let saves=0,shares=0;const f=fixture(async()=>{saves++;return true;});
- f.c.share=async()=>{shares++;if(shares===1)throw Object.assign(Error('gesture'),{name:'NotAllowedError'});};
- await f.c.onSend();assert.equal(f.events[0],'Ready to share. Tap Send/Share again.');
- await f.c.onSend();assert.equal(saves,1);assert.equal(shares,2);assert.equal(f.buttons.send.disabled,false);
- f.c.state._captureShareSave=null;await f.c.onSend();assert.equal(saves,2,'a cleared capture save invalidates the prepared share');
-});
 
 function saveFixture(){
   const photo={name:'wall.jpg'},note={value:'Raise the wall one foot'},state={photoFile:photo,_note:note.value,me:{email:'owner@example.invalid'},location:{lat:1,lng:2}};
@@ -55,5 +47,37 @@ test('Issue Reporter shares the selected Topic and refreshes prepared shares aft
  vm.runInContext(source.slice(source.indexOf('  function caption()'),source.indexOf('  function toast(')),f.c);
  await f.c.onSend();assert.match(f.events[0].text,/Topic: Broken gate/);
  f.c.state.area='Leaking pipe';await f.c.onSend();assert.match(f.events[1].text,/Topic: Leaking pipe/);assert.doesNotMatch(f.events[1].text,/Broken gate/);
- f.c.isIssueReporterClient=()=>false;assert.doesNotMatch(f.c.caption(),/Topic:/);
+ f.c.isIssueReporterClient=()=>false;assert.match(f.c.caption(),/Topic: Leaking pipe/);
+});
+
+test('device share reports success, cancellation, and failure separately',async()=>{
+ for(const outcome of ['success','AbortError','NotAllowedError']){
+  const events=[],context={navigator:{canShare:()=>true,share:async()=>{if(outcome!=='success')throw Object.assign(Error('share'),{name:outcome});}},tr:x=>x,toast:x=>events.push(x)};
+  vm.createContext(context);vm.runInContext(source.slice(source.indexOf('  async function share('),source.indexOf('  var sending')),context);
+  assert.equal(await context.share({name:'photo.jpg'},'note'),outcome==='success');
+  assert.equal(context.share.lastOutcome,outcome==='success'?'shared':outcome==='AbortError'?'canceled':'failed');
+ }
+});
+test('completing a saved share clears photo and notes without another upload',async()=>{
+ const f=saveFixture();await f.context.saveCaptureDurably({preserveDraft:true});f.context.clearCompletedCapture();
+ assert.equal(f.state.photoFile,null);assert.equal(f.state._note,'');assert.equal(f.note.value,'');assert.equal(f.state._captureShareSave,null);assert.equal(f.saves(),1);
+});
+
+test('share confirmation retains the upload receipt across repeated Share taps',async()=>{
+ const f=saveFixture();let receipt;
+ f.context.enqueueUpload=async(payload,coords,options)=>{receipt=options.receipt;};
+ await f.context.saveCaptureDurably({preserveDraft:true});
+ assert.equal(receipt.captureShare,true);assert.equal(receipt.uploaded,false);
+ receipt.uploaded=true;await f.context.saveCaptureDurably({preserveDraft:true});
+ assert.equal(f.state._captureShareSave.receipt,receipt);assert.equal(f.state._captureShareSave.receipt.uploaded,true);
+});
+
+test('Capture sharing includes GPS and address together plus PhotoNote metadata',()=>{
+ const nodes={gps:{textContent:'29.55655, -98.55486'},addr:{textContent:'47 Villa Jardin, San Antonio, TX 78230'}};
+ const field={id:'captureUrgency',tagName:'SELECT',type:'select-one',value:'standard',selectedOptions:[{textContent:'Standard'}],labels:[{textContent:'Urgency'}]};
+ const c={state:{location:{lat:29.55655,lng:-98.55486},address:nodes.addr.textContent,area:'Pool drainage'},q:id=>nodes[id],noteVal:()=> 'Somebody is emptying their pool.',tr:x=>x,locale:()=> 'en-US',document:{querySelectorAll:()=>[field]}};
+ vm.createContext(c);vm.runInContext(source.slice(source.indexOf('  function caption()'),source.indexOf('  function toast')),c);
+ const text=c.caption();assert.match(text,/GPS Coordinates: 29.55655, -98.55486/);assert.match(text,/Address: 47 Villa Jardin/);assert.match(text,/Notes: Somebody/);assert.match(text,/Topic: Pool drainage/);assert.match(text,/Urgency: Standard/);
+ c.state.location={lat:0,lng:0};assert.match(c.caption(),/GPS Coordinates: 0, 0/);
+ c.state.location=null;nodes.gps.textContent='Getting location...';assert.doesNotMatch(c.caption(),/GPS Coordinates:/);
 });
