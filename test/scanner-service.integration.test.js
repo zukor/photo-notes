@@ -133,6 +133,8 @@ test('scanner routes retain photos, extract fields, save reviews and report serv
   assert(!(await listJob(jobA.id)).some(r=>r.id===gauge.id));assert((await listJob(jobB.id)).some(r=>r.id===gauge.id));
   assert.equal((await pool.query('SELECT job_id,note FROM captures WHERE id=$1',[linked.capture_id])).rows[0].job_id,jobA.id,'scanner reassignment does not move the Photo Note');
   assert.equal((await request('/api/camera-readings/'+gauge.id,{title:'Thermometer',fields,job_id:null})).status,200);assert((await listJob('unassigned')).some(r=>r.id===gauge.id));
+  const newReading=(await pool.query("INSERT INTO camera_readings(user_id,reading_type,title,fields,photo_path,status,job_id,job_assignment_set) VALUES($1,'plan_sketch','Job Plan','{}',$2,'saved',$3,true) RETURNING id",[user.id,ticket.ticket.photo_path,jobB.id])).rows[0];
+  const newPhoto=await(await request('/api/camera-readings/'+newReading.id+'/library',{})).json();assert.equal((await pool.query('SELECT job_id FROM captures WHERE id=$1',[newPhoto.capture_id])).rows[0].job_id,jobB.id,'new linked photo inherits selected scanner job');
   const foreignOwner=(await pool.query("INSERT INTO users(email,password_hash,plan,pro_type) VALUES($1,'none','pro','general') RETURNING id",['scanner-job-foreign-'+Date.now()+'@example.invalid'])).rows[0];
   const foreignJob=(await pool.query("INSERT INTO jobs(user_id,name) VALUES($1,'Private Job') RETURNING id",[foreignOwner.id])).rows[0];
   assert.equal((await request('/api/camera-readings/'+gauge.id,{title:'Thermometer',fields,job_id:foreignJob.id})).status,400);
