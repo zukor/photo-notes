@@ -36,11 +36,11 @@ test('iPhone issue dictation avoids the conflicting microphone preflight and can
   assert.match(app, /if\(issueDictationActive&&!ios\)/);
 });
 
-test('Android note dictation replaces revised results and restarts after silence', () => {
+test('Android note dictation replaces revised results and requests restart after interruption', () => {
   assert.match(app, /for \(let i=0;i<ev\.results\.length;i\+\+\) parts\.push/);
   assert.doesNotMatch(app, /if \(finalText\) base \+= finalText/);
-  assert.match(app, /dictationRestartTimer=setTimeout\(\(\)=>startDictationSession\(SR\),300\)/);
-  assert.match(app, /Listening\.\.\. tap to stop/);
+  assert.match(app, /session\.continuous = true/);
+  assert.match(app, /showDictationInterruption\('Speech recognition stopped before you pressed Stop\.'/);
   assert.match(app, /mergeSpeechTranscript\(dictationBase,sessionText\)/);
 });
 

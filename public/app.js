@@ -456,6 +456,7 @@ function renderApp() {
   if (state.view === 'my-issues') renderMyIssueReports();
   else if (state.view === 'manage-testing') renderTestingManagement();
   else if (state.view === 'my-assignment') renderMyTestingAssignment();
+  else if (state.view === 'photo-library' && (isBasicClient()||isRoadIssuesClient())) renderDevicePhotoNotesLibrary();
   else if (isRoadIssuesClient()) { state.view='road-report'; renderRoadIssueReport(); }
 
   else if (isBasicClient()) { state.view='capture'; renderCapture(); }
@@ -465,7 +466,7 @@ function renderApp() {
   else if (state.view === 'ticket') renderTicketScanner();
   else if (state.view === 'camera-reader') renderCameraReader();
   else if (state.view === 'alignment') renderAlignmentTool();
-  else if (state.view === 'photo-library') renderList();
+  else if (state.view === 'photo-library') { if(isBasicClient()||isRoadIssuesClient())renderDevicePhotoNotesLibrary();else renderList(); }
   else if (state.view === 'organize') isHoaClient()?renderHoaVisits():renderList();
   else if (state.view === 'edit') renderEdit();
   else if (state.view === 'create') renderGroups();
@@ -1369,6 +1370,22 @@ function acquireLocation(force=false) {
   return state._locationPromise;
 }
 
+function showDictationInterruption(reason) {
+  document.getElementById('dictationInterruptedDialog')?.remove();
+  const note=document.getElementById('note'),photo=state.photoFile,generation=dictationGeneration;
+  if(!note)return;
+  const status=document.getElementById('dictationStatus');if(status)status.textContent='Recording stopped early. Your captured words are kept.';
+  const dialog=document.createElement('dialog');dialog.id='dictationInterruptedDialog';dialog.className='web-help-dialog';dialog.style.background='#fff';dialog.style.color='#000';
+  dialog.setAttribute('aria-labelledby','dictationInterruptedTitle');
+  dialog.innerHTML='<h2 id="dictationInterruptedTitle">Recording stopped early</h2><p id="dictationInterruptedReason" style="color:#000"></p><p style="color:#000">Your captured words are kept. Restart to continue your note.</p><button class="btn" id="dictationRestart" type="button">Restart Recording</button><button class="btn secondary" id="dictationStop" type="button">Stop</button>';
+  dialog.querySelector('#dictationInterruptedReason').textContent=reason;
+  const close=()=>{dialog.close();if(document.getElementById('note')===note)document.getElementById('dictate')?.focus();};
+  dialog.querySelector('#dictationRestart').onclick=()=>{const current=generation===dictationGeneration&&state.photoFile===photo&&document.getElementById('note')===note;close();if(current)void toggleDictation();};
+  dialog.querySelector('#dictationStop').onclick=close;
+  dialog.oncancel=e=>{e.preventDefault();close();};
+  dialog.addEventListener('close',()=>dialog.remove());document.body.append(dialog);dialog.showModal();
+}
+
 function cleanupDictation() {
   dictationGeneration++;
   dictationPending=false;
@@ -1384,6 +1401,7 @@ function cleanupDictation() {
 }
 
 function stopCaptureDictation(){
+  document.getElementById("dictationInterruptedDialog")?.remove();
   dictationPending=false;
   if(dictationFinish){clearTimeout(dictationFinish.timer);const done=dictationFinish.resolve;dictationFinish=null;done();}
   dictationGeneration++;
@@ -1429,6 +1447,7 @@ async function toggleDictation() {
     return;
   }
   if(dictationFinish)return;
+  document.getElementById("dictationInterruptedDialog")?.remove();
   if(dictationPending){stopCaptureDictation();return;}
   if (dictationActive) {
     await finishCaptureDictation();
@@ -1442,7 +1461,7 @@ async function toggleDictation() {
   dictationPending=true;
   recordDictationEvent('request');
   if(btn)btn.textContent='Starting microphone... tap to cancel';
-  dictationWatchdog=setTimeout(()=>{if(requestGeneration!==dictationGeneration)return;recordDictationEvent('permission-timeout');stopCaptureDictation();toast('Microphone did not start. Tap Record Notes to try again');},15000);
+  dictationWatchdog=setTimeout(()=>{if(requestGeneration!==dictationGeneration)return;recordDictationEvent('permission-timeout');stopCaptureDictation();showDictationInterruption('The microphone did not start.');},15000);
   if(!isIOS())try {
     // Preflight permission on Android/desktop. On iPhone, start speech
     // directly from the tap to preserve Safari's user gesture.
@@ -1451,7 +1470,7 @@ async function toggleDictation() {
   } catch (e) {
     if(requestGeneration!==dictationGeneration)return;
     recordDictationEvent('permission-error',e.name);stopCaptureDictation();
-    toast('Microphone access is off for Photo Notes. Allow it for this website, then tap Record Notes again');
+    showDictationInterruption('Microphone access was denied. Allow access before restarting.');
     return;
   }
   if(requestGeneration!==dictationGeneration)return;
@@ -1469,35 +1488,39 @@ async function toggleDictation() {
 function startDictationSession(SR) {
   if (!dictationActive) return;
   const noteEl = document.getElementById('note');
-  let session;const ios=isIOS();
-  // The prior session has ended. Aborting it here can reset Safari's shared
-  // speech service just as the next session starts. Active cancellation still
-  // aborts through stopCaptureDictation; completed sessions are only released.
-  try{if(ios&&iosDictationSession){iosDictationSession=null;iosDictationConstructor=null;recordDictationEvent('completed-session-released');}session=new SR();if(ios){iosDictationSession=session;iosDictationConstructor=SR;}}catch(error){cleanupDictation();const status=document.getElementById('dictationStatus');if(status)status.textContent='Speech could not start. Use the keyboard microphone to dictate your notes.';return;}
-  const generation=++dictationGeneration, photoForSession=state.photoFile;
+  let session;
+  try{session=new SR();}catch(error){stopCaptureDictation();showDictationInterruption('The microphone could not start. You can use the keyboard microphone.');return;}
+  const generation=++dictationGeneration, photoForSession=state.photoFile, ios=isIOS();
+  if(ios){iosDictationSession=session;iosDictationConstructor=SR;}
   recognizer = session;
   session.lang = uiSpeechLanguage();
-  session.continuous = !ios;
+  session.continuous = true;
   session.interimResults = true;
-  let sessionText = '', sessionError = '';
-  const current=()=>generation===dictationGeneration&&document.getElementById('note')===noteEl&&state.photoFile===photoForSession;
-  const armWatchdog=(delay=30000)=>{
-    if(dictationWatchdog)clearTimeout(dictationWatchdog);
-    dictationWatchdog=setTimeout(()=>{
-      if(generation!==dictationGeneration)return;
-      recordDictationEvent('no-result-timeout');
-      stopCaptureDictation();
-      try{session.abort();}catch(e){}
-      const status=document.getElementById('dictationStatus');if(status)status.textContent='No words were received. Tap Record Notes to try again. Your existing note is kept.';
-    },delay);
+  let sessionText = '';
+  const started=()=>{
+    if(generation!==dictationGeneration||!dictationActive)return;
+    if(dictationWatchdog)clearTimeout(dictationWatchdog);dictationWatchdog=null;
+    recordDictationEvent('started');
+    const status=document.getElementById('dictationStatus');if(status)status.textContent=ios?'Listening. On iPhone, words may appear after you pause.':'Listening...';
+    const btn=document.getElementById('dictate');if(btn)btn.textContent='Recording... tap to stop';
   };
-  session.onstart=()=>{if(generation!==dictationGeneration)return;recordDictationEvent('started');if(!dictationActive)return;const status=document.getElementById('dictationStatus');if(status)status.textContent=ios?'Listening. On iPhone, words may appear after you pause.':'Listening...';const btn=document.getElementById('dictate');if(btn)btn.textContent='Recording... tap to stop';};
-  session.onaudiostart=()=>{if(generation!==dictationGeneration||!dictationActive)return;recordDictationEvent('audio-start');armWatchdog();};
-  session.onspeechstart=()=>{if(generation!==dictationGeneration||!dictationActive)return;recordDictationEvent('speech-start');armWatchdog(120000);};
-  session.onspeechend=()=>{if(generation!==dictationGeneration)return;recordDictationEvent('speech-end');if(dictationActive)armWatchdog();};
-  session.onaudioend=()=>{if(generation!==dictationGeneration)return;recordDictationEvent('audio-end');};
-  session.onnomatch=()=>{if(generation!==dictationGeneration)return;recordDictationEvent('no-match');};
-  armWatchdog();
+  // Detect a microphone that never starts, never use silence as a stop signal.
+  dictationWatchdog=setTimeout(()=>{
+    if(generation!==dictationGeneration||!dictationActive)return;
+    recordDictationEvent('start-timeout');stopCaptureDictation();
+    showDictationInterruption('The microphone did not start.');
+  },30000);
+  session.onstart=started;
+  session.onaudiostart=started;
+  session.onspeechstart=started;
+  session.onaudioend=()=>{
+    if(generation!==dictationGeneration||!dictationActive||dictationFinish)return;
+    setTimeout(()=>{
+      if(generation!==dictationGeneration||!dictationActive||dictationFinish||recognizer!==session)return;
+      recordDictationEvent('audio-ended-without-end');stopCaptureDictation();
+      showDictationInterruption('The microphone stopped before you pressed Stop.');
+    },1500);
+  };
   session.onresult = (ev) => {
     if(generation!==dictationGeneration||state.photoFile!==photoForSession||document.getElementById('note')!==noteEl)return;
     if(!dictationFinish){if(dictationWatchdog)clearTimeout(dictationWatchdog);dictationWatchdog=null;}
@@ -1508,64 +1531,38 @@ function startDictationSession(SR) {
     for (let i=0;i<ev.results.length;i++) parts.push(ev.results[i][0].transcript.trim());
     sessionText=combineSpeechResults(parts);
     recordDictationEvent('result',Array.from(ev.results,result=>result.isFinal?'final':'interim').join(','));
-    if(dictationActive)armWatchdog(120000);
+
     if (noteEl) { noteEl.value=mergeSpeechTranscript(dictationBase,sessionText); state._note=noteEl.value; void persistCaptureDraft().catch(()=>{}); }
     const status=document.getElementById('dictationStatus');if(status&&sessionText)status.textContent='Speech received.';
     if (isIndustryProClient()) applyExtraction(dictationBase+sessionText);
   };
   session.onerror = (e) => {
-    if(!current())return;
-    const err = e && e.error;
-    sessionError=err||'unknown';
+    if(generation!==dictationGeneration)return;
+    const err=e&&e.error;
     recordDictationEvent('error',err);
-    const errorStatus=document.getElementById('dictationStatus');
-    if(errorStatus)errorStatus.textContent=err==='not-allowed'||err==='service-not-allowed'?'Speech access was denied. Check microphone permission for this website. You can also dictate using the keyboard microphone.':err==='network'?'Speech recognition could not connect. Check your connection and try again.':err==='audio-capture'?'The microphone is unavailable. Close other apps using it, then try again.':'No words received. Tap Record Notes to try again.';
-    if (err === 'not-allowed' || err === 'service-not-allowed') {
-      toast('Allow microphone access for this site, then tap Record Notes again');
-      dictationActive=false;
-    } else if (err === 'no-speech') {
-      // Android often ends a session before the user starts talking. onend
-      // restarts it while the Record button remains active.
-    } else if (err === 'audio-capture') {
-      toast('The microphone is unavailable. Close any other app using it, then try again');
-      dictationActive=false;
-    } else if (err === 'network') {
-      toast('Speech recognition could not connect. Check your internet connection and try again');
-      dictationActive=false;
-    } else if (err === 'aborted') {
-      // Stopping after speech can report "aborted" on Safari even though the
-      // final result has already been delivered. No error message is needed.
-    } else {
-      toast('Recording stopped unexpectedly. Tap Record Notes to try again');
-      dictationActive=false;
-    }
-    if(!dictationActive&&!dictationFinish){stopCaptureDictation();try{session.abort();}catch(e){}}
+    if(!dictationActive||dictationFinish)return;
+    const reason=err==='network'?'Speech recognition lost its connection.':
+      (err==='not-allowed'||err==='service-not-allowed')?'Microphone access was denied. Allow access before restarting.':
+      err==='audio-capture'?'The microphone became unavailable.':
+      'Speech recognition stopped before you pressed Stop.';
+    stopCaptureDictation();showDictationInterruption(reason);
   };
   session.onend = () => {
     if(generation!==dictationGeneration)return;
     recordDictationEvent('ended');
+    const interrupted=dictationActive&&!dictationFinish;
     if(dictationWatchdog)clearTimeout(dictationWatchdog);dictationWatchdog=null;
-    if (recognizer === session) recognizer=null;
-    if (sessionText) {
-      dictationBase=mergeSpeechTranscript(dictationBase,sessionText);
-      if (dictationBase) dictationBase+=' ';
-    }
-    dictationEmptySessions=sessionText?0:dictationEmptySessions+1;
-    if(!ios&&dictationEmptySessions>=3){dictationActive=false;recordDictationEvent('empty-session-limit');toast('No words were received. Tap Record Notes to try again');}
-    if(ios){dictationActive=false;const status=document.getElementById('dictationStatus');if(status&&!sessionError)status.textContent=sessionText?'Speech received. Tap Record Notes to add more.':'No words were received. Tap Record Notes to try again.';}
-    if (dictationActive && document.getElementById('note')===noteEl && state.photoFile===photoForSession) {
-      const btn=document.getElementById('dictate');
-      if (btn) btn.textContent='Listening... tap to stop';
-      dictationRestartTimer=setTimeout(()=>startDictationSession(SR),300);
-    } else {
-      cleanupDictation();
-      // Release the ended Safari recognizer on the next tap. Aborting an already
-      // ended session can invalidate the browser's underlying speech service.
-      if(ios){if(sessionError&&!['aborted','no-speech'].includes(sessionError)){iosDictationSession=null;iosDictationConstructor=null;}recordDictationEvent('session-ready');}
+    if(recognizer===session)recognizer=null;
+    if(sessionText){dictationBase=mergeSpeechTranscript(dictationBase,sessionText);if(dictationBase)dictationBase+=' ';}
+    const current=document.getElementById('note')===noteEl&&state.photoFile===photoForSession;
+    cleanupDictation();
+    if(interrupted&&current){
+      const status=document.getElementById('dictationStatus');if(status)status.textContent='Recording stopped early. Your captured words are kept.';
+      showDictationInterruption('Speech recognition stopped before you pressed Stop.');
     }
   };
   try { session.start(); }
-  catch (e) { recordDictationEvent('start-error',e.name);stopCaptureDictation(); const status=document.getElementById('dictationStatus');if(status)status.textContent='Speech could not start. Use the keyboard microphone to dictate your notes.';toast('Recording could not start. Tap Record Notes to try again'); }
+  catch (e) { stopCaptureDictation(); showDictationInterruption('The microphone could not start. You can use the keyboard microphone.'); }
 }
 
 // ================= Pro dimension fields =================
@@ -1967,6 +1964,52 @@ let offlineQueueRestored = false;
 let queueAccount = null;
 let legacyPendingCount = 0;
 let queueRetryTimer = null;
+let queueNextRetry = 0;
+const pendingUploadNotices = new Set();
+let pendingUploadNoticeOpening = false;
+function renderDevicePhotoNotesLibrary(){
+  document.getElementById('body').innerHTML='<h2>PhotoNotes Library</h2><button class="btn secondary" id="pendingLibraryCapture" type="button">Back to Capture</button><div id="cards"></div>';
+  document.getElementById('pendingLibraryCapture').onclick=()=>{state.view='capture';renderApp();};
+  void renderPendingLibrary();
+}
+function queuePaused(){return !!queueAccount&&localStorage.getItem('pn-upload-paused:'+queueAccount+':'+selectedEdition())==='1';}
+function setQueuePaused(paused){
+  if(!queueAccount)return;
+  const key='pn-upload-paused:'+queueAccount+':'+selectedEdition();
+  if(paused)localStorage.setItem(key,'1');else localStorage.removeItem(key);
+  clearTimeout(queueRetryTimer);queueNextRetry=0;
+  bgIndicator();
+  if(!paused)void restoreOfflineQueue();
+}
+function scheduleQueueRetry(){
+  clearTimeout(queueRetryTimer);queueNextRetry=0;
+  if(queuePaused()||!bgQueue.length||bgQueue[0].blocked)return;
+  queueNextRetry=Date.now()+10000;
+  queueRetryTimer=setTimeout(()=>{queueNextRetry=0;void drainQueue();},10000);
+}
+function queueRetryText(){
+  if(queuePaused())return 'Automatic retry is stopped.';
+  if(bgDraining)return 'Uploading PhotoNotes...';
+  if(!bgQueue.length)return 'All PhotoNotes in this version have uploaded.';
+  if(bgQueue[0].blocked)return 'Automatic retry is paused until this is resolved.';
+  return 'Automatically retrying in '+Math.max(0,Math.ceil((queueNextRetry-Date.now())/1000))+' seconds.';
+}
+async function renderPendingLibrary(){
+  const cards=document.getElementById('cards');if(!cards||!state.me||!['organize','photo-library'].includes(state.view))return;
+  const account=queueAccount,edition=selectedEdition();
+  let rows;try{rows=await PhotoNotesQueue.all();}catch{return;}
+  if(account!==queueAccount||edition!==selectedEdition()||document.getElementById('cards')!==cards)return;
+  document.getElementById('pendingLibrary')?.remove();
+  rows=rows.filter(row=>PhotoNotesQueue.eligible(row,account,edition));if(!rows.length)return;
+  const panel=document.createElement('section');panel.id='pendingLibrary';panel.style.color='#000';
+  panel.innerHTML='<h2>Saved on this device</h2><p>These PhotoNotes are in Library on this device. Upload is pending.</p>';
+  for(const row of rows){const card=document.createElement('article');card.className='card';card.style.background='#fff';card.style.color='#000';
+    const title=document.createElement('strong');title.textContent='PhotoNote - upload pending';card.append(title);
+    if(row.payload?.photo){const img=document.createElement('img'),url=URL.createObjectURL(row.payload.photo);img.src=url;img.alt='Pending PhotoNote';img.onload=img.onerror=()=>URL.revokeObjectURL(url);card.append(img);}
+    const note=document.createElement('p');note.textContent=row.payload?.note||'';card.append(note);panel.append(card);
+  }
+  cards.before(panel);
+}
 async function queueStore(payload,hadCoords){
   if(!state.me)throw Error('Sign in first');
   const email=state.me.email,edition=selectedEdition();
@@ -1983,7 +2026,7 @@ async function restoreOfflineQueue(){
     const rows=await PhotoNotesQueue.all();
     if(queueAccount!==account)return;
     legacyPendingCount=rows.filter(row=>!row.account).length;
-    bgQueue=rows.filter(row=>PhotoNotesQueue.eligible(row,account,selectedEdition())).map(row=>({...row,tries:0}));
+    bgQueue=rows.filter(row=>PhotoNotesQueue.eligible(row,account,selectedEdition())).map(row=>({...row,tries:0,receipt:bgQueue.find(item=>item.id===row.id)?.receipt}));
     offlineQueueRestored=true;
     bgIndicator();void drainQueue();
   }catch(error){toast('Local pending photos could not be read. Keep this browser data and try again.');}
@@ -1994,42 +2037,47 @@ async function showPendingPhotos(){
   let rows;try{rows=await PhotoNotesQueue.all();}catch(error){toast('Local storage is unavailable. Do not clear browser data.');return;}
   if(!state.me||account!==queueAccount)return;
   document.getElementById('pendingPhotosDialog')?.remove();
-  const dialog=document.createElement('dialog');dialog.id='pendingPhotosDialog';dialog.className='web-help-dialog';
-  dialog.innerHTML='<h2>Pending Photos</h2><p>These captures are saved in this browser, but are not yet confirmed uploaded. Keep Photo Notes open and connected. Do not clear browser data or uninstall this web app while photos are pending.</p>';
-  const owned=rows.filter(row=>row.account===account);
-  for(const row of owned){
-    const item=document.createElement('p');item.textContent=`${editionNames[row.edition]||row.edition}: ${new Date(row.createdAt).toLocaleString()}${row.edition!==selectedEdition()?' - switch to this version to upload':''}`;dialog.append(item);
-    if(row.payload?.photo){const button=document.createElement('button');button.className='btn secondary';button.textContent='Download Original Photo';button.onclick=()=>{const url=URL.createObjectURL(row.payload.photo),a=document.createElement('a');a.href=url;a.download=row.payload.photoName||'pending-photo.jpg';a.click();setTimeout(()=>URL.revokeObjectURL(url),60000);};dialog.append(button);}
-    const notes=document.createElement('button');notes.className='btn secondary';notes.textContent='Download Notes and Details';notes.onclick=()=>{const {photo,...details}=row.payload||{};downloadBlob(new Blob([JSON.stringify({edition:row.edition,...details},null,2)],{type:'application/json'}),'pending-photo-details.json');};dialog.append(notes);
-  }
-  if(!owned.length){const p=document.createElement('p');p.textContent='No pending captures for this account in this browser.';dialog.append(p);}
-  if(rows.some(row=>!row.account)){const p=document.createElement('p');p.textContent='Older pending captures without an account label were retained and will not upload automatically. Report this issue from the account that created them. Do not clear browser data.';dialog.append(p);}
-  const retry=document.createElement('button');retry.className='btn';retry.textContent='Retry Current Version';retry.onclick=async()=>{dialog.close();await restoreOfflineQueue();};
-  const close=document.createElement('button');close.className='btn secondary';close.textContent='Close';close.onclick=()=>dialog.close();dialog.append(retry,close);dialog.addEventListener('close',()=>dialog.remove());document.body.append(dialog);dialog.showModal();
+  const dialog=document.createElement('dialog');dialog.id='pendingPhotosDialog';dialog.className='web-help-dialog';dialog.style.background='#fff';dialog.style.color='#000';
+  dialog.innerHTML='<h2>Pending PhotoNotes</h2><p id="pendingUploadReason">Saved on this device. Upload is pending.</p><p id="pendingRetryStatus" role="status" aria-live="polite"></p><button class="btn" id="pendingRetryToggle" type="button"></button><button class="btn secondary" id="pendingSaveLibrary" type="button">Save to PhotoNotes Library</button><p>Do not clear app data or uninstall until upload finishes.</p><div id="pendingVersionNotice"></div><button class="btn secondary" id="pendingClose" type="button">Close</button>';
+  const owned=rows.filter(row=>row.account===account),edition=selectedEdition();
+  const other=owned.filter(row=>row.edition!==edition);
+  if(other.length)dialog.querySelector('#pendingVersionNotice').textContent='Switch versions to upload: '+[...new Set(other.map(row=>editionNames[row.edition]||row.edition))].join(', ')+'.';
+  if(!queuePaused()&&bgQueue.length&&!bgDraining&&!queueNextRetry)scheduleQueueRetry();
+  const update=()=>{dialog.querySelector('#pendingUploadReason').textContent=bgQueue.find(item=>item.uploadReason)?.uploadReason||(legacyPendingCount?'Older PhotoNotes have no account label. Report this issue from the original account.':'Saved on this device. Upload is pending.');if(queueAccount!==account||selectedEdition()!==edition){dialog.close();return;}dialog.querySelector('#pendingRetryStatus').textContent=queueRetryText();dialog.querySelector('#pendingRetryToggle').textContent=queuePaused()?'Continue Retrying':'Stop Retrying';};
+  dialog.querySelector('#pendingRetryToggle').onclick=()=>{setQueuePaused(!queuePaused());update();};
+  dialog.querySelector('#pendingSaveLibrary').onclick=()=>{dialog.close();state.view='photo-library';renderApp();};
+  dialog.querySelector('#pendingClose').onclick=()=>dialog.close();
+  dialog.querySelectorAll('p').forEach(p=>p.style.color='#000');
+  const ticker=setInterval(()=>{if(!dialog.isConnected){clearInterval(ticker);return;}update();},1000);dialog.addEventListener('close',()=>{clearInterval(ticker);dialog.remove();});document.body.append(dialog);dialog.showModal();update();
+
 }
 function payloadFormData(p){const fd=new FormData();if(p.photo)fd.append('photo',p.photo,p.photoName||'offline-photo.jpg');fd.append('note',p.note||'');fd.append('area_tags',p.area_tags||'[]');fd.append('kind',p.kind||'note');if(p.custom_fields)fd.append('custom_fields',p.custom_fields);if(p.context_source_id)fd.append('context_source_id',p.context_source_id);if(Object.prototype.hasOwnProperty.call(p,'job_id'))fd.append('job_id',p.job_id||'');if(p.follow_up_occurrence_id)fd.append('follow_up_occurrence_id',p.follow_up_occurrence_id);for(const k of ['urgency','paving_photo_reason','concrete_phase','concrete_purpose','concrete_element','concrete_stage','concrete_condition','concrete_severity','concrete_location','concrete_mix','hoa_community_id','hoa_title','hoa_item_type','hoa_priority','hoa_area','hoa_directed_to','hoa_budget_source','hoa_photo_stage','hoa_target_date','property_area_id','incident_id','incident_view'])if(p[k])fd.append(k,p[k]);if(p.latitude!=null)fd.append('latitude',p.latitude);if(p.longitude!=null)fd.append('longitude',p.longitude);if(p.address)fd.append('address',p.address);return fd;}
 
 function bgIndicator() {
-  let box=document.getElementById('bgstatus');
-  if(!state.me){if(box)box.remove();return;}
-  const total=bgQueue.length+bgActive;
-  if(!box){if(!total&&!legacyPendingCount)return;box=document.createElement('button');box.id='bgstatus';box.type='button';box.className='web-queue-status';box.setAttribute('aria-live','polite');box.onclick=showPendingPhotos;document.body.append(box);}
-  box.textContent=total?`${total} capture${total===1?'':'s'} saved on this device, ${navigator.onLine===false?'waiting for connection':bgQueue.some(x=>x.blocked)?'needs attention':'waiting for upload'}`:legacyPendingCount?'Older pending captures need recovery':'All queued captures uploaded';
-  box.hidden=!total&&!legacyPendingCount;
+  document.getElementById('bgstatus')?.remove();
+  if(!state.me||pendingUploadNoticeOpening||document.getElementById('pendingPhotosDialog'))return;
+  const failed=bgQueue.find(item=>item.tries||item.blocked);
+  if(!failed&&!legacyPendingCount)return;
+  const key=queueAccount+':'+selectedEdition()+':'+(failed?.requestId||'legacy');
+  if(pendingUploadNotices.has(key))return;
+  pendingUploadNotices.add(key);pendingUploadNoticeOpening=true;
+  void showPendingPhotos().catch(()=>pendingUploadNotices.delete(key)).finally(()=>{pendingUploadNoticeOpening=false;});
 }
+
 async function enqueueUpload(payload, hadCoords, options = {}) {
   const row=await queueStore(payload,hadCoords);
   if(row.account!==queueAccount||row.edition!==selectedEdition())return;
-  bgQueue.push({...row,tries:0});
+  bgQueue.push({...row,tries:0,receipt:options.receipt});
   if(!bgOnlineHooked){window.addEventListener('online',()=>void restoreOfflineQueue());bgOnlineHooked=true;}
   bgIndicator();void drainQueue();
 }
 async function drainQueue() {
-  if(bgDraining||!state.me||!queueAccount)return;
+  if(bgDraining||!state.me||!queueAccount||queuePaused())return;
+  clearTimeout(queueRetryTimer);queueNextRetry=0;
   bgDraining=true;
   const account=queueAccount, edition=selectedEdition();
   try{
-    while(bgQueue.length&&queueAccount===account&&selectedEdition()===edition){
+    while(bgQueue.length&&!queuePaused()&&queueAccount===account&&selectedEdition()===edition){
       // Hotspots can report offline while the server is reachable. The request
       // and existing retry delay determine whether an upload can proceed.
       const item=bgQueue[0];
@@ -2037,24 +2085,26 @@ async function drainQueue() {
       if(!PhotoNotesQueue.eligible(item,account,edition))break;
       try{
         const me=await api('/api/me');
-        if(!me.ok)throw Object.assign(Error('Sign in to upload pending photos'),{blocked:true});
-        if(me.headers.get('X-Photo-Notes-Upload-Receipts')!=='1')throw Error('Waiting for upload service update');
+        if(!me.ok)throw Object.assign(Error('Sign in to upload your PhotoNotes.'),{blocked:true,userMessage:'Sign in to upload your PhotoNotes.'});
+        if(me.headers.get('X-Photo-Notes-Upload-Receipts')!=='1')throw Object.assign(Error('Waiting for upload service update'),{userMessage:'The upload service is updating. Your PhotoNotes are saved on this device.'});
         const identity=await me.json();
-        if(await PhotoNotesQueue.accountKey(identity.email)!==account)throw Object.assign(Error('Sign in to the original account to upload these photos'),{blocked:true});
+        if(await PhotoNotesQueue.accountKey(identity.email)!==account)throw Object.assign(Error('Sign in to the original account to upload these PhotoNotes.'),{blocked:true,userMessage:'Sign in to the original account to upload these PhotoNotes.'});
         if(queueAccount!==account||selectedEdition()!==edition)break;
         const r=await fetch('/api/captures',{method:'POST',credentials:'same-origin',headers:PhotoNotesQueue.headers(item),body:payloadFormData(item.payload)});
-        if(!r.ok){const body=await r.json().catch(()=>({}));throw Object.assign(Error(body.error||'Upload needs attention'),{blocked:PhotoNotesQueue.permanent(r.status)});}
+        if(!r.ok){const body=await r.json().catch(()=>({}));throw Object.assign(Error(body.error||'Upload needs attention'),{blocked:PhotoNotesQueue.permanent(r.status),userMessage:({400:'The PhotoNote details were rejected. Report this issue.',401:'Sign in to upload your PhotoNotes.',403:'This account cannot upload these PhotoNotes. Report this issue.',409:'The PhotoNote could not be matched to this account. Report this issue.',413:'The PhotoNote is too large to upload. Report this issue.',422:'The PhotoNote details were rejected. Report this issue.'})[r.status]||'The server could not upload your PhotoNotes. They are saved on this device.'});}
         const saved=await r.json();if(!saved.id)throw Error('Upload confirmation missing');
+        if(item.receipt)item.receipt.uploaded=true;
         await queueDelete(item.id);
         if(queueAccount!==account||selectedEdition()!==edition)break;
         bgQueue=bgQueue.filter(row=>row.id!==item.id);
-        toast((edition==='basic'||edition==='issue')?'Saved to Photo Notes.':'Saved to Photo Notes. Find it in Organize.');
+        void renderPendingLibrary();
+        if(!item.receipt?.captureShare)toast((edition==='basic'||edition==='issue')?'Saved to Photo Notes.':'Saved to Photo Notes. Find it in Library.');
         if(state.view==='organize'||state.view==='edit'){const f=document.getElementById('filter');void loadCards(f?f.value||'':'');}
       }catch(error){
         if(queueAccount!==account||selectedEdition()!==edition)break;
         item.tries++;item.blocked=!!error.blocked;
-        if(error.blocked)toast(error.message+'. Local photo retained.');
-        else {clearTimeout(queueRetryTimer);queueRetryTimer=setTimeout(()=>void drainQueue(),Math.min(120000,2000*2**Math.min(item.tries,6)));}
+        item.uploadReason=error.userMessage||'The server could not be reached. Your PhotoNotes are saved on this device.';
+        if(!error.blocked)scheduleQueueRetry();
         break;
       }
       bgIndicator();
@@ -2110,17 +2160,24 @@ async function saveCaptureDurably(options = {}) {
   const signature=JSON.stringify({...payload,photo:null,latitude:undefined,longitude:undefined,address:undefined});
   const previous=state._captureShareSave;
   const alreadySaved=previous&&previous.photo===payload.photo&&previous.signature===signature&&previous.account===state.me?.email&&previous.edition===selectedEdition();
+  const receipt=alreadySaved?previous.receipt:{uploaded:false,captureShare:!!options.preserveDraft};
   if(!alreadySaved){
-    try{await enqueueUpload(payload,hadCoords,{requireDurable:true});}
+    try{await enqueueUpload(payload,hadCoords,{requireDurable:true,receipt});}
     catch(e){toast('Could not save this photo. Your draft is still here.');return false;}
   }
   if(options.preserveDraft){
-    state._captureShareSave={photo:payload.photo,signature,account:state.me?.email,edition:selectedEdition()};
+    state._captureShareSave={photo:payload.photo,signature,receipt,account:state.me?.email,edition:selectedEdition()};
     return true;
   }
+  clearCompletedCapture();
+  toast(alreadySaved?'This capture is already saved in Photo Notes.':'Saved on this device. Waiting to upload to Photo Notes.');
+  return true;
+}
+
+function clearCompletedCapture() {
   state._captureShareSave=null;state._duplicateContext=null;state._followUp=null;
-  await persistCaptureDraft(true).catch(()=>{});
-  // Only an explicit Save clears the saved draft and hands upload to the background.
+  void persistCaptureDraft(true).catch(()=>{});
+  // Save and successful device sharing clear only this completed Capture.
   captureLocationGeneration++;
   globalThis.PhotoNotesIncidents?.advance();
   globalThis.PhotoNotesCustomFields?.clear();
@@ -2128,8 +2185,6 @@ async function saveCaptureDurably(options = {}) {
   state._dims = freshDims(); state._measure = null;
   if(isConcreteClient()){const d=concreteCaptureDraft();state._concreteCapture={phase:d.phase,purpose:d.purpose,element:d.element,jobId:d.jobId};}
   renderCapture();
-  toast(alreadySaved?'This capture is already saved in Photo Notes.':'Saved on this device. Waiting to upload to Photo Notes.');
-  return true;
 }
 
 // ================= HOA Maintenance Pro =================
@@ -2723,6 +2778,7 @@ async function doFixAddresses() {
 
 let cardsRequest = 0;
 async function loadCards(area, query = '', filters = {}) {
+  if(typeof renderPendingLibrary==='function')void renderPendingLibrary();
   if(arguments.length<3&&typeof state!=='undefined'&&['organize','photo-library'].includes(state.view)&&document.getElementById('photoSearch'))return runSmartSearch();
   const request = ++cardsRequest;
   const cards = document.getElementById('cards');

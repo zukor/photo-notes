@@ -90,7 +90,7 @@ test('Save never waits for location and stale location cannot move to the next c
   assert.doesNotMatch(saveCapture, /await state\._locationPromise/);
   assert.match(app, /let captureLocationGeneration = 0/);
   assert.match(app, /generation === captureLocationGeneration && state\.photoFile === photoForLocation/);
-  assert.match(app, /await enqueueUpload\(payload,hadCoords,\{requireDurable:true\}\)/);
+  assert.match(app, /await enqueueUpload\(payload,hadCoords,\{requireDurable:true,receipt\}\)/);
 });
 
 test('signed-in phone users receive a one-time install app icon offer', () => {
