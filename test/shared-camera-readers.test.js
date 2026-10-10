@@ -40,3 +40,9 @@ test('actual reader routes preserve ownership, review, photo, publishing and man
   assert.equal(captures.length,['equipment_plate','gauge','plan_sketch','material_label','business_card'].filter(t=>require('../public/scanner-availability').allowed(pro_type,t)).length);assert.equal((await call('get','/api/camera-readings',2)).data.length,0);
  }
 });
+
+ test('business cards are available in every industry Pro edition, excluding ordinary Pro and free editions',()=>{
+ const availability=require('../public/scanner-availability');
+ for(const edition of ['contractor','paving','asphalt','concrete','hoa','property','roofer'])assert.equal(availability.allowed(edition,'business_card'),true,edition);
+ for(const edition of ['general','pro','basic','issue','roads','unknown'])assert.equal(availability.allowed(edition,'business_card'),false,edition);
+ });
