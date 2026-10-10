@@ -18,7 +18,7 @@ test('general Pro retains the former Basic help, issue, and assignment workflows
 test('administrators can create, assign, and switch to general Pro',()=>{
   assert.match(admin,/pro:'Photo Notes Pro'/);
   assert.match(admin,/versionChecks/);
-  assert.match(server,/\['issue','roads','general','contractor','paving','hoa','property','concrete','roofer'\]/);
+  assert.match(server,/\['security','issue','roads','general','contractor','paving','hoa','property','concrete','roofer'\]/);
   assert.doesNotMatch(db,/SET plan='pro',pro_type='general' FROM testing_assignments/);
 });
 test('final Pro branding uses the shared lockup',()=>{

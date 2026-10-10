@@ -162,7 +162,7 @@
   </style>
   <link rel="stylesheet" href="/testing-hub.css?v=277">
   <script src="/testing-hub.js?v=350"></script>
-<link rel="stylesheet" href="/theme.css?v=389"><script src="/theme.js?v=389"></script><link rel="stylesheet" href="/help.css?v=376"><script src="/help-catalog.js?v=440" defer></script><script src="/help.js?v=440" defer></script></head>
+<link rel="stylesheet" href="/theme.css?v=389"><script src="/theme.js?v=389"></script><link rel="stylesheet" href="/help.css?v=376"><script src="/help-catalog.js?v=441" defer></script><script src="/help.js?v=441" defer></script></head>
 <body>
   <div id="app"></div>
   <script src="/admin-ai.js?v=1"></script><script src="/admin-user-usage.js?v=2"></script>
@@ -182,8 +182,8 @@
     function st(n, l){ return `<span class="stat"><div class="n">${n}</div><div class="l">${l}</div></span>`; }
     function num(v){ return Number(v) || 0; }
     let allUsers = [], selectedUserId = null;
-    const editionLabels={basic:'Photo Notes Basic',issue:'Issue Reporter',pro:'Photo Notes Pro',contractor:'General Contractor Pro',roads:'Road Issue Reporter',paving:'Paving Pro',hoa:'HOA Maintenance Pro',property:'Property Manager Pro',concrete:'Concrete Pro',roofer:'Roofer Pro'};
-    function allowedVersions(u){return Array.isArray(u.edition_access)?u.edition_access:u.role==='admin'?Object.keys(editionLabels):[u.plan==='pro'?(u.pro_type==='general'?'pro':u.pro_type||'paving'):u.pro_type==='roads'?'roads':'basic'];}
+    const editionLabels={security:'Security Issue Reporter Pro',basic:'Photo Notes Basic',issue:'Issue Reporter',pro:'Photo Notes Pro',contractor:'General Contractor Pro',roads:'Road Issue Reporter',paving:'Paving Pro',hoa:'HOA Maintenance Pro',property:'Property Manager Pro',concrete:'Concrete Pro',roofer:'Roofer Pro'};
+    function allowedVersions(u){return Array.isArray(u.edition_access)?u.edition_access:u.role==='admin'?Object.keys(editionLabels):[u.plan==='pro'?(u.pro_type==='general'?'pro':u.pro_type||'paving'):u.pro_type==='security'?'security':u.pro_type==='roads'?'roads':'basic'];}
     function versionChecks(owner,access){return Object.entries(editionLabels).map(([key,label])=>`<label class="feature-item"><input type="checkbox" data-version-owner="${owner}" value="${key}" ${access.includes(key)?'checked':''}><span>${label}</span></label>`).join('');}
     function showUser(id){selectedUserId=id;renderUserList();document.getElementById('users').scrollIntoView({block:'start'});document.getElementById(id?'backToUsers':'userSearch').focus();}
     async function saveVersions(id,btn){
@@ -279,7 +279,7 @@
           <div class="user-title-row"><div class="userhead">${esc(u.name || u.email || '(unnamed user)')}</div>${u.active ? '' : '<span class="pill basic">Inactive</span>'}</div>
           <div class="account-badges">
             ${u.role==='admin' ? '<span class="pill role">Administrator Access</span>' : '<span class="pill basic">Standard Access</span>'}
-            <span class="pill basic">Currently using: ${esc(editionLabels[u.plan==='pro'?(u.pro_type==='general'?'pro':u.pro_type):u.pro_type==='roads'?'roads':'basic'])}</span>
+            <span class="pill basic">Currently using: ${esc(editionLabels[u.plan==='pro'?(u.pro_type==='general'?'pro':u.pro_type):u.pro_type==='security'?'security':u.pro_type==='roads'?'roads':'basic'])}</span>
           </div>
           <div class="muted">${esc(u.email)}${u.industry ? ' · Industry: ' + esc(u.industry) : ''}</div>
           <div class="muted">Joined ${fdate(u.created_at)} · Last login ${fdatetime(u.last_login_at)} · Login count ${num(u.logins)} · Last active ${fdatetime(u.last_activity)}</div>

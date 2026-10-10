@@ -16,8 +16,9 @@ function isPavingClient(){return isProClient()&&(state.proType==='paving'||state
 function isRooferClient(){return isProClient()&&state.proType==='roofer';}
 function isRoadIssuesClient(){return !isProClient()&&state.proType==='roads';}
 function isIssueReporterClient(){return !isProClient()&&state.proType==='issue';}
-function productName(){return isIssueReporterClient()?'Issue Reporter':isRoadIssuesClient()?'Road Issue Reporter':isGeneralProClient()?'Photo Notes Pro':isGeneralContractorClient()?'General Contractor Pro':isHoaClient()?(state.proType==='property'?'Property Manager Pro':'HOA Maintenance Pro'):isConcreteClient()?'Concrete Pro':isRooferClient()?'Roofer Pro':isPavingClient()?'Paving Pro':'Photo Notes AI Basic';}
-const editionNames={basic:'Photo Notes Basic',issue:'Issue Reporter',pro:'Photo Notes Pro',contractor:'General Contractor Pro',roads:'Road Issue Reporter',paving:'Paving Pro',hoa:'HOA Maintenance Pro',property:'Property Manager Pro',concrete:'Concrete Pro',roofer:'Roofer Pro'};
+function isSecurityClient(){return !isProClient()&&state.proType==='security';}
+function productName(){return isSecurityClient()?'Security Issue Reporter Pro':isIssueReporterClient()?'Issue Reporter':isRoadIssuesClient()?'Road Issue Reporter':isGeneralProClient()?'Photo Notes Pro':isGeneralContractorClient()?'General Contractor Pro':isHoaClient()?(state.proType==='property'?'Property Manager Pro':'HOA Maintenance Pro'):isConcreteClient()?'Concrete Pro':isRooferClient()?'Roofer Pro':isPavingClient()?'Paving Pro':'Photo Notes AI Basic';}
+const editionNames={security:'Security Issue Reporter Pro',basic:'Photo Notes Basic',issue:'Issue Reporter',pro:'Photo Notes Pro',contractor:'General Contractor Pro',roads:'Road Issue Reporter',paving:'Paving Pro',hoa:'HOA Maintenance Pro',property:'Property Manager Pro',concrete:'Concrete Pro',roofer:'Roofer Pro'};
 function editionSwitcherOptions() {
   const allowed = state.me.edition_access;
   const core = ['basic','pro'].filter(key=>allowed.includes(key));
@@ -26,7 +27,7 @@ function editionSwitcherOptions() {
   const option = key=>`<option value="${esc(key)}" ${key===selectedEdition()?'selected':''}>${esc(editionNames[key]||key)}</option>`;
   return core.map(option).join('') + (core.length && others.length ? '<hr>' : '') + others.map(option).join('');
 }
-function selectedEdition(){return isIssueReporterClient()?'issue':isBasicClient()?'basic':isRoadIssuesClient()?'roads':isGeneralProClient()?'pro':state.proType;}
+function selectedEdition(){return isSecurityClient()?'security':isIssueReporterClient()?'issue':isBasicClient()?'basic':isRoadIssuesClient()?'roads':isGeneralProClient()?'pro':state.proType;}
 function issueFabLabel(){return 'Report Issue';}
 function featureOn(name) { if(name==='camera_readers'&&state.proType==='general')return false;return (['camera_readers','before_after'].includes(name) ? isProClient() && ['general','paving','asphalt','concrete','property','hoa','contractor','roofer'].includes(state.proType) : isPavingClient()) && (!state.me || !state.me.feature_access || state.me.feature_access[name] !== false); }
 function measurementOn(){return isConcreteClient()||featureOn('measurements');}
@@ -352,7 +353,7 @@ function renderApp() {
             <div class="profile-menu" id="profileMenu" hidden>
               <div class="profile-name">${esc((state.me && state.me.name) || 'Photo Notes User')}</div>
               <div class="profile-email">${esc((state.me && state.me.email) || '')}</div>
-              <div class="profile-plan">${isIssueReporterClient()?'Issue Reporter':isRoadIssuesClient()?'Road Issue Reporter':isGeneralProClient()?'Photo Notes Pro':isProClient()?esc(productName()):'Photo Notes Basic'}</div>
+              <div class="profile-plan">${isSecurityClient()?'Security Issue Reporter Pro':isIssueReporterClient()?'Issue Reporter':isRoadIssuesClient()?'Road Issue Reporter':isGeneralProClient()?'Photo Notes Pro':isProClient()?esc(productName()):'Photo Notes Basic'}</div>
               ${state.me&&Array.isArray(state.me.edition_access)&&state.me.edition_access.length>1?`<div class="profile-version"><span>Photo Notes Version</span><select id="editionSwitcher" aria-label="Switch Photo Notes version">${editionSwitcherOptions()}</select></div>`:''}
               <button type="button" id="manageTesting" ${state.me?.is_testing_manager||state.me?.role==='admin'?'':'hidden'}>${uiT('Testing Administration')}</button>
               <button type="button" id="myAssignment" ${state.me?.is_tester||state.me?.is_testing_manager||state.me?.role==='admin'?'':'hidden'}>${uiT(isTestingManager()?'My Testing Dashboard':'Testing Dashboard')}</button>
@@ -2109,7 +2110,7 @@ async function drainQueue() {
         if(queueAccount!==account||selectedEdition()!==edition)break;
         bgQueue=bgQueue.filter(row=>row.id!==item.id);
         void renderPendingLibrary();
-        if(!item.receipt?.captureShare)toast((edition==='basic'||edition==='issue')?'Saved to Photo Notes.':'Saved to Photo Notes. Find it in Library.');
+        if(!item.receipt?.captureShare)toast((edition==='basic'||edition==='issue'||edition==='security')?'Saved to Photo Notes.':'Saved to Photo Notes. Find it in Library.');
         if(state.view==='organize'||state.view==='edit'){const f=document.getElementById('filter');void loadCards(f?f.value||'':'');}
       }catch(error){
         if(queueAccount!==account||selectedEdition()!==edition)break;

@@ -1,5 +1,6 @@
 const EDITIONS = Object.freeze({
   issue:{plan:'free',pro_type:'issue',label:'Issue Reporter'},
+  security:{plan:'free',pro_type:'security',label:'Security Issue Reporter Pro'},
   basic:{plan:'free',pro_type:'general',label:'Photo Notes Basic'},
   pro:{plan:'pro',pro_type:'general',label:'Photo Notes Pro'},
   contractor:{plan:'pro',pro_type:'contractor',label:'General Contractor Pro'},
@@ -11,7 +12,7 @@ const EDITIONS = Object.freeze({
   roofer:{plan:'pro',pro_type:'roofer',label:'Roofer Pro'}
 });
 function currentEdition(user) {
-  if(user.plan!=='pro')return user.pro_type==='issue'?'issue':user.pro_type==='roads'?'roads':'basic';
+  if(user.plan!=='pro')return user.pro_type==='security'?'security':user.pro_type==='issue'?'issue':user.pro_type==='roads'?'roads':'basic';
   return user.pro_type==='general'?'pro':Object.hasOwn(EDITIONS,user.pro_type)?user.pro_type:'paving';
 }
 function editionAccess(user) {

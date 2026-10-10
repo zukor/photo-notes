@@ -6,7 +6,7 @@ let refreshLanguage=null;
 document.addEventListener('photo-notes-languagechange',()=>{if(refreshLanguage)refreshLanguage();});
 const es=()=>window.photoNotesI18n?.getLanguage()==='es';const tr=(en,spanish)=>es()?spanish:en;
 const pick=(a,k)=>es()&&a[k+'_es']?a[k+'_es']:a[k]||'';
-const editionNames={basic:'Photo Notes Basic',issue:'Issue Reporter',property:'Property Manager Pro',pro:'Photo Notes Pro',roads:'Road Issue Reporter',paving:'Paving Pro',concrete:'Concrete Pro',contractor:'General Contractor Pro',hoa:'HOA Maintenance Pro',roofer:'Roofer Pro'};
+const editionNames={security:'Security Issue Reporter Pro',basic:'Photo Notes Basic',issue:'Issue Reporter',property:'Property Manager Pro',pro:'Photo Notes Pro',roads:'Road Issue Reporter',paving:'Paving Pro',concrete:'Concrete Pro',contractor:'General Contractor Pro',hoa:'HOA Maintenance Pro',roofer:'Roofer Pro'};
 const labels=()=>({not_tested:tr('Not Tested','Sin probar'),passed:tr('Passed','Pasó'),failed:tr('Failed','Falló'),blocked:tr('Blocked','Bloqueado')});
 async function request(url,body,method='POST'){const r=await fetch(url,body===undefined?{}:{method,headers:body instanceof FormData?{}:{'Content-Type':'application/json'},body:body instanceof FormData?body:JSON.stringify(body)});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||'Request failed');return d;}
 function errorText(e){if(!es())return e.message;return 'No se pudo guardar. Sus cambios se conservan en este dispositivo. Revise la conexión. Si abrió otra ventana, recargue y compare el borrador local. Detalle: '+e.message;}
