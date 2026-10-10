@@ -98,6 +98,7 @@ CREATE TABLE IF NOT EXISTS captures (
   concrete_purpose TEXT,
   paving_photo_reason TEXT,
   urgency TEXT NOT NULL DEFAULT 'standard',
+  security_issue_type TEXT,
   concrete_element TEXT,
   concrete_stage TEXT,
   concrete_condition TEXT,
@@ -610,6 +611,7 @@ async function init() {
   await pool.query(require('./saved-views').SCHEMA);
 
   await pool.query("ALTER TABLE captures ADD COLUMN IF NOT EXISTS urgency TEXT NOT NULL DEFAULT 'standard'");
+  await pool.query("ALTER TABLE captures ADD COLUMN IF NOT EXISTS security_issue_type TEXT");
   await pool.query(require('./send-shortcuts').SCHEMA);
   await pool.query(require('./export-presets').SCHEMA);
 

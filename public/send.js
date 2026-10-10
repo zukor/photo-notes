@@ -112,7 +112,7 @@
     document.body.appendChild(modal);modal.querySelector('[data-share]').focus();
   }
   var sending = false;
-  function shareKey(){return JSON.stringify([noteVal(),q('addr')?.textContent,q('gps')?.textContent,typeof state==='undefined'?null:state.me?.email,typeof state==='undefined'?null:state.proType,typeof state==='undefined'?null:state.area,locale()]);}
+  function shareKey(){return JSON.stringify([noteVal(),q('addr')?.textContent,q('gps')?.textContent,typeof state==='undefined'?null:state.me?.email,typeof state==='undefined'?null:state.proType,typeof state==='undefined'?null:state.area,typeof state==='undefined'?null:state.securityIssueType,locale()]);}
   var basicShare=null;
   function basicMode(){return typeof isBasicClient==='function'&&isBasicClient();}
   function recording(){return (typeof dictationActive!=='undefined'&&dictationActive)||(typeof dictationFinish!=='undefined'&&!!dictationFinish);}
@@ -254,6 +254,7 @@
   var mo = new MutationObserver(apply);
   mo.observe(document.documentElement, { childList: true, subtree: true });
   document.addEventListener('input', function(e){if(e.target&&e.target.id==='note')prepareBasicShare();});
+  document.addEventListener('change', function(e){if(e.target&&e.target.id==='securityIssueType')prepareBasicShare();});
   document.addEventListener('DOMContentLoaded', apply);
   document.addEventListener('photo-notes-languagechange', apply);
   apply();
