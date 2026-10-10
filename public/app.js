@@ -764,6 +764,7 @@ function mountDuplicateContext(){
 function renderCapture() {
   if(isPavingClient()&&pavingPhotoReason().id!=='proposal'){renderPavingToolCapture();return;}
   const body = document.getElementById('body');
+  body.className = 'workflow-capture';
   body.innerHTML = `
     ${isPavingClient()?pavingPhotoReasonMarkup():''}
     ${isHoaClient()?`<label>${hoaText('HOA / Community')}</label><select id="hoaCommunity"><option value="">${hoaText('Select Community')}</option>${state.communities.map(c=>`<option value="${c.id}" ${String(state.communityId)===String(c.id)?'selected':''}>${esc(c.name)}</option>`).join('')}</select>${!state.communities.length?`<p class="status">${hoaText('Create your first community under Assets before saving a maintenance record.')}</p>`:''}<label>Issue Title</label><input id="hoaTitle" placeholder="Briefly identify the maintenance issue"><div class="row compact"><div style="flex:1"><label>Record Type</label><select id="hoaType"><option value="maintenance">Maintenance Issue</option><option value="information">Information Request</option><option value="inspection">Inspection Finding</option></select></div><div style="flex:1"><label>Priority</label><select id="hoaPriority"><option value="routine">Routine</option><option value="high">High</option><option value="emergency">Emergency</option><option value="monitor">Monitor</option></select></div></div>`:''}
