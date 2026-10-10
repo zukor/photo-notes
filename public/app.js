@@ -2129,8 +2129,8 @@ let captureSavePending=false;
 async function chooseCaptureJob(){
  if(!state.photoFile&&!document.getElementById('note')?.value.trim())return toast('Take a photo or add a note first');
  const dialog=document.createElement('dialog');dialog.className='capture-job-dialog';
- const existingJobs=state.jobs.length?`<label for="captureJobChoice">Existing Job</label><select id="captureJobChoice">${state.jobs.map(j=>`<option value="${j.id}">${esc(j.name)}</option>`).join('')}</select><button class="btn" id="captureJobSave">Save to Selected Job</button>`:'<p class="capture-job-empty">No Existing Jobs</p>';
- dialog.innerHTML=`<h2>Save to Job</h2><p class="capture-job-summary">Select an existing job, create one, or save without a job.</p>${existingJobs}<label for="captureNewJobName">New Job Name</label><input id="captureNewJobName" maxlength="200"><button class="btn secondary" id="captureJobCreate">Create Job and Save</button><button class="btn secondary" id="captureJobUnassigned">Save Without a Job</button><button class="btn secondary" id="captureJobCancel">Cancel</button><p id="captureJobStatus" role="status"></p>`;
+ const existingJobs=state.jobs.length?`<label for="captureJobChoice">Select Existing Job</label><select id="captureJobChoice">${state.jobs.map(j=>`<option value="${j.id}">${esc(j.name)}</option>`).join('')}</select><button class="btn" id="captureJobSave">Save to Selected Job</button>`:'<p class="capture-job-empty">No Existing Jobs</p>';
+ dialog.innerHTML=`<h2>Save to Job</h2>${existingJobs}<label for="captureNewJobName">New Job Name</label><input id="captureNewJobName" maxlength="200"><button class="btn secondary" id="captureJobCreate">Create Job and Save</button><button class="btn secondary" id="captureJobUnassigned">Save Without a Job</button><button class="btn secondary" id="captureJobCancel">Cancel</button><p id="captureJobStatus" role="status"></p>`;
  document.body.append(dialog);dialog.showModal();dialog.onclose=()=>dialog.remove();
  const save=async job=>{dialog.close();await saveCapture({jobId:job});};
  dialog.querySelector('#captureJobCancel').onclick=()=>dialog.close();
