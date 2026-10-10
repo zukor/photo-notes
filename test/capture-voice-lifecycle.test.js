@@ -64,3 +64,9 @@ test('Safari completed recognizer is released on the next user tap, after final 
  for(let i=0;i<10;i++){await h.run('toggleDictation()');const s=h.sessions.at(-1);assert.equal(h.run('dictationActive'),true);s.onresult({results:[[{transcript:'Recording '+i}]]});const stopping=h.run('toggleDictation()');s.onend();await stopping;assert.notEqual(s.aborted,true);}
  assert.equal(h.sessions.length,10);for(const s of h.sessions.slice(0,-1))assert.notEqual(s.aborted,true);assert(h.elements.note.value.includes('Recording 9'));
 });
+
+test('audio start without transcription cannot leave Capture listening forever',async()=>{
+ const h=harness();await h.run('toggleDictation()');const first=h.sessions[0];first.onstart();first.onaudiostart();first.onspeechstart();h.fire(30000);
+ assert.equal(h.run('dictationActive'),false);assert.ok(first.aborted);assert.match(h.interruptions[0],/no words were received/);
+ await h.run('toggleDictation()');h.sessions[1].onresult({results:[[{transcript:'Recovered words'}]]});h.fire(30000);assert.equal(h.run('dictationActive'),true);assert.equal(h.elements.note.value,'Recovered words');
+});

@@ -9,3 +9,9 @@ test('speech errors are retained only as recognized codes, never arbitrary conte
  const text=run(JSON.stringify([{...base,detail:'aborted'},{...base,detail:'PRIVATE note text'},{...base,event:'result',detail:'PRIVATE transcript'}]),'Second recording failed');
  assert(text.includes('"error":"aborted"'));assert(!text.includes('PRIVATE'));
 });
+
+test('later result bursts retain the preceding failed recording boundary',()=>{
+ const base={at:new Date().toISOString(),version:440,active:true,pending:false,finishing:false,mode:'browser'};
+ const rows=[{...base,event:'request',generation:1},{...base,event:'no-result-timeout',generation:1},...Array.from({length:70},()=>({...base,event:'result',generation:2})),{...base,event:'stop',generation:2}];
+ const text=run(JSON.stringify(rows),'Second recording failed');assert(text.includes('no-result-timeout'));assert(text.includes('request'));assert(text.length<=5000);
+});
