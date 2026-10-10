@@ -150,8 +150,10 @@
       var saved=await saveCapture({requireDurable:true,preserveDraft:true});
       if(!saved)return;
       t=caption();
+      var original=f,key=shareKey();
       if(f&&window.PhotoNotesShareImage){try{f=await window.PhotoNotesShareImage.withDetails(f,t);}catch(e){toast(e.message);}}
       if(typeof state!=='undefined'&&state.view&&state.view!=='capture')return;
+      if(shareKey()!==key||(typeof state!=='undefined'&&state.photoFile!==original)){toast('Photo or notes changed. Tap Send/Share again.');return;}
       showSavedShare(f,t);
     } catch(e){toast('Could not save this photo. Your draft is still here.');}
     finally{sending=false;if(q('send'))q('send').disabled=false;if(q('save'))q('save').disabled=false;}
