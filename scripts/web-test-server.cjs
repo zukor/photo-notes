@@ -8,7 +8,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs/promises');
  const originalFetch=global.fetch;global.fetch=(input,options)=>{const url=new URL(typeof input==='string'?input:input.url);if(!['localhost','127.0.0.1'].includes(url.hostname))throw Error('External requests disabled in acceptance tests');return originalFetch(input,options);};
  delete process.env.RESEND_API_KEY;delete process.env.ISSUE_GITHUB_TOKEN;
  const {pool,init}=require('../db');await init();await require('../issue-cloud').initCloud(pool);
- await pool.query("UPDATE users SET edition_access=ARRAY['basic','pro','contractor','roads','paving','hoa','property','concrete','roofer','issue'] WHERE email='ios-integration@example.invalid'");
+ await pool.query("UPDATE users SET edition_access=$1::text[] WHERE email='ios-integration@example.invalid'",[Object.keys(require('../editions').EDITIONS)]);
  const {app}=require('../server');const server=app.listen(Number(process.env.PN_WEB_TEST_PORT||33088),'127.0.0.1',()=>console.log('Disposable web test API: http://127.0.0.1:'+server.address().port));
  process.on('SIGTERM',()=>server.close(async()=>{await pool.end();process.exit(0);}));
 })().catch(error=>{console.error(error.message);process.exit(1);});
