@@ -1093,7 +1093,11 @@ button.tab:not(.on) {
   padding:6px 11px;
   border-radius:var(--pn-control-radius);
 }
-.tab.on,
+.tab.on {
+  color:#fff;
+  background:var(--pn-capture-blue);
+  border:var(--pn-control-border);
+}
 .pill.on,
 [role="tab"][aria-selected="true"] {
   color:#000;
@@ -1182,11 +1186,6 @@ button:disabled {
 }
 
 /* Capture corrections after the shared visual-system rollout. */
-#tabCapture.on {
-  color:#fff;
-  background:var(--pn-capture-blue);
-  border-color:#000;
-}
 .status:empty { display:none; }
 #qualityStatus,
 #gps,
