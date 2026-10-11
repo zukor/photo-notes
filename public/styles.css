@@ -591,7 +591,8 @@ body:has(.issue-fab) { padding-bottom:calc(80px + env(safe-area-inset-bottom)); 
   .organize-footer-actions .btn { width:100%; }
 }
 @media (max-width:360px){.workflow-organize #cards{grid-template-columns:1fr;}}
-input::placeholder,textarea::placeholder { color:#6b7280 !important; font-weight:400 !important; opacity:1 !important; }
+html:not([data-theme="dark"]) input::placeholder,
+html:not([data-theme="dark"]) textarea::placeholder { color:#595959 !important; font-weight:400 !important; opacity:1 !important; }
 
 /* Keep the company mark compact on the narrowest iPhones. This rule belongs
    after the 700px phone rule so the cascade cannot enlarge it again. */
@@ -1058,8 +1059,9 @@ body:not(:where(html[data-theme="dark"] *)) :is(input,textarea,select) {
   border:1px solid #000;
   border-radius:var(--pn-control-radius);
 }
-input::placeholder,textarea::placeholder {
-  color:#666 !important;
+html:not([data-theme="dark"]) input::placeholder,
+html:not([data-theme="dark"]) textarea::placeholder {
+  color:#595959 !important;
   font-weight:400 !important;
   opacity:1 !important;
 }
