@@ -1987,22 +1987,31 @@ function renderDevicePhotoNotesLibrary(){
   void renderPendingLibrary();
 }
 function queuePaused(){return !!queueAccount&&localStorage.getItem('pn-upload-paused:'+queueAccount+':'+selectedEdition())==='1';}
+function queuePausedIdsKey(){return 'pn-upload-paused-ids:'+queueAccount+':'+selectedEdition();}
+function queueItemPaused(item){
+  if(!queuePaused())return false;
+  const stored=localStorage.getItem(queuePausedIdsKey());
+  if(!stored)return true; // Preserve pauses saved by an older release.
+  try{return JSON.parse(stored).includes(item.requestId);}catch{return true;}
+}
+function nextQueueUpload(){return bgQueue.find(item=>!item.blocked&&!queueItemPaused(item));}
 function setQueuePaused(paused){
   if(!queueAccount)return;
   const key='pn-upload-paused:'+queueAccount+':'+selectedEdition();
-  if(paused)localStorage.setItem(key,'1');else localStorage.removeItem(key);
+  if(paused){localStorage.setItem(key,'1');localStorage.setItem(queuePausedIdsKey(),JSON.stringify(bgQueue.map(item=>item.requestId)));}
+  else{localStorage.removeItem(key);localStorage.removeItem(queuePausedIdsKey());}
   clearTimeout(queueRetryTimer);queueNextRetry=0;
   bgIndicator();
   if(!paused)void restoreOfflineQueue();
 }
 function scheduleQueueRetry(){
   clearTimeout(queueRetryTimer);queueNextRetry=0;
-  if(queuePaused()||!bgQueue.length||bgQueue[0].blocked)return;
+  if(!nextQueueUpload())return;
   queueNextRetry=Date.now()+10000;
   queueRetryTimer=setTimeout(()=>{queueNextRetry=0;void drainQueue();},10000);
 }
 function queueRetryText(){
-  if(queuePaused())return 'Automatic retry is stopped.';
+  if(queuePaused()&&!nextQueueUpload())return 'Automatic retry is stopped.';
   if(bgDraining)return 'Uploading PhotoNotes...';
   if(!bgQueue.length)return 'All PhotoNotes in this version have uploaded.';
   if(bgQueue[0].blocked)return 'Automatic retry is paused until this is resolved.';
@@ -2070,7 +2079,7 @@ function payloadFormData(p){const fd=new FormData();if(p.photo)fd.append('photo'
 function bgIndicator() {
   document.getElementById('bgstatus')?.remove();
   if(!state.me||pendingUploadNoticeOpening||document.getElementById('pendingPhotosDialog'))return;
-  const failed=bgQueue.find(item=>item.tries||item.blocked);
+  const failed=bgQueue.find(item=>!queueItemPaused(item)&&(item.tries||item.blocked))||bgQueue.find(item=>item.tries||item.blocked);
   if(!failed&&!legacyPendingCount)return;
   const key=queueAccount+':'+selectedEdition()+':'+(failed?.requestId||'legacy');
   if(pendingUploadNotices.has(key))return;
@@ -2081,20 +2090,22 @@ function bgIndicator() {
 async function enqueueUpload(payload, hadCoords, options = {}) {
   const row=await queueStore(payload,hadCoords);
   if(row.account!==queueAccount||row.edition!==selectedEdition())return;
+  // Migrate a legacy account-wide pause before adding this new capture.
+  if(queuePaused()&&!localStorage.getItem(queuePausedIdsKey()))localStorage.setItem(queuePausedIdsKey(),JSON.stringify(bgQueue.map(item=>item.requestId)));
   bgQueue.push({...row,tries:0,receipt:options.receipt});
   if(!bgOnlineHooked){window.addEventListener('online',()=>void restoreOfflineQueue());bgOnlineHooked=true;}
   bgIndicator();void drainQueue();
 }
 async function drainQueue() {
-  if(bgDraining||!state.me||!queueAccount||queuePaused())return;
+  if(bgDraining||!state.me||!queueAccount)return;
   clearTimeout(queueRetryTimer);queueNextRetry=0;
   bgDraining=true;
   const account=queueAccount, edition=selectedEdition();
   try{
-    while(bgQueue.length&&!queuePaused()&&queueAccount===account&&selectedEdition()===edition){
+    while(nextQueueUpload()&&queueAccount===account&&selectedEdition()===edition){
       // Hotspots can report offline while the server is reachable. The request
       // and existing retry delay determine whether an upload can proceed.
-      const item=bgQueue[0];
+      const item=nextQueueUpload();
       if(item.blocked)break;
       if(!PhotoNotesQueue.eligible(item,account,edition))break;
       try{

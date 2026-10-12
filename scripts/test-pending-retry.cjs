@@ -9,12 +9,27 @@ await page.getByRole('button',{name:'Stop Retrying',exact:true}).waitFor();asser
 await page.screenshot({path:`/tmp/pending-photonotes-${engine.name()}-${width}.png`});
 await page.getByRole('button',{name:'Stop Retrying',exact:true}).click();assert.match(await page.locator('#pendingRetryStatus').innerText(),/stopped/);const count=attempts;
 await page.getByRole('button',{name:'Save to PhotoNotes Library',exact:true}).click();await page.locator('#pendingLibrary').waitFor();assert.match(await page.locator('#pendingLibrary').innerText(),/Pool draining/);assert.equal(attempts,count);
+// A stopped old note must never block new saves, including after restoring the queue.
+success=true;
+await page.evaluate(async()=>{await enqueueUpload({note:'New online capture'},false);});
+await page.waitForFunction(()=>!bgDraining&&bgQueue.length===1);
+assert.equal(await page.evaluate(()=>queuePaused()),true,'old note remains stopped');
+assert.equal(await page.evaluate(async()=>(await PhotoNotesQueue.all()).length),1,'only old stopped note remains');
+await page.evaluate(()=>restoreOfflineQueue());
+const afterNew=attempts;
+await page.evaluate(()=>drainQueue());assert.equal(attempts,afterNew,'restore must preserve old pause');
+success=false;
+await page.evaluate(async()=>{await enqueueUpload({note:'New offline capture'},false);});
+await page.waitForFunction(()=>queueNextRetry>0&&!!document.getElementById('pendingPhotosDialog'));
+assert.match(await page.locator('#pendingRetryStatus').innerText(),/Automatically retrying/);
+assert.equal(await page.evaluate(()=>bgQueue.length),2);
+await page.getByRole('button',{name:'Close',exact:true}).click();
 await page.evaluate(()=>showPendingPhotos());await page.getByRole('button',{name:'Continue Retrying',exact:true}).click();await page.waitForFunction(()=>queueNextRetry>0);
 if(engine===chromium&&width===390){const start=attempts;await page.waitForFunction(()=>queueNextRetry>0);await new Promise(r=>setTimeout(r,10500));assert(attempts>start,'automatic retry must send another request');assert.equal(await page.locator('#pendingPhotosDialog').count(),1);}
 success=true;await page.getByRole('button',{name:'Stop Retrying',exact:true}).click();await page.getByRole('button',{name:'Continue Retrying',exact:true}).click();await page.waitForFunction(()=>bgQueue.length===0);assert.equal(await page.evaluate(async()=>(await PhotoNotesQueue.all()).length),0);
 await page.getByRole('button',{name:'Close',exact:true}).click();
 for(const edition of ['basic','issue','roads','general','contractor','paving','hoa','property','concrete','roofer']){
-await page.evaluate(async edition=>{state.plan=['basic','issue','roads'].includes(edition)?'free':'pro';state.proType=edition==='basic'?'general':edition;state.view='capture';renderApp();await restoreOfflineQueue();setQueuePaused(true);await PhotoNotesQueue.create({note:'Local '+edition},false,queueAccount,selectedEdition());await restoreOfflineQueue();await showPendingPhotos();},edition);
+await page.evaluate(async edition=>{state.plan=['basic','issue','roads'].includes(edition)?'free':'pro';state.proType=edition==='basic'?'general':edition;state.view='capture';renderApp();await restoreOfflineQueue();const local=await PhotoNotesQueue.create({note:'Local '+edition},false,queueAccount,selectedEdition());bgQueue.push({...local,tries:0});setQueuePaused(true);await restoreOfflineQueue();await showPendingPhotos();},edition);
 await page.getByRole('button',{name:'Save to PhotoNotes Library',exact:true}).click();await page.locator('#pendingLibrary').waitFor();assert.match(await page.locator('#pendingLibrary').innerText(),new RegExp('Local '+edition));assert.deepEqual(await page.evaluate(()=>PhotoNotesHelp.inspect().filter(i=>!i.authored).map(i=>i.key)),[],edition+' device Library Help');
 await page.evaluate(async()=>{for(const row of await PhotoNotesQueue.all())await PhotoNotesQueue.remove(row.id);});
 }
