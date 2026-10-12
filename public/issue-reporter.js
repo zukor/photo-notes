@@ -162,13 +162,32 @@ function cleanSpeechTranscript(value){
   }
   return words.join(' ');
 }
+// Compare spoken words across result boundaries even when automatic punctuation
+// changes. Keep signs and internal punctuation, so -5 and 5 remain distinct.
+function speechWordKey(word){
+  return word.toLocaleLowerCase().replace(/^[.,!?;:"“”‘’¿¡()]+|[.,!?;:"“”‘’¿¡()]+$/g,'');
+}
 function combineSpeechResults(parts){
   const segments=[];
-  const words=value=>value.toLocaleLowerCase().split(/\s+/);
+  const words=value=>value.split(/\s+/).map(speechWordKey);
   const prefix=(short,long)=>short.length<=long.length&&short.every((word,i)=>word===long[i]);
   for(const part of parts){
     const text=String(part||'').trim();if(!text)continue;
     const incoming=words(text),previous=words(segments.at(-1)||'');
+    // A long expanding indexed snapshot may also revise one recognized word.
+    // Require a strong unchanged opening and preserve number/negation changes.
+    // This applies only within indexed results, never across separate sessions.
+    if(previous.length>=20&&incoming.length>previous.length&&prefix(previous.slice(0,6),incoming)){
+      const changed=previous.map((word,i)=>word===incoming[i]?null:[word,incoming[i]]).filter(Boolean);
+      const consequential=word=>/\d/.test(word)||/^(no|not|never|without|cannot|can't|isn't|wasn't|don't|doesn't)$/.test(word);
+      const minorRevision=pair=>{
+        const [a,b]=pair.length&&pair[0].length<=pair[1].length?pair:[pair[1],pair[0]];
+        if(a.length<3||b.length!==a.length+1)return false;
+        let i=0;while(i<a.length&&a[i]===b[i])i++;
+        return a.slice(i)===b.slice(i+1);
+      };
+      if(changed.length===1&&!changed[0].some(consequential)&&minorRevision(changed[0])){segments.pop();segments.push(text);continue;}
+    }
     // Some Android engines append progressively longer snapshots as new slots.
     // Replace that prefix chain before joining; joining first loses boundaries.
     if(segments.length&&incoming.length>previous.length&&prefix(previous,incoming)){
@@ -190,7 +209,7 @@ function combineSpeechResults(parts){
 function mergeSpeechTranscript(base,incoming){
   const left=String(base||'').trim().split(/\s+/).filter(Boolean),right=cleanSpeechTranscript(incoming).split(/\s+/).filter(Boolean);
   let overlap=0,max=Math.min(left.length,right.length);
-  for(let size=max;size>=1;size--)if(left.slice(-size).map(w=>w.toLowerCase()).join('\u0000')===right.slice(0,size).map(w=>w.toLowerCase()).join('\u0000')){overlap=size;break;}
+  for(let size=max;size>=1;size--)if(left.slice(-size).map(speechWordKey).join('\u0000')===right.slice(0,size).map(speechWordKey).join('\u0000')){overlap=size;break;}
   return cleanSpeechTranscript([...left,...right.slice(overlap)].join(' '));
 }
 async function toggleIssueDictation(){
