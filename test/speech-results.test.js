@@ -32,3 +32,13 @@ test('complete long sentences repeated in separate result slots appear once',()=
  assert.equal(context.mergeSpeechTranscript(sentence,sentence),sentence);
  assert.equal(combine([sentence,sentence+' with a new ending']),sentence+' with a new ending');
 });
+
+// Recognition may reissue the same words with sentence punctuation added.
+test('punctuation revisions at indexed result and session boundaries do not duplicate long passages',()=>{
+ const first='Here are three facts about this picture first a city crew is working in the street second water sprays from the pipe';
+ const revised='Here are three facts about this picture. First a city crew is working in the street. Second water sprays from the pipe.';
+ assert.equal(combine([first,revised+' The truck waits nearby.']),revised+' The truck waits nearby.');
+ assert.equal(context.mergeSpeechTranscript(first,revised+' The truck waits nearby.'),first+' The truck waits nearby.');
+ assert.equal(combine(['The door is blue.','blue and closed.']),'The door is blue. blue and closed.');
+ assert.equal(combine(['Pressure is -5','Pressure is 5']),'Pressure is -5 Pressure is 5');
+});

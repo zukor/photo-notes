@@ -162,9 +162,14 @@ function cleanSpeechTranscript(value){
   }
   return words.join(' ');
 }
+// Compare spoken words across result boundaries even when automatic punctuation
+// changes. Keep signs and internal punctuation, so -5 and 5 remain distinct.
+function speechWordKey(word){
+  return word.toLocaleLowerCase().replace(/^[.,!?;:"“”‘’¿¡()]+|[.,!?;:"“”‘’¿¡()]+$/g,'');
+}
 function combineSpeechResults(parts){
   const segments=[];
-  const words=value=>value.toLocaleLowerCase().split(/\s+/);
+  const words=value=>value.split(/\s+/).map(speechWordKey);
   const prefix=(short,long)=>short.length<=long.length&&short.every((word,i)=>word===long[i]);
   for(const part of parts){
     const text=String(part||'').trim();if(!text)continue;
@@ -190,7 +195,7 @@ function combineSpeechResults(parts){
 function mergeSpeechTranscript(base,incoming){
   const left=String(base||'').trim().split(/\s+/).filter(Boolean),right=cleanSpeechTranscript(incoming).split(/\s+/).filter(Boolean);
   let overlap=0,max=Math.min(left.length,right.length);
-  for(let size=max;size>=1;size--)if(left.slice(-size).map(w=>w.toLowerCase()).join('\u0000')===right.slice(0,size).map(w=>w.toLowerCase()).join('\u0000')){overlap=size;break;}
+  for(let size=max;size>=1;size--)if(left.slice(-size).map(speechWordKey).join('\u0000')===right.slice(0,size).map(speechWordKey).join('\u0000')){overlap=size;break;}
   return cleanSpeechTranscript([...left,...right.slice(overlap)].join(' '));
 }
 async function toggleIssueDictation(){
