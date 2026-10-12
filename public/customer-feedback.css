@@ -1,0 +1,13 @@
+#feedbackFab {position:fixed;left:max(14px,env(safe-area-inset-left));bottom:calc(64px + env(safe-area-inset-bottom));z-index:80;min-height:44px;padding:8px 14px;border:2px solid #1464d2;border-radius:24px;background:#fff;color:#000;font:700 13px Arial,sans-serif;cursor:pointer}
+#feedbackDialog {box-sizing:border-box;width:min(560px,calc(100% - 24px));max-height:calc(100dvh - 24px);overflow:auto;border:2px solid #1464d2;border-radius:14px;padding:20px;background:#fff;color:#000;text-align:left;font-family:Arial,Helvetica,sans-serif}
+#feedbackDialog::backdrop {background:rgba(0,0,0,.45)}
+#feedbackDialog * {color:#000;box-sizing:border-box}
+#feedbackDialog fieldset {border:0;padding:0;margin:16px 0}
+#feedbackDialog .feedback-choice {display:flex;gap:12px;align-items:center;border:1px solid #000;border-radius:8px;padding:12px;margin:8px 0;cursor:pointer;min-height:60px}
+#feedbackDialog input[type=radio] {width:20px;height:20px;flex-shrink:0}
+#feedbackDialog textarea {width:100%;font:16px Arial,sans-serif;padding:12px;background:#fff;border:1px solid #000;border-radius:8px}
+#feedbackDialog button {min-height:44px;padding:10px 14px;margin:6px 4px 6px 0;background:#fff;border:1px solid #000;border-radius:8px;font:16px Arial,sans-serif;cursor:pointer}
+#feedbackDialog button:disabled {opacity:1;cursor:default}
+#feedbackDialog #feedbackSend {background:#cce4ff;border:2px solid #1464d2}
+#feedbackDialog .feedback-actions {display:flex;gap:8px;flex-wrap:wrap}
+#feedbackDialog label {text-transform:none;font:16px/1.4 Arial,Helvetica,sans-serif;letter-spacing:normal}
