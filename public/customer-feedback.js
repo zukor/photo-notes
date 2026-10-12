@@ -2,9 +2,10 @@
 (() => {
 'use strict';
 const categories=[['problem','🐞','Something isn’t working','Report a problem or unexpected result.'],['idea','💡','I have an idea','Suggest a new feature or improvement.'],['workflow','⇄','Help with our workflow','Tell us about a business process we could improve.'],['other','💬','Other feedback','Share an observation or general comment.']];
-let editor=null,blob=null,generation=0,returnFocus=null,recognizer=null,speechFinish=null;
+let editor=null,blob=null,generation=0,returnFocus=null,recognizer=null,speechFinish=null,speechWanted=false,speechRestart=null,emptySessions=0;
 const el=id=>document.getElementById(id);
 function stopSpeech(cancel=false){
+ speechWanted=false;clearTimeout(speechRestart);speechRestart=null;
  const speech=recognizer;
  if(!speech)return Promise.resolve();
  if(cancel){recognizer=null;try{speech.abort();}catch{}speechFinish?.();return Promise.resolve();}
@@ -15,24 +16,52 @@ function stopSpeech(cancel=false){
  speechFinish=finish;speechFinish.promise=promise;
  try{speech.stop();}catch{recognizer=null;finish();}return promise;
 }
+function resetFeedback(){
+ el('feedbackForm').reset();el('feedbackDescription').value='';
+ el('feedbackForm').querySelectorAll('[name="feedbackCategory"]').forEach(input=>{input.checked=false;});
+ editor?.destroy();editor=null;blob=null;el('feedbackMarkupHost').replaceChildren();el('feedbackRemoveScreenshot').hidden=true;
+}
 function close(){generation++;void stopSpeech(true);editor?.destroy();editor=null;blob=null;el('feedbackDialog').close();returnFocus?.focus();}
 function mount(){if(el('feedbackFab'))return;
  document.body.insertAdjacentHTML('beforeend',`<button type="button" id="feedbackFab" hidden>Feedback</button><dialog id="feedbackDialog" aria-labelledby="feedbackTitle"><form id="feedbackForm"><h2 id="feedbackTitle">Send Feedback</h2><p>Tell us what you’re experiencing or what would make Photo Notes more useful.</p><fieldset><legend>Choose a category</legend>${categories.map(([key,icon,label,description])=>`<label class="feedback-choice"><input type="radio" name="feedbackCategory" value="${key}" required><span><strong>${icon} ${label}</strong><br>${description}</span></label>`).join('')}</fieldset><label for="feedbackDescription">Your feedback</label><textarea id="feedbackDescription" rows="5" maxlength="10000" required></textarea><button type="button" id="feedbackDictate" hidden>Dictate feedback</button><button type="button" id="feedbackScreenshot">Attach screenshot (optional)</button><button type="button" id="feedbackRemoveScreenshot" hidden>Remove screenshot</button><div id="feedbackMarkupHost"></div><p id="feedbackStatus" role="status" aria-live="polite"></p><div class="feedback-actions"><button type="submit" id="feedbackSend">Send Feedback</button><button type="button" id="feedbackCancel">Cancel</button></div></form></dialog>`);
- const dialog=el('feedbackDialog');el('feedbackFab').onclick=()=>{returnFocus=document.activeElement;el('feedbackForm').reset();el('feedbackCancel').textContent='Cancel';el('feedbackStatus').textContent='';el('feedbackSend').disabled=false;el('feedbackDictate').disabled=false;el('feedbackScreenshot').disabled=false;el('feedbackRemoveScreenshot').hidden=true;el('feedbackMarkupHost').replaceChildren();dialog.showModal();dialog.querySelector('input').focus();};
+ const dialog=el('feedbackDialog');el('feedbackFab').onclick=()=>{returnFocus=document.activeElement;resetFeedback();el('feedbackCancel').textContent='Cancel';el('feedbackStatus').textContent='';el('feedbackSend').disabled=false;el('feedbackDictate').disabled=false;el('feedbackScreenshot').disabled=false;el('feedbackRemoveScreenshot').hidden=true;el('feedbackMarkupHost').replaceChildren();dialog.showModal();dialog.querySelector('input').focus();};
  dialog.oncancel=e=>{e.preventDefault();close();};el('feedbackCancel').onclick=close;
  el('feedbackRemoveScreenshot').onclick=()=>{editor?.destroy();editor=null;blob=null;el('feedbackMarkupHost').replaceChildren();el('feedbackRemoveScreenshot').hidden=true;};
  el('feedbackScreenshot').onclick=async()=>{const token=generation;el('feedbackScreenshot').disabled=true;el('feedbackStatus').textContent='Capturing screenshot...';dialog.style.visibility='hidden';try{await new Promise(requestAnimationFrame);const shot=await captureIssueScreenshot();if(token!==generation)return;editor?.destroy();blob=shot;el('feedbackMarkupHost').innerHTML=IssueMarkup.markup();const host=el('feedbackMarkupHost').firstElementChild;host.hidden=false;editor=IssueMarkup.create(host,blob);await editor.ready;host.querySelector('#issueMarkupRetake').onclick=()=>el('feedbackScreenshot').click();el('feedbackRemoveScreenshot').hidden=false;el('feedbackStatus').textContent='Screenshot attached. You can mark it with arrows, shapes, or text.';}catch{if(token===generation)el('feedbackStatus').textContent='Screenshot unavailable. You can still send your feedback.';}finally{dialog.style.visibility='';el('feedbackScreenshot').disabled=false;}};
  const Speech=window.SpeechRecognition||window.webkitSpeechRecognition;
  if(Speech){el('feedbackDictate').hidden=false;el('feedbackDictate').onclick=()=>{
-  if(recognizer){void stopSpeech();return;}
-  const field=el('feedbackDescription'),base=field.value,token=generation;
-  const speech=new Speech();recognizer=speech;speech.lang=document.documentElement.lang||'en-US';speech.continuous=true;speech.interimResults=true;
-  speech.onresult=e=>{if(token!==generation||recognizer!==speech)return;const parts=Array.from(e.results).map(r=>r[0].transcript);field.value=mergeSpeechTranscript(base,combineSpeechResults(parts)).slice(0,10000);};
-  speech.onend=()=>{if(recognizer!==speech)return;recognizer=null;speechFinish?.();el('feedbackDictate').textContent='Dictate feedback';};
-  speech.onerror=()=>{if(token!==generation||recognizer!==speech)return;el('feedbackStatus').textContent='Dictation stopped. Captured words are kept. You can dictate again or type your feedback.';recognizer=null;speechFinish?.();el('feedbackDictate').textContent='Dictate feedback';};
-  try{speech.start();el('feedbackDictate').textContent='Stop dictation';}catch{recognizer=null;el('feedbackStatus').textContent='Dictation is unavailable. Please type your feedback.';}
+  if(speechWanted||recognizer||speechFinish){void stopSpeech();el('feedbackDictate').textContent='Dictate feedback';return;}
+  const field=el('feedbackDescription'),token=generation;
+  speechWanted=true;emptySessions=0;el('feedbackStatus').textContent='Listening. Pause naturally, then keep speaking. Tap Stop dictation when finished.';
+  function start(){
+   speechRestart=null;
+   if(!speechWanted||token!==generation||!el('feedbackDialog').open)return;
+   const base=field.value,speech=new Speech();let received=false;
+   recognizer=speech;speech.lang=document.documentElement.lang||'en-US';speech.continuous=true;speech.interimResults=true;
+   speech.onresult=e=>{if(token!==generation||recognizer!==speech)return;const parts=Array.from(e.results).map(r=>r[0].transcript);if(parts.some(text=>text.trim()))received=true;field.value=mergeSpeechTranscript(base,combineSpeechResults(parts)).slice(0,10000);};
+   function interrupted(){speechWanted=false;clearTimeout(speechRestart);speechRestart=null;recognizer=null;speechFinish?.();el('feedbackDictate').textContent='Dictate feedback';el('feedbackStatus').textContent='Dictation stopped. Captured words are kept. Tap Dictate feedback to continue or type your feedback.';}
+   speech.onend=()=>{
+    if(token!==generation||recognizer!==speech)return;
+    recognizer=null;
+    if(speechFinish){speechFinish();return;}
+    if(!speechWanted)return;
+    emptySessions=received?0:emptySessions+1;
+    if(emptySessions>=2||navigator.onLine===false||document.visibilityState==='hidden'){interrupted();return;}
+    // A normal browser session end is not the user's Stop. Preserve the
+    // current text as the next session's base and bound empty-session retries.
+    speechRestart=setTimeout(start,250);
+   };
+   speech.onerror=e=>{
+    if(token!==generation||recognizer!==speech)return;
+    if(speechFinish)return;
+    if(e.error==='no-speech')return; // Normal silence is handled by onend.
+    try{speech.abort();}catch{}interrupted();
+   };
+   try{speech.start();el('feedbackDictate').textContent='Stop dictation';}catch{interrupted();}
+  }
+  start();
  };}
- el('feedbackForm').onsubmit=async e=>{e.preventDefault();if(el('feedbackSend').disabled)return;el('feedbackSend').disabled=true;el('feedbackDictate').disabled=true;const token=generation;await stopSpeech();if(token!==generation)return;const text=el('feedbackDescription').value.trim();if(!text){el('feedbackSend').disabled=false;el('feedbackDictate').disabled=false;el('feedbackStatus').textContent='Please describe your feedback.';return;}el('feedbackSend').disabled=true;el('feedbackScreenshot').disabled=true;try{const fd=new FormData();fd.append('feedback_category',new FormData(e.target).get('feedbackCategory'));fd.append('description',text);fd.append('page_name',typeof state!=='undefined'?state.view||'Photo Notes':'Photo Notes');fd.append('page_url',location.href);fd.append('viewport',`${innerWidth} x ${innerHeight}`);fd.append('user_agent',navigator.userAgent);const shot=editor?await editor.exportBlob():blob;if(token!==generation)return;if(shot)fd.append('screenshot',shot,'feedback.jpg');const r=await api('/api/issues',{method:'POST',body:fd});const data=await r.json();if(token!==generation)return;if(!r.ok)throw Error(data.error||'Feedback could not be sent. Please try again.');generation++;el('feedbackForm').reset();editor?.destroy();editor=null;blob=null;el('feedbackMarkupHost').replaceChildren();el('feedbackRemoveScreenshot').hidden=true;el('feedbackSend').disabled=false;el('feedbackStatus').textContent=`Feedback #${data.id} sent. Thank you.`;el('feedbackCancel').textContent='Close';}catch(error){if(token===generation){el('feedbackStatus').textContent=error.message;el('feedbackSend').disabled=false;}}finally{if(token===generation||token+1===generation){el('feedbackScreenshot').disabled=false;el('feedbackDictate').disabled=false;}}};
+ el('feedbackForm').onsubmit=async e=>{e.preventDefault();if(el('feedbackSend').disabled)return;el('feedbackSend').disabled=true;el('feedbackDictate').disabled=true;const token=generation;await stopSpeech();if(token!==generation)return;const text=el('feedbackDescription').value.trim();if(!text){el('feedbackSend').disabled=false;el('feedbackDictate').disabled=false;el('feedbackStatus').textContent='Please describe your feedback.';return;}el('feedbackSend').disabled=true;el('feedbackScreenshot').disabled=true;try{const fd=new FormData();fd.append('feedback_category',new FormData(e.target).get('feedbackCategory'));fd.append('description',text);fd.append('page_name',typeof state!=='undefined'?state.view||'Photo Notes':'Photo Notes');fd.append('page_url',location.href);fd.append('viewport',`${innerWidth} x ${innerHeight}`);fd.append('user_agent',navigator.userAgent);const shot=editor?await editor.exportBlob():blob;if(token!==generation)return;if(shot)fd.append('screenshot',shot,'feedback.jpg');const r=await api('/api/issues',{method:'POST',body:fd});const data=await r.json();if(token!==generation)return;if(!r.ok)throw Error(data.error||'Feedback could not be sent. Please try again.');generation++;resetFeedback();el('feedbackSend').disabled=false;el('feedbackStatus').textContent=`Feedback #${data.id} sent. Thank you.`;el('feedbackCancel').textContent='Close';}catch(error){if(token===generation){el('feedbackStatus').textContent=error.message;el('feedbackSend').disabled=false;}}finally{if(token===generation||token+1===generation){el('feedbackScreenshot').disabled=false;el('feedbackDictate').disabled=false;}}};
 }
 window.refreshCustomerFeedback=async()=>{mount();try{const r=await api('/api/customer-feedback/access');const data=r.ok?await r.json():{};el('feedbackFab').hidden=!data.enabled;if(!data.enabled&&el('feedbackDialog').open)close();}catch{el('feedbackFab').hidden=true;}};
 })();
