@@ -44,8 +44,8 @@ test('cancel pending microphone permission discards eventual stream',async()=>{
 test('stale error cannot stop a newer recording',async()=>{
  const h=harness();await h.run('toggleDictation()');const old=h.sessions[0];h.run('stopCaptureDictation()');await h.run('toggleDictation()');old.onerror({error:'network'});assert.equal(h.run('dictationActive'),true);
 });
-test('unexpected browser end keeps words and requests a user restart on iPhone and Android',async()=>{
- for(const ios of [true,false]){const h=harness({ios});await h.run('toggleDictation()');h.sessions[0].onresult({results:[[{transcript:'Kept words'}]]});h.sessions[0].onend();h.fire(300);assert.equal(h.sessions.length,1);assert.equal(h.interruptions.length,1);assert.equal(h.elements.note.value,'Kept words');await h.run('toggleDictation()');h.sessions[1].onresult({results:[[{transcript:'New words'}]]});assert.equal(h.elements.note.value,'Kept words New words');}
+test('unexpected iPhone browser end keeps words and requests a user restart',async()=>{
+ for(const ios of [true]){const h=harness({ios});await h.run('toggleDictation()');h.sessions[0].onresult({results:[[{transcript:'Kept words'}]]});h.sessions[0].onend();h.fire(300);assert.equal(h.sessions.length,1);assert.equal(h.interruptions.length,1);assert.equal(h.elements.note.value,'Kept words');await h.run('toggleDictation()');h.sessions[1].onresult({results:[[{transcript:'New words'}]]});assert.equal(h.elements.note.value,'Kept words New words');}
 });
 test('fatal error resets without an end event; diagnostic log excludes words',async()=>{
  const h=harness();await h.run('toggleDictation()');h.sessions[0].onresult({results:[[{transcript:'Private note text'}]]});h.sessions[0].onerror({error:'network'});assert.equal(h.elements.dictate.textContent,'Record Notes');assert.equal(h.elements.note.value,'Private note text');assert.ok(!h.logs.photoNotesSpeechDiagnostics.includes('Private note text'));

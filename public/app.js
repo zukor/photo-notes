@@ -1569,6 +1569,20 @@ function startDictationSession(SR) {
     if(recognizer===session)recognizer=null;
     if(sessionText){dictationBase=mergeSpeechTranscript(dictationBase,sessionText);if(dictationBase)dictationBase+=' ';}
     const current=document.getElementById('note')===noteEl&&state.photoFile===photoForSession;
+    // Android speech services can end a successful continuous session on
+    // cellular networks. Continue with a fresh session while Stop is absent.
+    // Empty sessions are bounded to avoid an automatic retry loop.
+    if(interrupted&&current&&!ios&&/Android/i.test(navigator.userAgent)&&navigator.onLine!==false&&document.visibilityState!=='hidden'){
+      dictationEmptySessions=sessionText?0:dictationEmptySessions+1;
+      if(dictationEmptySessions<2){
+        recordDictationEvent('session-continuation');
+        dictationRestartTimer=setTimeout(()=>{
+          dictationRestartTimer=null;
+          if(generation===dictationGeneration&&dictationActive&&document.getElementById('note')===noteEl&&state.photoFile===photoForSession)startDictationSession(SR);
+        },250);
+        return;
+      }
+    }
     cleanupDictation();
     if(interrupted&&current){
       const status=document.getElementById('dictationStatus');if(status)status.textContent='Recording stopped early. Your captured words are kept.';
