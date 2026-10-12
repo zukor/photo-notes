@@ -174,6 +174,20 @@ function combineSpeechResults(parts){
   for(const part of parts){
     const text=String(part||'').trim();if(!text)continue;
     const incoming=words(text),previous=words(segments.at(-1)||'');
+    // A long expanding indexed snapshot may also revise one recognized word.
+    // Require a strong unchanged opening and preserve number/negation changes.
+    // This applies only within indexed results, never across separate sessions.
+    if(previous.length>=20&&incoming.length>previous.length&&prefix(previous.slice(0,6),incoming)){
+      const changed=previous.map((word,i)=>word===incoming[i]?null:[word,incoming[i]]).filter(Boolean);
+      const consequential=word=>/\d/.test(word)||/^(no|not|never|without|cannot|can't|isn't|wasn't|don't|doesn't)$/.test(word);
+      const minorRevision=pair=>{
+        const [a,b]=pair.length&&pair[0].length<=pair[1].length?pair:[pair[1],pair[0]];
+        if(a.length<3||b.length!==a.length+1)return false;
+        let i=0;while(i<a.length&&a[i]===b[i])i++;
+        return a.slice(i)===b.slice(i+1);
+      };
+      if(changed.length===1&&!changed[0].some(consequential)&&minorRevision(changed[0])){segments.pop();segments.push(text);continue;}
+    }
     // Some Android engines append progressively longer snapshots as new slots.
     // Replace that prefix chain before joining; joining first loses boundaries.
     if(segments.length&&incoming.length>previous.length&&prefix(previous,incoming)){

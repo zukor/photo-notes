@@ -42,3 +42,14 @@ test('punctuation revisions at indexed result and session boundaries do not dupl
  assert.equal(combine(['The door is blue.','blue and closed.']),'The door is blue. blue and closed.');
  assert.equal(combine(['Pressure is -5','Pressure is 5']),'Pressure is -5 Pressure is 5');
 });
+
+test('long expanding indexed snapshots reconcile a minor recognition revision',()=>{
+ const first='In front of the building there are three rows of long white cylinders and a worker checking equipment beside another blue pie';
+ const revised=first.replace('blue pie','blue pipe');
+ assert.equal(combine([first,revised+' and a sign on the building']),revised+' and a sign on the building');
+ const numbered='In front of the building there are 15 long white cylinders and a worker checking equipment beside another blue pipe';
+ assert.equal(combine([numbered,numbered.replace('15','50')+' near the fence']),numbered+' '+numbered.replace('15','50')+' near the fence');
+ const short='The blue pie';
+ assert.equal(combine([short,'The blue pipe is broken']),short+' The blue pipe is broken');
+ assert.equal(context.mergeSpeechTranscript(first,revised),first+' '+revised);
+});
