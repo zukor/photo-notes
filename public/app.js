@@ -446,6 +446,7 @@ function renderApp() {
   const prOpen=document.getElementById('prOpen');if(prOpen)prOpen.onclick=()=>{rememberPhotoToolReturn();state.view='photo-requests';renderApp();};
   const photoToolClose=document.getElementById('photoToolClose');if(photoToolClose)photoToolClose.onclick=closePhotoTool;
   refreshIssueAttention();
+  window.refreshCustomerFeedback?.();
   const updates=document.getElementById('issueUpdates');if(updates)updates.onclick=e=>{e.preventDefault();state.view='my-issues';renderApp();};
   const issueFab = document.getElementById('issueFab'); if (issueFab) issueFab.onclick = openIssueReporter;
   const tabCapture=document.getElementById('tabCapture');if(tabCapture)tabCapture.onclick = () => { state._libraryOpenId=null;state.view='capture'; renderApp(); };
