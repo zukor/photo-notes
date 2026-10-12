@@ -20,8 +20,14 @@ test('iPhone first-result watchdog clears when words arrive and stays clear thro
 test('changing photo cancels old words and stale errors',async()=>{
  const h=harness();await h.run('toggleDictation()');await h.run('stopCaptureDictation();state.photoFile={name:"next photo"}');await h.run('toggleDictation()');h.sessions[0].onresult({results:[[{transcript:'OLD WORDS'}]]});h.sessions[0].onerror({error:'not-allowed'});assert.equal(h.elements.note.value,'Existing note');assert.equal(h.run('dictationActive'),true);
 });
-test('Android unexpected end requests explicit restart, deliberate Stop stays stopped',async()=>{
- const h=harness(false);await h.run('toggleDictation()');h.result('Android words');h.sessions[0].onend();assert.equal(h.run('dictationActive'),false);assert.match(h.elements.dictationStatus.textContent,/before you pressed Stop/);await h.run('toggleDictation()');const done=h.run('finishCaptureDictation()');h.sessions[1].onend();await done;assert.equal(h.run('dictationActive'),false);
+test('Android successful natural end continues, and Stop cancels pending continuation',async()=>{
+ const h=harness(false);await h.run('toggleDictation()');h.result('Android words');h.sessions[0].onend();assert.equal(h.run('dictationActive'),true);
+ [...h.timers.values()].find(t=>t.ms===250).fn();assert.equal(h.sessions.length,2);h.result('more words');assert.equal(h.elements.note.value,'Existing note Android words more words');
+ const done=h.run('finishCaptureDictation()');h.sessions[1].onend();await done;assert.equal(h.run('dictationActive'),false);
+ const second=harness(false);await second.run('toggleDictation()');second.result('kept');second.sessions[0].onend();second.run('stopCaptureDictation()');assert.equal(second.run('dictationActive'),false);assert.equal(second.timers.size,0);
+});
+test('Android repeated empty sessions stop instead of looping',async()=>{
+ const h=harness(false);await h.run('toggleDictation()');h.sessions[0].onend();[...h.timers.values()].find(t=>t.ms===250).fn();h.sessions[1].onend();assert.equal(h.run('dictationActive'),false);
 });
 test('unresponsive speech service releases the Stop button after a bounded wait',async()=>{
  const h=harness();await h.run('toggleDictation()');const done=h.run('finishCaptureDictation()');[...h.timers.values()].find(t=>t.ms===8000).fn();await done;assert.equal(h.elements.dictate.disabled,false);assert.equal(h.run('recognizer'),null);
