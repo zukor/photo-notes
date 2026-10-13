@@ -65,7 +65,8 @@ function mount(){if(el('feedbackFab'))return;
    function interrupted(){speechWanted=false;clearTimeout(speechRestart);speechRestart=null;if(speechFinish)speechFinish();else releaseSpeech();speechButton();el('feedbackStatus').textContent='Dictation stopped. Captured words are kept. Tap Dictate feedback to continue or type your feedback.';}
    speech.onend=()=>{
     if(token!==generation||recognizer!==speech)return;
-    if(speechFinish){speechFinish();return;}
+    // Completed sessions need document disposal, not another browser abort.
+    if(speechFinish){recognizer=null;speechFinish();return;}
     recognizer=null;
     if(!speechWanted)return;
     emptySessions=received?0:emptySessions+1;
