@@ -53,3 +53,13 @@ test('long expanding indexed snapshots reconcile a minor recognition revision',(
  assert.equal(combine([short,'The blue pipe is broken']),short+' The blue pipe is broken');
  assert.equal(context.mergeSpeechTranscript(first,revised),first+' '+revised);
 });
+
+test('expanding indexed snapshot completes its truncated final word without repeating the passage',()=>{
+ const first='Immediately press stop after the final sentence check the final words appears and record';
+ const next='Immediately press stop after the final sentence check the final words appears and recording finish save and reopen in library';
+ assert.equal(combine([first,next]),next);
+ assert.equal(context.mergeSpeechTranscript(first,next),first+' '+next);
+ const changed=next.replace('final words','missing words');
+ assert.equal(combine([first,changed]),first+' '+changed);
+ assert.equal(combine(['Please record','Please recording finish']),'Please record Please recording finish');
+});
