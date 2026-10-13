@@ -14,7 +14,7 @@ function speechButton(){
 function prepareSpeech(){
  if(!isolatedSpeech()||!window.PhotoNotesSpeechDocument?.create){speechButton();return;}
  if(!speechDocument)speechDocument=window.PhotoNotesSpeechDocument.create();
- speechDocument.prepare(({ready,failed})=>{speechReady=ready;speechButton();if(failed&&el('feedbackDialog').open)el('feedbackStatus').textContent='The microphone could not initialize. Close Feedback and reopen it to try again. Your text is kept until you close.';});
+ speechDocument.prepare(({ready,failed})=>{speechReady=ready;speechButton();if(failed&&el('feedbackDialog').open&&!el('feedbackStatus').textContent)el('feedbackStatus').textContent='The microphone could not initialize. Close Feedback and reopen it to try again. Your text is kept until you close.';});
 }
 function releaseSpeech(){
  const current=recognizer;recognizer=null;
