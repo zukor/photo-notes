@@ -2,8 +2,10 @@
 (() => {
 'use strict';
 const categories=[['problem','🐞','Something isn’t working','Report a problem or unexpected result.'],['idea','💡','I have an idea','Suggest a new feature or improvement.'],['workflow','⇄','Help with our workflow','Tell us about a business process we could improve.'],['other','💬','Other feedback','Share an observation or general comment.']];
-let editor=null,blob=null,generation=0,returnFocus=null,recognizer=null,speechFinish=null,speechWanted=false,speechRestart=null,emptySessions=0;
+let editor=null,blob=null,generation=0,returnFocus=null,recognizer=null,speechFinish=null,speechWanted=false,speechRestart=null,emptySessions=0,speechWatchdog=null,speechSession=0;
 const el=id=>document.getElementById(id);
+function speechEvent(event,detail=''){if(typeof recordDictationEvent==='function')recordDictationEvent(event,detail,{source:'feedback',generation:speechSession,active:speechWanted,pending:!!speechDocument&&!speechReady,finishing:!!speechFinish});}
+function clearWatchdog(){clearTimeout(speechWatchdog);speechWatchdog=null;}
 let speechDocument=null,speechReady=false;
 const isolatedSpeech=()=>/iP(hone|ad|od)/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
 function speechButton(){
@@ -14,18 +16,18 @@ function speechButton(){
 function prepareSpeech(){
  if(!isolatedSpeech()||!window.PhotoNotesSpeechDocument?.create){speechButton();return;}
  if(!speechDocument)speechDocument=window.PhotoNotesSpeechDocument.create();
- speechDocument.prepare(({ready,failed})=>{speechReady=ready;speechButton();if(failed&&el('feedbackDialog').open&&!el('feedbackStatus').textContent)el('feedbackStatus').textContent='The microphone could not initialize. Close Feedback and reopen it to try again. Your text is kept until you close.';});
+ speechDocument.prepare(({ready,failed})=>{speechReady=ready;speechEvent(ready?'document-ready':failed?'document-error':'document-preparing');speechButton();if(failed&&el('feedbackDialog').open&&!el('feedbackStatus').textContent)el('feedbackStatus').textContent='The microphone could not initialize. Close Feedback and reopen it to try again. Your text is kept until you close.';});
 }
 function releaseSpeech(){
- const current=recognizer;recognizer=null;
- if(current)try{current.abort();}catch{}
+ clearWatchdog();const current=recognizer;recognizer=null;
+ if(current)try{speechEvent('abort');current.abort();}catch{}
  speechDocument?.dispose();speechDocument=null;speechReady=false;
  speechButton();
  if(el('feedbackDialog')?.open)prepareSpeech();
 }
 
 function stopSpeech(cancel=false){
- speechWanted=false;clearTimeout(speechRestart);speechRestart=null;
+ clearWatchdog();speechWanted=false;clearTimeout(speechRestart);speechRestart=null;
  const speech=recognizer;
  if(el('feedbackStatus')&&!el('feedbackSend').disabled)el('feedbackStatus').textContent=cancel?'':speech?'Finishing dictation...':'Dictation stopped. Captured words are kept.';
  if(!speech){releaseSpeech();return Promise.resolve();}
@@ -35,7 +37,7 @@ function stopSpeech(cancel=false){
  const timer=setTimeout(()=>{if(recognizer===speech){recognizer=null;try{speech.abort();}catch{}}finish();},8000);
  function finish(){clearTimeout(timer);speechFinish=null;releaseSpeech();if(el('feedbackDialog').open&&!el('feedbackSend').disabled)el('feedbackStatus').textContent='Dictation stopped. Captured words are kept.';resolve();}
  speechFinish=finish;speechFinish.promise=promise;speechButton();
- try{speech.stop();}catch{finish();}return promise;
+ try{speechEvent('stop');speech.stop();}catch{finish();}return promise;
 }
 function resetFeedback(){
  el('feedbackForm').reset();el('feedbackDescription').value='';
@@ -59,12 +61,15 @@ function mount(){if(el('feedbackFab'))return;
    if(!speechWanted||token!==generation||!el('feedbackDialog').open)return;
    const base=field.value,Constructor=speechDocument?speechDocument.constructor():Speech;
    if(!Constructor){speechWanted=false;speechButton();return;}
-   const speech=new Constructor();let received=false;
+   const speech=new Constructor();let received=false;speechSession++;speechEvent('request');
    recognizer=speech;speech.lang=document.documentElement.lang||'en-US';speech.continuous=true;speech.interimResults=true;
-   speech.onresult=e=>{if(token!==generation||recognizer!==speech)return;const parts=Array.from(e.results).map(r=>r[0].transcript);if(parts.some(text=>text.trim()))received=true;field.value=mergeSpeechTranscript(base,combineSpeechResults(parts)).slice(0,10000);};
+   speech.onstart=()=>{if(token===generation&&recognizer===speech)speechEvent('started');};
+   speech.onaudiostart=()=>{if(token===generation&&recognizer===speech)speechEvent('audio-start');};
+   speech.onresult=e=>{if(token!==generation||recognizer!==speech)return;clearWatchdog();speechEvent('result',Array.from(e.results,r=>r.isFinal?'final':'interim').join(','));const parts=Array.from(e.results).map(r=>r[0].transcript);if(parts.some(text=>text.trim()))received=true;field.value=mergeSpeechTranscript(base,combineSpeechResults(parts)).slice(0,10000);};
    function interrupted(){speechWanted=false;clearTimeout(speechRestart);speechRestart=null;if(speechFinish)speechFinish();else releaseSpeech();speechButton();el('feedbackStatus').textContent='Dictation stopped. Captured words are kept. Tap Dictate feedback to continue or type your feedback.';}
    speech.onend=()=>{
     if(token!==generation||recognizer!==speech)return;
+    clearWatchdog();speechEvent('ended');
     // Completed sessions need document disposal, not another browser abort.
     if(speechFinish){recognizer=null;speechFinish();return;}
     recognizer=null;
@@ -77,11 +82,13 @@ function mount(){if(el('feedbackFab'))return;
    };
    speech.onerror=e=>{
     if(token!==generation||recognizer!==speech)return;
-    if(speechFinish)return;
+    speechEvent('error',e.error);if(speechFinish)return;
     if(e.error==='no-speech')return; // Normal silence is handled by onend.
-    try{speech.abort();}catch{}interrupted();
+    // releaseSpeech retires the recognizer before aborting it once.
+    interrupted();
    };
-   try{speech.start();el('feedbackDictate').textContent='Stop dictation';}catch{interrupted();}
+   speechWatchdog=setTimeout(()=>{if(token!==generation||recognizer!==speech||!speechWanted)return;speechEvent('no-result-timeout');interrupted();},30000);
+   try{speech.start();el('feedbackDictate').textContent='Stop dictation';}catch(error){speechEvent('start-error',error.name);interrupted();}
   }
   start();
  };}
