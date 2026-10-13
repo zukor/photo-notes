@@ -12,7 +12,9 @@ test('shared stylesheet contains the approved global visual tokens and roles',()
   '--pn-control-border:1.5px solid #000'
  ])assert.ok(css.includes(declaration),declaration);
  assert.match(css,/html:not\(\[data-theme="dark"\]\) input::placeholder,[\s\S]*?textarea::placeholder\s*\{[^}]*color:#595959[^}]*font-weight:400/s);
+ assert.match(css,/:required,[\s\S]*?\[aria-required="true"\][\s\S]*?background:var\(--pn-ice\)/s);
  assert.match(css,/\.tab\.on\s*\{[^}]*color:#fff;[^}]*background:var\(--pn-capture-blue\)/s);
  assert.match(css,/\.delete-text,[\s\S]*?color:#b42318;[\s\S]*?border:0;/);
  assert.match(css,/\.workflow-organize #cards \{ grid-template-columns:repeat\(5/);
+ assert.match(css,/Approved open-surface layout[\s\S]*?\.new-document-settings \{[^}]*border:0;[\s\S]*?\.new-document-settings details \{[^}]*border-top:1px solid #000/s);
 });
