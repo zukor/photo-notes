@@ -64,6 +64,15 @@ test('expanding indexed snapshot completes its truncated final word without repe
  assert.equal(combine(['Please record','Please recording finish']),'Please record Please recording finish');
 });
 
+test('indexed phone-number suffix growth does not repeat the surrounding passage',()=>{
+ const lead='if you see Water waste you can report it by calling ';
+ const parts=['210','210-','210-704','210-704-','210-704-7','210-704-7283'].map(n=>lead+n);
+ assert.equal(combine(parts),lead+'210-704-7283');
+ assert.equal(combine([lead+'210',lead+'310-704-7283']),lead+'210 '+lead+'310-704-7283');
+ assert.equal(context.mergeSpeechTranscript(parts[0],parts.at(-1)),parts[0]+' '+parts.at(-1));
+ assert.equal(combine(['call 210','call 210-704']),'call 210 call 210-704');
+});
+
 test('short repeated openings in a new speech session are kept',()=>{
  assert.equal(context.mergeSpeechTranscript('The pipe sprays water.','Water reaches the sidewalk.'),'The pipe sprays water. Water reaches the sidewalk.');
  assert.equal(context.mergeSpeechTranscript('Look at the blue pipe.','Blue pipe needs repair.'),'Look at the blue pipe. Blue pipe needs repair.');

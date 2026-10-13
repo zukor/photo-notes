@@ -174,6 +174,14 @@ function combineSpeechResults(parts){
   for(const part of parts){
     const text=String(part||'').trim();if(!text)continue;
     const incoming=words(text),previous=words(segments.at(-1)||'');
+    // A phone-number token may grow after each spoken dash. Reconcile only
+    // an exact opening with an appended numeric suffix, never changed digits.
+    if(previous.length>=9&&incoming.length>=previous.length&&prefix(previous.slice(0,-1),incoming)){
+      const tail=previous.at(-1),completed=incoming[previous.length-1];
+      if(/^\d{3,}(?:[-–]\d*)*$/.test(tail)&&/^\d+(?:[-–]\d*)*$/.test(completed)&&completed.startsWith(tail)&&completed.length>tail.length){
+        segments.pop();segments.push(text);continue;
+      }
+    }
     // Indexed cumulative snapshots can finish a truncated last word while
     // retaining the entire preceding passage. Limit this to a long exact
     // opening and a small suffix completion, never a separate session.
