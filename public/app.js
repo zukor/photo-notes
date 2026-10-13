@@ -2025,9 +2025,9 @@ function scheduleQueueRetry(){
   queueRetryTimer=setTimeout(()=>{queueNextRetry=0;void drainQueue();},10000);
 }
 function queueRetryText(){
+  if(!bgQueue.length)return 'All PhotoNotes in this version have uploaded.';
   if(queuePaused()&&!nextQueueUpload())return 'Automatic retry is stopped.';
   if(bgDraining)return 'Uploading PhotoNotes...';
-  if(!bgQueue.length)return 'All PhotoNotes in this version have uploaded.';
   if(bgQueue[0].blocked)return 'Automatic retry is paused until this is resolved.';
   return 'Automatically retrying in '+Math.max(0,Math.ceil((queueNextRetry-Date.now())/1000))+' seconds.';
 }
@@ -2075,12 +2075,20 @@ async function showPendingPhotos(){
   if(!state.me||account!==queueAccount)return;
   document.getElementById('pendingPhotosDialog')?.remove();
   const dialog=document.createElement('dialog');dialog.id='pendingPhotosDialog';dialog.className='web-help-dialog';dialog.style.background='#fff';dialog.style.color='#000';
-  dialog.innerHTML='<h2>Pending PhotoNotes</h2><p id="pendingUploadReason">Saved on this device. Upload is pending.</p><p id="pendingRetryStatus" role="status" aria-live="polite"></p><button class="btn" id="pendingRetryToggle" type="button"></button><button class="btn secondary" id="pendingSaveLibrary" type="button">Save to PhotoNotes Library</button><p>Do not clear app data or uninstall until upload finishes.</p><div id="pendingVersionNotice"></div><button class="btn secondary" id="pendingClose" type="button">Close</button>';
+  dialog.innerHTML='<h2>Pending PhotoNotes</h2><p id="pendingUploadReason">Saved on this device. Upload is pending.</p><p id="pendingRetryStatus" role="status" aria-live="polite"></p><button class="btn" id="pendingRetryToggle" type="button"></button><button class="btn secondary" id="pendingSaveLibrary" type="button">Save to PhotoNotes Library</button><p id="pendingStorageWarning">Do not clear app data or uninstall until upload finishes.</p><div id="pendingVersionNotice"></div><button class="btn secondary" id="pendingClose" type="button">Close</button>';
   const owned=rows.filter(row=>row.account===account),edition=selectedEdition();
   const other=owned.filter(row=>row.edition!==edition);
   if(other.length)dialog.querySelector('#pendingVersionNotice').textContent='Switch versions to upload: '+[...new Set(other.map(row=>editionNames[row.edition]||row.edition))].join(', ')+'.';
   if(!queuePaused()&&bgQueue.length&&!bgDraining&&!queueNextRetry)scheduleQueueRetry();
-  const update=()=>{dialog.querySelector('#pendingUploadReason').textContent=bgQueue.find(item=>item.uploadReason)?.uploadReason||(legacyPendingCount?'Older PhotoNotes have no account label. Report this issue from the original account.':'Saved on this device. Upload is pending.');if(queueAccount!==account||selectedEdition()!==edition){dialog.close();return;}dialog.querySelector('#pendingRetryStatus').textContent=queueRetryText();dialog.querySelector('#pendingRetryToggle').textContent=queuePaused()?'Continue Retrying':'Stop Retrying';};
+  const update=()=>{
+    if(queueAccount!==account||selectedEdition()!==edition){dialog.close();return;}
+    const pending=bgQueue.length>0,unresolved=pending||legacyPendingCount>0;
+    dialog.querySelector('#pendingUploadReason').textContent=unresolved?(bgQueue.find(item=>item.uploadReason)?.uploadReason||(legacyPendingCount?'Older PhotoNotes have no account label. Report this issue from the original account.':'Saved on this device. Upload is pending.')):'All PhotoNotes in this version have uploaded.';
+    dialog.querySelector('#pendingRetryStatus').textContent=unresolved?queueRetryText():'';
+    const retry=dialog.querySelector('#pendingRetryToggle');retry.hidden=!pending;retry.textContent=queuePaused()?'Continue Retrying':'Stop Retrying';
+    dialog.querySelector('#pendingSaveLibrary').textContent=unresolved?'Save to PhotoNotes Library':'Open PhotoNotes Library';
+    dialog.querySelector('#pendingStorageWarning').hidden=!unresolved&&!other.length;
+  };
   dialog.querySelector('#pendingRetryToggle').onclick=()=>{setQueuePaused(!queuePaused());update();};
   dialog.querySelector('#pendingSaveLibrary').onclick=()=>{dialog.close();state.view='photo-library';renderApp();};
   dialog.querySelector('#pendingClose').onclick=()=>dialog.close();
