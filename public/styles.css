@@ -1224,3 +1224,55 @@ button:disabled {
   clear:both;
   background:#fff;
 }
+
+/* Approved open-surface layout. Use dividers for workflow sections and reserve
+   complete borders for discrete records, dialogs, and photo cards. */
+.workflow-intro {
+  padding:4px 0 12px;
+  border:0;
+  border-bottom:1px solid #000;
+  border-radius:0;
+  background:transparent;
+}
+.organize-panel,
+.organize-batch-grid .organize-panel {
+  padding:12px 0;
+  border:0;
+  border-top:1px solid #000;
+  border-radius:0;
+  background:transparent;
+  box-shadow:none;
+}
+.send-feature-panel {
+  padding:18px 0;
+  border:0;
+  border-top:1px solid #000;
+  border-bottom:1px solid #000;
+  border-radius:0;
+  background:transparent;
+}
+.document-preset-row {
+  padding:0 0 18px;
+  border:0;
+  border-bottom:1px solid #000;
+  border-radius:0;
+  background:transparent;
+}
+.new-document-settings {
+  padding:0;
+  border:0;
+  border-radius:0;
+  background:transparent;
+}
+.new-document-settings details {
+  margin:0;
+  padding:0;
+  border:0;
+  border-top:1px solid #000;
+  border-radius:0;
+  background:transparent;
+}
+.new-document-settings details:last-of-type { border-bottom:1px solid #000; }
+.new-document-settings summary { padding:14px 2px; }
+.new-document-settings details > :not(summary) { margin-left:2px; margin-right:2px; }
+html[data-theme="dark"] :is(.workflow-intro,.organize-panel,.send-feature-panel,.document-preset-row,.new-document-settings details) { border-color:#fff; }

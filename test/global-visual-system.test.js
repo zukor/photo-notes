@@ -16,4 +16,5 @@ test('shared stylesheet contains the approved global visual tokens and roles',()
  assert.match(css,/\.tab\.on\s*\{[^}]*color:#fff;[^}]*background:var\(--pn-capture-blue\)/s);
  assert.match(css,/\.delete-text,[\s\S]*?color:#b42318;[\s\S]*?border:0;/);
  assert.match(css,/\.workflow-organize #cards \{ grid-template-columns:repeat\(5/);
+ assert.match(css,/Approved open-surface layout[\s\S]*?\.new-document-settings \{[^}]*border:0;[\s\S]*?\.new-document-settings details \{[^}]*border-top:1px solid #000/s);
 });
