@@ -31,7 +31,7 @@ for(let cycle=0;cycle<5;cycle++){
  await page.locator('#feedbackDictate').click();assert(await page.evaluate(()=>feedbackSpeechSessions.at(-1).started));
  const count=await page.evaluate(()=>feedbackSpeechSessions.length);
  await page.locator('#feedbackDictate').click();await page.getByRole('button',{name:'Dictate feedback',exact:true}).waitFor();
- await page.waitForFunction(()=>!document.getElementById('feedbackDictate').disabled);
+ await page.waitForFunction(()=>!document.getElementById('feedbackDictate').disabled);assert.equal(await page.locator('#feedbackStatus').textContent(),'Dictation stopped. Captured words are kept.');
  await page.evaluate(()=>{const old=feedbackSpeechSessions.at(-1);old.onresult({results:[[{transcript:'STALE'}]]});old.onerror({error:'network'});old.onend();});
  assert(!(await page.locator('#feedbackDescription').inputValue()).includes('STALE'));
  assert.equal(await page.evaluate(()=>feedbackSpeechSessions.length),count);

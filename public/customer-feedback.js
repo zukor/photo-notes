@@ -27,12 +27,13 @@ function releaseSpeech(){
 function stopSpeech(cancel=false){
  speechWanted=false;clearTimeout(speechRestart);speechRestart=null;
  const speech=recognizer;
+ if(el('feedbackStatus')&&!el('feedbackSend').disabled)el('feedbackStatus').textContent=cancel?'':speech?'Finishing dictation...':'Dictation stopped. Captured words are kept.';
  if(!speech){releaseSpeech();return Promise.resolve();}
  if(cancel){releaseSpeech();speechFinish?.();speechButton();return Promise.resolve();}
  if(speechFinish)return speechFinish.promise;
  let resolve;const promise=new Promise(done=>resolve=done);
  const timer=setTimeout(()=>{if(recognizer===speech){recognizer=null;try{speech.abort();}catch{}}finish();},8000);
- function finish(){clearTimeout(timer);speechFinish=null;releaseSpeech();resolve();}
+ function finish(){clearTimeout(timer);speechFinish=null;releaseSpeech();if(el('feedbackDialog').open&&!el('feedbackSend').disabled)el('feedbackStatus').textContent='Dictation stopped. Captured words are kept.';resolve();}
  speechFinish=finish;speechFinish.promise=promise;speechButton();
  try{speech.stop();}catch{finish();}return promise;
 }
