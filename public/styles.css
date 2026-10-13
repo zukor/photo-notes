@@ -1059,6 +1059,17 @@ body:not(:where(html[data-theme="dark"] *)) :is(input,textarea,select) {
   border:1px solid #000;
   border-radius:var(--pn-control-radius);
 }
+html:not([data-theme="dark"]) :is(
+  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="color"]):not([type="range"]):required,
+  textarea:required,
+  select:required,
+  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="color"]):not([type="range"])[aria-required="true"],
+  textarea[aria-required="true"],
+  select[aria-required="true"]
+) {
+  color:#000;
+  background:var(--pn-ice);
+}
 html:not([data-theme="dark"]) input::placeholder,
 html:not([data-theme="dark"]) textarea::placeholder {
   color:#595959 !important;
