@@ -27,6 +27,14 @@ await page.getByRole('button',{name:'Close',exact:true}).click();
 await page.evaluate(()=>showPendingPhotos());await page.getByRole('button',{name:'Continue Retrying',exact:true}).click();await page.waitForFunction(()=>queueNextRetry>0);
 if(engine===chromium&&width===390){const start=attempts;await page.waitForFunction(()=>queueNextRetry>0);await new Promise(r=>setTimeout(r,10500));assert(attempts>start,'automatic retry must send another request');assert.equal(await page.locator('#pendingPhotosDialog').count(),1);}
 success=true;await page.getByRole('button',{name:'Stop Retrying',exact:true}).click();await page.getByRole('button',{name:'Continue Retrying',exact:true}).click();await page.waitForFunction(()=>bgQueue.length===0);assert.equal(await page.evaluate(async()=>(await PhotoNotesQueue.all()).length),0);
+await page.waitForFunction(()=>document.getElementById('pendingUploadReason').textContent==='All PhotoNotes in this version have uploaded.');
+assert.equal(await page.locator('#pendingRetryToggle').isVisible(),false,'empty queue has no retry action');
+assert.equal(await page.locator('#pendingSaveLibrary').textContent(),'Open PhotoNotes Library');
+await page.getByRole('button',{name:'Close',exact:true}).click();
+await page.evaluate(()=>showPendingPhotos());
+assert.equal(await page.locator('#pendingUploadReason').textContent(),'All PhotoNotes in this version have uploaded.','reopening an empty queue does not claim pending uploads');
+assert.equal(await page.locator('#pendingRetryToggle').isVisible(),false);
+assert.equal(await page.evaluate(async()=>(await PhotoNotesQueue.all()).length),0);
 await page.getByRole('button',{name:'Close',exact:true}).click();
 for(const edition of ['basic','issue','roads','general','contractor','paving','hoa','property','concrete','roofer']){
 await page.evaluate(async edition=>{state.plan=['basic','issue','roads'].includes(edition)?'free':'pro';state.proType=edition==='basic'?'general':edition;state.view='capture';renderApp();await restoreOfflineQueue();const local=await PhotoNotesQueue.create({note:'Local '+edition},false,queueAccount,selectedEdition());bgQueue.push({...local,tries:0});setQueuePaused(true);await restoreOfflineQueue();await showPendingPhotos();},edition);
