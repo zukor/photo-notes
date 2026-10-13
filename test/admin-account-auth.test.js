@@ -1,7 +1,7 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('fs'),vm=require('vm');
 const source=fs.readFileSync('server.js','utf8');
 function run(user){
-  const ctx=vm.createContext({readUser:()=>({id:1,role:'admin'}),pool:{query:async()=>({rows:user?[user]:[]})}});
+  const ctx=vm.createContext({require:id=>{assert.equal(id,'./ai-request-context');return require('../ai-request-context');},readUser:()=>({id:1,role:'admin'}),pool:{query:async()=>({rows:user?[user]:[]})}});
   vm.runInContext(source.slice(source.indexOf('async function requireAuth'),source.indexOf('function requireTestingQueueToken')),ctx);
   return ctx;
 }

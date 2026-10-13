@@ -2,6 +2,8 @@ const {isSuperAdmin}=require('./super-admin');
 const PROVIDERS={openai:{name:'OpenAI',key:'OPENAI_API_KEY',base:'https://api.openai.com/v1'},anthropic:{name:'Anthropic',key:'ANTHROPIC_API_KEY',base:'https://api.anthropic.com/v1'},grok:{name:'Grok',key:'XAI_API_KEY',base:'https://api.x.ai/v1'}};
 const SCHEMA=`CREATE TABLE IF NOT EXISTS ai_settings(id integer PRIMARY KEY CHECK(id=1),provider text NOT NULL,model text NOT NULL,updated_by integer,updated_at timestamptz NOT NULL DEFAULT now());
 CREATE TABLE IF NOT EXISTS ai_usage(id bigserial PRIMARY KEY,started_at timestamptz NOT NULL DEFAULT now(),provider text NOT NULL,model text NOT NULL,status text NOT NULL DEFAULT 'pending',input_tokens bigint,output_tokens bigint,cached_tokens bigint,estimated_usd numeric(18,10),pricing_version text);
+ALTER TABLE ai_usage ADD COLUMN IF NOT EXISTS user_id integer;
+CREATE INDEX IF NOT EXISTS ai_usage_user_started_idx ON ai_usage(user_id,started_at);
 CREATE INDEX IF NOT EXISTS ai_usage_started_idx ON ai_usage(started_at);
 CREATE TABLE IF NOT EXISTS ai_settings_history(id bigserial PRIMARY KEY,actor_id integer NOT NULL,provider text NOT NULL,model text NOT NULL,created_at timestamptz NOT NULL DEFAULT now());`;
 // Standard USD per million tokens, verified 2026-10-08. Unknown rates stay unknown.
@@ -50,7 +52,7 @@ function createAISettings({pool,env=process.env,fetcher=(...a)=>fetch(...a)}){
  const models=[...new Map(list.filter(m=>typeof m.id==='string').map(m=>[m.id,{id:m.id,name:m.display_name||m.id,compatible:!!compatible(provider,m),rank:rank(m.id),rates:rates(m.id)}])).values()].sort((a,b)=>b.rank-a.rank||a.id.localeCompare(b.id));
  return {provider,configured:true,models,checked_at:new Date().toISOString(),message:'Approximate capability order. Unranked models appear last. Only photo-analysis models can be selected.'};
  }
- async function begin(s){return (await pool.query('INSERT INTO ai_usage(provider,model) VALUES($1,$2) RETURNING id',[s.provider,s.model])).rows[0].id;}
+ async function begin(s){return (await pool.query('INSERT INTO ai_usage(provider,model,user_id) VALUES($1,$2,$3) RETURNING id',[s.provider,s.model,require('./ai-request-context').getStore()?.userId??null])).rows[0].id;}
  async function record(id,s,body,status){const u=body?.usage;await pool.query('UPDATE ai_usage SET status=$2,input_tokens=$3,output_tokens=$4,cached_tokens=$5,estimated_usd=$6,pricing_version=$7 WHERE id=$1',[id,status,u?.input_tokens??u?.prompt_tokens??null,u?.output_tokens??u?.completion_tokens??null,u?.cache_read_input_tokens??u?.input_tokens_details?.cached_tokens??u?.prompt_tokens_details?.cached_tokens??null,estimate(s.model,u,s.provider),'2026-10-08-standard']);}
  function register(app,requireAdmin){
  const guard=(req,res,next)=>isSuperAdmin(req.user,env)&&req.get('X-Photo-Notes-Admin-View')!=='regular'?next():res.status(403).json({error:'Super Admin access required'});
@@ -64,7 +66,8 @@ function createAISettings({pool,env=process.env,fetcher=(...a)=>fetch(...a)}){
  }));
  app.get('/api/admin/ai/usage',requireAdmin,guard,wrap(async(req,res)=>{
  const rows=(await pool.query(`SELECT to_char(started_at AT TIME ZONE 'America/Chicago','YYYY-MM-DD') AS day,provider,model,count(*)::int AS requests,count(*) FILTER(WHERE status='failed')::int AS failures,count(*) FILTER(WHERE estimated_usd IS NULL)::int AS unknown_cost_requests,sum(input_tokens)::text AS input_tokens,sum(output_tokens)::text AS output_tokens,sum(estimated_usd)::text AS estimated_usd FROM ai_usage WHERE started_at>=now()-interval '30 days' GROUP BY day,provider,model ORDER BY day DESC,provider,model`)).rows;
- res.json({timezone:'America/Chicago',currency:'USD',days:rows,tracking_started:(await pool.query('SELECT min(started_at) AS at FROM ai_usage')).rows[0]?.at||null,note:'Estimated standard API charges for Photo Notes requests since tracking began. Unknown costs are excluded from totals. Provider invoices may differ.'});
+ const users=(await pool.query(`SELECT a.user_id,u.name,u.email,count(*)::int AS requests,count(*) FILTER(WHERE a.status='failed')::int AS failures,count(*) FILTER(WHERE a.estimated_usd IS NULL)::int AS unknown_cost_requests,sum(a.estimated_usd)::text AS estimated_usd FROM ai_usage a LEFT JOIN users u ON u.id=a.user_id WHERE a.started_at>=now()-interval '30 days' GROUP BY a.user_id,u.name,u.email ORDER BY sum(a.estimated_usd) DESC NULLS LAST,a.user_id NULLS LAST`)).rows;
+ res.json({timezone:'America/Chicago',currency:'USD',users,days:rows,tracking_started:(await pool.query('SELECT min(started_at) AS at FROM ai_usage')).rows[0]?.at||null,note:'Estimated standard API charges for Photo Notes requests since tracking began. Unknown costs are excluded from totals. Provider invoices may differ.'});
  }));
  }
  return {selection,catalog,begin,record,register};
