@@ -33,3 +33,18 @@ test('AI settings and usage reject regular admins and regular view, including di
  const server=app.listen(0);await new Promise(r=>server.once('listening',r));const base='http://127.0.0.1:'+server.address().port;
  try{for(const path of ['/api/admin/ai','/api/admin/ai/models?provider=openai','/api/admin/ai/usage']){assert.equal((await fetch(base+path,{headers:{'test-role':'user'}})).status,403);assert.equal((await fetch(base+path,{headers:{'X-Photo-Notes-Admin-View':'regular'}})).status,403);}assert.equal((await fetch(base+'/api/admin/ai',{method:'PUT',headers:{'X-Photo-Notes-Admin-View':'regular','Content-Type':'application/json'},body:'{"provider":"openai","model":"gpt-6-astra"}'})).status,403);assert.equal(writes,0);assert.equal((await fetch(base+'/api/admin/ai')).status,200);}finally{await new Promise(r=>server.close(r));}
 });
+test('concurrent AI reservations retain authenticated identity and background calls stay unattributed',async()=>{
+ const context=require('../ai-request-context'),saved=[];
+ const s=createAISettings({pool:{query:async(sql,args)=>{saved.push(args);return {rows:[{id:saved.length}]};}}});
+ const selection={provider:'openai',model:'gpt-6-astra'};
+ await Promise.all([context.run({userId:17},async()=>{await new Promise(r=>setTimeout(r,10));await s.begin(selection);}),context.run({userId:29},async()=>{await s.begin(selection);})]);
+ await s.begin(selection);
+ assert.deepEqual(saved.map(a=>a[2]),[29,17,null]);
+});
+test('per-user report uses the daily ledger period and retains unknown costs and unattributed entries',async()=>{
+ const queries=[],users=[{user_id:17,name:'Test',email:'test@example.test',estimated_usd:'0.12',requests:2,failures:1,unknown_cost_requests:1},{user_id:null,estimated_usd:null,requests:1,unknown_cost_requests:1}];
+ const s=createAISettings({pool:{query:async sql=>{queries.push(sql);return {rows:sql.includes('LEFT JOIN users')?users:[]};}},env:{SUPER_ADMIN_USER_IDS:'1'}});
+ const app=express();app.use((req,res,next)=>{req.user={id:1,role:'admin'};next();});s.register(app,(req,res,next)=>next());
+ const server=app.listen(0);await new Promise(r=>server.once('listening',r));
+ try{const response=await fetch('http://127.0.0.1:'+server.address().port+'/api/admin/ai/usage');assert.equal(response.status,200);assert.equal(response.headers.get('cache-control'),'no-store');assert.deepEqual((await response.json()).users,users);assert.match(queries.find(q=>q.includes('LEFT JOIN users')),/interval '30 days'.*GROUP BY a.user_id/); }finally{await new Promise(r=>server.close(r));}
+});

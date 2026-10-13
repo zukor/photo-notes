@@ -132,7 +132,7 @@ async function requireAuth(req, res, next) {
     if(!user||!user.active)return res.status(401).json({error:'not authenticated'});
     req.user=user;
   }catch(e){return res.status(503).json({error:'Account could not be checked. Please try again.'});}
-  next();
+  require('./ai-request-context').run({userId:req.user.id},next);
 }
 function requireAdmin(req, res, next) {
   return requireAuth(req,res,()=>{

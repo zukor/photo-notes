@@ -19,3 +19,5 @@ The current documented rates cover the latest flagship families, the existing So
 - `node scripts/test-all-edition-help.cjs`
 
 Provider request/response contracts are tested using fixtures. Live paid provider requests and production deployment require separate verification.
+
+AI Cost per User shows the same rolling 30-day ledger grouped by authenticated requesting user, sorted by known estimated cost. It includes names, emails, stable user IDs, request counts, failures and unknown-cost counts. All shared AI adapters inherit request identity through an asynchronous request context. Older entries remain Unattributed. Deleted accounts retain ledger IDs without retaining copied personal details. No historical user attribution is inferred.
