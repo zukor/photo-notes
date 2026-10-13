@@ -174,6 +174,15 @@ function combineSpeechResults(parts){
   for(const part of parts){
     const text=String(part||'').trim();if(!text)continue;
     const incoming=words(text),previous=words(segments.at(-1)||'');
+    // Indexed cumulative snapshots can finish a truncated last word while
+    // retaining the entire preceding passage. Limit this to a long exact
+    // opening and a small suffix completion, never a separate session.
+    if(previous.length>=13&&incoming.length>previous.length&&prefix(previous.slice(0,-1),incoming)){
+      const tail=previous.at(-1),completed=incoming[previous.length-1];
+      if(tail.length>=5&&completed.startsWith(tail)&&completed.length>tail.length&&completed.length<=tail.length+4&&!/\d/.test(tail)){
+        segments.pop();segments.push(text);continue;
+      }
+    }
     // A long expanding indexed snapshot may also revise one recognized word.
     // Require a strong unchanged opening and preserve number/negation changes.
     // This applies only within indexed results, never across separate sessions.
