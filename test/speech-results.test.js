@@ -63,3 +63,10 @@ test('expanding indexed snapshot completes its truncated final word without repe
  assert.equal(combine([first,changed]),first+' '+changed);
  assert.equal(combine(['Please record','Please recording finish']),'Please record Please recording finish');
 });
+
+test('short repeated openings in a new speech session are kept',()=>{
+ assert.equal(context.mergeSpeechTranscript('The pipe sprays water.','Water reaches the sidewalk.'),'The pipe sprays water. Water reaches the sidewalk.');
+ assert.equal(context.mergeSpeechTranscript('Look at the blue pipe.','Blue pipe needs repair.'),'Look at the blue pipe. Blue pipe needs repair.');
+ assert.equal(context.mergeSpeechTranscript('very','very important'),'very very important');
+ assert.equal(context.mergeSpeechTranscript('The door is blue','door is blue and closed'),'The door is blue and closed');
+});

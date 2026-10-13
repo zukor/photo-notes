@@ -218,7 +218,9 @@ function combineSpeechResults(parts){
 function mergeSpeechTranscript(base,incoming){
   const left=String(base||'').trim().split(/\s+/).filter(Boolean),right=cleanSpeechTranscript(incoming).split(/\s+/).filter(Boolean);
   let overlap=0,max=Math.min(left.length,right.length);
-  for(let size=max;size>=1;size--)if(left.slice(-size).map(speechWordKey).join('\u0000')===right.slice(0,size).map(speechWordKey).join('\u0000')){overlap=size;break;}
+  // A new session can deliberately repeat one or two words from the prior
+  // sentence. Only reconcile multiword service replays across sessions.
+  for(let size=max;size>=3;size--)if(left.slice(-size).map(speechWordKey).join('\u0000')===right.slice(0,size).map(speechWordKey).join('\u0000')){overlap=size;break;}
   return cleanSpeechTranscript([...left,...right.slice(overlap)].join(' '));
 }
 async function toggleIssueDictation(){
