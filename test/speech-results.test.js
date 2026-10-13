@@ -72,3 +72,10 @@ test('indexed phone-number suffix growth does not repeat the surrounding passage
  assert.equal(context.mergeSpeechTranscript(parts[0],parts.at(-1)),parts[0]+' '+parts.at(-1));
  assert.equal(combine(['call 210','call 210-704']),'call 210 call 210-704');
 });
+
+test('short repeated openings in a new speech session are kept',()=>{
+ assert.equal(context.mergeSpeechTranscript('The pipe sprays water.','Water reaches the sidewalk.'),'The pipe sprays water. Water reaches the sidewalk.');
+ assert.equal(context.mergeSpeechTranscript('Look at the blue pipe.','Blue pipe needs repair.'),'Look at the blue pipe. Blue pipe needs repair.');
+ assert.equal(context.mergeSpeechTranscript('very','very important'),'very very important');
+ assert.equal(context.mergeSpeechTranscript('The door is blue','door is blue and closed'),'The door is blue and closed');
+});
