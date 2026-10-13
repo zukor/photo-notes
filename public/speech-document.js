@@ -1,5 +1,6 @@
 (()=>{
  'use strict';
+ function create(){
  let frame=null,ready=false,failed=false,notify=()=>{},timer=null;
  const report=()=>notify({ready,failed});
  function dispose(){clearTimeout(timer);timer=null;frame?.remove();frame=null;ready=false;failed=false;}
@@ -11,6 +12,10 @@
   next.onerror=()=>finish(false);timer=setTimeout(()=>finish(false),10000);
   next.src='/speech-session-frame.html';document.body.append(next);
  }
- window.PhotoNotesSpeechDocument={prepare(callback){notify=callback;if(!frame)reset();else report();},reset,dispose,constructor(){if(!ready)return null;try{return frame.contentWindow.SpeechRecognition||frame.contentWindow.webkitSpeechRecognition;}catch{return null;}}};
- window.addEventListener('pagehide',dispose);
+ const api={prepare(callback){notify=callback;if(!frame)reset();else report();},reset,dispose,constructor(){if(!ready)return null;try{return frame.contentWindow.SpeechRecognition||frame.contentWindow.webkitSpeechRecognition;}catch{return null;}}};
+ return api;
+ }
+ window.PhotoNotesSpeechDocument=create();
+ window.PhotoNotesSpeechDocument.create=create;
+ window.addEventListener('pagehide',()=>window.PhotoNotesSpeechDocument.dispose());
 })();
