@@ -51,7 +51,7 @@ function dialog(mode,row){
   for(const source of fields()){
    const label=document.createElement('label');label.htmlFor='ct-'+source.id;label.textContent=source.id==='hoaArea'?'Maintenance Category':source.id==='hoaType'?'Record Type':source.id==='hoaPriority'?'Priority':source.id==='concretePhase'?'Project phase':source.id==='concretePurpose'?'Photo purpose':source.id==='concreteElement'?'Project type':'Photo Reason';
    const select=document.createElement('select');select.id='ct-'+source.id;select.dataset.source=source.id;
-   select.innerHTML='<option value="">Leave unchanged</option>'+[...source.options].filter(o=>o.value&&(source.id!=='pavingPhotoReason'||o.value==='proposal')).map(o=>`<option value="${escape(o.value)}">${escape(o.textContent)}</option>`).join('');select.value=d[source.id]||'';
+   select.innerHTML='<option value="">Leave unchanged</option>'+[...source.options].filter(o=>o.value&&(source.id!=='pavingPhotoReason'||['pavement_problems','existing_conditions','proposal','work_progress','completed_work','extra_work','follow_up'].includes(o.value))).map(o=>`<option value="${escape(o.value)}">${escape(o.textContent)}</option>`).join('');select.value=d[source.id]||'';
    editor.querySelector('#ctSpecialty').append(label,select);
   }
   const phase=editor.querySelector('#ct-concretePhase'),purpose=editor.querySelector('#ct-concretePurpose');

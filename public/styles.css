@@ -1275,4 +1275,7 @@ html[data-theme="dark"] :is(.workflow-intro,.organize-panel,.send-feature-panel,
 
 #pavingPhotoReason[hidden] { display:none; }
 
-.paving-tools-link { display:block; min-height:44px; padding:10px 0; color:#000; text-align:left; text-decoration:underline; }
+
+#pavingScanner[hidden] { display:none; }
+#pavingCaptureType { display:block; box-sizing:border-box; width:100%; min-height:44px; padding:10px 8px; border:1px solid #000; border-radius:8px; background:#fff; color:#000; font:16px Arial,Helvetica,sans-serif; text-align:left; }
+.paving-photo-context > label:not(:first-child) { margin-top:12px; }
