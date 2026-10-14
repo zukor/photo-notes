@@ -1,5 +1,30 @@
 (()=>{
  'use strict';
+ // Reset Safari's page-wide audio capture routing before a speech attempt.
+ // Never keep a getUserMedia track alive alongside SpeechRecognition.
+ let microphoneQueue=Promise.resolve();
+ async function primeMicrophone(isCurrent=()=>true){
+  const previous=microphoneQueue;let unlockMicrophone;
+  microphoneQueue=new Promise(resolve=>unlockMicrophone=resolve);
+  await previous;
+  try{
+  if(!isCurrent())return false;
+  if(!navigator.mediaDevices?.getUserMedia)throw new Error('Microphone access unavailable');
+  let retired=false,deadline;
+  const request=Promise.resolve().then(()=>navigator.mediaDevices.getUserMedia({audio:true})).then(stream=>{
+   if(retired){stream.getTracks().forEach(track=>track.stop());return null;}
+   return stream;
+  });
+  try{
+   const stream=await Promise.race([request,new Promise((_,reject)=>{deadline=setTimeout(()=>reject(new Error('Microphone initialization timed out')),15000);})]);
+   clearTimeout(deadline);
+   try{if(!isCurrent())return false;}finally{stream.getTracks().forEach(track=>track.stop());}
+   // Let WebKit finish deactivating direct capture before speech takes ownership.
+   await new Promise(resolve=>setTimeout(resolve,300));
+   return isCurrent();
+  }finally{retired=true;clearTimeout(deadline);}
+  }finally{unlockMicrophone();}
+ }
  function create(){
  let frame=null,ready=false,failed=false,notify=()=>{},timer=null;
  const report=()=>notify({ready,failed});
@@ -17,5 +42,6 @@
  }
  window.PhotoNotesSpeechDocument=create();
  window.PhotoNotesSpeechDocument.create=create;
+ window.PhotoNotesSpeechDocument.primeMicrophone=primeMicrophone;
  window.addEventListener('pagehide',()=>window.PhotoNotesSpeechDocument.dispose());
 })();

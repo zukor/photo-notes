@@ -122,7 +122,7 @@ if(focus){const known=new Set([...databaseSuites,...legacySuites].map(row=>row[0
     await run(feature,legacy?['--test','test/'+feature+'.test.js']:['scripts/test-'+feature+'.cjs'],{[key]:scoped.toString(),...(flag?{[flag]:'1'}:{}),PN_AUTOMATION_DATA_DIR:temporaryCluster||url.searchParams.get('host')||'',PN_WEB_TEST_DATA_DIR:temporaryCluster||url.searchParams.get('host')||'',UPLOAD_DIR:path.join(temporaryCluster||url.searchParams.get('host')||'',name+'-uploads')},legacy?180000:180000);
     await admin.query('DROP DATABASE '+name+' WITH (FORCE)');
    }
-   for(const feature of browserSuites.filter(feature=>!focus||focus.includes(feature)))await run(feature,['scripts/test-'+feature+'.cjs'],{},feature==='complete-help'?360000:180000);
+   for(const feature of browserSuites.filter(feature=>!focus||focus.includes(feature)))await run(feature,['scripts/test-'+feature+'.cjs'],{},feature==='complete-help'?360000:feature==='capture-voice'?300000:180000);
    if(!focus&&visualRequired)await run('visual-baselines',['scripts/compare-visual-baselines.cjs']);
   }
  } catch(error) {results.push({feature:'environment',status:'failed',error:error.message});console.error(error.message);}
