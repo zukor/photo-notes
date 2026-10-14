@@ -81,6 +81,29 @@ test('short repeated openings in a new speech session are kept',()=>{
 });
 
 
+test('two-digit recognized phone openings reconcile dashes without changing digits or words',()=>{
+ const lead='this rules can change with aquifer levels so residents should check so.org for the current stage if you see Water waste you can report it by calling to ';
+ const parts=['10','10-','10-70','10-704','10-704-7','10-704-7283'].map(n=>lead+n);
+ assert.equal(combine(parts),parts.at(-1));
+ assert.equal(combine([...parts.slice(0,-1),parts.at(-1)+' come down the street is not allowed at any time of year.']),parts.at(-1)+' come down the street is not allowed at any time of year.');
+ assert.equal(combine([lead+'10',lead+'11-704']),lead+'10 '+lead+'11-704');
+ assert.equal(combine([lead+'10',lead+'100']),lead+'10 '+lead+'100');
+ assert.equal(combine([lead+'10',lead.replace('can report','cannot report')+'10-704']),lead+'10 '+lead.replace('can report','cannot report')+'10-704');
+ assert.equal(combine(['call to 10','call to 10-704']),'call to 10 call to 10-704');
+ assert.equal(context.mergeSpeechTranscript(parts[0],parts.at(-1)),parts[0]+' '+parts.at(-1));
+});
+
+
+test('automatic continuation only replaces matching number growth, preserving short emphasis and consequential changes',()=>{
+ const lead='if you see Water waste you can report it by calling to ';
+ assert.equal(context.mergeSpeechContinuation(lead+'10',lead+'10-704'),lead+'10-704');
+ assert.equal(context.mergeSpeechContinuation(lead+'10',lead+'11-704'),lead+'10 '+lead+'11-704');
+ assert.equal(context.mergeSpeechContinuation('very','very important'),'very very important');
+ assert.equal(context.mergeSpeechContinuation('yes','yes'),'yes yes');
+ assert.equal(context.mergeSpeechContinuation(lead+'10',lead.replace('can report','cannot report')+'10-704'),lead+'10 '+lead.replace('can report','cannot report')+'10-704');
+});
+
+
 test('long expanding spelled-address snapshots preserve the latest recognized letters without repeating the passage',()=>{
  const first='rules can change with aquifer levels so residents should check s a w s. or for the current';
  const next='rules can change with aquifer levels so residents should check as a w s. or for the current stage';

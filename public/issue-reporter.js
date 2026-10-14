@@ -167,6 +167,18 @@ function cleanSpeechTranscript(value){
 function speechWordKey(word){
   return word.toLocaleLowerCase().replace(/^[.,!?;:"“”‘’¿¡()]+|[.,!?;:"“”‘’¿¡()]+$/g,'');
 }
+function growingSpeechNumber(previous,incoming){
+  if(previous.length<9||incoming.length<previous.length||!previous.slice(0,-1).every((word,i)=>word===incoming[i]))return false;
+  const tail=previous.at(-1),completed=incoming[previous.length-1];
+  return /^\d{2,}(?:[-–]\d*)*$/.test(tail)&&/^\d+[-–]\d*(?:[-–]\d*)*$/.test(completed)&&completed.startsWith(tail)&&completed.length>tail.length;
+}
+function mergeSpeechContinuation(base,incoming){
+  const left=String(base||'').trim(),right=String(incoming||'').trim();
+  const words=text=>text.split(/\s+/).filter(Boolean).map(speechWordKey);
+  // Only automatic continuation of this recording may extend a matching
+  // number. Other boundaries retain the existing multiword replay rule.
+  return growingSpeechNumber(words(left),words(right))?right:mergeSpeechTranscript(left,right);
+}
 function combineSpeechResults(parts){
   const segments=[];
   const words=value=>value.split(/\s+/).map(speechWordKey);
@@ -175,13 +187,8 @@ function combineSpeechResults(parts){
     const text=String(part||'').trim();if(!text)continue;
     const incoming=words(text),previous=words(segments.at(-1)||'');
     // A phone-number token may grow after each spoken dash. Reconcile only
-    // an exact opening with an appended numeric suffix, never changed digits.
-    if(previous.length>=9&&incoming.length>=previous.length&&prefix(previous.slice(0,-1),incoming)){
-      const tail=previous.at(-1),completed=incoming[previous.length-1];
-      if(/^\d{3,}(?:[-–]\d*)*$/.test(tail)&&/^\d+(?:[-–]\d*)*$/.test(completed)&&completed.startsWith(tail)&&completed.length>tail.length){
-        segments.pop();segments.push(text);continue;
-      }
-    }
+    // an exact opening with an appended dash/number suffix, never changed digits.
+    if(growingSpeechNumber(previous,incoming)){segments.pop();segments.push(text);continue;}
     // Indexed cumulative snapshots can finish a truncated last word while
     // retaining the entire preceding passage. Limit this to a long exact
     // opening and a small suffix completion, never a separate session.
