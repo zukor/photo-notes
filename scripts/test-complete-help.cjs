@@ -39,7 +39,11 @@ function data(url){const p=url.pathname;
  return [];
 }
 (async()=>{
- const app=express();app.use('/vendor/leaflet',express.static(path.dirname(require.resolve('leaflet/dist/leaflet.js'))));app.use(express.static(path.join(root,'public')));
+ const app=express();
+ // Serve local API fixtures over HTTP so polling requests remain valid during navigation.
+ // Live-asset checks still intercept APIs below to prevent customer writes.
+ app.use('/api',(req,res)=>res.json(data(new URL(req.originalUrl,'http://help-fixture.invalid'))));
+ app.use('/vendor/leaflet',express.static(path.dirname(require.resolve('leaflet/dist/leaflet.js'))));app.use(express.static(path.join(root,'public')));
  const serverSource=fs.readFileSync(path.join(root,'server.js'),'utf8');
  function publicForm(prefix,locals){const line=serverSource.split('\n').find(s=>s.includes("app.get('"+prefix)&&s.includes("res.send(`"));const a=line.indexOf('res.send(`')+9,b=line.lastIndexOf('`);');return vm.runInNewContext('('+line.slice(a,b+1)+')',{escXml:s=>String(s??'').replace(/[&<>"']/g,' '),...locals});}
  app.get('/completion-photos/help-fixture',(req,res)=>res.send(publicForm('/completion-photos/:token',{row:{community_name:'Test property',title:'Repair gate',description:'Review returned evidence',original_photo:'',recipient_name:'',token:'help-fixture'}})));
@@ -50,7 +54,7 @@ function data(url){const p=url.pathname;
   const page=await browser.newPage({viewport:{width,height:960},serviceWorkers:'block',reducedMotion:'reduce',...(width===390?{hasTouch:true}: {})});
   await page.addInitScript(()=>{localStorage.setItem('pn_install_prompt_dismissed_v1','dismissed');localStorage.setItem('pn_first_use_v1:'+encodeURIComponent('help-test@example.invalid'),'done');});
   page.on('pageerror',e=>errors.push(e.message));
-  await page.route('**/*',r=>{const u=new URL(r.request().url());if(u.origin!==new URL(base).origin)return r.abort();if(u.pathname.startsWith('/api/'))return r.fulfill({json:data(u)});return r.continue();});
+  await page.route('**/*',r=>{const u=new URL(r.request().url());if(u.origin!==new URL(base).origin)return r.abort();if(process.env.PN_HELP_BASE_URL&&u.pathname.startsWith('/api/'))return r.fulfill({json:data(u)});return r.continue();});
   await page.goto(base);await page.waitForFunction(()=>typeof state!=='undefined'&&state.me&&document.getElementById('body'));
   async function check(name){
    await page.waitForFunction(()=>typeof PhotoNotesHelp!=='undefined');
