@@ -15,7 +15,7 @@ for(const engine of [chromium,webkit]){const browser=await engine.launch();try{f
  for(const [id,type] of Object.entries(types)){assert.equal(await page.locator('#'+id).count(),allowed.allowed(pro_type,type)?1:0);if(allowed.allowed(pro_type,type))assert.match(await page.locator('#'+id).innerText(),/^Open /);}
  assert.equal(await page.locator('#toolTicket').count(),pro_type==='paving'?1:0);assert.equal(await page.locator('#scannerHistory').count(),pro_type==='general'?0:1);for(const type of Object.values(types))assert.equal(await page.locator(`[data-scanner-history="${type}"]`).count(),allowed.allowed(pro_type,type)?1:0);
  for(const id of ['toolPlan','toolCard','toolEquipment','toolMaterial','toolGauge']){
-  if(!allowed.allowed(pro_type,types[id]))continue;await page.locator('#'+id).click();assert(await page.locator('#readerTake').isVisible());assert(await page.locator('#readerChoose').isVisible());
+  if(!allowed.allowed(pro_type,types[id]))continue;await page.locator('#'+id).click();assert(await page.locator('#readerTake').isVisible());assert(await page.locator('#readerChoose').isVisible());assert.match(await page.locator('#readerRead').innerText(),/^Read /,'workspace action reads a photo rather than opening navigation');
   assert(!(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth)));
   await page.locator('#readerBack').click();
  }

@@ -37,6 +37,7 @@ async function run(feature, args, overrides = {}, timeout = 180000) {
  return result;
 }
 const browserSuites = [
+ 'send-document-layout',
  'automation-edition-browser','capture-recovery','capture-result','capture-share-metadata','pending-retry','proposal-exhibit','capture-draft-recovery','issue-report-display',
  'complete-help','admin-help','all-edition-help','shared-workflow-parity','location-intelligence',
  'investigation-repairs','linked-photo-records','shared-camera-readers','specialist-scanner-reports','capture-voice','customer-feedback','issue-completion-browser','issue-result-screenshot','sticky-workflow-menu','batch-annotations-browser','custom-annotation-templates','document-title','create-photo-filters','create-send-dark','document-photo-source','crop-context-browser','testing-dashboard','record-notes-check','speech-session-check','capture-templates','property-incidents',
@@ -67,6 +68,7 @@ const legacySuites = [
  ['issue-backlog-repairs.integration','PN_LEGACY_TEST_DATABASE_URL','pn_issue_backlog_test','PN_ISSUE_FLOW_TEST']
 ];
 const databaseSuites = [
+ ['library-projects-integration','DATABASE_URL','pn_library_projects_test'],
  ['automation-core-db','PN_ISOLATED_DATABASE_URL','pn_core_test'],
  ['automation-offline-browser','PN_WEB_TEST_DATABASE_URL','pn_ios_test'],
  ['photo-requests-integration','PN_REQUEST_TEST_DATABASE_URL','pn_requests_test'],

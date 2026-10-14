@@ -1273,6 +1273,13 @@ button:disabled {
 .new-document-settings details > :not(summary) { margin-left:2px; margin-right:2px; }
 html[data-theme="dark"] :is(.workflow-intro,.organize-panel,.send-feature-panel,.document-preset-row,.new-document-settings details) { border-color:#fff; }
 
+/* Document delivery controls occupy their own row and remain inside the viewport. */
+.send-document-list>li{flex-wrap:wrap}
+.send-document-list>li>div:first-child{flex:1 1 240px}
+.send-document-list .document-send-options{box-sizing:border-box;min-width:0;width:100%;flex:1 1 100%}
+.send-document-list .compact-document-actions{max-width:100%;flex-wrap:wrap;white-space:normal}
+.send-document-list .document-send-options[hidden]{display:none}
+@media(max-width:700px){.send-document-list>li{display:block}.send-document-list>li>.compact-document-actions{margin-top:10px}.send-document-list .document-send-options label{display:block;width:100%;max-width:100%}.send-document-list .document-delivery-format{box-sizing:border-box;width:100%;min-width:0}.available-documents-heading{flex-wrap:wrap;row-gap:8px}}
 #pavingPhotoReason[hidden] { display:none; }
 
 
