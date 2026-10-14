@@ -79,3 +79,29 @@ test('short repeated openings in a new speech session are kept',()=>{
  assert.equal(context.mergeSpeechTranscript('very','very important'),'very very important');
  assert.equal(context.mergeSpeechTranscript('The door is blue','door is blue and closed'),'The door is blue and closed');
 });
+
+
+test('long expanding spelled-address snapshots preserve the latest recognized letters without repeating the passage',()=>{
+ const first='rules can change with aquifer levels so residents should check s a w s. or for the current';
+ const next='rules can change with aquifer levels so residents should check as a w s. or for the current stage';
+ assert.equal(combine([first,next]),next);
+ assert.equal(combine([first,next,next+' today']),next+' today');
+ assert.equal(context.mergeSpeechTranscript(first,next),first+' '+next);
+ const changed=next.replace('can change','cannot change');
+ assert.equal(combine([first,changed]),first+' '+changed);
+ const short='check s a w s';assert.equal(combine([short,'check as a w s today']),short+' check as a w s today');
+});
+
+
+test('spelled-result revisions retain negations and require a letter run and unchanged following words',()=>{
+ const lead='rules can change with aquifer levels so residents should check ';
+ const negation=lead+'n a w s or for the current';
+ const revised=lead+'no a w s or for the current stage';
+ assert.equal(combine([negation,revised]),negation+' '+revised);
+ const noRun=lead+'s beside the current worker';
+ const noRunNext=lead+'as beside the current worker today';
+ assert.equal(combine([noRun,noRunNext]),noRun+' '+noRunNext);
+ const ending=lead+'a w s';
+ const endingNext=lead+'a w as today';
+ assert.equal(combine([ending,endingNext]),ending+' '+endingNext);
+});
