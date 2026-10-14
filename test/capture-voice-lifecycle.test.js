@@ -1,11 +1,12 @@
 const test=require('node:test'),assert=require('node:assert/strict'),vm=require('node:vm'),fs=require('node:fs');
 const source=fs.readFileSync('public/app.js','utf8');
-function harness({ios=true,pending=false,exclusive=false,retainOnEnd=false,abortEvents=false}={}){
+function harness({ios=true,pending=false,exclusive=false,retainOnEnd=false,abortEvents=false,realResults=false}={}){
  const elements={},sessions=[],timers=new Map(),logs={},interruptions=[];let next=0,permission,tracksStopped=0,owner;
  class Speech{constructor(){sessions.push(this);}start(){if(exclusive&&owner&&owner!==this)throw new Error('Microphone still owned');owner=this;}stop(){this.stopped=true;}abort(){this.aborted=true;if(owner===this)owner=null;if(abortEvents){this.onerror?.({error:"aborted"});this.onend?.();}}set onend(handler){this.end=()=>{if(owner===this&&!retainOnEnd)owner=null;handler();};}get onend(){return this.end;}}
  const stream={getTracks:()=>[{stop:()=>tracksStopped++}]};
  const context=vm.createContext({Date,Promise,JSON,navigator:{userAgent:ios?'iPhone':'Android',onLine:true,mediaDevices:{getUserMedia:()=>pending?new Promise(r=>permission=r):Promise.resolve(stream)}},window:{SpeechRecognition:Speech},document:{visibilityState:'visible',getElementById:id=>elements[id]||=( {value:'',textContent:'',remove(){},focus(){},classList:{add(){},remove(){}}})},localStorage:{getItem:k=>logs[k],setItem:(k,v)=>logs[k]=v},state:{photoFile:{}},uiSpeechLanguage:()=> 'en-US',isIndustryProClient:()=>false,showDictationInterruption:reason=>interruptions.push(reason),toast(){},persistCaptureDraft:async()=>{},setTimeout:(fn,ms)=>{timers.set(++next,{fn,ms});return next;},clearTimeout:id=>timers.delete(id)});
- vm.runInContext("let iosDictationSession=null,iosDictationConstructor=null,recognizer=null,dictationActive=false,dictationRestartTimer=null,dictationWatchdog=null,dictationGeneration=0,dictationBase='',dictationFinish=null;"+source.slice(source.indexOf('let dictationEmptySessions'),source.indexOf('let currentGroupItems'))+"function combineSpeechResults(parts){return parts.join(' ');}function mergeSpeechTranscript(a,b){return (a.trim()+' '+b.trim()).trim();}"+source.slice(source.indexOf('function cleanupDictation()'),source.indexOf('// ================= Pro dimension fields')),context);
+ if(realResults){const shared=fs.readFileSync('public/issue-reporter.js','utf8');vm.runInContext(shared.slice(shared.indexOf('function cleanSpeechTranscript'),shared.indexOf('async function toggleIssueDictation')),context);}
+ vm.runInContext("let iosDictationSession=null,iosDictationConstructor=null,recognizer=null,dictationActive=false,dictationRestartTimer=null,dictationWatchdog=null,dictationGeneration=0,dictationBase='',dictationFinish=null;"+source.slice(source.indexOf('let dictationEmptySessions'),source.indexOf('let currentGroupItems'))+(realResults?"":"function combineSpeechResults(parts){return parts.join(' ');}function mergeSpeechTranscript(a,b){return (a.trim()+' '+b.trim()).trim();}function mergeSpeechContinuation(a,b){return mergeSpeechTranscript(a,b);}")+source.slice(source.indexOf('function cleanupDictation()'),source.indexOf('// ================= Pro dimension fields')),context);
  return {run:c=>vm.runInContext(c,context),sessions,elements,timers,logs,interruptions,resolve:()=>permission(stream),tracksStopped:()=>tracksStopped,fire:ms=>{for(const [id,t]of [...timers])if(t.ms===ms){timers.delete(id);t.fn();}}};
 }
 test('Stop keeps Safari final results until end, and finishing blocks another start',async()=>{
@@ -69,4 +70,25 @@ test('audio start without transcription cannot leave Capture listening forever',
  const h=harness();await h.run('toggleDictation()');const first=h.sessions[0];first.onstart();first.onaudiostart();first.onspeechstart();h.fire(30000);
  assert.equal(h.run('dictationActive'),false);assert.ok(first.aborted);assert.match(h.interruptions[0],/no words were received/);
  await h.run('toggleDictation()');h.sessions[1].onresult({results:[[{transcript:'Recovered words'}]]});h.fire(30000);assert.equal(h.run('dictationActive'),true);assert.equal(h.elements.note.value,'Recovered words');
+});
+
+
+test('one Android recording reconciles phone suffixes across automatic continuations and retains manual restarts',async()=>{
+ const h=harness({ios:false,realResults:true});
+ const lead='this rules can change with aquifer levels so residents should check so.org for the current stage if you see Water waste you can report it by calling to ';
+ h.elements.note={value:'Typed starting note.',textContent:''};
+ await h.run('toggleDictation()');
+ for(const number of ['10','10-','10-70','10-704','10-704-7']){
+  const session=h.sessions.at(-1);session.onresult({results:[[{transcript:lead+number}]]});
+  assert.equal(h.elements.note.value,'Typed starting note. '+lead+number);
+  session.onend();h.fire(250);
+ }
+ const last=h.sessions.at(-1),finalText=lead+'10-704-7283 come down the street is not allowed at any time of year.';
+ last.onresult({results:[[{transcript:finalText}]]});
+ assert.equal(h.elements.note.value,'Typed starting note. '+finalText);
+ const finish=h.run('finishCaptureDictation()');last.onend();await finish;
+ assert.equal(h.elements.note.value,'Typed starting note. '+finalText);
+ await h.run('toggleDictation()');const manual=h.sessions.at(-1);
+ manual.onresult({results:[[{transcript:lead+'10-704-7284'}]]});
+ assert.equal(h.elements.note.value,'Typed starting note. '+finalText+' '+lead+'10-704-7284');
 });

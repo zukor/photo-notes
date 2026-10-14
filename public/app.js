@@ -1506,7 +1506,7 @@ async function toggleDictation() {
   startDictationSession(SR);
 }
 
-function startDictationSession(SR) {
+function startDictationSession(SR, continuedText = '') {
   if (!dictationActive) return;
   const noteEl = document.getElementById('note');
   let session;const ios=isIOS();
@@ -1520,6 +1520,9 @@ function startDictationSession(SR) {
   session.continuous = true;
   session.interimResults = true;
   let sessionText = '', microphoneStarted = false;
+  // Automatic Android restarts belong to one user recording. Reconcile its
+  // received snapshots before joining them to words present before the tap.
+  const recordingText = () => continuedText ? mergeSpeechContinuation(continuedText,sessionText) : sessionText;
   const started=()=>{
     if(generation!==dictationGeneration||!dictationActive)return;
     microphoneStarted = true;
@@ -1556,9 +1559,9 @@ function startDictationSession(SR) {
     sessionText=combineSpeechResults(parts);
     recordDictationEvent('result',Array.from(ev.results,result=>result.isFinal?'final':'interim').join(','));
 
-    if (noteEl) { noteEl.value=mergeSpeechTranscript(dictationBase,sessionText); state._note=noteEl.value; void persistCaptureDraft().catch(()=>{}); }
+    if (noteEl) { noteEl.value=mergeSpeechTranscript(dictationBase,recordingText()); state._note=noteEl.value; void persistCaptureDraft().catch(()=>{}); }
     const status=document.getElementById('dictationStatus');if(status&&sessionText)status.textContent='Speech received.';
-    if (isIndustryProClient()) applyExtraction(dictationBase+sessionText);
+    if (isIndustryProClient()) applyExtraction(dictationBase+recordingText());
   };
   session.onerror = (e) => {
     if(generation!==dictationGeneration)return;
@@ -1577,7 +1580,6 @@ function startDictationSession(SR) {
     const interrupted=dictationActive&&!dictationFinish;
     if(dictationWatchdog)clearTimeout(dictationWatchdog);dictationWatchdog=null;
     if(recognizer===session)recognizer=null;
-    if(sessionText){dictationBase=mergeSpeechTranscript(dictationBase,sessionText);if(dictationBase)dictationBase+=' ';}
     const current=document.getElementById('note')===noteEl&&state.photoFile===photoForSession;
     // Android speech services can end a successful continuous session on
     // cellular networks. Continue with a fresh session while Stop is absent.
@@ -1588,11 +1590,12 @@ function startDictationSession(SR) {
         recordDictationEvent('session-continuation');
         dictationRestartTimer=setTimeout(()=>{
           dictationRestartTimer=null;
-          if(generation===dictationGeneration&&dictationActive&&document.getElementById('note')===noteEl&&state.photoFile===photoForSession)startDictationSession(SR);
+          if(generation===dictationGeneration&&dictationActive&&document.getElementById('note')===noteEl&&state.photoFile===photoForSession)startDictationSession(SR,recordingText());
         },250);
         return;
       }
     }
+    if(recordingText()){dictationBase=mergeSpeechTranscript(dictationBase,recordingText());if(dictationBase)dictationBase+=' ';}
     cleanupDictation();
     if(interrupted&&current){
       const status=document.getElementById('dictationStatus');if(status)status.textContent='Recording stopped early. Your captured words are kept.';
