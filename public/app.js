@@ -687,7 +687,7 @@ const PAVING_PHOTO_REASONS=[
   {id:'alignment',label:'Before & After Alignment',feature:'before_after',description:'Compare before and after photos using the same framing.'}
 ];
 function scannerOn(type){return featureOn('camera_readers')&&globalThis.PhotoNotesScannerAvailability?.allowed(state.proType,type)===true;}
-function pavingPhotoReasons(){return PAVING_PHOTO_REASONS.filter(r=>!r.feature||(r.feature==='camera_readers'?scannerOn(r.id):featureOn(r.feature)));}
+function pavingPhotoReasons(){return PAVING_PHOTO_REASONS.filter(r=>!r.feature||(r.feature==='camera_readers'?scannerOn(r.id):featureOn(r.feature))).sort((a,b)=>a.label.localeCompare(b.label));}
 function pavingPhotoReason(){return pavingPhotoReasons().find(r=>r.id===state._pavingReason)||PAVING_PHOTO_REASONS[0];}
 function pavingPhotoReasonMarkup(){
   const selected=pavingPhotoReason(),choices=pavingPhotoReasons();
@@ -709,11 +709,12 @@ function bindPavingPhotoReason(){
     cameraReaderFile=null;cameraReaderDraft=null;ticketPhotoFile=null;ticketDraft=null;alignmentAfterFile=null;alignmentBefore=null;
     state._pavingReason=next;renderCapture();
   };
+  window.ConcretePurposeMenu.mount(select);
   document.getElementById('pavingToolsGuide').onclick=()=>{if(pavingHasUnsavedPhoto()&&!confirm(uiT('Changing the photo reason will discard this unsaved photo and notes. Continue?')))return;state.view='camera-tools';renderApp();};
 }
 function pavingToolMount(){return document.getElementById('pavingInlineTool')||document.getElementById('body');}
 function pavingToolEmbedded(){return state.view==='capture'&&isPavingClient()&&!!document.getElementById('pavingInlineTool');}
-function setPavingToolBusy(ids,busy){for(const id of ['pavingPhotoReason','pavingToolsGuide',...ids]){const el=document.getElementById(id);if(el)el.disabled=busy;}}
+function setPavingToolBusy(ids,busy){for(const id of ['pavingPhotoReason','pavingPhotoReasonButton','pavingToolsGuide',...ids]){const el=document.getElementById(id);if(el)el.disabled=busy;}}
 function renderPavingToolCapture(){
   const body=document.getElementById('body'),reason=pavingPhotoReason();body.className='workflow-paving-capture';
   body.innerHTML=pavingPhotoReasonMarkup()+'<div id="pavingInlineTool" class="paving-inline-tool"></div>';
