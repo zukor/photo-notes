@@ -1281,3 +1281,5 @@ html[data-theme="dark"] :is(.workflow-intro,.organize-panel,.send-feature-panel,
 .send-document-list .document-send-options[hidden]{display:none}
 @media(max-width:700px){.send-document-list>li{display:block}.send-document-list>li>.compact-document-actions{margin-top:10px}.send-document-list .document-send-options label{display:block;width:100%;max-width:100%}.send-document-list .document-delivery-format{box-sizing:border-box;width:100%;min-width:0}.available-documents-heading{flex-wrap:wrap;row-gap:8px}}
 #pavingPhotoReason[hidden] { display:none; }
+
+.paving-tools-link { display:block; min-height:44px; padding:10px 0; color:#000; text-align:left; text-decoration:underline; }
