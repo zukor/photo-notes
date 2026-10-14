@@ -7,9 +7,9 @@ function sanitize(edition, input={}) {
  if(['standard','urgent'].includes(input.urgency))out.urgency=input.urgency;
  const fields=edition==='concrete'?['concretePhase','concretePurpose','concreteElement']:['hoa','property'].includes(edition)?['hoaType','hoaPriority','hoaArea']:edition==='paving'?['pavingPhotoReason']:[];
  const concrete=require('./public/concrete-capture');
- const choices={hoaType:['maintenance','information','inspection'],hoaPriority:['routine','high','emergency','monitor'],concretePhase:concrete.phases.map(p=>p.id),concreteElement:Object.keys(concrete.elements),concretePurpose:(concrete.phase(input.concretePhase)?.purposes||[]).map(p=>p[0]),pavingPhotoReason:['proposal']};
+ const choices={hoaType:['maintenance','information','inspection'],hoaPriority:['routine','high','emergency','monitor'],concretePhase:concrete.phases.map(p=>p.id),concreteElement:Object.keys(concrete.elements),concretePurpose:(concrete.phase(input.concretePhase)?.purposes||[]).map(p=>p[0]),pavingPhotoReason:['pavement_problems','existing_conditions','proposal','work_progress','completed_work','extra_work','follow_up']};
  for(const key of fields)if(typeof input[key]==='string'&&input[key]&&(!choices[key]||choices[key].includes(input[key])))out[key]=input[key].slice(0,100);
- if(out.pavingPhotoReason&&out.pavingPhotoReason!=='proposal')delete out.pavingPhotoReason;
+
  return out;
 }
 function register(app,{pool,requireAuth}) {

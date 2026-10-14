@@ -9,6 +9,7 @@ test('templates exclude evidence and isolate specialty fields',()=>{
  assert.equal(sanitize('hoa',unsafe).hoaType,'inspection');
  assert.equal(sanitize('concrete',{concretePhase:'invalid',concretePurpose:'work_problem'}).concretePurpose,undefined);
 });
+test('Paving saved settings preserve job purposes and exclude scanner choices',()=>{for(const reason of ['pavement_problems','existing_conditions','proposal','work_progress','completed_work','extra_work','follow_up'])assert.equal(sanitize('paving',{pavingPhotoReason:reason}).pavingPhotoReason,reason);for(const reason of ['ticket','gauge','alignment'])assert.equal(sanitize('paving',{pavingPhotoReason:reason}).pavingPhotoReason,undefined);});
 test('server queries and updates use authenticated account, reject free accounts',async()=>{
  const routes={},queries=[];register({get:(p,...h)=>routes.get=h,put:(p,...h)=>routes.put=h},{requireAuth:(req,res,next)=>next(),pool:{query:async(sql,params)=>{queries.push({sql,params});return {rows:[]};}}});
  let status;const res={status:n=>(status=n,res),json:x=>x};

@@ -5,7 +5,7 @@ const EDITIONS=new Set(['general','pro','paving','asphalt','concrete','property'
 function fieldsFor(edition){
  const fields={area_tags:{label:'Topic',type:'topics'},job_id:{label:'Job',type:'job'},urgency:{label:'Urgency',options:[['standard','Standard'],['urgent','Urgent']]},favorite:{label:'Favorite',type:'boolean',options:[[true,'Mark Favorite'],[false,'Remove Favorite']]},flagged:{label:'Flagged',type:'boolean',options:[[true,'Flag'],[false,'Remove Flag']]}};
  if(edition==='concrete')fields.concrete_element={label:'Concrete Element',options:Object.entries(require('./public/concrete-capture').elements),clear:true};
- if(['paving','asphalt'].includes(edition))fields.paving_photo_reason={label:'Photo Reason',options:[['proposal','Proposal Photo']],clear:true};
+ if(['paving','asphalt'].includes(edition))fields.paving_photo_reason={label:'Photo Reason',options:[['pavement_problems','Pavement Problems & Repairs'],['existing_conditions','Existing Conditions'],['proposal','Proposed Work'],['work_progress','Work in Progress'],['completed_work','Completed Work'],['extra_work','Extra Work'],['follow_up','Follow-Up Inspection']],clear:true};
  return fields;
 }
 function validate(body,edition){
