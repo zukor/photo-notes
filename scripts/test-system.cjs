@@ -67,6 +67,7 @@ const legacySuites = [
  ['issue-backlog-repairs.integration','PN_LEGACY_TEST_DATABASE_URL','pn_issue_backlog_test','PN_ISSUE_FLOW_TEST']
 ];
 const databaseSuites = [
+ ['library-projects-integration','DATABASE_URL','pn_library_projects_test'],
  ['automation-core-db','PN_ISOLATED_DATABASE_URL','pn_core_test'],
  ['automation-offline-browser','PN_WEB_TEST_DATABASE_URL','pn_ios_test'],
  ['photo-requests-integration','PN_REQUEST_TEST_DATABASE_URL','pn_requests_test'],
