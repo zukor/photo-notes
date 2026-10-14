@@ -175,10 +175,10 @@ function combineSpeechResults(parts){
     const text=String(part||'').trim();if(!text)continue;
     const incoming=words(text),previous=words(segments.at(-1)||'');
     // A phone-number token may grow after each spoken dash. Reconcile only
-    // an exact opening with an appended numeric suffix, never changed digits.
+    // an exact opening with an appended dash/number suffix, never changed digits.
     if(previous.length>=9&&incoming.length>=previous.length&&prefix(previous.slice(0,-1),incoming)){
       const tail=previous.at(-1),completed=incoming[previous.length-1];
-      if(/^\d{3,}(?:[-–]\d*)*$/.test(tail)&&/^\d+(?:[-–]\d*)*$/.test(completed)&&completed.startsWith(tail)&&completed.length>tail.length){
+      if(/^\d{2,}(?:[-–]\d*)*$/.test(tail)&&/^\d+[-–]\d*(?:[-–]\d*)*$/.test(completed)&&completed.startsWith(tail)&&completed.length>tail.length){
         segments.pop();segments.push(text);continue;
       }
     }

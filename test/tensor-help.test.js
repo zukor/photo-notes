@@ -41,7 +41,7 @@ test('Android note dictation replaces revised results and requests restart after
   assert.doesNotMatch(app, /if \(finalText\) base \+= finalText/);
   assert.match(app, /session\.continuous = true/);
   assert.match(app, /showDictationInterruption\('Speech recognition stopped before you pressed Stop\.'/);
-  assert.match(app, /mergeSpeechTranscript\(dictationBase,sessionText\)/);
+  assert.match(app, /mergeSpeechTranscript\(dictationBase,recordingText\(\)\)/);
 });
 
 test('speech cleanup collapses only obvious repeated recognition fragments', () => {
