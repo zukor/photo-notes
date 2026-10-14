@@ -677,7 +677,13 @@ function concreteCapturePayload(){
 }
 
 const PAVING_PHOTO_REASONS=[
-  {id:'proposal',label:'Proposal Photo',description:'Document the proposed paving area, existing conditions, access, and measurements for a proposal.'},
+  {id:"pavement_problems",label:"Pavement Problems & Repairs",description:"Document potholes, cracks, damaged pavement, drainage problems, and areas needing repair. Add notes and location so the customer can see what needs attention."},
+  {id:"existing_conditions",label:"Existing Conditions",description:"Record pavement, site access, drainage, boundaries, and surrounding conditions before work begins."},
+  {id:"proposal",label:"Proposed Work",description:"Show the areas and measurements included in the proposed work for a customer proposal."},
+  {id:"work_progress",label:"Work in Progress",description:"Document preparation, paving stages, materials, and progress while work is underway."},
+  {id:"completed_work",label:"Completed Work",description:"Photograph the finished paving and details needed for customer review and handover."},
+  {id:"extra_work",label:"Extra Work",description:"Photograph work outside the original scope and explain why it was needed. This saves photo evidence; use Extra Work Records for a separate extra-work record."},
+  {id:"follow_up",label:"Follow-Up Inspection",description:"Document the pavement condition during a later inspection, including wear, recurring problems, or repairs needing attention."},
   {id:'ticket',label:'Paving Delivery Ticket Scanner',feature:'ticket_scanner',description:'Read asphalt and paving delivery-ticket details and calculate saved daily tonnage.'},
   {id:'plan_sketch',label:'Plan or Sketch Scanner',feature:'camera_readers',description:'Read visible project, sheet, revision, scale, dimension, and field-note information without estimating missing details.'},
   {id:'business_card',label:'Business Card Scanner',feature:'camera_readers',description:'Read contact and company details from a photographed business card.'},
@@ -687,21 +693,24 @@ const PAVING_PHOTO_REASONS=[
   {id:'alignment',label:'Before & After Alignment',feature:'before_after',description:'Compare before and after photos using the same framing.'}
 ];
 function scannerOn(type){return featureOn('camera_readers')&&globalThis.PhotoNotesScannerAvailability?.allowed(state.proType,type)===true;}
-function pavingPhotoReasons(){return PAVING_PHOTO_REASONS.filter(r=>!r.feature||(r.feature==='camera_readers'?scannerOn(r.id):featureOn(r.feature))).sort((a,b)=>a.label.localeCompare(b.label));}
-function pavingPhotoReason(){return pavingPhotoReasons().find(r=>r.id===state._pavingReason)||PAVING_PHOTO_REASONS[0];}
+function pavingPhotoReasons(){return PAVING_PHOTO_REASONS.filter(r=>!r.feature).sort((a,b)=>(typeof uiT==='function'?uiT(a.label):a.label).localeCompare(typeof uiT==='function'?uiT(b.label):b.label));}
+function pavingScannerChoices(){return PAVING_PHOTO_REASONS.filter(r=>r.feature&&r.id!=='alignment'&&(r.feature==='camera_readers'?scannerOn(r.id):featureOn(r.feature))).sort((a,b)=>(typeof uiT==='function'?uiT(a.label):a.label).localeCompare(typeof uiT==='function'?uiT(b.label):b.label));}
+function pavingPhotoReason(){return [...pavingPhotoReasons(),...pavingScannerChoices(),...(featureOn('before_after')?PAVING_PHOTO_REASONS.filter(r=>r.id==='alignment'):[])].find(r=>r.id===state._pavingReason)||PAVING_PHOTO_REASONS[0];}
+function pavingIsJobPhoto(){return !pavingPhotoReason().feature;}
 function pavingPhotoReasonMarkup(){
-  const selected=pavingPhotoReason(),choices=pavingPhotoReasons();
-  return `<section class="paving-photo-context" aria-label="Paving photo reason"><label for="pavingPhotoReason">Photo Reason</label><select id="pavingPhotoReason" aria-describedby="pavingReasonDescription">${choices.map(r=>`<option value="${r.id}" ${r.id===selected.id?'selected':''}>${esc(r.label)}</option>`).join('')}</select><button type="button" class="backlink paving-tools-link" id="pavingToolsGuide">Open Camera Tools guide</button><p id="pavingReasonDescription">${esc(selected.description)}</p></section>`;
+  const selected=pavingPhotoReason(),photo=pavingIsJobPhoto(),scanners=pavingScannerChoices(),alignment=selected.id==='alignment';
+  const selector=photo?'pavingPhotoReason':'pavingScanner',choices=photo?pavingPhotoReasons():scanners;
+  return `<section class="paving-photo-context" aria-label="Paving capture type"><label for="pavingCaptureType">Capture Type</label><select id="pavingCaptureType"><option value="photo" ${photo?'selected':''}>Job Photo</option>${scanners.length?`<option value="scanner" ${!photo&&!alignment?'selected':''}>Scanner / Reader</option>`:''}${featureOn('before_after')?`<option value="alignment" ${alignment?'selected':''}>Before &amp; After</option>`:''}</select>${alignment?'':`<label for="${selector}">${photo?'Photo Reason':'Scanner / Reader'}</label><select id="${selector}" aria-describedby="pavingReasonDescription">${choices.map(r=>`<option value="${r.id}" ${r.id===selected.id?'selected':''}>${esc(r.label)}</option>`).join('')}</select>`}<p id="pavingReasonDescription">${esc(selected.description)}</p></section>`;
 }
 function pavingHasUnsavedPhoto(){
   const id=pavingPhotoReason().id;
-  return id==='proposal'?!!(state.photoFile||state._note):id==='ticket'?!!(ticketPhotoFile||ticketDraft):id==='alignment'?!!alignmentAfterFile:!!(cameraReaderFile||cameraReaderDraft);
+  return pavingIsJobPhoto()?!!(state.photoFile||state._note):id==='ticket'?!!(ticketPhotoFile||ticketDraft):id==='alignment'?!!alignmentAfterFile:!!(cameraReaderFile||cameraReaderDraft);
 }
 function bindPavingPhotoReason(){
-  const select=document.getElementById('pavingPhotoReason');
-  select.onchange=()=>{
-    const previous=pavingPhotoReason().id,next=select.value;if(previous===next)return;
-    if(pavingHasUnsavedPhoto()&&!confirm(uiT('Changing the photo reason will discard this unsaved photo and notes. Continue?'))){select.value=previous;return;}
+  const select=document.getElementById('pavingPhotoReason')||document.getElementById('pavingScanner'),type=document.getElementById('pavingCaptureType');
+  const change=next=>{
+    const previous=pavingPhotoReason().id;if(previous===next)return;
+    if(pavingHasUnsavedPhoto()&&!confirm(uiT('Changing capture type or photo reason will discard the unsaved photo and notes. Continue?'))){if(select)select.value=previous;type.value=pavingIsJobPhoto()?'photo':previous==='alignment'?'alignment':'scanner';return;}
     stopCaptureDictation();captureLocationGeneration++;
     if(state._previewUrl)URL.revokeObjectURL(state._previewUrl);
     state._previewUrl=null;state._captureShareSave=null;state.photoFile=null;state._note='';state.location=null;state.address=null;state._locationPromise=null;state._qualityPromise=null;state._qualityResult=null;
@@ -709,12 +718,12 @@ function bindPavingPhotoReason(){
     cameraReaderFile=null;cameraReaderDraft=null;ticketPhotoFile=null;ticketDraft=null;alignmentAfterFile=null;alignmentBefore=null;
     state._pavingReason=next;renderCapture();
   };
-  window.ConcretePurposeMenu.mount(select);
-  document.getElementById('pavingToolsGuide').onclick=()=>{if(pavingHasUnsavedPhoto()&&!confirm(uiT('Changing the photo reason will discard this unsaved photo and notes. Continue?')))return;state.view='camera-tools';renderApp();};
+  if(select){select.onchange=()=>change(select.value);window.ConcretePurposeMenu.mount(select);}
+  type.onchange=()=>change(type.value==='photo'?'pavement_problems':type.value==='alignment'?'alignment':pavingScannerChoices()[0].id);
 }
 function pavingToolMount(){return document.getElementById('pavingInlineTool')||document.getElementById('body');}
 function pavingToolEmbedded(){return state.view==='capture'&&isPavingClient()&&!!document.getElementById('pavingInlineTool');}
-function setPavingToolBusy(ids,busy){for(const id of ['pavingPhotoReason','pavingPhotoReasonButton','pavingToolsGuide',...ids]){const el=document.getElementById(id);if(el)el.disabled=busy;}}
+function setPavingToolBusy(ids,busy){for(const id of ['pavingCaptureType','pavingPhotoReason','pavingPhotoReasonButton','pavingScanner','pavingScannerButton',...ids]){const el=document.getElementById(id);if(el)el.disabled=busy;}}
 function renderPavingToolCapture(){
   const body=document.getElementById('body'),reason=pavingPhotoReason();body.className='workflow-paving-capture';
   body.innerHTML=pavingPhotoReasonMarkup()+'<div id="pavingInlineTool" class="paving-inline-tool"></div>';
@@ -737,7 +746,7 @@ function duplicatePhotoNote(source) {
     if(state._previewUrl)URL.revokeObjectURL(state._previewUrl);
     state._previewUrl=null;state.photoFile=null;state.location=null;state.address=null;state._locationPromise=null;state._qualityPromise=null;state._qualityResult=null;state._captureShareSave=null;
     void persistCaptureDraft(true).catch(()=>{});
-    state._dims=freshDims();state._measure=null;state.urgency='standard';state._note=context.note;state.area=context.topics[0]||'';state.jobId=context.jobId;state._concreteCapture=context.concrete||null;state._pavingReason='proposal';state._captureTemplateName='';state._duplicateContext=context;window.PhotoNotesCustomFields?.clear();
+    state._dims=freshDims();state._measure=null;state.urgency='standard';state._note=context.note;state.area=context.topics[0]||'';state.jobId=context.jobId;state._concreteCapture=context.concrete||null;state._pavingReason='pavement_problems';state._captureTemplateName='';state._duplicateContext=context;window.PhotoNotesCustomFields?.clear();
     if(state.area&&!state.areas.includes(state.area))state.areas=[...state.areas,state.area];
     if(context.property)state.communityId=context.property.communityId;
     dialog.close();state.view='capture';renderApp();
@@ -764,7 +773,7 @@ function mountDuplicateContext(){
 }
 
 function renderCapture() {
-  if(isPavingClient()&&pavingPhotoReason().id!=='proposal'){renderPavingToolCapture();return;}
+  if(isPavingClient()&&!pavingIsJobPhoto()){renderPavingToolCapture();return;}
   const body = document.getElementById('body');
   body.className = 'workflow-capture';
   body.innerHTML = `
@@ -950,14 +959,14 @@ function renderCameraReader() {
       <div class="row"><button class="btn" id="readerTake">Take Photo</button><button class="btn secondary" id="readerChoose">Choose Existing Photo</button></div>
       <input type="file" accept="image/*" capture="environment" id="readerCam" style="display:none"><input type="file" accept="image/*" id="readerLib" style="display:none">
       <div class="photo-box" id="readerPreviewBox" style="display:none;margin-top:12px"><img id="readerPreview" alt="Source photo"></div>
-      <button class="btn" id="readerRead" style="margin-top:12px" ${embedded?'hidden':''} disabled>${cfg.readLabel}</button><div class="status" id="readerStatus"></div>
+      <button class="btn" id="readerRead" style="margin-top:12px" disabled>${cfg.readLabel}</button><div class="status" id="readerStatus"></div>
     </section><div id="readerReview"></div>`}<div class="formhead" style="margin-top:28px">Saved ${cfg.title.replace('Scanner','Records').replace('Reader','Readings')}</div><label for="readerJobFilter">Saved records by job</label><select id="readerJobFilter">${cameraReaderJobOptions(cameraReaderJobFilter,true)}</select><div id="readerSaved"><p class="status">Loading...</p></div>`;
   const jobFilter=document.getElementById('readerJobFilter');jobFilter.value=cameraReaderJobFilter;jobFilter.onchange=()=>{cameraReaderJobFilter=jobFilter.value;loadCameraReadings();};
   if(!embedded)document.getElementById('readerBack').onclick = () => { state.view='camera-tools'; renderApp(); };
   if(!historyOnly){
   document.getElementById('readerTake').onclick = () => document.getElementById('readerCam').click();
   document.getElementById('readerChoose').onclick = () => document.getElementById('readerLib').click();
-  const pick = e => { const f=e.target.files&&e.target.files[0]; if(!f)return; cameraReaderFile=f; document.getElementById('readerPreview').src=URL.createObjectURL(f); document.getElementById('readerPreviewBox').style.display='block'; document.getElementById('readerRead').disabled=false; document.getElementById('readerReview').innerHTML=''; document.getElementById('readerStatus').textContent='Ready to read.'; e.target.value=''; if(embedded)void scanCameraReader(); };
+  const pick = e => { const f=e.target.files&&e.target.files[0]; if(!f)return; cameraReaderFile=f; document.getElementById('readerPreview').src=URL.createObjectURL(f); document.getElementById('readerPreviewBox').style.display='block'; document.getElementById('readerRead').disabled=false; document.getElementById('readerReview').innerHTML=''; document.getElementById('readerStatus').textContent='Ready to read.'; e.target.value='';  };
   document.getElementById('readerCam').onchange=pick; document.getElementById('readerLib').onchange=pick; document.getElementById('readerRead').onclick=scanCameraReader;
   }
   loadCameraReadings();
@@ -1094,7 +1103,7 @@ ${embedded?'':'<div class="workflow-intro"><strong>Paving Delivery Ticket Scanne
       <input type="file" accept="image/*" capture="environment" id="ticketCam" style="display:none" />
       <input type="file" accept="image/*" id="ticketLib" style="display:none" />
       <div class="photo-box" id="ticketPreviewBox" style="display:none;margin-top:12px"><img id="ticketPreview" alt="Ticket preview" /></div>
-      <button type="button" class="btn" id="ticketRead" style="margin-top:12px" ${embedded?'hidden':''} disabled>Read Ticket</button>
+      <button type="button" class="btn" id="ticketRead" style="margin-top:12px" disabled>Read Ticket</button>
       <div class="status" id="ticketScanStatus"></div>
     </div>
     <div id="ticketReview"></div>
@@ -1113,7 +1122,7 @@ ${embedded?'':'<div class="workflow-intro"><strong>Paving Delivery Ticket Scanne
     document.getElementById('ticketReview').innerHTML = '';
     document.getElementById('ticketScanStatus').textContent = 'Ready to read.';
     e.target.value = '';
-    if(embedded)void scanTicketPhoto();
+
   };
   document.getElementById('ticketCam').onchange = pick;
   document.getElementById('ticketLib').onchange = pick;
@@ -2198,7 +2207,7 @@ async function saveCaptureDurably(options = {}) {
   if(isHoaClient()){Object.assign(payload,{hoa_community_id:state.communityId,hoa_title:document.getElementById('hoaTitle').value.trim(),hoa_item_type:document.getElementById('hoaType').value,hoa_priority:document.getElementById('hoaPriority').value,hoa_area:document.getElementById('hoaArea').value,hoa_directed_to:(document.getElementById('hoaDirected')||{}).value||'',hoa_budget_source:'unassigned',hoa_photo_stage:'initial'});}
   if(state.proType==='property')payload.property_area_id=document.getElementById('paCaptureArea')?.value||'';
   if(isConcreteClient())Object.assign(payload,concreteCapturePayload());
-  if(isPavingClient()){payload.paving_photo_reason='proposal';if(state.jobId)payload.job_id=state.jobId;}
+  if(isPavingClient()){payload.paving_photo_reason=pavingPhotoReason().id;if(state.jobId)payload.job_id=state.jobId;}
   try{globalThis.PhotoNotesIncidents?.payload(payload);}catch(e){toast(e.message);return false;}
   try{globalThis.PhotoNotesFollowUps?.payload(payload);}catch(e){toast(e.message);return false;}
   if(Object.prototype.hasOwnProperty.call(options,'jobId'))payload.job_id=options.jobId||'';
@@ -2933,7 +2942,7 @@ function captureCardHtml(c) {
     ${isProClient()&&c.photo_path?`<button class="btn secondary slim relatedOpen" data-related-id="${c.id}">Related Photos</button>`:''}${window.PhotoNotesFollowUps?.allowed()&&c.photo_path?`<button type="button" class="btn secondary slim" data-fu-source="${c.id}" data-fu-type="capture">Schedule Follow-Up Photo</button>`:''}
     ${state.view === 'edit' ? `<button class="editlink editaddress" data-id="${c.id}" style="padding-left:0">Edit Address</button>` : ''}
     <div class="topicwrap" data-id="${c.id}"><div class="meta">${kind}${tags||'<span class="badge">No Topic</span>'}</div>${topicAction}</div>
-    ${c.paving_photo_reason==='proposal'?'<div class="paving-photo-reason-label">Proposal Photo</div>':''}
+    ${c.paving_photo_reason?`<div class="paving-photo-reason-label">${esc(PAVING_PHOTO_REASONS.find(r=>r.id===c.paving_photo_reason)?.label||c.paving_photo_reason)}</div>`:''}
     ${concreteRow}
     ${isConcreteClient()&&c.photo_path?`<button class="btn secondary slim concrete-area-button" data-id="${c.id}">${(c.footprints||[]).length?'View / Edit Saved Areas ('+c.footprints.length+')':'Measure Patio / Foundation Area'}</button>`:''}
     ${photoEvidencePreview(c)}

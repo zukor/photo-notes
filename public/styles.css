@@ -1282,4 +1282,7 @@ html[data-theme="dark"] :is(.workflow-intro,.organize-panel,.send-feature-panel,
 @media(max-width:700px){.send-document-list>li{display:block}.send-document-list>li>.compact-document-actions{margin-top:10px}.send-document-list .document-send-options label{display:block;width:100%;max-width:100%}.send-document-list .document-delivery-format{box-sizing:border-box;width:100%;min-width:0}.available-documents-heading{flex-wrap:wrap;row-gap:8px}}
 #pavingPhotoReason[hidden] { display:none; }
 
-.paving-tools-link { display:block; min-height:44px; padding:10px 0; color:#000; text-align:left; text-decoration:underline; }
+
+#pavingScanner[hidden] { display:none; }
+#pavingCaptureType { -webkit-appearance:none; appearance:none; height:44px; display:block; box-sizing:border-box; width:100%; min-height:44px; padding:10px 8px; border:1px solid #000; border-radius:8px; background:#fff; color:#000; font:16px Arial,Helvetica,sans-serif; text-align:left; background-image:linear-gradient(45deg,transparent 50%,#000 50%),linear-gradient(135deg,#000 50%,transparent 50%); background-position:calc(100% - 16px) 19px,calc(100% - 11px) 19px; background-size:5px 5px; background-repeat:no-repeat; padding-right:28px; }
+.paving-photo-context > label:not(:first-child) { margin-top:12px; }

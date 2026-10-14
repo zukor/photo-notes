@@ -52,7 +52,7 @@ function controls(){
   const title=label(n);if(!title||title==='!'||title==='→')continue;
   const g=guide(n,title),key=[n.id.replace(/\d+/g,'#'),title,g.text].join('|');
   if(seen.has(key))continue;seen.add(key);
-  const pavingSelect=n.id==='pavingPhotoReasonButton'?document.getElementById('pavingPhotoReason'):null;
+  const pavingSelect=['pavingPhotoReasonButton','pavingScannerButton'].includes(n.id)?document.getElementById(n.id.replace(/Button$/,'')):null;
   const choices=n.tagName==='SELECT'?[...n.options].filter(o=>!o.hidden).map(o=>clean(o.textContent)).filter(Boolean):[];
   // Only structural choices, never user-entered field values, are read into Help.
   items.push({title,text:g.text,terms:g.terms,choices,authored:g.authored,key:keysFor(n),node:n});

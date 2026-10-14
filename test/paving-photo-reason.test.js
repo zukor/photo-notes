@@ -9,17 +9,17 @@ function scanner(kind,api){
  vm.runInContext(reader?fn('scanCameraReader','function renderCameraReaderReview'):fn('scanTicketPhoto','function ticketField'),ctx);
  return {ctx,elements,state,id,scan:()=>reader?ctx.scanCameraReader():ctx.scanTicketPhoto()};
 }
-test('Paving reasons are alphabetical, default to proposal, and obey feature permissions',()=>{
- const context={state:{proType:'paving',_pavingReason:'business_card'},PhotoNotesScannerAvailability:require('../public/scanner-availability'),featureOn:()=>false};vm.createContext(context);vm.runInContext(app.slice(app.indexOf('const PAVING_PHOTO_REASONS='),app.indexOf('function pavingPhotoReasonMarkup')),context);
- assert.deepEqual(Array.from(context.pavingPhotoReasons(),r=>r.id),['proposal']);assert.equal(context.pavingPhotoReason().id,'proposal');
- context.featureOn=()=>true;assert.equal(context.pavingPhotoReasons().length,8);const labels=Array.from(context.pavingPhotoReasons(),r=>r.label);assert.deepEqual(labels,[...labels].sort((a,b)=>a.localeCompare(b)));context.state._pavingReason=null;assert.equal(context.pavingPhotoReason().id,'proposal');
+test('Paving job reasons are alphabetical, default to pavement problems, and scanners obey permissions',()=>{
+ const context={state:{proType:'paving',_pavingReason:null},PhotoNotesScannerAvailability:require('../public/scanner-availability'),featureOn:()=>false};vm.createContext(context);vm.runInContext(app.slice(app.indexOf('const PAVING_PHOTO_REASONS='),app.indexOf('function pavingPhotoReasonMarkup')),context);
+ const labels=Array.from(context.pavingPhotoReasons(),r=>r.label);assert.equal(labels.length,7);assert.deepEqual(labels,[...labels].sort((a,b)=>a.localeCompare(b)));assert.equal(context.pavingPhotoReason().id,'pavement_problems');assert.equal(context.pavingScannerChoices().length,0);
+ context.featureOn=()=>true;assert.equal(context.pavingScannerChoices().length,6);context.state._pavingReason='proposal';assert.equal(context.pavingPhotoReason().label,'Proposed Work');context.state._pavingReason='ticket';assert.equal(context.pavingIsJobPhoto(),false);
 });
 for(const kind of ['reader','ticket']){
  test(kind+' scans once and displays the returned review',async()=>{let calls=0,resolve;const waiting=new Promise(r=>resolve=r);const s=scanner(kind,async()=>{calls++;await waiting;return {ok:true,json:async()=>({ai_read:true,reading:{id:5},ticket:{id:6}})};});const pending=s.scan();await s.scan();assert.equal(calls,1);resolve();await pending;assert.equal(s.state.review,true);});
  test(kind+' ignores a response after leaving its capture controls',async()=>{let resolve;const waiting=new Promise(r=>resolve=r);const s=scanner(kind,async()=>{await waiting;return {ok:true,json:async()=>({reading:{id:5},ticket:{id:6}})};});const pending=s.scan();s.elements[s.id]={disabled:false};resolve();await pending;assert.equal(s.state.review,undefined);assert.equal(s.elements[s.id].disabled,false);});
  test(kind+' exposes retry when automatic scanning fails',async()=>{const s=scanner(kind,async()=>{throw new Error('offline')});await s.scan();assert.equal(s.elements[s.id].disabled,false);assert.equal(s.elements[s.id].hidden,false);});
 }
-test('offline upload preserves the proposal reason',()=>{const context={FormData};vm.createContext(context);vm.runInContext(app.split('\n').find(x=>x.startsWith('function payloadFormData(')),context);assert.equal(context.payloadFormData({paving_photo_reason:'proposal'}).get('paving_photo_reason'),'proposal');});
+test('offline upload preserves every job-photo reason',()=>{const context={FormData};vm.createContext(context);vm.runInContext(app.split('\n').find(x=>x.startsWith('function payloadFormData(')),context);for(const reason of ['pavement_problems','existing_conditions','proposal','work_progress','completed_work','extra_work','follow_up'])assert.equal(context.payloadFormData({paving_photo_reason:reason}).get('paving_photo_reason'),reason);});
 for(const kind of ['reader','ticket']){
  test(kind+' preserves manual review and retry after a service setup failure',async()=>{
   const s=scanner(kind,async()=>({ok:true,json:async()=>({ai_read:false,ai_error:'not_configured',ai_message:'Automatic scanning is not set up yet. Your photo is available for manual entry.',reading:{id:5},ticket:{id:6}})}));

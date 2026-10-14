@@ -10,9 +10,9 @@
     if (restoreFocus && button.isConnected) button.focus();
   }
   function mount(select) {
-    const paving = select.id === 'pavingPhotoReason';
-    const buttonId = paving ? 'pavingPhotoReasonButton' : 'concretePurposeButton';
-    const menuId = paving ? 'pavingPhotoReasonMenu' : 'concretePurposeMenu';
+    const paving = select.id.startsWith('paving');
+    const buttonId = paving ? select.id+'Button' : 'concretePurposeButton';
+    const menuId = paving ? select.id+'Menu' : 'concretePurposeMenu';
     close();
     let button = document.getElementById(buttonId);
     if (!button) {
@@ -36,7 +36,7 @@
       menu.id = menuId;
       menu.className = 'concrete-purpose-menu';
       menu.setAttribute('role', 'listbox');
-      menu.setAttribute('aria-label', window.photoNotesI18n?.t(paving ? 'Photo Reason' : 'Photo purpose') || (paving ? 'Photo Reason' : 'Photo purpose'));
+      menu.setAttribute('aria-label', window.photoNotesI18n?.t(paving ? (select.id==='pavingScanner'?'Scanner / Reader':'Photo Reason') : 'Photo purpose') || (paving ? (select.id==='pavingScanner'?'Scanner / Reader':'Photo Reason') : 'Photo purpose'));
       for (const option of select.options) {
         const item = document.createElement('button');
         item.type = 'button';
