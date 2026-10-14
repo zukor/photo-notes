@@ -1274,3 +1274,5 @@ button:disabled {
 html[data-theme="dark"] :is(.workflow-intro,.organize-panel,.send-feature-panel,.document-preset-row,.new-document-settings details) { border-color:#fff; }
 
 #pavingPhotoReason[hidden] { display:none; }
+
+.paving-tools-link { display:block; min-height:44px; padding:10px 0; color:#000; text-align:left; text-decoration:underline; }
