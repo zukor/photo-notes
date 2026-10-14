@@ -691,7 +691,7 @@ function pavingPhotoReasons(){return PAVING_PHOTO_REASONS.filter(r=>!r.feature||
 function pavingPhotoReason(){return pavingPhotoReasons().find(r=>r.id===state._pavingReason)||PAVING_PHOTO_REASONS[0];}
 function pavingPhotoReasonMarkup(){
   const selected=pavingPhotoReason(),choices=pavingPhotoReasons();
-  return `<section class="paving-photo-context" aria-label="Paving photo reason"><label for="pavingPhotoReason">Photo Reason</label><select id="pavingPhotoReason" aria-describedby="pavingReasonDescription">${choices.map(r=>`<option value="${r.id}" ${r.id===selected.id?'selected':''}>${esc(r.label)}</option>`).join('')}</select><p id="pavingReasonDescription">${esc(selected.description)}</p></section>`;
+  return `<section class="paving-photo-context" aria-label="Paving photo reason"><label for="pavingPhotoReason">Photo Reason</label><select id="pavingPhotoReason" aria-describedby="pavingReasonDescription">${choices.map(r=>`<option value="${r.id}" ${r.id===selected.id?'selected':''}>${esc(r.label)}</option>`).join('')}</select><button type="button" class="backlink paving-tools-link" id="pavingToolsGuide">Open Camera Tools guide</button><p id="pavingReasonDescription">${esc(selected.description)}</p></section>`;
 }
 function pavingHasUnsavedPhoto(){
   const id=pavingPhotoReason().id;
@@ -710,10 +710,11 @@ function bindPavingPhotoReason(){
     state._pavingReason=next;renderCapture();
   };
   window.ConcretePurposeMenu.mount(select);
+  document.getElementById('pavingToolsGuide').onclick=()=>{if(pavingHasUnsavedPhoto()&&!confirm(uiT('Changing the photo reason will discard this unsaved photo and notes. Continue?')))return;state.view='camera-tools';renderApp();};
 }
 function pavingToolMount(){return document.getElementById('pavingInlineTool')||document.getElementById('body');}
 function pavingToolEmbedded(){return state.view==='capture'&&isPavingClient()&&!!document.getElementById('pavingInlineTool');}
-function setPavingToolBusy(ids,busy){for(const id of ['pavingPhotoReason','pavingPhotoReasonButton',...ids]){const el=document.getElementById(id);if(el)el.disabled=busy;}}
+function setPavingToolBusy(ids,busy){for(const id of ['pavingPhotoReason','pavingPhotoReasonButton','pavingToolsGuide',...ids]){const el=document.getElementById(id);if(el)el.disabled=busy;}}
 function renderPavingToolCapture(){
   const body=document.getElementById('body'),reason=pavingPhotoReason();body.className='workflow-paving-capture';
   body.innerHTML=pavingPhotoReasonMarkup()+'<div id="pavingInlineTool" class="paving-inline-tool"></div>';
