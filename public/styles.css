@@ -629,10 +629,6 @@ html:not([data-theme="dark"]) textarea::placeholder { color:#595959 !important; 
 .paving-photo-context > label { margin-top:0; }
 .paving-photo-context select { width:100%; min-width:0; }
 .paving-photo-context p { color:var(--pn-text-000,#000); font-size:14px; line-height:1.5; margin:8px 0; }
-.paving-reason-guide { margin-top:12px; border:1px solid var(--pn-border-2455d9,#2455d9); border-radius:10px; padding:10px 12px; }
-.paving-reason-guide summary { cursor:pointer; color:var(--pn-text-000,#000); font-size:14px; font-weight:bold; }
-.paving-reason-guide article { margin-top:14px; color:var(--pn-text-000,#000); }
-.paving-reason-guide article p { margin:4px 0; }
 .paving-photo-reason-label { color:var(--pn-text-000,#000); font-weight:bold; margin:8px 0; }
 #pavingInlineTool [hidden] { display:none !important; }
 #pavingInlineTool > .workflow-intro { margin-top:0; }
