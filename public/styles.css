@@ -1277,5 +1277,5 @@ html[data-theme="dark"] :is(.workflow-intro,.organize-panel,.send-feature-panel,
 
 
 #pavingScanner[hidden] { display:none; }
-#pavingCaptureType { display:block; box-sizing:border-box; width:100%; min-height:44px; padding:10px 8px; border:1px solid #000; border-radius:8px; background:#fff; color:#000; font:16px Arial,Helvetica,sans-serif; text-align:left; }
+#pavingCaptureType { -webkit-appearance:none; appearance:none; height:44px; display:block; box-sizing:border-box; width:100%; min-height:44px; padding:10px 8px; border:1px solid #000; border-radius:8px; background:#fff; color:#000; font:16px Arial,Helvetica,sans-serif; text-align:left; background-image:linear-gradient(45deg,transparent 50%,#000 50%),linear-gradient(135deg,#000 50%,transparent 50%); background-position:calc(100% - 16px) 19px,calc(100% - 11px) 19px; background-size:5px 5px; background-repeat:no-repeat; padding-right:28px; }
 .paving-photo-context > label:not(:first-child) { margin-top:12px; }
