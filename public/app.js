@@ -1483,11 +1483,15 @@ async function toggleDictation() {
   recordDictationEvent('request');
   if(btn)btn.textContent='Starting microphone... tap to cancel';
   dictationWatchdog=setTimeout(()=>{if(requestGeneration!==dictationGeneration)return;recordDictationEvent('permission-timeout');stopCaptureDictation();showDictationInterruption('The microphone did not start.');},15000);
-  if(!isIOS())try {
-    // Preflight permission on Android/desktop. On iPhone, start speech
-    // directly from the tap to preserve Safari's user gesture.
+  try {
+    if(isIOS()&&window.PhotoNotesSpeechDocument?.primeMicrophone){
+      recordDictationEvent('microphone-reset');
+      if(!await window.PhotoNotesSpeechDocument.primeMicrophone(()=>requestGeneration===dictationGeneration))return;
+    }else{
+    // Permission is requested from the tap. iPhone resets direct capture first.
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     stream.getTracks().forEach(track => track.stop());
+    }
   } catch (e) {
     if(requestGeneration!==dictationGeneration)return;
     recordDictationEvent('permission-error',e.name);stopCaptureDictation();

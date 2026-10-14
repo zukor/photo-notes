@@ -27,7 +27,7 @@ function releaseSpeech(){
 }
 
 function stopSpeech(cancel=false){
- clearWatchdog();speechWanted=false;clearTimeout(speechRestart);speechRestart=null;
+ clearWatchdog();speechWanted=false;speechSession++;clearTimeout(speechRestart);speechRestart=null;
  const speech=recognizer;
  if(el('feedbackStatus')&&!el('feedbackSend').disabled)el('feedbackStatus').textContent=cancel?'':speech?'Finishing dictation...':'Dictation stopped. Captured words are kept.';
  if(!speech){releaseSpeech();return Promise.resolve();}
@@ -52,7 +52,7 @@ function mount(){if(el('feedbackFab'))return;
  el('feedbackRemoveScreenshot').onclick=()=>{editor?.destroy();editor=null;blob=null;el('feedbackMarkupHost').replaceChildren();el('feedbackRemoveScreenshot').hidden=true;};
  el('feedbackScreenshot').onclick=async()=>{const token=generation;el('feedbackScreenshot').disabled=true;el('feedbackStatus').textContent='Capturing screenshot...';dialog.style.visibility='hidden';try{await new Promise(requestAnimationFrame);const shot=await captureIssueScreenshot();if(token!==generation)return;editor?.destroy();blob=shot;el('feedbackMarkupHost').innerHTML=IssueMarkup.markup();const host=el('feedbackMarkupHost').firstElementChild;host.hidden=false;editor=IssueMarkup.create(host,blob);await editor.ready;host.querySelector('#issueMarkupRetake').onclick=()=>el('feedbackScreenshot').click();el('feedbackRemoveScreenshot').hidden=false;el('feedbackStatus').textContent='Screenshot attached. You can mark it with arrows, shapes, or text.';}catch{if(token===generation)el('feedbackStatus').textContent='Screenshot unavailable. You can still send your feedback.';}finally{dialog.style.visibility='';el('feedbackScreenshot').disabled=false;}};
  const Speech=window.SpeechRecognition||window.webkitSpeechRecognition;
- if(Speech){el('feedbackDictate').hidden=false;el('feedbackDictate').onclick=()=>{
+ if(Speech){el('feedbackDictate').hidden=false;el('feedbackDictate').onclick=async()=>{
   if(speechWanted||recognizer||speechFinish){void stopSpeech();return;}
   const field=el('feedbackDescription'),token=generation;
   speechWanted=true;emptySessions=0;el('feedbackStatus').textContent='Listening. Pause naturally, then keep speaking. Tap Stop dictation when finished.';
@@ -90,6 +90,21 @@ function mount(){if(el('feedbackFab'))return;
    speechWatchdog=setTimeout(()=>{if(token!==generation||recognizer!==speech||!speechWanted)return;speechEvent('no-result-timeout');interrupted();},30000);
    try{speech.start();el('feedbackDictate').textContent='Stop dictation';}catch(error){speechEvent('start-error',error.name);interrupted();}
   }
+  if(isolatedSpeech()&&window.PhotoNotesSpeechDocument?.primeMicrophone){
+   const attempt=++speechSession;
+   speechButton();el('feedbackStatus').textContent='Starting microphone...';
+   speechEvent('microphone-reset');
+   try{
+    const current=()=>speechWanted&&token===generation&&attempt===speechSession&&el('feedbackDialog').open;
+    if(!await window.PhotoNotesSpeechDocument.primeMicrophone(current))return;
+   }catch(error){
+    if(token!==generation||attempt!==speechSession||!speechWanted)return;
+    speechEvent('permission-error',error.name);speechWanted=false;releaseSpeech();
+    el('feedbackStatus').textContent='The microphone could not start. Allow microphone access, then try again. You can also type your feedback.';
+    return;
+   }
+  }
+  el('feedbackStatus').textContent='Listening. Pause naturally, then keep speaking. Tap Stop dictation when finished.';
   start();
  };}
  el('feedbackForm').onsubmit=async e=>{e.preventDefault();if(el('feedbackSend').disabled)return;el('feedbackSend').disabled=true;el('feedbackDictate').disabled=true;el('feedbackStatus').textContent='Sending feedback...';const token=generation;await stopSpeech();if(token!==generation)return;const text=el('feedbackDescription').value.trim();if(!text){el('feedbackSend').disabled=false;el('feedbackDictate').disabled=false;el('feedbackStatus').textContent='Please describe your feedback.';return;}el('feedbackSend').disabled=true;el('feedbackScreenshot').disabled=true;try{const fd=new FormData();fd.append('feedback_category',new FormData(e.target).get('feedbackCategory'));fd.append('description',text);fd.append('page_name',typeof state!=='undefined'?state.view||'Photo Notes':'Photo Notes');fd.append('page_url',location.href);fd.append('viewport',`${innerWidth} x ${innerHeight}`);fd.append('user_agent',navigator.userAgent);const shot=editor?await editor.exportBlob():blob;if(token!==generation)return;if(shot)fd.append('screenshot',shot,'feedback.jpg');const r=await api('/api/issues',{method:'POST',body:fd});const data=await r.json();if(token!==generation)return;if(!r.ok)throw Error(data.error||'Feedback could not be sent. Please try again.');generation++;releaseSpeech();resetFeedback();el('feedbackSend').disabled=false;el('feedbackStatus').textContent=`Feedback #${data.id} sent. Thank you.`;el('feedbackCancel').textContent='Close';}catch(error){if(token===generation){el('feedbackStatus').textContent=error.message;el('feedbackSend').disabled=false;}}finally{if(token===generation||token+1===generation){el('feedbackScreenshot').disabled=false;speechButton();}}};
