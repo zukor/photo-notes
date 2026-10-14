@@ -30,8 +30,17 @@ const {chromium,webkit}=require('playwright');
    assert.equal(await page.evaluate(()=>state._note),'Typed starting note. '+final,edition+' saved draft source');
    const stoppedCount=await page.evaluate(()=>speechSessions.length);await page.locator('#dictate').click();await page.waitForFunction(count=>speechSessions.length>count,stoppedCount);await page.evaluate(text=>speechSessions.at(-1).onresult({results:[[{transcript:text}]]}),lead+'10-704-7284');await page.locator('#dictate').click();
    assert.equal(await page.locator('#note').inputValue(),'Typed starting note. '+final+' '+lead+'10-704-7284',edition+' separate recording keeps changed digits');
+
+   const beforeSpelling=await page.locator('#note').inputValue(),beforeCount=await page.evaluate(()=>speechSessions.length);
+   await page.locator('#dictate').click();await page.waitForFunction(count=>speechSessions.length>count,beforeCount);
+   const first='rules can change with aquifer levels so residents should check s a w s. or for the current';
+   const next='rules can change with aquifer levels so residents should check as a w s. or for the current stage';
+   await page.evaluate(({first,next})=>speechSessions.at(-1).onresult({results:[[{transcript:first}],[{transcript:next}]]}),{first,next});
+   await page.locator('#dictate').click();
+   assert.equal(await page.locator('#note').inputValue(),beforeSpelling+' '+next,edition+' revised spelled-address snapshot appears once');
+   assert.equal(await page.evaluate(()=>state._note),beforeSpelling+' '+next,edition+' spelled-address draft source');
    assert(await page.locator('#dictate').evaluate(el=>el.getBoundingClientRect().right<=innerWidth),edition+' button fits');
   }
-  console.log(`${engine.name()} ${width}: Android continuation/Stop/manual restart, ten editions PASS`);await page.close();
+  console.log(`${engine.name()} ${width}: Android continuation/Stop/manual restart and spelled-address snapshots, ten editions PASS`);await page.close();
  }}finally{await browser.close();}}}finally{server.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});
