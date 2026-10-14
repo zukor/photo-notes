@@ -92,3 +92,13 @@ test('two-digit recognized phone openings reconcile dashes without changing digi
  assert.equal(combine(['call to 10','call to 10-704']),'call to 10 call to 10-704');
  assert.equal(context.mergeSpeechTranscript(parts[0],parts.at(-1)),parts[0]+' '+parts.at(-1));
 });
+
+
+test('automatic continuation only replaces matching number growth, preserving short emphasis and consequential changes',()=>{
+ const lead='if you see Water waste you can report it by calling to ';
+ assert.equal(context.mergeSpeechContinuation(lead+'10',lead+'10-704'),lead+'10-704');
+ assert.equal(context.mergeSpeechContinuation(lead+'10',lead+'11-704'),lead+'10 '+lead+'11-704');
+ assert.equal(context.mergeSpeechContinuation('very','very important'),'very very important');
+ assert.equal(context.mergeSpeechContinuation('yes','yes'),'yes yes');
+ assert.equal(context.mergeSpeechContinuation(lead+'10',lead.replace('can report','cannot report')+'10-704'),lead+'10 '+lead.replace('can report','cannot report')+'10-704');
+});

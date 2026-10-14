@@ -1522,7 +1522,7 @@ function startDictationSession(SR, continuedText = '') {
   let sessionText = '', microphoneStarted = false;
   // Automatic Android restarts belong to one user recording. Reconcile its
   // received snapshots before joining them to words present before the tap.
-  const recordingText = () => continuedText ? combineSpeechResults([continuedText,sessionText]) : sessionText;
+  const recordingText = () => continuedText ? mergeSpeechContinuation(continuedText,sessionText) : sessionText;
   const started=()=>{
     if(generation!==dictationGeneration||!dictationActive)return;
     microphoneStarted = true;
