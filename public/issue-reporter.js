@@ -198,6 +198,21 @@ function combineSpeechResults(parts){
         segments.pop();segments.push(text);continue;
       }
     }
+    // Spelling an address can revise a letter token, e.g. "s" to "as".
+    // Require a long exact opening, only one one-character revision inside
+    // a run of spoken letters, and at least three unchanged following words.
+    if(previous.length>=13&&incoming.length>previous.length&&prefix(previous.slice(0,8),incoming)){
+      const changed=previous.map((word,i)=>word===incoming[i]?-1:i).filter(i=>i>=0);
+      if(changed.length===1){
+        const at=changed[0],pair=[previous[at],incoming[at]].sort((a,b)=>a.length-b.length);
+        const letter=word=>/^[a-z]$/.test(word);let neighbors=0;
+        for(let i=at-1;i>=0&&letter(previous[i]);i--)neighbors++;
+        for(let i=at+1;i<previous.length&&letter(previous[i]);i++)neighbors++;
+        if(at<=previous.length-4&&neighbors>=2&&letter(pair[0])&&/^[a-z]{2}$/.test(pair[1])&&pair[1].includes(pair[0])&&pair[1]!=='no'){
+          segments.pop();segments.push(text);continue;
+        }
+      }
+    }
     // A long expanding indexed snapshot may also revise one recognized word.
     // Require a strong unchanged opening and preserve number/negation changes.
     // This applies only within indexed results, never across separate sessions.
