@@ -5,7 +5,7 @@ const {chromium,webkit}=require('playwright');
  const app=express();app.use(express.static(require('node:path').join(__dirname,'../public')));const server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));
  try{for(const engine of [chromium,webkit]){const browser=await engine.launch();try{for(const width of [390,1440]){
  const page=await browser.newPage({viewport:{width,height:900},serviceWorkers:'block',userAgent:'Mozilla/5.0 (iPhone)'});
- await page.addInitScript(()=>{localStorage.setItem('pn_install_prompt_dismissed_v1','1');Object.defineProperty(navigator,'mediaDevices',{configurable:true,value:{getUserMedia:async()=>{window.top.speechNeedsReset=false;window.top.directCapture=true;return {getTracks:()=>[{stop(){window.top.directCapture=false;}}]};}}});const root=window.top;root.speechSessions||=[];root.speechPhrase||='';root.speechOwner||=null;window.SpeechRecognition=class{constructor(){this.documentIdentity=window;root.speechSessions.push(this);}start(){if(root.speechOwner||root.directCapture)throw Error('Microphone still owned');if(root.speechNeedsReset)throw Error('Shared audio session needs reset');root.speechOwner=this;this.onstart?.();}stop(){root.speechNeedsReset=true;setTimeout(()=>{this.onresult?.({results:[[{transcript:root.speechPhrase}]]});if(root.speechOwner===this)root.speechOwner=null;this.onend?.();},30);}abort(){if(root.speechOwner===this)root.speechOwner=null;}};});
+ await page.addInitScript(()=>{localStorage.setItem('pn_install_prompt_dismissed_v1','1');Object.defineProperty(navigator,'mediaDevices',{configurable:true,value:{getUserMedia:async()=>{if(window.top.speechOwner)throw Error('Speech still owns microphone');window.top.speechNeedsReset=false;window.top.directCapture=true;return {getTracks:()=>[{stop(){window.top.directCapture=false;}}]};}}});const root=window.top;root.speechSessions||=[];root.speechPhrase||='';root.speechOwner||=null;window.SpeechRecognition=class{constructor(){this.documentIdentity=window;root.speechSessions.push(this);}start(){if(root.speechOwner||root.directCapture)throw Error('Microphone still owned');if(root.speechNeedsReset)throw Error('Shared audio session needs reset');root.speechOwner=this;this.onstart?.();}stop(){root.speechNeedsReset=true;if(root.speechHangStop)return;setTimeout(()=>{this.onresult?.({results:[[{transcript:root.speechPhrase}]]});if(root.speechOwner===this)root.speechOwner=null;this.onend?.();},30);}abort(){if(root.speechOwner===this)root.speechOwner=null;}};});
  await page.route('**/api/**',route=>{const path=new URL(route.request().url()).pathname;return route.fulfill({json:path==='/api/me'?{id:1,name:'Test',plan:'pro',pro_type:'general',role:'user',edition_access:['pro']}:path==='/api/customer-feedback/access'?{enabled:true}:path==='/api/billing/config'?{checkout_enabled:false}:path==='/api/hoa/context'?{communities:[],members:[]}:[]});});
  await page.goto(`http://127.0.0.1:${server.address().port}`);await page.waitForFunction(()=>state.me);
  for(const edition of ['basic','general','contractor','paving','asphalt','concrete','roofer','hoa','property','issue']){
@@ -31,6 +31,25 @@ const {chromium,webkit}=require('playwright');
   assert.equal(await page.locator('#feedbackDescription').inputValue(),'Feedback cross flow');
   await page.locator('#feedbackCancel').click();
  }
+ // Feedback must finish an active Capture before taking the microphone.
+ await page.evaluate(()=>window.speechPhrase='Capture handoff');
+ await page.locator('#dictate').click();await page.waitForFunction(()=>!dictationPending);
+ await page.locator('#feedbackFab').click();await page.locator('#feedbackDictate').click();
+ await page.waitForFunction(()=>document.getElementById('feedbackStatus').textContent.startsWith('Listening.'));
+ assert((await page.locator('#note').inputValue()).endsWith('Capture handoff'));
+ await page.evaluate(()=>window.speechPhrase='Feedback handoff');
+ await page.locator('#feedbackDictate').click();await page.waitForFunction(()=>document.getElementById('feedbackDictate').textContent==='Dictate feedback'&&!document.getElementById('feedbackDictate').disabled);
+ assert.equal(await page.locator('#feedbackDescription').inputValue(),'Feedback handoff');await page.locator('#feedbackCancel').click();
+ // A failed Capture that never ends must be retired within eight seconds.
+ await page.clock.install();await page.evaluate(()=>{window.speechHangStop=true;});
+ await page.locator('#dictate').click();await page.clock.fastForward(301);await page.waitForFunction(()=>!dictationPending);
+ await page.locator('#feedbackFab').click();await page.locator('#feedbackDictate').click();
+ await page.clock.fastForward(8001);await page.clock.fastForward(301);
+ await page.waitForFunction(()=>document.getElementById('feedbackStatus').textContent.startsWith('Listening.'));
+ assert(await page.evaluate(()=>speechOwner===speechSessions.at(-1)));
+ await page.clock.resume();await page.evaluate(()=>{window.speechHangStop=false;window.speechPhrase='Feedback after stalled Capture';});
+ await page.locator('#feedbackDictate').click();await page.waitForFunction(()=>document.getElementById('feedbackDictate').textContent==='Dictate feedback'&&!document.getElementById('feedbackDictate').disabled);
+ assert.equal(await page.locator('#feedbackDescription').inputValue(),'Feedback after stalled Capture');await page.locator('#feedbackCancel').click();
  console.log(`${engine.name()} ${width}: 10 edition Capture screens, 10 repeated Stop/Start cycles each PASS`);await page.close();
  }}finally{await browser.close();}}}finally{server.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

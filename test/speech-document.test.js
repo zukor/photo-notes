@@ -17,17 +17,25 @@ test('shared microphone reset releases every track before speech may start and c
 });
 test('cancel during microphone permission releases late tracks and never starts speech',async()=>{
  let resolve,stopped=false,current=true;const h=microphoneHarness(()=>new Promise(done=>resolve=done));
- const pending=h.prime(()=>current);await Promise.resolve();current=false;resolve({getTracks:()=>[{stop(){stopped=true;}}]});
+ const pending=h.prime(()=>current);await Promise.resolve();await Promise.resolve();current=false;resolve({getTracks:()=>[{stop(){stopped=true;}}]});
  assert.equal(await pending,false);assert(stopped);assert.equal(h.delays.length,0);
 });
-test('microphone reset serializes both features and recovers after permission denial',async()=>{
- let reject;const h=microphoneHarness(()=>new Promise((_,fail)=>reject=fail));
- const pending=h.prime();await assert.rejects(h.prime(),/already in progress/);reject(new Error('denied'));await assert.rejects(pending,/denied/);
- const retry=h.prime();await Promise.resolve();reject(new Error('denied again'));await assert.rejects(retry,/denied again/);
+test('microphone resets queue across both features and recover after permission denial',async()=>{
+ const requests=[];const h=microphoneHarness(()=>new Promise((resolve,reject)=>requests.push({resolve,reject})));
+ const first=h.prime(),second=h.prime();
+ while(requests.length<1)await new Promise(r=>setTimeout(r,0));assert.equal(requests.length,1);
+ requests[0].reject(new Error('denied'));await assert.rejects(first,/denied/);
+ while(requests.length<2)await new Promise(r=>setTimeout(r,0));requests[1].resolve({getTracks:()=>[{stop(){}}]});assert.equal(await second,true);
+});
+test('a queued recording canceled before its turn does not request microphone access',async()=>{
+ let resolve,calls=0;const h=microphoneHarness(()=>{calls++;return new Promise(done=>resolve=done);});
+ const first=h.prime(),second=h.prime(()=>false);
+ while(!resolve)await new Promise(r=>setTimeout(r,0));resolve({getTracks:()=>[{stop(){}}]});
+ assert.equal(await first,true);assert.equal(await second,false);assert.equal(calls,1);
 });
 test('permission timeout releases a late microphone stream without starting recognition',async()=>{
  let resolve,stops=0;const timers=new Map(),window={addEventListener(){}};
  vm.runInNewContext(fs.readFileSync('public/speech-document.js','utf8'),{window,navigator:{mediaDevices:{getUserMedia:()=>new Promise(done=>resolve=done)}},setTimeout(fn,ms){timers.set(ms,fn);return ms;},clearTimeout(id){timers.delete(id);}});
- const pending=window.PhotoNotesSpeechDocument.primeMicrophone();await Promise.resolve();timers.get(15000)();
+ const pending=window.PhotoNotesSpeechDocument.primeMicrophone();await Promise.resolve();await Promise.resolve();timers.get(15000)();
  await assert.rejects(pending,/timed out/);resolve({getTracks:()=>[{stop(){stops++;}}]});await Promise.resolve();await Promise.resolve();assert.equal(stops,1);
 });

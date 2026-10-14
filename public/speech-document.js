@@ -2,11 +2,14 @@
  'use strict';
  // Reset Safari's page-wide audio capture routing before a speech attempt.
  // Never keep a getUserMedia track alive alongside SpeechRecognition.
- let priming=false;
+ let microphoneQueue=Promise.resolve();
  async function primeMicrophone(isCurrent=()=>true){
-  if(priming)throw new Error('Microphone initialization already in progress');
+  const previous=microphoneQueue;let unlockMicrophone;
+  microphoneQueue=new Promise(resolve=>unlockMicrophone=resolve);
+  await previous;
+  try{
+  if(!isCurrent())return false;
   if(!navigator.mediaDevices?.getUserMedia)throw new Error('Microphone access unavailable');
-  priming=true;
   let retired=false,deadline;
   const request=Promise.resolve().then(()=>navigator.mediaDevices.getUserMedia({audio:true})).then(stream=>{
    if(retired){stream.getTracks().forEach(track=>track.stop());return null;}
@@ -19,7 +22,8 @@
    // Let WebKit finish deactivating direct capture before speech takes ownership.
    await new Promise(resolve=>setTimeout(resolve,300));
    return isCurrent();
-  }finally{retired=true;clearTimeout(deadline);priming=false;}
+  }finally{retired=true;clearTimeout(deadline);}
+  }finally{unlockMicrophone();}
  }
  function create(){
  let frame=null,ready=false,failed=false,notify=()=>{},timer=null;

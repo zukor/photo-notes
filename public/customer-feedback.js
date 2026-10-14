@@ -90,12 +90,18 @@ function mount(){if(el('feedbackFab'))return;
    speechWatchdog=setTimeout(()=>{if(token!==generation||recognizer!==speech||!speechWanted)return;speechEvent('no-result-timeout');interrupted();},30000);
    try{speech.start();el('feedbackDictate').textContent='Stop dictation';}catch(error){speechEvent('start-error',error.name);interrupted();}
   }
+  const attempt=++speechSession;
+  const current=()=>speechWanted&&token===generation&&attempt===speechSession&&el('feedbackDialog').open;
+  speechButton();
+  if(typeof finishCaptureDictation==='function'&&(dictationActive||dictationPending||dictationFinish)){
+   el('feedbackStatus').textContent='Finishing Capture notes...';
+   await finishCaptureDictation();
+   if(!current())return;
+  }
   if(isolatedSpeech()&&window.PhotoNotesSpeechDocument?.primeMicrophone){
-   const attempt=++speechSession;
    speechButton();el('feedbackStatus').textContent='Starting microphone...';
    speechEvent('microphone-reset');
    try{
-    const current=()=>speechWanted&&token===generation&&attempt===speechSession&&el('feedbackDialog').open;
     if(!await window.PhotoNotesSpeechDocument.primeMicrophone(current))return;
    }catch(error){
     if(token!==generation||attempt!==speechSession||!speechWanted)return;
