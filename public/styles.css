@@ -1276,3 +1276,5 @@ button:disabled {
 .new-document-settings summary { padding:14px 2px; }
 .new-document-settings details > :not(summary) { margin-left:2px; margin-right:2px; }
 html[data-theme="dark"] :is(.workflow-intro,.organize-panel,.send-feature-panel,.document-preset-row,.new-document-settings details) { border-color:#fff; }
+
+#pavingPhotoReason[hidden] { display:none; }

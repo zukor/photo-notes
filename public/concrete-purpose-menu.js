@@ -10,19 +10,22 @@
     if (restoreFocus && button.isConnected) button.focus();
   }
   function mount(select) {
+    const paving = select.id === 'pavingPhotoReason';
+    const buttonId = paving ? 'pavingPhotoReasonButton' : 'concretePurposeButton';
+    const menuId = paving ? 'pavingPhotoReasonMenu' : 'concretePurposeMenu';
     close();
-    let button = document.getElementById('concretePurposeButton');
+    let button = document.getElementById(buttonId);
     if (!button) {
       button = document.createElement('button');
-      button.id = 'concretePurposeButton';
+      button.id = buttonId;
       button.type = 'button';
       button.className = 'concrete-purpose-button';
       button.setAttribute('aria-haspopup', 'listbox');
-      button.setAttribute('aria-controls', 'concretePurposeMenu');
-      button.setAttribute('aria-describedby', 'concretePhotoGuide');
+      button.setAttribute('aria-controls', menuId);
+      button.setAttribute('aria-describedby', select.getAttribute('aria-describedby') || 'concretePhotoGuide');
       select.after(button);
       select.hidden = true;
-      document.querySelector('label[for="concretePurpose"]').htmlFor = button.id;
+      document.querySelector(`label[for="${select.id}"]`).htmlFor = button.id;
     }
     button.disabled = select.disabled;
     button.setAttribute('aria-expanded', 'false');
@@ -30,10 +33,10 @@
     button.onclick = () => {
       if (active) { close(); return; }
       const menu = document.createElement('div');
-      menu.id = 'concretePurposeMenu';
+      menu.id = menuId;
       menu.className = 'concrete-purpose-menu';
       menu.setAttribute('role', 'listbox');
-      menu.setAttribute('aria-label', window.photoNotesI18n?.t('Photo purpose') || 'Photo purpose');
+      menu.setAttribute('aria-label', window.photoNotesI18n?.t(paving ? 'Photo Reason' : 'Photo purpose') || (paving ? 'Photo Reason' : 'Photo purpose'));
       for (const option of select.options) {
         const item = document.createElement('button');
         item.type = 'button';
@@ -43,8 +46,8 @@
         item.textContent = option.textContent;
         item.onclick = () => {
           select.value = option.value;
-          button.textContent = option.textContent;
           select.dispatchEvent(new Event('change', {bubbles: true}));
+          button.textContent = select.selectedOptions[0]?.textContent || '';
           close(true);
         };
         menu.append(item);
