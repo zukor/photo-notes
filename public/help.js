@@ -52,9 +52,11 @@ function controls(){
   const title=label(n);if(!title||title==='!'||title==='→')continue;
   const g=guide(n,title),key=[n.id.replace(/\d+/g,'#'),title,g.text].join('|');
   if(seen.has(key))continue;seen.add(key);
+  const pavingSelect=n.id==='pavingPhotoReasonButton'?document.getElementById('pavingPhotoReason'):null;
   const choices=n.tagName==='SELECT'?[...n.options].filter(o=>!o.hidden).map(o=>clean(o.textContent)).filter(Boolean):[];
   // Only structural choices, never user-entered field values, are read into Help.
   items.push({title,text:g.text,terms:g.terms,choices,authored:g.authored,key:keysFor(n),node:n});
+  if(pavingSelect)for(const option of pavingSelect.options){const text=catalog.pavingPhotoReasonHelp[option.value];if(text)items.push({title:clean(option.textContent),text,terms:g.terms,choices:[],authored:true,key:`paving-reason-${option.value}`,node:n});}
  }
  return items;
 }
