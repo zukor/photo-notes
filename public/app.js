@@ -888,29 +888,29 @@ function renderCameraTools() {
     <section class="camera-tool-group">
       <div class="camera-tool-heading"><strong>Document Scanners</strong><span>Turn photographed documents into searchable, reviewable information.</span></div>
       <div class="camera-tool-grid">
-        ${featureOn('ticket_scanner') ? cameraToolCard('Paving Delivery Ticket Scanner','Read asphalt and paving delivery-ticket details and calculate saved daily tonnage.','Scan Ticket','toolTicket') : ''}
-        ${scannerOn('plan_sketch') ? cameraToolCard('Plan or Sketch Scanner','Read visible project, sheet, revision, scale, dimension, and field-note information without estimating missing details.','Scan Plan or Sketch','toolPlan') : ''}
-        ${scannerOn('business_card') ? cameraToolCard('Business Card Scanner','Read contact and company details from a photographed business card.','Scan Business Card','toolCard') : ''}
+        ${featureOn('ticket_scanner') ? cameraToolCard('Paving Delivery Ticket Scanner','Read asphalt and paving delivery-ticket details and calculate saved daily tonnage.','Open Ticket Scanner','toolTicket') : ''}
+        ${scannerOn('plan_sketch') ? cameraToolCard('Plan or Sketch Scanner','Read visible project, sheet, revision, scale, dimension, and field-note information without estimating missing details.','Open Plan or Sketch Scanner','toolPlan') : ''}
+        ${scannerOn('business_card') ? cameraToolCard('Business Card Scanner','Read contact and company details from a photographed business card.','Open Business Card Scanner','toolCard') : ''}
       </div>
     </section>
     <section class="camera-tool-group">
       <div class="camera-tool-heading"><strong>Equipment &amp; Material Scanners</strong><span>Record identifying information from equipment plates and construction-product labels.</span></div>
       <div class="camera-tool-grid">
-        ${scannerOn('equipment_plate') ? cameraToolCard('Equipment Plate Scanner','Read manufacturer, model, serial number, year, and equipment specifications.','Scan Plate','toolEquipment') : ''}
-        ${scannerOn('material_label') ? cameraToolCard('Material Label Scanner','Read product, manufacturer, lot, quantity, dates, instructions, and visible warnings.','Scan Label','toolMaterial') : ''}
+        ${scannerOn('equipment_plate') ? cameraToolCard('Equipment Plate Scanner','Read manufacturer, model, serial number, year, and equipment specifications.','Open Equipment Plate Scanner','toolEquipment') : ''}
+        ${scannerOn('material_label') ? cameraToolCard('Material Label Scanner','Read product, manufacturer, lot, quantity, dates, instructions, and visible warnings.','Open Material Label Scanner','toolMaterial') : ''}
       </div>
     </section>
     <section class="camera-tool-group">
       <div class="camera-tool-heading"><strong>Instrument Readers</strong><span>Capture the displayed value while retaining a photograph of the instrument.</span></div>
       <div class="camera-tool-grid">
-        ${scannerOn('gauge') ? cameraToolCard('Gauge & Instrument Reader','Read gauges, scales, hour meters, thermometers, fuel displays, and other instruments.','Read Instrument','toolGauge') : ''}
+        ${scannerOn('gauge') ? cameraToolCard('Gauge & Instrument Reader','Read gauges, scales, hour meters, thermometers, fuel displays, and other instruments.','Open Gauge & Instrument Reader','toolGauge') : ''}
       </div>
     </section>
     ${Object.keys(readerConfigs).some(type=>PhotoNotesScannerAvailability.allowed(state.proType,type))?`<details id="scannerHistory"><summary>Saved Scanner Records</summary><p>Review scanner records for this industry edition.</p>${Object.entries(readerConfigs).filter(([type])=>PhotoNotesScannerAvailability.allowed(state.proType,type)).map(([type,cfg])=>`<button class="btn secondary slim" data-scanner-history="${type}">${cfg.title}: Saved Records</button>`).join('')}</details>`:''}
     ${beforeAfterOn()?`<section class="camera-tool-group">
       <div class="camera-tool-heading"><strong>Comparison Tools</strong><span>Create consistent visual records of work before and after completion.</span></div>
       <div class="camera-tool-grid">
-        ${beforeAfterOn() ? cameraToolCard('Before & After Alignment','Use an earlier photo as a framing reference, compare the alignment, and save the pair.','Match Photos','toolAlignment') : ''}
+        ${beforeAfterOn() ? cameraToolCard('Before & After Alignment','Use an earlier photo as a framing reference, compare the alignment, and save the pair.','Open Before & After Alignment','toolAlignment') : ''}
       </div>
     </section>`:''}`;
   body.querySelectorAll('.camera-tool-group').forEach(group=>{if(!group.querySelector('button'))group.remove();});
@@ -932,7 +932,7 @@ const cameraReaderJobOptions=(value,all=false)=>`${all?'<option value="">All Job
 let cameraReaderType = 'equipment_plate', cameraReaderFile = null, cameraReaderDraft = null;
 const readerConfigs = {
   equipment_plate: { title:'Equipment Plate Scanner', noun:'plate', captureLabel:'Plate', readLabel:'Read Plate', fields:[['manufacturer','Manufacturer'],['model','Model'],['serial_number','Serial Number'],['year','Year'],['equipment_type','Equipment Type'],['specifications','Other Specifications']] },
-  gauge: { title:'Gauge & Instrument Reader', noun:'instrument', captureLabel:'Instrument', readLabel:'Read Instrument', fields:[['instrument_type','Instrument Type'],['reading','Displayed Reading'],['unit','Unit'],['equipment_name','Equipment Name or Number'],['observed_at','Displayed Date or Time'],['notes','Reading Notes']] },
+  gauge: { title:'Gauge & Instrument Reader', noun:'instrument', captureLabel:'Instrument', readLabel:'Open Gauge & Instrument Reader', fields:[['instrument_type','Instrument Type'],['reading','Displayed Reading'],['unit','Unit'],['equipment_name','Equipment Name or Number'],['observed_at','Displayed Date or Time'],['notes','Reading Notes']] },
   plan_sketch: { title:'Plan or Sketch Scanner', noun:'plan or sketch', captureLabel:'Plan or Sketch', readLabel:'Read Plan or Sketch', fields:[['project_name','Project Name'],['site_address','Site Address'],['sheet_title','Sheet Title'],['sheet_number','Sheet Number'],['revision_date','Revision Date'],['scale','Printed Scale'],['visible_dimensions','Visible Dimensions','textarea'],['visible_notes','Visible Notes','textarea']] },
   material_label: { title:'Material Label Scanner', noun:'material label', captureLabel:'Material Label', readLabel:'Read Label', fields:[['product_name','Product Name'],['manufacturer','Manufacturer'],['product_code','Product Code'],['lot_number','Lot Number'],['quantity','Quantity'],['manufactured_date','Manufactured Date'],['expiration_date','Expiration Date'],['instructions','Visible Instructions','textarea'],['warnings','Visible Warnings','textarea']] },
   business_card: { title:'Business Card Scanner', noun:'business card', captureLabel:'Business Card', readLabel:'Read Business Card', fields:[['name','Name'],['job_title','Job Title'],['company','Company'],['phone','Phone'],['email','Email'],['address','Address'],['website','Website']] },
