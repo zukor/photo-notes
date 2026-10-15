@@ -1,14 +1,63 @@
 const test=require('node:test'),assert=require('node:assert/strict'),vm=require('node:vm'),fs=require('node:fs');
 const source=fs.readFileSync('public/app.js','utf8');
 function harness({ios=true,pending=false,exclusive=false,retainOnEnd=false,abortEvents=false,realResults=false}={}){
- const elements={},sessions=[],timers=new Map(),logs={},interruptions=[];let next=0,permission,tracksStopped=0,owner;
+ const elements={},sessions=[],timers=new Map(),logs={},interruptions=[];let next=0,permission,tracksStopped=0,owner,now=1000000;
+ class ClockDate extends Date{static now(){return now;}}
  class Speech{constructor(){sessions.push(this);}start(){if(exclusive&&owner&&owner!==this)throw new Error('Microphone still owned');owner=this;}stop(){this.stopped=true;}abort(){this.aborted=true;if(owner===this)owner=null;if(abortEvents){this.onerror?.({error:"aborted"});this.onend?.();}}set onend(handler){this.end=()=>{if(owner===this&&!retainOnEnd)owner=null;handler();};}get onend(){return this.end;}}
  const stream={getTracks:()=>[{stop:()=>tracksStopped++}]};
- const context=vm.createContext({Date,Promise,JSON,navigator:{userAgent:ios?'iPhone':'Android',onLine:true,mediaDevices:{getUserMedia:()=>pending?new Promise(r=>permission=r):Promise.resolve(stream)}},window:{SpeechRecognition:Speech},document:{visibilityState:'visible',getElementById:id=>elements[id]||=( {value:'',textContent:'',remove(){},focus(){},classList:{add(){},remove(){}}})},localStorage:{getItem:k=>logs[k],setItem:(k,v)=>logs[k]=v},state:{photoFile:{}},uiSpeechLanguage:()=> 'en-US',isIndustryProClient:()=>false,showDictationInterruption:reason=>interruptions.push(reason),toast(){},persistCaptureDraft:async()=>{},setTimeout:(fn,ms)=>{timers.set(++next,{fn,ms});return next;},clearTimeout:id=>timers.delete(id)});
+ const context=vm.createContext({Date:ClockDate,Promise,JSON,navigator:{userAgent:ios?'iPhone':'Android',onLine:true,mediaDevices:{getUserMedia:()=>pending?new Promise(r=>permission=r):Promise.resolve(stream)}},window:{SpeechRecognition:Speech},document:{visibilityState:'visible',getElementById:id=>elements[id]||=( {value:'',textContent:'',remove(){},focus(){},classList:{add(){},remove(){}}})},localStorage:{getItem:k=>logs[k],setItem:(k,v)=>logs[k]=v},state:{photoFile:{}},uiSpeechLanguage:()=> 'en-US',isIndustryProClient:()=>false,showDictationInterruption:reason=>interruptions.push(reason),toast(){},persistCaptureDraft:async()=>{},setTimeout:(fn,ms)=>{timers.set(++next,{fn,ms});return next;},clearTimeout:id=>timers.delete(id)});
  if(realResults){const shared=fs.readFileSync('public/issue-reporter.js','utf8');vm.runInContext(shared.slice(shared.indexOf('function cleanSpeechTranscript'),shared.indexOf('async function toggleIssueDictation')),context);}
  vm.runInContext("let iosDictationSession=null,iosDictationConstructor=null,recognizer=null,dictationActive=false,dictationRestartTimer=null,dictationWatchdog=null,dictationGeneration=0,dictationBase='',dictationFinish=null;"+source.slice(source.indexOf('let dictationEmptySessions'),source.indexOf('let currentGroupItems'))+(realResults?"":"function combineSpeechResults(parts){return parts.join(' ');}function mergeSpeechTranscript(a,b){return (a.trim()+' '+b.trim()).trim();}function mergeSpeechContinuation(a,b){return mergeSpeechTranscript(a,b);}")+source.slice(source.indexOf('function cleanupDictation()'),source.indexOf('// ================= Pro dimension fields')),context);
- return {run:c=>vm.runInContext(c,context),sessions,elements,timers,logs,interruptions,resolve:()=>permission(stream),tracksStopped:()=>tracksStopped,fire:ms=>{for(const [id,t]of [...timers])if(t.ms===ms){timers.delete(id);t.fn();}}};
+ return {run:c=>vm.runInContext(c,context),sessions,elements,timers,logs,interruptions,advance:ms=>now+=ms,resolve:()=>permission(stream),tracksStopped:()=>tracksStopped,fire:ms=>{for(const [id,t]of [...timers])if(t.ms===ms){timers.delete(id);t.fn();}}};
 }
+test('Android quiet endings after received words allow a 45-second pause in one recording',async()=>{
+ const h=harness({ios:false,realResults:true});await h.run('toggleDictation()');
+ h.sessions[0].onresult({results:[[{transcript:'First observation'}]]});
+ for(const elapsed of [10000,15000,20000]){
+  h.advance(elapsed);const current=h.sessions.at(-1);current.onerror({error:'no-speech'});
+  assert.equal(h.interruptions.length,0,'silence after words does not interrupt');
+  current.onend();h.fire(250);assert.equal(h.run('dictationActive'),true);
+ }
+ h.sessions.at(-1).onresult({results:[[{transcript:'Second observation after the pause'}]]});
+ assert.equal(h.elements.note.value,'First observation Second observation after the pause');
+ const finish=h.run('finishCaptureDictation()');h.sessions.at(-1).onend();await finish;
+ assert.equal(h.run('dictationActive'),false);assert.equal(h.timers.size,0);
+});
+test('Android empty continuations share one minute from the last words, not a new timeout per session',async()=>{
+ const h=harness({ios:false});await h.run('toggleDictation()');h.sessions[0].onresult({results:[[{transcript:'Kept observation'}]]});
+ h.advance(10000);h.sessions[0].onend();h.fire(250);
+ assert([...h.timers.values()].some(t=>t.ms===50000));
+ h.advance(30000);h.sessions.at(-1).onerror({error:'no-speech'});h.sessions.at(-1).onend();h.fire(250);
+ assert([...h.timers.values()].some(t=>t.ms===20000));
+ h.advance(20000);h.fire(20000);
+ assert.equal(h.run('dictationActive'),false);assert.equal(h.interruptions.length,1);
+ assert.equal(h.elements.note.value,'Kept observation');assert.equal(h.timers.size,0);
+});
+test('Android no-speech without end still stops at the quiet deadline and a manual recording starts fresh',async()=>{
+ const h=harness({ios:false});await h.run('toggleDictation()');h.sessions[0].onresult({results:[[{transcript:'Kept observation'}]]});
+ h.advance(10000);h.sessions[0].onerror({error:'no-speech'});
+ assert.equal(h.run('dictationActive'),true);assert.equal(h.interruptions.length,0);
+ h.advance(50000);h.fire(50000);
+ assert.equal(h.run('dictationActive'),false);assert.ok(h.sessions[0].aborted);assert.equal(h.interruptions.length,1);
+ await h.run('toggleDictation()');h.fire(30000);
+ assert.equal(h.run('dictationActive'),false);assert.equal(h.interruptions.length,2);assert.equal(h.elements.note.value,'Kept observation');
+});
+test('Stop and navigation cancel a quiet Android continuation before it can restart',async()=>{
+ for(const action of ['finishCaptureDictation()','stopCaptureDictation()']){
+  const h=harness({ios:false});await h.run('toggleDictation()');h.sessions[0].onresult({results:[[{transcript:'Kept observation'}]]});
+  h.sessions[0].onerror({error:'no-speech'});h.sessions[0].onend();
+  await h.run(action);h.fire(250);h.sessions[0].onend();
+  assert.equal(h.sessions.length,1);assert.equal(h.run('dictationActive'),false);
+  assert.equal(h.elements.note.value,'Kept observation');assert.equal(h.timers.size,0);
+ }
+});
+test('network and hidden-client interruptions are not treated as an Android speech pause',async()=>{
+ for(const hidden of [false,true]){
+  const h=harness({ios:false});await h.run('toggleDictation()');h.sessions[0].onresult({results:[[{transcript:'Kept observation'}]]});
+  if(hidden)h.run("document.visibilityState='hidden'");h.sessions[0].onerror({error:hidden?'no-speech':'network'});h.sessions[0].onend();h.fire(250);
+  assert.equal(h.run('dictationActive'),false);assert.equal(h.sessions.length,1);assert.equal(h.interruptions.length,1);
+ }
+});
 test('Stop keeps Safari final results until end, and finishing blocks another start',async()=>{
  const h=harness();await h.run('toggleDictation()');const s=h.sessions[0];const stopping=h.run('toggleDictation()');await h.run('toggleDictation()');assert.equal(h.sessions.length,1);
  s.onresult({results:[[{transcript:'Final words'}]]});s.onend();await stopping;

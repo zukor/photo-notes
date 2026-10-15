@@ -43,6 +43,7 @@ let dictationFinish = null;
 let captureLocationGeneration = 0;
 let dictationBase = '';
 let dictationEmptySessions = 0;
+let dictationLastResultAt = 0;
 let dictationPending = false;
 function recordDictationEvent(event, detail = '', context = null) {
   try {
@@ -1406,6 +1407,7 @@ function showDictationInterruption(reason) {
 
 function cleanupDictation() {
   dictationGeneration++;
+  dictationLastResultAt=0;
   dictationPending=false;
   if(dictationFinish){clearTimeout(dictationFinish.timer);const done=dictationFinish.resolve;dictationFinish=null;done();}
   if (dictationRestartTimer) clearTimeout(dictationRestartTimer);
@@ -1421,6 +1423,7 @@ function cleanupDictation() {
 
 function stopCaptureDictation(){
   document.getElementById("dictationInterruptedDialog")?.remove();
+  dictationLastResultAt=0;
   dictationPending=false;
   if(dictationFinish){clearTimeout(dictationFinish.timer);const done=dictationFinish.resolve;dictationFinish=null;done();}
   dictationGeneration++;
@@ -1503,6 +1506,7 @@ async function toggleDictation() {
   clearTimeout(dictationWatchdog);
   dictationActive = true;
   dictationEmptySessions = 0;
+  dictationLastResultAt = 0;
   dictationBase = noteEl ? noteEl.value.trim() : '';
   if (dictationBase) dictationBase += ' ';
   if (btn) { btn.textContent = 'Starting microphone... tap to stop'; btn.classList.add('on'); }
@@ -1513,7 +1517,10 @@ async function toggleDictation() {
 function startDictationSession(SR, continuedText = '') {
   if (!dictationActive) return;
   const noteEl = document.getElementById('note');
-  let session;const ios=isIOS();
+  let session;const ios=isIOS(),android=!ios&&/Android/i.test(navigator.userAgent);
+  // Quiet Android restarts share one deadline across the user's recording.
+  // A new recognizer must not reset the silence budget or discard prior words.
+  const pauseRemaining=()=>dictationLastResultAt?Math.max(0,60000-(Date.now()-dictationLastResultAt)):0;
   // The prior session has ended. Aborting it here can reset Safari's shared
   // speech service just as the next session starts. Active cancellation still
   // aborts through stopCaptureDictation; completed sessions are only released.
@@ -1536,11 +1543,16 @@ function startDictationSession(SR, continuedText = '') {
   };
   // Starting audio is not proof of transcription. Bound a session that never
   // receives its first result, while allowing pauses after words arrive.
-  dictationWatchdog=setTimeout(()=>{
-    if(generation!==dictationGeneration||!dictationActive)return;
-    recordDictationEvent(microphoneStarted?'no-result-timeout':'start-timeout');stopCaptureDictation();
-    showDictationInterruption(microphoneStarted?'The microphone started, but no words were received.':'The microphone did not start.');
-  },30000);
+  const watchForWords=()=>{
+    if(dictationWatchdog)clearTimeout(dictationWatchdog);
+    const quietContinuation=android&&dictationLastResultAt>0;
+    dictationWatchdog=setTimeout(()=>{
+      if(generation!==dictationGeneration||!dictationActive)return;
+      recordDictationEvent(quietContinuation?'pause-timeout':microphoneStarted?'no-result-timeout':'start-timeout');stopCaptureDictation();
+      showDictationInterruption(quietContinuation?'No new words were received for one minute. Restart Recording to continue.':microphoneStarted?'The microphone started, but no words were received.':'The microphone did not start.');
+    },quietContinuation?Math.max(1,pauseRemaining()):30000);
+  };
+  watchForWords();
   session.onstart=started;
   session.onaudiostart=started;
   session.onspeechstart=started;
@@ -1554,13 +1566,13 @@ function startDictationSession(SR, continuedText = '') {
   };
   session.onresult = (ev) => {
     if(generation!==dictationGeneration||state.photoFile!==photoForSession||document.getElementById('note')!==noteEl)return;
-    if(!dictationFinish){if(dictationWatchdog)clearTimeout(dictationWatchdog);dictationWatchdog=null;}
     // Rebuild the current recognition session from its indexed result slots.
     // Android may revise a cumulative phrase and mark it final repeatedly;
     // appending each event produces duplicated/spammed words.
     const parts=[];
     for (let i=0;i<ev.results.length;i++) parts.push(ev.results[i][0].transcript.trim());
     sessionText=combineSpeechResults(parts);
+    if(sessionText&&!dictationFinish){dictationLastResultAt=Date.now();if(dictationWatchdog)clearTimeout(dictationWatchdog);dictationWatchdog=null;}
     recordDictationEvent('result',Array.from(ev.results,result=>result.isFinal?'final':'interim').join(','));
 
     if (noteEl) { noteEl.value=mergeSpeechTranscript(dictationBase,recordingText()); state._note=noteEl.value; void persistCaptureDraft().catch(()=>{}); }
@@ -1572,6 +1584,11 @@ function startDictationSession(SR, continuedText = '') {
     const err=e&&e.error;
     recordDictationEvent('error',err);
     if(!dictationActive||dictationFinish)return;
+    if(err==='no-speech'&&android&&pauseRemaining()>0&&navigator.onLine!==false&&document.visibilityState!=='hidden'&&document.getElementById('note')===noteEl&&state.photoFile===photoForSession){
+      recordDictationEvent('pause-no-speech');
+      // Wait for the normal end callback, bounded even if it never arrives.
+      watchForWords();return;
+    }
     const reason=err==='network'?'Speech recognition lost its connection.':
       (err==='not-allowed'||err==='service-not-allowed')?'Microphone access was denied. Allow access before restarting.':
       err==='audio-capture'?'The microphone became unavailable.':
@@ -1588,9 +1605,9 @@ function startDictationSession(SR, continuedText = '') {
     // Android speech services can end a successful continuous session on
     // cellular networks. Continue with a fresh session while Stop is absent.
     // Empty sessions are bounded to avoid an automatic retry loop.
-    if(interrupted&&current&&!ios&&/Android/i.test(navigator.userAgent)&&navigator.onLine!==false&&document.visibilityState!=='hidden'){
+    if(interrupted&&current&&android&&navigator.onLine!==false&&document.visibilityState!=='hidden'){
       dictationEmptySessions=sessionText?0:dictationEmptySessions+1;
-      if(dictationEmptySessions<2){
+      if(dictationLastResultAt?pauseRemaining()>0:dictationEmptySessions<2){
         recordDictationEvent('session-continuation');
         dictationRestartTimer=setTimeout(()=>{
           dictationRestartTimer=null;

@@ -6,6 +6,7 @@ const {chromium,webkit}=require('playwright');
  const server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));
  try{for(const engine of [chromium,webkit]){const browser=await engine.launch();try{for(const width of [390,1440]){
   const page=await browser.newPage({viewport:{width,height:900},serviceWorkers:'block',userAgent:'Mozilla/5.0 (Linux; Android 10) Chrome/152.0.0.0 Mobile Safari/537.36'});
+  await page.clock.install();
   await page.addInitScript(()=>{
    localStorage.setItem('pn_install_prompt_dismissed_v1','1');window.speechSessions=[];
    Object.defineProperty(navigator,'mediaDevices',{configurable:true,value:{getUserMedia:async()=>({getTracks:()=>[{stop(){}}]})}});
@@ -64,8 +65,28 @@ const {chromium,webkit}=require('playwright');
    await page.evaluate(first=>speechSessions.at(-1).onresult({results:[[{transcript:first+'.com'}]]}),continuedWebsite);
    await page.locator('#dictate').click();
    assert.equal(await page.locator('#note').inputValue(),continuedDomain+' '+continuedWebsite+'.com',edition+' manual recording keeps a different domain');
+   const beforePause=await page.locator('#note').inputValue();
+   let pauseCount=await page.evaluate(()=>speechSessions.length);
+   await page.locator('#dictate').click();await page.waitForFunction(count=>speechSessions.length>count,pauseCount);
+   await page.evaluate(()=>speechSessions.at(-1).onresult({results:[[{transcript:'Observation before a quiet pause.'}]]}));
+   for(const quiet of [10000,15000,20000]){
+    await page.clock.fastForward(quiet);
+    pauseCount=await page.evaluate(()=>speechSessions.length);
+    await page.evaluate(()=>{const current=speechSessions.at(-1);current.onerror({error:'no-speech'});current.onend();});
+    await page.clock.fastForward(251);await page.waitForFunction(count=>speechSessions.length>count,pauseCount);
+    assert.equal(await page.locator('#dictationInterruptedDialog').count(),0,edition+' quiet pause has no stopped dialog');
+   }
+   await page.evaluate(()=>speechSessions.at(-1).onresult({results:[[{transcript:'Observation after the quiet pause.'}]]}));
+   const afterPause=beforePause+' Observation before a quiet pause. Observation after the quiet pause.';
+   assert.equal(await page.locator('#note').inputValue(),afterPause,edition+' both sides of 45-second pause retained');
+   // A quiet restart has one bounded minute, rather than a fresh timer each time.
+   await page.evaluate(()=>speechSessions.at(-1).onend());await page.clock.fastForward(251);
+   await page.clock.fastForward(60001);await page.locator('#dictationInterruptedDialog').waitFor({state:'visible'});
+   assert.equal(await page.evaluate(()=>dictationActive),false,edition+' quiet continuation is bounded');
+   assert.equal(await page.locator('#note').inputValue(),afterPause,edition+' quiet timeout keeps notes');
+   await page.locator('#dictationStop').click();
    assert(await page.locator('#dictate').evaluate(el=>el.getBoundingClientRect().right<=innerWidth),edition+' button fits');
   }
-  console.log(`${engine.name()} ${width}: Android continuation/Stop/manual restart and spelled-address snapshots, ten editions PASS`);await page.close();
+  console.log(`${engine.name()} ${width}: Android continuation/Stop/manual restart, spelled addresses and bounded quiet pauses, ten editions PASS`);await page.close();
  }}finally{await browser.close();}}}finally{server.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});
