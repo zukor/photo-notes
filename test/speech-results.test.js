@@ -3,6 +3,34 @@ const source=fs.readFileSync(process.env.SPEECH_SOURCE||'public/issue-reporter.j
 const context={};vm.createContext(context);
 vm.runInContext(source.slice(source.indexOf('function cleanSpeechTranscript'),source.indexOf('async function toggleIssueDictation')),context);
 const combine=parts=>context.combineSpeechResults?context.combineSpeechResults(parts):context.cleanSpeechTranscript(parts.filter(Boolean).join(' '));
+test('spelled website dot suffix completes the same recording without replaying its opening',()=>{
+ const first='this is the web page s a w s';
+ assert.equal(combine([first,first+'.org']),first+'.org');
+ assert.equal(context.mergeSpeechContinuation(first,first+'.org'),first+'.org');
+ const parts=[first,first+'.o',first+'.or',first+'.org',first+'.org for more information'];
+ assert.equal(combine(parts),parts.at(-1));
+ assert.equal(parts.reduce((text,part)=>context.mergeSpeechContinuation(text,part),''),parts.at(-1));
+ // A new manual recording and repetition already inside one result remain literal.
+ assert.equal(context.mergeSpeechTranscript(first,first+'.org'),first+' '+first+'.org');
+ assert.equal(combine([first+' '+first+'.org']),first+' '+first+'.org');
+});
+test('spelled domain growth requires matching context, letters and an unchanged existing suffix',()=>{
+ const first='this is the web page s a w s';
+ for(const next of [first.replace('s a w s','s a w x')+'.org',first.replace('is the','is not the')+'.org']){
+  assert.equal(combine([first,next]),first+' '+next);
+  assert.equal(context.mergeSpeechContinuation(first,next),first+' '+next);
+ }
+ for(const [left,right] of [
+  [first+'.org',first+'.com'],
+  ['this is the web page saws','this is the web page saws.org'],
+  ['s a w s','s a w s.org'],
+  ['this is the web page 5','this is the web page 5.org'],
+  ['this is the web page s a w s','this is the web page s a w s.-org']
+ ]){
+  assert.equal(combine([left,right]),left+' '+right);
+  assert.equal(context.mergeSpeechContinuation(left,right),left+' '+right);
+ }
+});
 test('Android expanding result slots form one phrase in English and Spanish',()=>{
  assert.equal(combine(['this','this is','this is','this is my','this is my first test']),'this is my first test');
  assert.equal(combine(['Estoy','Estoy grabando','Estoy grabando una nota']),'Estoy grabando una nota');

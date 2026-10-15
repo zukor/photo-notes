@@ -172,12 +172,23 @@ function growingSpeechNumber(previous,incoming){
   const tail=previous.at(-1),completed=incoming[previous.length-1];
   return /^\d{2,}(?:[-–]\d*)*$/.test(tail)&&/^\d+[-–]\d*(?:[-–]\d*)*$/.test(completed)&&completed.startsWith(tail)&&completed.length>tail.length;
 }
+function growingSpelledDomain(previous,incoming){
+  if(incoming.length<previous.length||!previous.slice(0,-1).every((word,i)=>word===incoming[i]))return false;
+  const tail=previous.at(-1)||'',completed=incoming[previous.length-1]||'';
+  if(!/^[a-z](?:\.[a-z]+)*$/.test(tail)||!/^[a-z](?:\.[a-z]+)+$/.test(completed)||!completed.startsWith(tail)||completed.length<=tail.length)return false;
+  let letters=0;
+  for(let i=previous.length-2;i>=0&&/^[a-z]$/.test(previous[i]);i--)letters++;
+  // A domain suffix attached to the last of at least three spelled letters
+  // may keep the same word count. Require four unchanged introductory words.
+  return letters>=2&&previous.length-letters-1>=4;
+}
 function mergeSpeechContinuation(base,incoming){
   const left=String(base||'').trim(),right=String(incoming||'').trim();
   const words=text=>text.split(/\s+/).filter(Boolean).map(speechWordKey);
   // Only automatic continuation of this recording may extend a matching
-  // number. Other boundaries retain the existing multiword replay rule.
-  return growingSpeechNumber(words(left),words(right))?right:mergeSpeechTranscript(left,right);
+  // number or spelled domain. Manual recordings keep the ordinary merge rule.
+  const previous=words(left),next=words(right);
+  return growingSpeechNumber(previous,next)||growingSpelledDomain(previous,next)?right:mergeSpeechTranscript(left,right);
 }
 function combineSpeechResults(parts){
   const segments=[];
@@ -186,9 +197,9 @@ function combineSpeechResults(parts){
   for(const part of parts){
     const text=String(part||'').trim();if(!text)continue;
     const incoming=words(text),previous=words(segments.at(-1)||'');
-    // A phone-number token may grow after each spoken dash. Reconcile only
-    // an exact opening with an appended dash/number suffix, never changed digits.
-    if(growingSpeechNumber(previous,incoming)){segments.pop();segments.push(text);continue;}
+    // A number or spelled-domain token may grow without adding another word.
+    // The shared guards require an exact opening and an unchanged growing tail.
+    if(growingSpeechNumber(previous,incoming)||growingSpelledDomain(previous,incoming)){segments.pop();segments.push(text);continue;}
     // Indexed cumulative snapshots can finish a truncated last word while
     // retaining the entire preceding passage. Limit this to a long exact
     // opening and a small suffix completion, never a separate session.
