@@ -1,0 +1,33 @@
+// Super Admin: Record Notes reliability from content-free recording outcomes.
+(()=>{
+const escape=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const pct=(a,b)=>b?`${(100*a/b).toFixed(1)}%`:'None';
+const LABEL={live:'Worked live',recovered:'Recovered from saved audio',retried:'Transcribed later',kept:'Saved, waiting to retry',failed:'Failed',empty:'No speech',cancelled:'Cancelled',interrupted:'Interrupted'};
+const SURFACE={capture:'Record Notes',feedback:'Send Feedback',issue:'Report Issue',ewr:'Extra Work',selftest:'Self-test'};
+window.PhotoNotesAdminRecordNotes={mount(host,api){
+ if(!host)return;
+ host.innerHTML=`<style>#recordNotesReliabilityHost,#recordNotesReliabilityHost *{color:#000!important;text-align:left}#recordNotesReliabilityHost select{background:#fff!important}#recordNotesReliabilityHost button{background:#ffe600!important}#recordNotesReliabilityHost table{width:100%;border-collapse:collapse}#recordNotesReliabilityHost td,#recordNotesReliabilityHost th{border-bottom:1px solid #000;padding:4px}</style>
+ <details class="admin-section" data-admin-tool="record-notes-reliability"><summary id="recordNotesReliabilityHeading">Record Notes Reliability</summary><div class="admin-section-body" style="background:white">
+ <p>Every recording reports how it ended, without any words or audio. Success means the words reached the note, either live or recovered from the saved recording. Not transcribed means the recording is still waiting on the device or failed. Cancelled and no-speech recordings are not counted in the rate.</p>
+ <label for="recordNotesDays">Period</label> <select id="recordNotesDays"><option value="1">Last 24 hours</option><option value="7" selected>Last 7 days</option><option value="30">Last 30 days</option><option value="90">Last 90 days</option></select>
+ <button type="button" class="btn" id="recordNotesRefresh">Refresh</button><div id="recordNotesResults" aria-live="polite">Loading...</div></div></details>`;
+ const out=host.querySelector('#recordNotesResults');
+ const table=(head,rows)=>`<table><thead><tr>${head.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.join('')||`<tr><td colspan="${head.length}">No recordings in this period.</td></tr>`}</tbody></table>`;
+ const row=values=>`<tr>${values.map(v=>`<td>${escape(v)}</td>`).join('')}</tr>`;
+ async function load(){
+  out.textContent='Loading...';
+  try{
+   const r=await api('/api/admin/record-notes-reliability?days='+host.querySelector('#recordNotesDays').value);if(!r.ok)throw Error('Reliability could not be loaded');
+   const d=await r.json();
+   const counted=d.totals.filter(t=>!['cancelled','empty','retried'].includes(t.outcome));
+   const total=counted.reduce((n,t)=>n+t.count,0),ok=counted.filter(t=>['live','recovered'].includes(t.outcome)).reduce((n,t)=>n+t.count,0);
+   out.innerHTML=`<h3>Success rate: ${pct(ok,total)} of ${total} recordings</h3>`
+    +table(['Outcome','Recordings'],d.totals.map(t=>row([LABEL[t.outcome]||t.outcome,t.count])))
+    +'<h3>By device</h3>'+table(['Device','Browser','App','Recordings','Success','Recovered','Not transcribed','Interrupted'],d.devices.map(x=>row([x.os,x.browser,x.mode==='installed'?'Home Screen app':'Browser',x.recordings,pct(x.succeeded,x.recordings),x.recovered,x.not_transcribed,x.interrupted])))
+    +'<h3>By app version</h3>'+table(['Version','Recordings','Not transcribed'],d.versions.map(x=>row([x.version,x.recordings,x.not_transcribed])))
+    +'<h3>Recent problems</h3>'+table(['When','Person','Where','Outcome','Device','Reason','Length'],d.problems.map(p=>row([new Date(p.created_at).toLocaleString(),p.name||p.email||'',SURFACE[p.detail.surface]||p.detail.surface,(LABEL[p.detail.outcome]||p.detail.outcome)+(p.detail.interrupted?' (interrupted)':''),`${p.detail.os} ${p.detail.os_version||''} ${p.detail.browser}`.trim(),p.detail.reason||'',`${p.detail.seconds||0} s`])));
+  }catch(e){out.textContent=e.message;}
+ }
+ host.querySelector('#recordNotesRefresh').onclick=load;host.querySelector('#recordNotesDays').onchange=load;load();
+}};
+})();

@@ -68,12 +68,12 @@ test('saved recording is uploaded, polled until complete, then deleted at the pr
   const fetchImpl = async (url, options = {}) => {
     seen.push([options.method || 'GET', url]);
     if (url.endsWith('/v2/upload')) return json({ upload_url: 'https://cdn/upload/1' });
-    if (url.endsWith('/v2/transcript') && options.method === 'POST') { assert.equal(JSON.parse(options.body).language_code, 'es'); return json({ id: 'abc' }); }
+    if (url.endsWith('/v2/transcript') && options.method === 'POST') { const body = JSON.parse(options.body); assert.equal(body.language_code, 'es'); assert.ok(body.keyterms_prompt.includes('rebar')); return json({ id: 'abc' }); }
     if (options.method === 'DELETE') return json({});
     polls++; return json(polls < 2 ? { status: 'processing' } : { status: 'completed', text: ' Hola, la grieta está aquí. ', audio_duration: 4 });
   };
   const result = await live.transcribeRecording(Buffer.alloc(100), { env: { ASSEMBLYAI_API_KEY: 'k' }, fetchImpl, lang: 'es', wait: async () => {} });
-  assert.deepEqual(result, { text: 'Hola, la grieta está aquí.', seconds: 4 });
+  assert.deepEqual(result, { text: 'Hola, la grieta está aquí.', seconds: 4, provider: 'assemblyai' });
   await new Promise(r => setImmediate(r));
   assert.ok(seen.some(([m, u]) => m === 'DELETE' && u.endsWith('/v2/transcript/abc')));
 });
@@ -85,7 +85,9 @@ test('limiter bounds recordings per user', () => {
 });
 
 // ---------- Browser engine ----------
-function browser({ sessionOk = true, recordingText = 'Recovered words.', recordingOk = true } = {}) {
+function browser(options = {}) {
+  const opts = { sessionOk: true, recordingText: 'Recovered words.', recordingOk: true, userAgent: 'test', ...options };
+  const userAgent = opts.userAgent;
   const sockets = [], fetches = [], timers = [];
   class FakeSocket {
     constructor(url) { this.url = url; this.sent = []; this.readyState = 0; sockets.push(this); }
@@ -103,27 +105,35 @@ function browser({ sessionOk = true, recordingText = 'Recovered words.', recordi
     createGain() { return { gain: { value: 1 }, connect() {}, disconnect() {} }; }
   }
   const track = { stopped: false, listeners: {}, stop() { this.stopped = true; }, addEventListener(name, fn) { this.listeners[name] = fn; } };
+  const listeners = {};
   const window = {
     WebSocket: FakeSocket, AudioContext: FakeContext,
+    addEventListener(name, fn) { (listeners[name] ||= []).push(fn); },
+    removeEventListener(name, fn) { listeners[name] = (listeners[name] || []).filter(f => f !== fn); },
+    dispatchEvent(event) { (listeners[event.type] || []).forEach(fn => fn(event)); return true; },
   };
+  const docListeners = {};
+  const document = { visibilityState: 'visible', addEventListener(n, fn) { (docListeners[n] ||= []).push(fn); }, removeEventListener(n, fn) { docListeners[n] = (docListeners[n] || []).filter(f => f !== fn); }, querySelector: () => null, getElementById: () => null, hide() { this.visibilityState = 'hidden'; (docListeners.visibilitychange || []).forEach(fn => fn()); } };
+  const outcomes = [];
   const context = {
-    window, WebSocket: FakeSocket, Blob, URLSearchParams, AbortController, console,
+    window, document, CustomEvent: class { constructor(type) { this.type = type; } }, crypto, WebSocket: FakeSocket, Blob, URLSearchParams, AbortController, console,
     localStorage: { getItem: () => null, setItem() {} },
-    navigator: { mediaDevices: { getUserMedia: async () => ({ getTracks: () => [track], getAudioTracks: () => [track] }) } },
+    navigator: { userAgent, onLine: true, mediaDevices: { getUserMedia: async () => ({ getTracks: () => [track], getAudioTracks: () => [track] }) } },
     setTimeout: (fn, ms) => { timers.push({ fn, ms }); if (ms <= 1000) return setTimeout(fn, 0); return timers.length; },
     clearTimeout: id => clearTimeout(id),
     fetch: async (url, options = {}) => {
       fetches.push({ url, options });
       if (url.startsWith('/api/transcription/config')) return json({ live: true });
-      if (url.startsWith('/api/transcription/session')) return sessionOk ? json({ url: 'wss://streaming.assemblyai.com/v3/ws?token=t&format_turns=true' }) : { ok: false, status: 502, json: async () => ({}) };
-      if (url.startsWith('/api/transcription/recording')) return recordingOk ? json({ text: recordingText }) : { ok: false, status: 502, json: async () => ({}) };
+      if (url.startsWith('/api/transcription/session')) return opts.sessionOk ? json({ url: 'wss://streaming.assemblyai.com/v3/ws?token=t&format_turns=true' }) : { ok: false, status: 502, json: async () => ({}) };
+      if (url.startsWith('/api/transcription/recording')) return opts.recordingOk ? json({ text: opts.recordingText }) : { ok: false, status: 502, json: async () => ({}) };
+      if (url.startsWith('/api/transcription/outcome')) { outcomes.push(JSON.parse(options.body)); return json({ ok: true }); }
       throw new Error('unexpected ' + url);
     },
   };
   vm.runInNewContext(fs.readFileSync('public/live-transcription.js', 'utf8'), context);
   const api = window.PhotoNotesLiveTranscription;
   const speak = (seconds = 1) => { for (let i = 0; i < seconds * 12; i++) processor.onaudioprocess({ inputBuffer: { getChannelData: () => new Float32Array(4000).fill(0.1) } }); };
-  return { api, sockets, fetches, track, speak, timers };
+  return { api, sockets, fetches, track, speak, timers, outcomes, window, document, opts };
 }
 const flush = () => new Promise(r => setTimeout(r, 5));
 function recorder(api) {
@@ -278,4 +288,144 @@ test('a paused audio pipeline that captures nothing is reported instead of recor
   await flush();
   assert.ok(events.includes('error:audio-capture'));
   assert.ok(events.includes('end'));
+});
+
+
+// ---------- Reliability additions ----------
+test('custom vocabulary is sent to live sessions within provider limits', () => {
+  const params = live.connectionParams({}, 'en');
+  const terms = JSON.parse(params.keyterms_prompt);
+  assert.ok(terms.length > 20 && terms.length <= 100);
+  assert.ok(terms.every(t => t.length <= 50));
+  assert.ok(terms.includes('tap record') && terms.includes('rebar'));
+});
+
+test('recording transcription retries without vocabulary if the provider rejects it', async () => {
+  const bodies = [];
+  const fetchImpl = async (url, options = {}) => {
+    if (url.endsWith('/v2/upload')) return json({ upload_url: 'u' });
+    if (url.endsWith('/v2/transcript') && options.method === 'POST') { bodies.push(JSON.parse(options.body)); return bodies.length === 1 ? { ok: false, status: 400, json: async () => ({}) } : json({ id: 'x' }); }
+    if (options.method === 'DELETE') return json({});
+    return json({ status: 'completed', text: 'ok' });
+  };
+  const r = await live.transcribeRecording(Buffer.alloc(50), { env: { ASSEMBLYAI_API_KEY: 'k' }, fetchImpl, wait: async () => {} });
+  assert.equal(r.text, 'ok'); assert.ok(bodies[0].keyterms_prompt); assert.equal(bodies[1].keyterms_prompt, undefined);
+});
+
+test('OpenAI is used as a backup only when AssemblyAI fails and the key exists', async () => {
+  const calls = [];
+  const fetchImpl = async (url, options = {}) => { calls.push(url); if (url.includes('assemblyai')) return { ok: false, status: 500, json: async () => ({}) }; assert.match(options.headers.authorization, /^Bearer o-key$/); return json({ text: 'Backup words.' }); };
+  const r = await live.transcribeWithBackup(Buffer.alloc(50), { env: { ASSEMBLYAI_API_KEY: 'k', OPENAI_API_KEY: 'o-key' }, fetchImpl, logger: { warn() {} } });
+  assert.deepEqual(r, { text: 'Backup words.', seconds: 0, provider: 'openai' });
+  assert.ok(calls.some(u => u.endsWith('/audio/transcriptions')));
+  await assert.rejects(live.transcribeWithBackup(Buffer.alloc(50), { env: { ASSEMBLYAI_API_KEY: 'k' }, fetchImpl }));
+});
+
+test('outcomes are validated, content-free, and device comes from the request', () => {
+  assert.equal(live.outcomeDetail({ surface: 'capture', outcome: 'nonsense' }), null);
+  const d = live.outcomeDetail({ surface: 'capture', outcome: 'recovered', seconds: 99999, reason: 'Closed<script>', words: 12, text: 'secret words', mode: 'installed', version: 479 }, 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit Version/18 Mobile Safari/604.1');
+  assert.equal(d.os, 'iPhone'); assert.equal(d.os_version, '18'); assert.equal(d.browser, 'Safari'); assert.equal(d.seconds, 3600); assert.equal(d.reason, 'closedscript'); assert.equal(d.mode, 'installed');
+  assert.equal('text' in d, false);
+});
+
+test('outcome and reliability routes store and summarize without content', async () => {
+  const queries = [];
+  const pool = { query: async (sql, params) => { queries.push({ sql, params }); return { rows: sql.includes('GROUP BY 1 ORDER BY 2') ? [{ outcome: 'live', count: 9 }, { outcome: 'kept', count: 1 }] : [] }; } };
+  const handlers = {};
+  const app = { get(p, ...f) { handlers['GET ' + p] = f; }, post(p, ...f) { handlers['POST ' + p] = f; } };
+  live.register(app, { requireAuth: (q, r, n) => n(), requireAdmin: (q, r, n) => n(), pool, env: {}, fetchImpl: async () => json({}), logger: { warn() {}, error() {} } });
+  const run = async (key, req) => { const res = { statusCode: 200, set() { return this; }, status(c) { this.statusCode = c; return this; }, json(b) { this.body = b; return this; } }; for (const fn of handlers[key]) { if (fn.length === 3) await new Promise(d => fn(req, res, d)); else await fn(req, res); } return res; };
+  const ok = await run('POST /api/transcription/outcome', { user: { id: 3 }, body: { surface: 'feedback', outcome: 'live', seconds: 4 }, get: () => 'Android 14 Chrome/130' });
+  assert.equal(ok.statusCode, 200);
+  assert.match(queries[0].sql, /record_notes_outcome/); assert.equal(JSON.parse(queries[0].params[1]).os, 'Android');
+  assert.equal((await run('POST /api/transcription/outcome', { user: { id: 3 }, body: { surface: 'x', outcome: 'live' }, get: () => '' })).statusCode, 400);
+  const report = await run('GET /api/admin/record-notes-reliability', { user: { id: 1 }, query: { days: '30' } });
+  assert.deepEqual(report.body.totals, [{ outcome: 'live', count: 9 }, { outcome: 'kept', count: 1 }]);
+  assert.equal(report.body.days, 30);
+});
+
+test('each recording reports one content-free outcome', async () => {
+  const { api, sockets, speak, outcomes } = browser();
+  await api.refresh(); api.unlock();
+  const { r } = recorder(api);
+  r.start(); await flush(); await flush();
+  sockets[0].open(); speak(2);
+  sockets[0].message({ type: 'Turn', turn_order: 0, transcript: 'Secret job words.', end_of_turn: true, turn_is_formatted: true, words: [{ end: 1500 }] });
+  r.stop(); await flush(); sockets[0].message({ type: 'Termination' }); await flush(); await flush();
+  assert.equal(outcomes.length, 1); assert.equal(outcomes[0].outcome, 'live'); assert.equal(outcomes[0].words, 3);
+  assert.equal(JSON.stringify(outcomes).includes('Secret'), false);
+});
+
+test('a dropped connection reconnects and resends from the last confirmed audio', async () => {
+  const { api, sockets, speak, outcomes, fetches } = browser({ recordingText: 'Full checked words.' });
+  await api.refresh(); api.unlock();
+  const { r, events, text } = recorder(api);
+  r.start(); await flush(); await flush();
+  sockets[0].open(); speak(3);
+  // Service confirmed the first 1.2 seconds of audio before the drop.
+  sockets[0].message({ type: 'Turn', turn_order: 0, transcript: 'First part.', end_of_turn: true, turn_is_formatted: true, words: [{ end: 1200 }] });
+  sockets[0].message({ type: 'Turn', turn_order: 1, transcript: 'unconfirmed', end_of_turn: false });
+  sockets[0].close();
+  assert.ok(events.includes('status:offline'));
+  assert.equal(text(), 'First part.', 'unconfirmed words are removed until resent');
+  await new Promise(r => setTimeout(r, 30));
+  assert.equal(sockets.length, 2, 'reconnected');
+  sockets[1].open();
+  const firstResent = new Int16Array(sockets[1].sent[0]);
+  // 3 seconds recorded (30 chunks); 1.2 seconds confirmed (12 chunks); 18 chunks resent.
+  assert.equal(sockets[1].sent.filter(m => typeof m !== 'string').length, 18, 'resends from 1.2 s, not from the start');
+  assert.ok(firstResent.length === 1600);
+  sockets[1].message({ type: 'Turn', turn_order: 0, transcript: 'Second part.', end_of_turn: true, turn_is_formatted: true, words: [{ end: 900 }] });
+  assert.equal(text(), 'First part. Second part.');
+  r.stop(); await flush(); sockets[1].message({ type: 'Termination' }); await flush(); await flush(); await flush();
+  assert.ok(fetches.some(f => f.url.startsWith('/api/transcription/recording')), 'checked against the full recording after a drop');
+  assert.equal(text(), 'Full checked words.');
+  assert.equal(outcomes.at(-1).outcome, 'recovered'); assert.equal(outcomes.at(-1).reason, 'reconnected'); assert.equal(outcomes.at(-1).reconnects, 1);
+});
+
+test('a kept recording is retried automatically when the connection returns and routed to its screen', async () => {
+  const ctx = browser({ sessionOk: false, recordingOk: false, recordingText: 'Words after reconnect.' });
+  await ctx.api.refresh(); ctx.api.unlock();
+  const { r, events } = recorder(ctx.api);
+  r.start(); await flush(); await flush(); ctx.speak(2); r.stop(); await flush(); await flush(); await flush();
+  assert.ok(events.includes('status:kept'));
+  const kept = r.keptRecording; assert.ok(kept);
+  let placed = '';
+  ctx.api.claimKept(kept.id, t => { placed = t; return true; });
+  ctx.window.dispatchEvent({ type: 'online' }); await flush(); await flush();
+  assert.equal(placed, '', 'still failing service keeps it');
+  assert.ok(ctx.api.pendingRecording());
+  ctx.opts.recordingOk = true;
+  ctx.window.dispatchEvent({ type: 'online' }); await flush(); await flush(); await flush();
+  assert.equal(placed, 'Words after reconnect.');
+  assert.equal(ctx.api.pendingRecording(), null);
+  assert.equal(ctx.outcomes.at(-1).outcome, 'retried');
+});
+
+test('recovered words with no open screen go to the Recovered list', async () => {
+  const ctx = browser({ sessionOk: false, recordingOk: false, recordingText: 'Orphan words.' });
+  let recovered = 0; ctx.window.addEventListener('photonotes-recordings-recovered', () => recovered++);
+  ctx.document.querySelector = () => ({}); // another dialog is open, so the list waits
+  await ctx.api.refresh(); ctx.api.unlock();
+  const { r } = recorder(ctx.api);
+  r.start(); await flush(); await flush(); ctx.speak(2); r.stop(); await flush(); await flush(); await flush();
+  ctx.api.claimKept(r.keptRecording.id, () => false); // screen already closed
+  ctx.opts.recordingOk = true;
+  ctx.window.dispatchEvent({ type: 'online' }); await flush(); await flush(); await flush();
+  assert.equal(recovered, 1);
+  const items = await ctx.api.listKept();
+  assert.equal(items[0].status, 'transcribed'); assert.equal(items[0].text, 'Orphan words.');
+});
+
+test('on a phone, leaving the screen pauses recording as an interruption and keeps words', async () => {
+  const ctx = browser({ userAgent: 'Mozilla/5.0 (iPhone)' });
+  await ctx.api.refresh(); ctx.api.unlock();
+  const { r, events, text } = recorder(ctx.api);
+  r.start(); await flush(); await flush();
+  ctx.sockets[0].open(); ctx.speak(1);
+  ctx.sockets[0].message({ type: 'Turn', turn_order: 0, transcript: 'Before leaving.', end_of_turn: true, turn_is_formatted: true, words: [{ end: 800 }] });
+  ctx.document.hide();
+  ctx.sockets[0].message({ type: 'Termination' }); await flush(); await flush();
+  assert.equal(text(), 'Before leaving.');
+  assert.ok(events.includes('end-interrupted'));
 });

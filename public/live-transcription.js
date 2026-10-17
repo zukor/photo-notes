@@ -1,19 +1,23 @@
 (()=>{
 'use strict';
 // Live Record Notes: streams microphone audio to the transcription service and
-// shows words as they are spoken. A copy of the audio is kept in memory for the
-// whole recording. If the live connection fails, the copy is transcribed after
-// Stop, so words are not lost. The object mimics the browser SpeechRecognition
-// interface so the existing Capture lifecycle code can drive it unchanged.
+// shows words as they are spoken. A copy of the audio is kept for the whole
+// recording. If the live connection drops, the engine reconnects and resends
+// the unconfirmed audio; after Stop, any recording whose live text may be
+// incomplete is transcribed again from the saved copy. A recording that still
+// cannot be transcribed is saved on this device and retried automatically.
+// The object mimics the browser SpeechRecognition interface so the existing
+// Capture lifecycle code can drive it unchanged. Each recording reports a
+// content-free outcome (never audio or words) for reliability measurement.
 const RATE=16000, CHUNK=1600; // 100 ms of 16 kHz mono PCM per streamed chunk.
-const CONFIG_KEY='pn_live_transcription_v1';
+const CONFIG_KEY='pn_live_transcription_v1', MAX_RECONNECTS=3;
 let config=null, configPromise=null, sharedContext=null, workletReady=null, lastFailed=null;
 
 function readCachedConfig(){try{return JSON.parse(localStorage.getItem(CONFIG_KEY)||'null');}catch{return null;}}
 function refresh(){
  configPromise=fetch('/api/transcription/config',{credentials:'same-origin',cache:'no-store'})
   .then(r=>r.ok?r.json():Promise.reject(new Error('config '+r.status)))
-  .then(value=>{config={live:!!value.live};try{localStorage.setItem(CONFIG_KEY,JSON.stringify(config));}catch{}return config;})
+  .then(value=>{config={live:!!value.live};try{localStorage.setItem(CONFIG_KEY,JSON.stringify(config));}catch{}if(config.live)setTimeout(async()=>{await retryKept();try{const items=await listKept();if(items.some(i=>i.status==='transcribed')&&!document.querySelector('dialog[open]'))void showRecovered();}catch{}},2500);return config;})
   .catch(()=>{config=config||readCachedConfig()||{live:false};return config;});
  return configPromise;
 }
@@ -65,19 +69,102 @@ async function transcribeRecording(wav,language,timeoutMs=60000){
  }finally{clearTimeout(timer);}
 }
 
+// ---------- Content-free outcome reporting ----------
+function appVersion(){return Number(document.querySelector?.('script[src*="/app.js"]')?.src?.match(/[?&]v=(\d+)/)?.[1])||0;}
+function installed(){try{return navigator.standalone===true||!!window.matchMedia?.('(display-mode: standalone)').matches;}catch{return false;}}
+function report(outcome,{surface='capture',seconds=0,reconnects=0,words=0,reason='',interrupted=false}={}){
+ try{fetch('/api/transcription/outcome',{method:'POST',credentials:'same-origin',keepalive:true,headers:{'Content-Type':'application/json'},body:JSON.stringify({surface,outcome,seconds,reconnects,words,reason:String(reason||'').slice(0,40),interrupted,mode:installed()?'installed':'browser',version:appVersion()})}).catch(()=>{});}catch{}
+}
+const wordCount=text=>String(text||'').trim().split(/\s+/).filter(Boolean).length;
+
+// ---------- Recordings kept on this device ----------
+// A recording that could not be transcribed is stored in IndexedDB so closing
+// or reloading the app does not lose it. Retries run when the app opens, when
+// the connection returns, and every minute while any are waiting.
+const DB_NAME='photonotes-recordings',STORE='kept';let dbPromise=null,retrying=false,retryTimer=null;
+// id -> function(text) registered by the screen that made the recording. It returns
+// true when it placed the words; false (screen closed) keeps them for the Recovered list.
+const claimers=new Map(),inFlight=new Set();
+function db(){
+ if(!dbPromise)dbPromise=new Promise((resolve,reject)=>{try{const request=indexedDB.open(DB_NAME,1);request.onupgradeneeded=()=>request.result.createObjectStore(STORE,{keyPath:'id'});request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);}catch(error){reject(error);}}).catch(error=>{dbPromise=null;throw error;});
+ return dbPromise;
+}
+async function tx(mode,fn){const database=await db();return new Promise((resolve,reject)=>{const t=database.transaction(STORE,mode),request=fn(t.objectStore(STORE));let value;if(request)request.onsuccess=()=>{value=request.result;};t.oncomplete=()=>resolve(value);t.onerror=()=>reject(t.error);t.onabort=()=>reject(t.error);});}
+const newId=()=>(crypto.randomUUID?.()||String(Date.now())+Math.random().toString(16).slice(2));
+async function keepRecording(wav,{language,seconds,surface}){
+ const item={id:newId(),language,seconds,surface,createdAt:Date.now(),status:'pending',attempts:0,text:''};
+ try{item.audio=await wav.arrayBuffer();item.stored=true;await tx('readwrite',store=>store.put(item));}catch{item.stored=false;}
+ item.wav=wav;lastFailed=item;scheduleRetry();return item;
+}
+async function listKept(){try{return await tx('readonly',store=>store.getAll())||[];}catch{return lastFailed&&!lastFailed.stored?[lastFailed]:[];}}
+async function removeKept(id){try{await tx('readwrite',store=>store.delete(id));}catch{}if(lastFailed?.id===id)lastFailed=null;}
+async function updateKept(item){if(item.stored===false)return;try{const {wav,...row}=item;await tx('readwrite',store=>store.put(row));}catch{}}
+function audioOf(item){return item.wav||new Blob([item.audio],{type:'audio/wav'});}
+async function transcribeKept(item){
+ if(inFlight.has(item.id))throw new Error('already transcribing');
+ inFlight.add(item.id);
+ try{
+  item.attempts=(item.attempts||0)+1;
+  const text=await transcribeRecording(audioOf(item),item.language);
+  report('retried',{surface:item.surface,seconds:item.seconds,words:wordCount(text),reason:'attempt-'+item.attempts});
+  const claim=claimers.get(item.id);claimers.delete(item.id);
+  let placed=false;try{placed=!!claim&&claim(text)!==false;}catch{}
+  if(placed){await removeKept(item.id);return text;}
+  item.status='transcribed';item.text=text;item.audio=undefined;delete item.wav;await updateKept(item);
+  if(!item.stored&&lastFailed===item)lastFailed=item;
+  window.dispatchEvent(new CustomEvent('photonotes-recordings-recovered'));
+  return text;
+ }finally{inFlight.delete(item.id);}
+}
+async function retryKept(){
+ if(retrying||!enabled()||navigator.onLine===false)return;retrying=true;
+ try{for(const item of await listKept()){if(item.status!=='pending'||inFlight.has(item.id))continue;if(!item.wav&&lastFailed?.id===item.id)item.wav=lastFailed.wav;try{await transcribeKept(item);}catch{await updateKept(item);}}}
+ finally{retrying=false;scheduleRetry();}
+}
+function scheduleRetry(){clearTimeout(retryTimer);retryTimer=setTimeout(async()=>{const items=await listKept();if(items.some(i=>i.status==='pending'))void retryKept();},60000);}
+window.addEventListener?.('online',()=>void retryKept());
+
+// Recovered recordings whose screen was closed are shown here to copy or add.
+async function showRecovered(){
+ const items=(await listKept()).filter(i=>i.status==='transcribed');
+ document.getElementById('recoveredRecordingsDialog')?.remove();
+ if(!items.length)return false;
+ const dialog=document.createElement('dialog');dialog.id='recoveredRecordingsDialog';dialog.className='web-help-dialog';dialog.style.background='#fff';dialog.style.color='#000';
+ dialog.innerHTML='<h2 style="color:#000">Recovered recordings</h2><p style="color:#000">These recordings could not be turned into text when you made them. They have now been transcribed. Copy the words, add them to the note you are writing, or discard them.</p><div id="recoveredList"></div><button class="btn secondary" id="recoveredClose" type="button">Close</button>';
+ const list=dialog.querySelector('#recoveredList');
+ for(const item of items){
+  const box=document.createElement('div');box.className='recovered-recording';box.style.cssText='border:1px solid #000;border-radius:8px;padding:10px;margin:10px 0;color:#000;text-align:left';
+  const when=document.createElement('p');when.style.color='#000';when.textContent=new Date(item.createdAt).toLocaleString()+' · '+({capture:'Record Notes',feedback:'Send Feedback',issue:'Report Issue',ewr:'Extra Work'}[item.surface]||'Recording');
+  const text=document.createElement('p');text.style.color='#000';text.textContent=item.text||'No words were found in this recording.';
+  const copy=document.createElement('button');copy.type='button';copy.className='btn';copy.dataset.recoveredCopy=item.id;copy.textContent='Copy Text';
+  copy.onclick=async()=>{try{await navigator.clipboard.writeText(item.text);copy.textContent='Copied';}catch{copy.textContent='Copy not available';}};
+  const add=document.createElement('button');add.type='button';add.className='btn';add.dataset.recoveredAdd=item.id;add.textContent='Add to Current Note';
+  add.hidden=!document.getElementById('note');
+  add.onclick=async()=>{const note=document.getElementById('note');if(!note)return;note.value=[note.value.trim(),item.text].filter(Boolean).join(' ');note.dispatchEvent(new Event('change'));try{if(typeof state!=='undefined')state._note=note.value;}catch{}await removeKept(item.id);box.remove();if(!list.children.length)dialog.close();};
+  const discard=document.createElement('button');discard.type='button';discard.className='btn secondary';discard.dataset.recoveredDiscard=item.id;discard.textContent='Discard';
+  discard.onclick=async()=>{await removeKept(item.id);box.remove();if(!list.children.length)dialog.close();};
+  box.append(when,text,copy,add,discard);list.append(box);
+ }
+ dialog.querySelector('#recoveredClose').onclick=()=>dialog.close();
+ dialog.addEventListener('close',()=>dialog.remove());document.body.append(dialog);dialog.showModal();return true;
+}
+
 class LiveRecognizer{
  constructor(){
-  this.lang='en-US';this.continuous=true;this.interimResults=true;
+  this.lang='en-US';this.continuous=true;this.interimResults=true;this.surface='capture';
   this.onstart=this.onaudiostart=this.onspeechstart=this.onaudioend=this.onresult=this.onerror=this.onend=this.onstatus=null;
   // Stop may wait for the after-the-fact transcription; the Capture finish timer reads this.
   this.finishTimeoutMs=75000;
   this._state='idle';this._turns=new Map();this._chunks=[];this._pending=new Int16Array(CHUNK);this._pendingLength=0;
   this._sent=0;this._ws=null;this._open=false;this._terminated=false;this._failure='';this._spoke=false;this._ended=false;
+  this._session=0;this._sessionStart=0;this._confirmed=0;this._reconnects=0;this._dropped=false;this._outcome=null;
  }
  static get isPhotoNotesLive(){return true;}
  get audioSeconds(){return (this._chunks.length*CHUNK+this._pendingLength)/RATE;}
+ get keptRecording(){return this._kept||null;}
  _emit(name,event={}){const fn=this['on'+name];if(typeof fn==='function')try{fn.call(this,event);}catch(error){setTimeout(()=>{throw error;});}}
  _status(state,detail=''){this._emit('status',{state,detail});}
+ _report(outcome,reason=''){if(this._outcome)return;this._outcome=outcome;report(outcome,{surface:this.surface,seconds:Math.round(this.audioSeconds),reconnects:this._reconnects,words:wordCount(joinTurns(this._turns)),reason,interrupted:!!this._interrupted});}
  _result(){
   const text=joinTurns(this._turns),final=Array.from(this._turns.values()).every(t=>t.final);
   if(text&&!this._spoke){this._spoke=true;this._emit('speechstart');}
@@ -89,30 +176,45 @@ class LiveRecognizer{
   this._state='starting';
   this._run().catch(error=>this._fail(error&&error.error||'audio-capture'));
  }
+ _session_request(){
+  const language=String(this.lang||'en').slice(0,2);
+  return fetch('/api/transcription/session',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({language})})
+   .then(r=>r.ok?r.json():Promise.reject(new Error('session '+r.status)));
+ }
  async _run(){
   const context=sharedContext||unlock();
   if(!context)throw speechError('audio-capture');
-  const language=String(this.lang||'en').slice(0,2);
-  const session=fetch('/api/transcription/session',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({language})})
-   .then(r=>r.ok?r.json():Promise.reject(new Error('session '+r.status))).catch(error=>{this._failure='session: '+error.message;return null;});
+  const session=this._session_request().catch(error=>{this._sessionError=error.message;return null;});
   let stream;
   try{stream=await navigator.mediaDevices.getUserMedia({audio:{channelCount:1,echoCancellation:true,noiseSuppression:true,autoGainControl:true}});}
   catch(error){throw speechError(error&&(error.name==='NotAllowedError'||error.name==='SecurityError')?'not-allowed':'audio-capture');}
   if(this._state!=='starting'){stream.getTracks().forEach(t=>t.stop());return;}
   this._stream=stream;
-  for(const track of stream.getAudioTracks())track.addEventListener('ended',()=>this._captureEnded());
+  for(const track of stream.getAudioTracks()){
+   track.addEventListener('ended',()=>this._captureEnded('microphone'));
+   // A muted track means the phone has taken the microphone (call, Siri) or paused the app.
+   track.addEventListener('mute',()=>{clearTimeout(this._muteTimer);this._muteTimer=setTimeout(()=>{if(track.muted)this._captureEnded('microphone');},1500);});
+   track.addEventListener('unmute',()=>clearTimeout(this._muteTimer));
+  }
+  // Phones stop the microphone when the app leaves the screen. Desktop browsers keep recording.
+  if(/iPhone|iPad|iPod|Android/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1)){
+   this._onHidden=()=>{if(document.visibilityState==='hidden')this._captureEnded('background');};
+   document.addEventListener('visibilitychange',this._onHidden);
+  }
+  this._onOnline=()=>{if(this._state==='recording'&&!this._open&&this._failure){this._failure='';this._reconnects=Math.min(this._reconnects,MAX_RECONNECTS-1);this._reconnect();}};
+  window.addEventListener('online',this._onOnline);
   if(context.state!=='running')try{await context.resume();}catch{}
   await this._attach(context,stream);
   if(this._state!=='starting'){this._detach();return;}
   this._state='recording';this._emit('start');this._emit('audiostart');
-  this._emit('status',{state:'capture',detail:`rate=${context.sampleRate} state=${context.state} node=${this._node&&this._node.port?'worklet':'script'}`});
+  this._status('capture',`rate=${context.sampleRate} state=${context.state} node=${this._node&&this._node.port?'worklet':'script'}`);
   // A paused audio pipeline would record silence. Detect it within seconds instead of losing the note.
   this._silenceCheck=setTimeout(()=>{if(this._state!=='recording'||this._chunks.length||this._pendingLength)return;context.resume?.().catch(()=>{});
    this._silenceCheck=setTimeout(()=>{if(this._state==='recording'&&!this._chunks.length&&!this._pendingLength)this._fail('audio-capture');},4000);},3000);
   const details=await session;
   if(this._state==='aborted')return;
-  if(details&&details.url)this._connect(details.url);
-  else{this._status('offline',this._failure);}
+  if(details&&details.url&&this._state==='recording')this._connect(details.url);
+  else if(this._state==='recording'){this._failure='session';this._dropped=true;this._status('offline',this._sessionError||'session');this._scheduleReconnect();}
  }
  async _attach(context,stream){
   const resample=createResampler(context.sampleRate);
@@ -134,7 +236,9 @@ class LiveRecognizer{
   this._source.connect(this._node);this._node.connect(this._sink);this._sink.connect(context.destination);
  }
  _detach(){
-  clearTimeout(this._silenceCheck);
+  clearTimeout(this._silenceCheck);clearTimeout(this._muteTimer);clearTimeout(this._reconnectTimer);
+  if(this._onHidden)document.removeEventListener('visibilitychange',this._onHidden);
+  if(this._onOnline)window.removeEventListener('online',this._onOnline);
   try{this._source?.disconnect();}catch{}try{this._node?.disconnect();}catch{}try{this._sink?.disconnect();}catch{}
   if(this._node?.port)this._node.port.onmessage=null;
   this._source=this._node=this._sink=null;
@@ -155,42 +259,70 @@ class LiveRecognizer{
  }
  _connect(url){
   let ws;try{ws=new WebSocket(url);}catch{this._lost('connect');return;}
-  ws.binaryType='arraybuffer';this._ws=ws;
+  const session=++this._session;
+  ws.binaryType='arraybuffer';this._ws=ws;this._terminated=false;
   const opened=setTimeout(()=>{if(!this._open&&this._ws===ws)this._lost('connect-timeout');},8000);
   ws.onopen=()=>{clearTimeout(opened);if(this._ws!==ws)return;this._open=true;this._status('live');this._flush();};
   ws.onmessage=e=>{
+   if(this._ws!==ws&&this._state!=='stopping')return;
    let message;try{message=JSON.parse(e.data);}catch{return;}
    if(message.type==='Turn'){
     const final=!!message.end_of_turn&&(message.turn_is_formatted!==false||!/format_turns=true/.test(url));
-    this._turns.set(Number(message.turn_order)||0,{text:message.transcript||'',final});
+    // Turns from a reconnected session sort after earlier sessions.
+    this._turns.set(session*100000+(Number(message.turn_order)||0),{text:message.transcript||'',final,session});
+    if(final&&Array.isArray(message.words)&&message.words.length){
+     const endMs=Math.max(...message.words.map(w=>Number(w.end)||0));
+     this._confirmed=Math.max(this._confirmed,this._sessionStart+Math.ceil(endMs/100));
+    }
     if(this._state!=='aborted')this._result();
-   }else if(message.type==='Termination'){this._terminated=true;this._settle?.();}
+   }else if(message.type==='Termination'){if(this._ws===ws||this._state==='stopping'){this._terminated=true;this._settle?.();}}
    else if(message.error){this._lost('provider');}
   };
   ws.onerror=()=>{};
   ws.onclose=()=>{clearTimeout(opened);if(this._ws!==ws)return;this._open=false;if(!this._terminated&&this._state==='recording')this._lost('closed');this._settle?.();};
  }
  _lost(reason){
-  if(this._failure&&this._failure!=='')return;
-  this._failure=reason;this._open=false;
-  try{this._ws?.close();}catch{}
-  // Recording continues. The saved copy is transcribed after Stop.
-  if(this._state==='recording'||this._state==='starting')this._status('offline',reason);
+  const ws=this._ws;this._ws=null;this._open=false;this._dropped=true;
+  try{ws?.close();}catch{}
+  if(this._state!=='recording'&&this._state!=='starting'){this._failure=this._failure||reason;this._settle?.();return;}
+  // Recording continues. Unconfirmed words are dropped and resent after reconnecting.
+  let removed=false;for(const [key,turn] of this._turns)if(!turn.final){this._turns.delete(key);removed=true;}
+  if(removed)this._result();
+  this._status('offline',reason);
+  this._failure=reason;this._scheduleReconnect();
  }
- _captureEnded(){
-  // The phone took the microphone away (call, Siri, lock). Keep what was captured.
+ _scheduleReconnect(){
+  if(this._reconnects>=MAX_RECONNECTS||this._state!=='recording')return;
+  clearTimeout(this._reconnectTimer);
+  this._reconnectTimer=setTimeout(()=>this._reconnect(),1000*Math.pow(2,this._reconnects));
+ }
+ async _reconnect(){
+  if(this._state!=='recording'||this._open||this._reconnects>=MAX_RECONNECTS||navigator.onLine===false)return;
+  this._reconnects++;
+  let details;try{details=await this._session_request();}catch{details=null;}
   if(this._state!=='recording')return;
-  this._interrupted=true;this.stop();
+  if(!details?.url){this._scheduleReconnect();return;}
+  // Resend from the last audio the service confirmed, so no words fall in the gap.
+  this._sessionStart=this._confirmed;this._sent=this._confirmed;this._failure='';
+  this._connect(details.url);
+ }
+ _captureEnded(reason){
+  // The phone took the microphone away or the app went to the background. Keep what was captured.
+  if(this._state!=='recording')return;
+  this._interrupted=reason||'microphone';this.stop();
  }
  stop(){
-  if(this._state==='starting'){this._state='aborted';this._detach();this._close();this._end();return;}
+  if(this._state==='starting'){this._state='aborted';this._detach();this._close();this._report('cancelled','before-start');this._end();return;}
   if(this._state!=='recording')return;
   this._state='stopping';
   void this._finalize();
  }
  abort(){
   if(this._state==='ended'||this._state==='aborted')return;
-  this._state='aborted';this._detach();this._close();this._end();
+  const stopping=this._state==='stopping';
+  this._state='aborted';this._detach();this._close();
+  if(!stopping)this._report('cancelled');
+  this._end();
  }
  _close(){
   const ws=this._ws;this._ws=null;this._open=false;
@@ -211,37 +343,55 @@ class LiveRecognizer{
   try{this._ws?.close();}catch{}this._ws=null;
   if(this._state==='aborted')return;
   const seconds=this.audioSeconds,text=joinTurns(this._turns);
-  // Use the saved recording when the live text is incomplete or never arrived.
-  if((!streamed||(!text&&seconds>=1.5))&&seconds>=0.5){
+  // Re-transcribe the saved recording whenever the live text may be incomplete:
+  // the connection never worked, dropped at any point, or returned nothing.
+  const reason=!streamed?(this._failure||'not-streamed'):this._dropped?'reconnected':!text&&seconds>=1.5?'no-live-text':'';
+  if(reason&&seconds>=0.5){
    this._status('transcribing');
    const wav=encodeWav(this._chunks),language=String(this.lang||'en').slice(0,2);
    try{
     const recovered=await transcribeRecording(wav,language);
     if(this._state==='aborted')return;
     if(recovered){this._turns=new Map([[0,{text:recovered,final:true}]]);this._result();}
-    lastFailed=null;
+    this._report('recovered',reason);
    }catch(error){
     if(this._state==='aborted')return;
-    lastFailed={wav,language,seconds,at:Date.now()};
-    this._status('kept',error.message);
+    if(streamed&&text){this._report('live','recheck-failed');}
+    else{this._kept=await keepRecording(wav,{language,seconds:Math.round(seconds),surface:this.surface});this._report('kept',reason);this._status('kept',error.message);}
    }
-  }
+  }else this._report(text?'live':'empty');
   this._chunks=[];
   this._end();
  }
  _fail(error){
   if(this._state==='aborted'||this._state==='ended')return;
   this._state='aborted';this._detach();this._close();
+  this._report('failed',error);
   this._emit('error',{error});this._end();
  }
- _end(){if(this._ended)return;this._ended=true;const aborted=this._state==='aborted';this._state=aborted?'aborted':'ended';setTimeout(()=>this._emit('end',{interrupted:!!this._interrupted}),0);}
+ _end(){if(this._ended)return;this._ended=true;const aborted=this._state==='aborted';this._state=aborted?'aborted':'ended';setTimeout(()=>this._emit('end',{interrupted:!!this._interrupted,reason:this._interrupted||''}),0);}
+}
+
+// Retry a kept recording from an open screen; the words go to that screen.
+// Retry a kept recording now. The screen's registered claimer places the words;
+// without one, the words are returned to the caller to place.
+async function retryPending(id){
+ const key=id||lastFailed?.id;const items=await listKept();
+ const item=items.find(i=>i.id===key)||(lastFailed&&lastFailed.id===key?lastFailed:null);
+ if(!item)return '';
+ if(item.status==='transcribed'){await removeKept(item.id);return item.text;}
+ if(!item.wav&&lastFailed?.id===item.id)item.wav=lastFailed.wav;
+ const prior=claimers.get(item.id);let result='';
+ claimers.set(item.id,text=>{result=text;return prior?prior(text):true;});
+ try{await transcribeKept(item);}catch(error){if(prior)claimers.set(item.id,prior);else claimers.delete(item.id);await updateKept(item);throw error;}
+ return prior?'':result;
 }
 
 // Simple text-field dictation for secondary fields (Extra Work description,
 // Report Issue description). Call from the button tap. Tapping again stops and
 // waits for the final words. Returns true when the live engine handled the tap.
 const fieldSessions=new Map();
-function dictateField({field,button,status,idleLabel,retryId,language='en-US',onText}){
+function dictateField({field,button,status,idleLabel,retryId,language='en-US',surface='feedback',onText}){
  if(!field||!button)return false;
  const active=fieldSessions.get(button);
  if(active){if(active.state==='recording'){active.state='finishing';button.disabled=true;button.textContent='Finishing...';try{active.recognizer.stop();}catch{}}return true;}
@@ -251,35 +401,43 @@ function dictateField({field,button,status,idleLabel,retryId,language='en-US',on
  const merge=(a,b)=>typeof window.mergeSpeechTranscript==='function'?window.mergeSpeechTranscript(a,b):[String(a||'').trim(),String(b||'').trim()].filter(Boolean).join(' ');
  document.getElementById(retryId)?.remove();
  const base=field.value.trim(),recognizer=new LiveRecognizer(),session={recognizer,state:'recording'};
- fieldSessions.set(button,session);recognizer.lang=language;
+ fieldSessions.set(button,session);recognizer.lang=language;recognizer.surface=surface;
  const reset=()=>{fieldSessions.delete(button);button.disabled=false;button.textContent=idleLabel;button.classList.remove('on');};
  recognizer.onstart=()=>{if(session.state==='recording'){button.textContent='Recording... tap to stop';say('Listening...');}};
  recognizer.onresult=e=>{const text=e.results[0][0].transcript;field.value=merge(base,text);onText?.(field.value);};
  recognizer.onstatus=e=>{
-  if(e.state==='offline')say('Connection lost. Still recording. Your words will be added when you stop.');
-  else if(e.state==='transcribing')say('Adding your words from the recording...');
+  if(e.state==='live'&&session.state==='recording')say('Listening...');
+  else if(e.state==='offline')say('Connection lost. Still recording. Reconnecting; your words will be added when you stop.');
+  else if(e.state==='transcribing')say('Checking your words against the recording...');
   else if(e.state==='kept'){
-   say('Your recording is kept on this device but could not be turned into text yet. Check your connection, then tap Transcribe Recording.');
+   const kept=recognizer.keptRecording;
+   say('Your recording is saved on this device and will be turned into text automatically when the connection returns. You can also tap Transcribe Recording.');
    const retry=document.createElement('button');retry.type='button';retry.className='btn secondary';retry.id=retryId;retry.textContent='Transcribe Recording';
+   if(kept)claimers.set(kept.id,text=>{if(!field.isConnected)return false;if(text){field.value=merge(field.value,text);onText?.(field.value);}say(text?'Words added from your recording.':'No words were found in the recording.');retry.remove();return true;});
    retry.onclick=async()=>{retry.disabled=true;retry.textContent='Transcribing...';
-    try{const text=await window.PhotoNotesLiveTranscription.retryPending();if(!field.isConnected){retry.remove();return;}if(text){field.value=merge(field.value,text);onText?.(field.value);}say(text?'Words added from your recording.':'No words were found in the recording.');retry.remove();}
-    catch{retry.disabled=false;retry.textContent='Transcribe Recording';say('Still could not transcribe the recording. Check your connection and try again.');}};
+    try{await retryPending(kept?.id);retry.remove();}
+    catch{retry.disabled=false;retry.textContent='Transcribe Recording';say('Still could not transcribe the recording. It stays saved and will be retried automatically.');}};
    button.after(retry);
   }};
  recognizer.onerror=e=>{say(e.error==='not-allowed'?'Allow microphone access for this website, then try again. You can also type.':'The microphone stopped. Your words are kept. Tap to record again or type.');};
- recognizer.onend=e=>{reset();if(e&&e.interrupted)say('Recording stopped early. Your words are kept.');else if(status&&/Listening|Adding/.test(status.textContent))status.textContent='';};
+ recognizer.onend=e=>{reset();if(e&&e.interrupted)say(e.reason==='background'?'Recording paused because the app left the screen. Your words are kept. Tap to continue.':'Recording paused because the phone used the microphone. Your words are kept. Tap to continue.');else if(status&&/Listening|Checking/.test(status.textContent))status.textContent='';};
  button.textContent='Starting microphone... tap to stop';button.classList.add('on');
  try{recognizer.start();}catch{reset();return false;}
  return true;
 }
 function fieldActive(button){return fieldSessions.has(button);}
 function stopField(button){const active=fieldSessions.get(button);if(active){fieldSessions.delete(button);try{active.recognizer.abort();}catch{}}}
+// Words from a kept recording are routed to the screen that is still open.
+function claimKept(id,handler){if(id)claimers.set(id,handler);}
+function releaseKept(id){claimers.delete(id);}
+
+window.addEventListener?.('photonotes-recordings-recovered',()=>{setTimeout(()=>{if(!document.querySelector('dialog[open]'))void showRecovered();},500);});
 
 window.PhotoNotesLiveTranscription={
- refresh,enabled,supported,unlock,Recognizer:LiveRecognizer,dictateField,stopField,fieldActive,
+ refresh,enabled,supported,unlock,Recognizer:LiveRecognizer,dictateField,stopField,fieldActive,claimKept,releaseKept,
  pendingRecording(){return lastFailed;},
- async retryPending(){if(!lastFailed)return '';const item=lastFailed;const text=await transcribeRecording(item.wav,item.language);lastFailed=null;return text;},
- discardPending(){lastFailed=null;},
- _test:{createResampler,encodeWav,joinTurns}
+ retryPending,retryKept,listKept,showRecovered,
+ discardPending(){if(lastFailed)void removeKept(lastFailed.id);lastFailed=null;},
+ _test:{createResampler,encodeWav,joinTurns,report}
 };
 })();

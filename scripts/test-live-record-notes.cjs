@@ -10,13 +10,13 @@ const {chromium}=require('playwright');
  try{for(const [label,ua,width] of [['iPhone','Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148',390],['Android','Mozilla/5.0 (Linux; Android 14) Chrome/130 Mobile',390],['desktop','Mozilla/5.0 (Macintosh) Chrome/130',1440]]){
   const page=await browser.newPage({viewport:{width,height:900},serviceWorkers:'block',userAgent:ua});
   page.on('pageerror',e=>console.log('pageerror',e.message));
-  const uploads=[];let recordingMode='ok';
+  const uploads=[],outcomes=[];let recordingMode='ok';
   await page.addInitScript(()=>{
    localStorage.setItem('pn_install_prompt_dismissed_v1','1');localStorage.setItem('pn_first_use_v1:'+encodeURIComponent('live@example.invalid'),'done');
    // Stand-in for the transcription socket: counts streamed audio and replies with turns.
    window.socketLog=[];window.socketMode='normal';
    window.WebSocket=class{constructor(url){this.url=url;this.readyState=0;this.bytes=0;this.turn=0;window.socketLog.push(this);setTimeout(()=>{if(window.socketMode==='refuse'){this.readyState=3;this.onclose?.({code:1006});return;}this.readyState=1;this.onopen?.();},30);}
-    send(data){if(typeof data==='string'){const m=JSON.parse(data);if(m.type==='Terminate'){this.terminated=true;setTimeout(()=>{this.onmessage?.({data:JSON.stringify({type:'Turn',turn_order:this.turn,transcript:`Final words ${window.socketLog.indexOf(this)}.`,end_of_turn:true,turn_is_formatted:true})});this.onmessage?.({data:JSON.stringify({type:'Termination'})});},50);}return;}
+    send(data){if(typeof data==='string'){const m=JSON.parse(data);if(m.type==='Terminate'){this.terminated=true;setTimeout(()=>{this.onmessage?.({data:JSON.stringify({type:'Turn',turn_order:this.turn,transcript:window.nextFinal||`Final words ${window.socketLog.indexOf(this)}.`,end_of_turn:true,turn_is_formatted:true})});this.onmessage?.({data:JSON.stringify({type:'Termination'})});},50);}return;}
      this.bytes+=data.byteLength;
      if(window.socketMode==='drop'&&this.bytes>16000*2){this.readyState=3;this.onclose?.({code:1006});return;}
      if(this.bytes%(3200*5)===0)this.onmessage?.({data:JSON.stringify({type:'Turn',turn_order:this.turn,transcript:'live words '+this.turn,end_of_turn:false})});}
@@ -24,6 +24,7 @@ const {chromium}=require('playwright');
   });
   await page.route('**/api/**',async route=>{
    const url=new URL(route.request().url()),path=url.pathname;
+   if(path==='/api/transcription/outcome'){outcomes.push(JSON.parse(route.request().postData()));return route.fulfill({json:{ok:true}});}
    if(path==='/api/transcription/config')return route.fulfill({json:{live:true,provider:'assemblyai'}});
    if(path==='/api/transcription/session')return route.fulfill({json:{url:'wss://streaming.assemblyai.com/v3/ws?token=t&format_turns=true',sampleRate:16000}});
    if(path==='/api/transcription/recording'){const body=route.request().postDataBuffer();uploads.push(body);return recordingMode==='ok'?route.fulfill({json:{text:'Recovered from the recording.',seconds:3}}):route.fulfill({status:502,json:{error:'down'}});}
@@ -66,7 +67,7 @@ const {chromium}=require('playwright');
   await page.evaluate(()=>{socketMode='refuse';document.getElementById('note').value='';state._note='';});recordingMode='fail';
   await page.locator('#dictate').click();await page.waitForTimeout(1500);await page.locator('#dictate').click();
   await page.locator('#dictationRetryTranscription').waitFor({timeout:15000});
-  assert.match(await page.locator('#dictationStatus').textContent(),/kept on this device/);
+  assert.match(await page.locator('#dictationStatus').textContent(),/saved on this device/);
   recordingMode='ok';await page.locator('#dictationRetryTranscription').click();
   await page.waitForFunction(()=>document.getElementById('note').value==='Recovered from the recording.');
   assert.equal(await page.locator('#dictationRetryTranscription').count(),0);
@@ -102,7 +103,43 @@ const {chromium}=require('playwright');
   await page.locator('#ewrDictate').click();
   await page.waitForFunction(()=>/Final words \d+\./.test(document.getElementById('ewrDesc').value)&&document.getElementById('ewrDictate').textContent==='Record Voice Note',null,{timeout:15000});
   assert.equal(await page.evaluate(()=>socketLog.filter(s=>!s.terminated&&s.readyState===1).length),0,'every live session terminated');
+  // 9. Every recording reported a content-free outcome.
+  assert.ok(outcomes.length>=8,'outcomes reported: '+outcomes.length);
+  assert.ok(outcomes.some(o=>o.outcome==='live'&&o.surface==='capture'));
+  assert.ok(outcomes.some(o=>o.outcome==='recovered'));
+  assert.ok(outcomes.some(o=>o.outcome==='kept'));
+  assert.ok(['feedback','issue','ewr'].every(surface=>outcomes.some(o=>o.surface===surface)));
+  assert.equal(JSON.stringify(outcomes).includes('Final words'),false,'no words in outcomes');
+  if(label==='iPhone'){
+   // 10. A saved recording survives closing the app and is recovered at the next open.
+   await page.evaluate(()=>{socketMode='refuse';state.view='capture';renderApp();document.getElementById('note').value='';});recordingMode='fail';
+   await page.locator('#dictate').click();await page.waitForTimeout(1500);await page.locator('#dictate').click();
+   await page.locator('#dictationRetryTranscription').waitFor({timeout:20000});
+   assert.equal(await page.evaluate(async()=>(await PhotoNotesLiveTranscription.listKept()).filter(i=>i.status==='pending').length),1,'saved on the device');
+   recordingMode='ok';
+   await page.reload();await page.waitForFunction(()=>state.me);
+   await page.locator('#recoveredRecordingsDialog').waitFor({timeout:20000});
+   assert.match(await page.locator('#recoveredList').textContent(),/Recovered from the recording\./);
+   await page.locator('[data-recovered-discard]').click();
+   await page.waitForFunction(()=>!document.getElementById('recoveredRecordingsDialog'));
+   assert.equal(await page.evaluate(async()=>(await PhotoNotesLiveTranscription.listKept()).length),0,'removed from the device');
+   // 11. Self-test page: ten recordings in a row with automatic pass/fail.
+   await page.goto(`http://127.0.0.1:${server.address().port}/record-notes-self-test.html`);
+   await page.evaluate(()=>{socketMode='normal';});
+   await page.locator('#selfTestRecord').waitFor();
+   for(let i=0;i<10;i++){
+    await page.locator('#selfTestRecord').click();
+    await page.waitForFunction(()=>document.getElementById('selfTestRecord').textContent==='Stop');
+    await page.evaluate(()=>{window.nextFinal=document.getElementById('selfTestSentence').textContent;});
+    await page.waitForTimeout(400);
+    await page.locator('#selfTestRecord').click();
+    await page.waitForFunction(n=>document.querySelectorAll('#selfTestResults tbody tr').length===n,i+1,{timeout:15000});
+   }
+   assert.equal(await page.locator('#selfTestSummary').textContent(),'All 10 tests passed.');
+   assert.equal(outcomes.filter(o=>o.surface==='selftest').length,10);
+   await page.screenshot({path:'/tmp/live-self-test.png',fullPage:true});
+  }
   await page.close();
-  console.log(label+': live words, Stop final words, repeated recordings, dropped connection recovery, retry, finish-before-save, Feedback and Capture handoff, Report Issue and Extra Work passed');
+  console.log(label+': live words, Stop final words, repeated recordings, dropped connection recovery, retry, finish-before-save, Feedback and Capture handoff, Report Issue and Extra Work, outcomes'+(label==='iPhone'?', saved recording across reload, self-test':'')+' passed');
  }}finally{await browser.close();server.close();}
 })().catch(e=>{console.error(e);process.exit(1);});

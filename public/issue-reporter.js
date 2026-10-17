@@ -269,7 +269,7 @@ async function toggleIssueDictation(){
   const generation=issueGeneration;
   const ta=document.getElementById('issueDescription'),btn=document.getElementById('issueRecord'),SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   // Live transcription turns speech into text on every device, including iPhone.
-  if(!issueRecognizer&&!issueDictationActive&&!issueMediaRecorder&&window.PhotoNotesLiveTranscription?.dictateField({field:ta,button:btn,status:document.getElementById('issueStatus'),idleLabel:uiPushText('Click To Speak Description'),retryId:'issueRetryTranscription',language:uiSpeechLanguage()}))return;
+  if(!issueRecognizer&&!issueDictationActive&&!issueMediaRecorder&&window.PhotoNotesLiveTranscription?.dictateField({field:ta,button:btn,status:document.getElementById('issueStatus'),idleLabel:uiPushText('Click To Speak Description'),retryId:'issueRetryTranscription',language:uiSpeechLanguage(),surface:'issue'}))return;
   if(isIOS()&&window.MediaRecorder&&navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)return toggleIssueVoiceRecording(btn);
   if(!SR){ta.focus();toast('Use the microphone key on your keyboard to dictate');return;}
   if(issueDictationActive){issueDictationActive=false;if(issueDictationRestartTimer)clearTimeout(issueDictationRestartTimer);if(issueDictationWatchdog)clearTimeout(issueDictationWatchdog);issueDictationRestartTimer=null;issueDictationWatchdog=null;if(issueRecognizer){try{issueRecognizer.stop();}catch(e){}}btn.textContent=uiPushText('Click To Speak Description');btn.classList.remove('on');return;}
