@@ -185,6 +185,8 @@ class LiveRecognizer{
   const context=sharedContext||unlock();
   if(!context)throw speechError('audio-capture');
   const session=this._session_request().catch(error=>{this._sessionError=error.message;return null;});
+  // Newer iPhones let a web app declare that it records, so Safari routes the microphone for capture.
+  try{if(navigator.audioSession&&navigator.audioSession.type!=='play-and-record'){this._audioType=navigator.audioSession.type;navigator.audioSession.type='play-and-record';}}catch{}
   let stream;
   try{stream=await navigator.mediaDevices.getUserMedia({audio:{channelCount:1,echoCancellation:true,noiseSuppression:true,autoGainControl:true}});}
   catch(error){throw speechError(error&&(error.name==='NotAllowedError'||error.name==='SecurityError')?'not-allowed':'audio-capture');}
@@ -207,6 +209,8 @@ class LiveRecognizer{
   await this._attach(context,stream);
   if(this._state!=='starting'){this._detach();return;}
   this._state='recording';this._emit('start');this._emit('audiostart');
+  // Keep the screen on while recording; an auto-lock would end the note.
+  try{navigator.wakeLock?.request('screen').then(lock=>{if(this._state==='recording')this._wake=lock;else lock.release().catch(()=>{});}).catch(()=>{});}catch{}
   this._status('capture',`rate=${context.sampleRate} state=${context.state} node=${this._node&&this._node.port?'worklet':'script'}`);
   // A paused audio pipeline would record silence. Detect it within seconds instead of losing the note.
   this._silenceCheck=setTimeout(()=>{if(this._state!=='recording'||this._chunks.length||this._pendingLength)return;context.resume?.().catch(()=>{});
@@ -236,6 +240,8 @@ class LiveRecognizer{
   this._source.connect(this._node);this._node.connect(this._sink);this._sink.connect(context.destination);
  }
  _detach(){
+  try{this._wake?.release().catch(()=>{});}catch{}this._wake=null;
+  try{if(this._audioType!==undefined&&navigator.audioSession){navigator.audioSession.type=this._audioType;this._audioType=undefined;}}catch{}
   clearTimeout(this._silenceCheck);clearTimeout(this._muteTimer);clearTimeout(this._reconnectTimer);
   if(this._onHidden)document.removeEventListener('visibilitychange',this._onHidden);
   if(this._onOnline)window.removeEventListener('online',this._onOnline);
