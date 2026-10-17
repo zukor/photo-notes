@@ -6,7 +6,14 @@ const pool = new Pool({
   connectionString,
   // Railway internal Postgres does not need SSL; managed external ones do.
   ssl: process.env.PGSSL === 'require' ? { rejectUnauthorized: false } : false,
+  // Fail fast instead of waiting forever when every connection is busy, and
+  // stop a forgotten transaction from holding locks indefinitely.
+  connectionTimeoutMillis: Number(process.env.PG_CONNECT_TIMEOUT_MS) || 15000,
+  idle_in_transaction_session_timeout: 60000,
 });
+// An idle connection dropped by a database restart or failover emits 'error'
+// on the pool. Without this listener Node exits the whole server.
+pool.on('error', error => console.error('[db] idle connection error', error && error.message));
 
 // Legacy global topics are retained only for schema compatibility.
 // Selectable topics belong to each account in user_areas.
@@ -630,7 +637,10 @@ async function init() {
   if (existing.rows.length === 0) {
     const email = (process.env.ADMIN_EMAIL || 'turcotte@zukor.com').toLowerCase().trim();
     const name = process.env.ADMIN_NAME || 'Sam';
-    const pw = process.env.ADMIN_PASSWORD || 'change-me';
+    // A new production database never gets a guessable admin password. Set ADMIN_PASSWORD to choose one.
+    const production = process.env.NODE_ENV === 'production' || !!process.env.RAILWAY_ENVIRONMENT;
+    const pw = process.env.ADMIN_PASSWORD || (production ? require('crypto').randomBytes(24).toString('base64url') : 'change-me');
+    if (!process.env.ADMIN_PASSWORD && production) console.warn('[db] ADMIN_PASSWORD is not set; the first admin account has a random password. Set ADMIN_PASSWORD and ADMIN_PASSWORD_RESET to sign in.');
     const hash = bcrypt.hashSync(pw, 10);
     const ins = await pool.query(
       `INSERT INTO users (email, name, password_hash, role, industry, active)
@@ -718,6 +728,10 @@ async function init() {
   await pool.query(`ALTER TABLE extra_work_records ADD COLUMN IF NOT EXISTS job_id INTEGER REFERENCES jobs(id) ON DELETE SET NULL`);
   await pool.query(`CREATE INDEX IF NOT EXISTS ewr_job_idx ON extra_work_records (user_id,job_id)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS captures_job_idx ON captures (user_id, job_id, created_at DESC)`);
+  // Library, duplicate checks and Record Notes reliability all filter by account or action and sort by date.
+  await pool.query(`CREATE INDEX IF NOT EXISTS captures_user_created_idx ON captures (user_id, created_at DESC)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS issue_reports_user_created_idx ON issue_reports (user_id, created_at DESC)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS events_action_created_idx ON events (action, created_at DESC)`);
   // Non-destructive crop: when a photo is first cropped, the pre-crop image is
   // backed up here so the original can always be restored.
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS photo_original_path TEXT`);

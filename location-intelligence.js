@@ -11,12 +11,12 @@ function registerLocationIntelligence(app,{pool,requireAuth,currentProduct}){
    const b=req.body||{},clear=b.subject_latitude===null&&b.subject_longitude===null;
    if(!clear&&!coordinates(b.subject_latitude,b.subject_longitude))return res.status(400).json({error:'Valid Subject Location coordinates required'});
    if(typeof b.location_description!=='string'||b.location_description.length>1000)return res.status(400).json({error:'Description must be at most 1000 characters'});
-   db=await pool.connect();await db.query('BEGIN');const c=await access(db,Number(req.params.id),req.user.id,true);if(!c){await db.query('ROLLBACK');return res.status(404).json({error:'Photo not found'});}
+   db=await pool.connect();await db.query('BEGIN');const c=await access(db,Number(req.params.id),req.user.id,true);if(!c){await db.query('ROLLBACK').catch(()=>{});return res.status(404).json({error:'Photo not found'});}
    const after={subject_latitude:clear?null:b.subject_latitude,subject_longitude:clear?null:b.subject_longitude,location_description:b.location_description.trim()||null};
    const saved=(await db.query(`UPDATE captures SET subject_latitude=$1,subject_longitude=$2,location_description=$3 WHERE id=$4 RETURNING *`,[after.subject_latitude,after.subject_longitude,after.location_description,c.id])).rows[0];
    await db.query(`INSERT INTO capture_history(capture_id,user_id,action,detail) VALUES($1,$2,'subject_location_updated',$3)`,[c.id,c.user_id,JSON.stringify({actor_id:req.user.id,before:{subject_latitude:c.subject_latitude,subject_longitude:c.subject_longitude,location_description:c.location_description},after,fields:['Subject Location','Location Description']})]);
    await db.query('COMMIT');res.json(saved);
-  }catch(e){if(db)await db.query('ROLLBACK');res.status(500).json({error:'Location could not save'});}finally{db?.release();}
+  }catch(e){if(db)await db.query('ROLLBACK').catch(()=>{});res.status(500).json({error:'Location could not save'});}finally{db?.release();}
  });
 }
 module.exports={EDITIONS,coordinates,registerLocationIntelligence};

@@ -98,7 +98,7 @@ function registerRamoIntake(app,{pool,requireAuth,requireConcrete,uploadDir}) {
       const row=(await client.query(`INSERT INTO ramo_intake_submissions(id,user_id,request_id,request_hash,manifest,status) VALUES($1,$2,$3,$4,$5,'sending') RETURNING *`,[id,req.user.id,input.requestId,requestHash,manifest])).rows[0];
       for(let i=0;i<attachments.length;i++)await client.query('INSERT INTO ramo_intake_files(submission_id,attachment_id,bytes) VALUES($1,$2,$3)',[id,attachments[i].id,saved[i]]);
       await client.query('COMMIT');res.status(201).json(view(row));
-    }catch(e){await client.query('ROLLBACK');throw e;}finally{client.release();}
+    }catch(e){await client.query('ROLLBACK').catch(()=>{});throw e;}finally{client.release();}
     void tick();
   });
   route('post','/api/ramo-intake/submissions/:id/retry',async(req,res)=>{

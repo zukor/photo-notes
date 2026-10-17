@@ -88,6 +88,8 @@ app.use(express.json());
 app.use(cookieParser());
 
 // ---- static frontend + uploaded photos ----
+// Uploads from a request that failed are removed unless the database already uses them.
+app.use((req,res,next)=>{res.on('finish',()=>{if(res.statusCode<400)return;const files=[req.file,...(Array.isArray(req.files)?req.files:Object.values(req.files||{}).flat())].filter(f=>f&&f.path);if(files.length)void removeUnreferencedUploads(files.map(f=>'/uploads/'+path.basename(f.path))).catch(()=>{});});next();});
 app.get('/vendor/jszip.min.js',(req,res)=>res.sendFile(require.resolve('jszip/dist/jszip.min.js')));
 app.get('/vendor/docx-preview.min.js',(req,res)=>res.sendFile(path.join(path.dirname(require.resolve('docx-preview')),'docx-preview.min.js')));
 app.get('/vendor/html2canvas.min.js', (req, res) => res.sendFile(require.resolve('html2canvas/dist/html2canvas.min.js')));
@@ -108,11 +110,16 @@ app.use('/uploads/customer-feedback',requireAuth,async(req,res)=>{
  try{const file=path.basename(req.path);const row=(await pool.query('SELECT user_id FROM issue_reports WHERE screenshot_path=$1 AND feedback_category IS NOT NULL',['/uploads/customer-feedback/'+file])).rows[0];if(!row||(row.user_id!==req.user.id&&!require('./customer-feedback').canReview(req.user)))return res.status(404).end();res.set('Cache-Control','private, no-store');res.sendFile(path.join(UPLOAD_DIR,'.private-feedback',file),{dotfiles:'allow'});}catch{res.status(500).end();}
 });
 app.use('/uploads',(req,res,next)=>{try{if(decodeURIComponent(req.path).split('/').includes('.private-feedback'))return res.status(404).end();next();}catch{res.status(400).end();}});
-app.use('/uploads', express.static(UPLOAD_DIR));
+// Uploaded files are user content. Serve them sandboxed so no file can run
+// script on this site, and download anything that is not an image or audio.
+app.use('/uploads', express.static(UPLOAD_DIR,{setHeaders(res,file){
+  res.setHeader('Content-Security-Policy',"sandbox; default-src 'none'; img-src 'self' data:; media-src 'self'; style-src 'unsafe-inline'");
+  if(!/\.(jpe?g|png|webp|gif|heic|heif|m4a|mp4|mov|webm|ogg|wav|mp3|aac|caf)$/i.test(file))res.setHeader('Content-Disposition','attachment');
+}}));
 
 // ---- auth ----
 function setSession(res, user) {
-  const token = jwt.sign({ id: user.id, email: user.email, name: user.name, role: user.role, plan: user.plan || 'free', pro_type:normalizeProType(user.pro_type) }, SESSION_SECRET, { expiresIn: '30d' });
+  const token = jwt.sign({ id: user.id, email: user.email, name: user.name, role: user.role, plan: user.plan || 'free', pro_type:normalizeProType(user.pro_type), pv:passwordVersion(user.password_hash) }, SESSION_SECRET, { expiresIn: '30d' });
   res.cookie(COOKIE, token, {
     httpOnly: true,
     sameSite: 'lax',
@@ -120,6 +127,8 @@ function setSession(res, user) {
     maxAge: 30 * 24 * 60 * 60 * 1000,
   });
 }
+// Sessions carry a short fingerprint of the password hash, so a password reset signs out every other device.
+function passwordVersion(hash){return hash?crypto.createHash('sha256').update(String(hash)).digest('hex').slice(0,16):undefined;}
 function readUser(req) {
   const token = req.cookies && req.cookies[COOKIE];
   if (!token) return null;
@@ -129,9 +138,11 @@ async function requireAuth(req, res, next) {
   const session = readUser(req);
   if (!session || !session.id) return res.status(401).json({ error: 'not authenticated' });
   try {
-    const user=(await pool.query('SELECT id,email,name,role,plan,pro_type,active,is_testing_manager FROM users WHERE id=$1',[session.id])).rows[0];
+    const user=(await pool.query('SELECT id,email,name,role,plan,pro_type,active,is_testing_manager,password_hash FROM users WHERE id=$1',[session.id])).rows[0];
     if(!user||!user.active)return res.status(401).json({error:'not authenticated'});
-    req.user=user;
+    // Sessions from before this check have no fingerprint and stay valid until they expire.
+    if(session.pv&&session.pv!==passwordVersion(user.password_hash))return res.status(401).json({error:'not authenticated'});
+    delete user.password_hash;req.user=user;
   }catch(e){return res.status(503).json({error:'Account could not be checked. Please try again.'});}
   require('./ai-request-context').run({userId:req.user.id},next);
 }
@@ -565,19 +576,28 @@ async function imageDims(localPath) {
 async function photoDhash(localPath){
   try{const {data}=await sharp(localPath).rotate().resize(9,8,{fit:'fill'}).greyscale().raw().toBuffer({resolveWithObject:true});let bits='';for(let y=0;y<8;y++)for(let x=0;x<8;x++)bits+=data[y*9+x]>data[y*9+x+1]?'1':'0';return BigInt('0b'+bits).toString(16).padStart(16,'0');}catch(e){return null;}
 }
+// A photo saved offline uploads later. Keep the time it was taken, within reason, instead of the upload time.
+function deviceCaptureTime(value,now=Date.now()){const t=Date.parse(String(value||''));if(!Number.isFinite(t)||t>now+5*60*1000||t<now-30*24*60*60*1000||now-t<2*60*1000)return null;return new Date(t).toISOString();}
 function hashDistance(a,b){if(!a||!b||a.length!==b.length)return 99;let x=BigInt('0x'+a)^BigInt('0x'+b),n=0;while(x){n+=Number(x&1n);x>>=1n;}return n;}
 
+// Failed sign-ins per email. Stops password guessing without locking out anyone who types correctly.
+const LOGIN_FAILURE_LIMIT=10,LOGIN_FAILURE_WINDOW_MS=15*60*1000,loginFailures=new Map();
+function loginBlocked(email,now=Date.now()){const list=(loginFailures.get(email)||[]).filter(t=>now-t<LOGIN_FAILURE_WINDOW_MS);if(list.length)loginFailures.set(email,list);else loginFailures.delete(email);return list.length>=LOGIN_FAILURE_LIMIT;}
+function noteLoginFailure(email,now=Date.now()){const list=(loginFailures.get(email)||[]).filter(t=>now-t<LOGIN_FAILURE_WINDOW_MS);list.push(now);loginFailures.set(email,list);if(loginFailures.size>10000)for(const key of loginFailures.keys()){loginFailures.delete(key);if(loginFailures.size<=5000)break;}}
 app.post('/api/login', async (req, res) => {
   try {
     const b = req.body || {};
     const email = String(b.email || '').toLowerCase().trim();
     const password = String(b.password || '');
     if (!email || !password) return res.status(400).json({ error: 'email and password required' });
+    if (loginBlocked(email)) return res.status(429).json({ error: 'Too many wrong passwords. Wait 15 minutes, then try again.' });
     const { rows } = await pool.query(`SELECT * FROM users WHERE email = $1 AND active = true`, [email]);
     const user = rows[0];
-    if (!user || !bcrypt.compareSync(password, user.password_hash)) {
+    if (!user || !user.password_hash || !(await bcrypt.compare(password, user.password_hash))) {
+      noteLoginFailure(email);
       return res.status(401).json({ error: 'wrong email or password' });
     }
+    loginFailures.delete(email);
     await pool.query(`UPDATE users SET last_login_at = now() WHERE id = $1`, [user.id]);
     setSession(res, user);
     logEvent(user.id, 'login', {});
@@ -629,19 +649,22 @@ app.get('/api/me', requireAuth, async (req, res) => {
 const photoFollowUps=require('./photo-follow-ups');
 photoFollowUps.register(app,{pool,requireAuth});
 
-async function hoaCompanyForUser(userId,create=false,db=pool){let row=(await db.query(`SELECT c.*,m.company_role FROM hoa_management_companies c JOIN hoa_company_members m ON m.company_id=c.id WHERE m.user_id=$1 ORDER BY c.id LIMIT 1`,[userId])).rows[0];if(!row&&create){const u=(await pool.query(`SELECT name FROM users WHERE id=$1`,[userId])).rows[0];const client=await pool.connect();try{await client.query('BEGIN');row=(await client.query(`INSERT INTO hoa_management_companies(name) VALUES($1) RETURNING *`,[`${u&&u.name||'HOA'} Management`])).rows[0];await client.query(`INSERT INTO hoa_company_members(company_id,user_id,company_role) VALUES($1,$2,'administrator')`,[row.id,userId]);await client.query('COMMIT');}catch(e){await client.query('ROLLBACK');throw e;}finally{client.release();}}return row||null;}
-async function requireHoa(req,res,next){if(!['hoa','property'].includes(await currentProduct(req.user.id)))return res.status(403).json({error:'HOA Maintenance Pro or Property Manager Pro required'});req.hoaCompany=await hoaCompanyForUser(req.user.id,true);next();}
+async function hoaCompanyForUser(userId,create=false,db=pool){let row=(await db.query(`SELECT c.*,m.company_role FROM hoa_management_companies c JOIN hoa_company_members m ON m.company_id=c.id WHERE m.user_id=$1 ORDER BY c.id LIMIT 1`,[userId])).rows[0];if(!row&&create){const u=(await pool.query(`SELECT name FROM users WHERE id=$1`,[userId])).rows[0];const client=await pool.connect();try{await client.query('BEGIN');row=(await client.query(`INSERT INTO hoa_management_companies(name) VALUES($1) RETURNING *`,[`${u&&u.name||'HOA'} Management`])).rows[0];await client.query(`INSERT INTO hoa_company_members(company_id,user_id,company_role) VALUES($1,$2,'administrator')`,[row.id,userId]);await client.query('COMMIT');}catch(e){await client.query('ROLLBACK').catch(()=>{});throw e;}finally{client.release();}}return row||null;}
+async function requireHoa(req,res,next){let company;try{if(!['hoa','property'].includes(await currentProduct(req.user.id)))return res.status(403).json({error:'HOA Maintenance Pro or Property Manager Pro required'});company=await hoaCompanyForUser(req.user.id,true);}catch(e){console.error('[hoa.company]',e&&e.message);return res.status(503).json({error:'Management company is temporarily unavailable'});}req.hoaCompany=company;next();}
 async function requireConcrete(req,res,next){if(await currentProduct(req.user.id)!=='concrete')return res.status(403).json({error:'Concrete Pro required'});next();}
 async function hoaOwnsCommunity(companyId,communityId,db=pool){return !!(await db.query(`SELECT 1 FROM hoa_communities WHERE id=$1 AND company_id=$2 AND active=true`,[communityId,companyId])).rowCount;}
 
 // ---- photo upload ----
+const SAFE_UPLOAD_EXTENSIONS = new Set(['.jpg','.jpeg','.png','.webp','.heic','.heif','.gif','.m4a','.mp4','.mov','.webm','.ogg','.wav','.mp3','.aac','.caf','.docx','.pdf']);
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, UPLOAD_DIR),
   filename: (req, file, cb) => {
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const rand = Math.random().toString(36).slice(2, 8);
+    // Unguessable names. The extension comes from a fixed list, never from the
+    // uploader, so an uploaded page or script can never be served as one.
+    const rand = crypto.randomBytes(12).toString('hex');
     const ext = (file.originalname.match(/\.[a-zA-Z0-9]+$/) || ['.jpg'])[0].toLowerCase();
-    cb(null, `${stamp}_${rand}${ext}`);
+    cb(null, `${stamp}_${rand}${SAFE_UPLOAD_EXTENSIONS.has(ext) ? ext : '.bin'}`);
   },
 });
 const upload = multer({ storage, limits: { fileSize: 25 * 1024 * 1024 } });
@@ -862,12 +885,12 @@ app.post('/api/captures', requireAuth, validateCaptureAccount, upload.single('ph
     const concreteLocation=concreteProduct?ticketText(b.concrete_location,300):null;
     const q = `INSERT INTO captures (user_id, captured_by, photo_path, photo_width, photo_height, note, latitude, longitude, address, area_tags, kind, status, job_id, perceptual_hash,
                  dim_length_in, dim_length_unit, dim_width_in, dim_width_unit, dim_depth_in, dim_shape, dim_area_sqft,
-                 dim_source, dim_confidence, dim_ai, dim_confirmed, concrete_element, concrete_stage, concrete_condition, concrete_severity, concrete_mix, concrete_location, concrete_phase, concrete_purpose, paving_photo_reason, urgency, security_issue_type)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36) RETURNING *`;
+                 dim_source, dim_confidence, dim_ai, dim_confirmed, concrete_element, concrete_stage, concrete_condition, concrete_severity, concrete_mix, concrete_location, concrete_phase, concrete_purpose, paving_photo_reason, urgency, security_issue_type, created_at)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,COALESCE($37::timestamptz,now())) RETURNING *`;
     const status = kind === 'task' ? 'open' : null;
     const vals = [req.user.id, req.user.name, photoPath, pw, ph, b.note || null, lat, lng, address, areas, kind, status, jobId, perceptualHash,
       dLenIn, dLenUnit, dWidIn, dWidUnit, dDepthIn, dShape, dArea,
-      dSource, dConf, dAi ? JSON.stringify(dAi) : null, dConfirmed, concreteElement, concreteStage, concreteCondition, concreteSeverity, concreteMix, concreteLocation, concreteContext.concrete_phase, concreteContext.concrete_purpose, pavingPhotoReason, captureProduct!=='basic'&&b.urgency==='urgent'?'urgent':'standard',securityIssueType];
+      dSource, dConf, dAi ? JSON.stringify(dAi) : null, dConfirmed, concreteElement, concreteStage, concreteCondition, concreteSeverity, concreteMix, concreteLocation, concreteContext.concrete_phase, concreteContext.concrete_purpose, pavingPhotoReason, captureProduct!=='basic'&&b.urgency==='urgent'?'urgent':'standard',securityIssueType,deviceCaptureTime(b.captured_at)];
     const cf=require('./custom-fields');
     if(b.custom_fields&&(!isProUser||!cf.EDITIONS.includes(cf.normalizeEdition(captureProduct))))throw Object.assign(new Error('Custom Fields require a Pro edition'),{status:403});
     const customValues=isProUser&&cf.EDITIONS.includes(cf.normalizeEdition(captureProduct))?await cf.captureValues(db,req.user.id,captureProduct,b.custom_fields):[];
@@ -931,6 +954,8 @@ app.post('/api/captures', requireAuth, validateCaptureAccount, upload.single('ph
     }
   } catch (err) {
     if(receipt)await receipt.rollback().catch(()=>{});
+    // Nothing was saved, so the uploaded file must not stay on the volume.
+    if(req.file)fs.promises.unlink(req.file.path).catch(()=>{});
     if(err.status)return res.status(err.status).json({error:err.message});
     console.error('[captures.create]', err);
     res.status(500).json({ error: 'failed to save capture' });
@@ -1036,7 +1061,15 @@ require('./property-incidents').register(app,{pool,requireAuth,requireHoa,curren
 app.get('/api/hoa/company',requireAuth,requireHoa,async(req,res)=>res.json(req.hoaCompany));
 app.post('/api/hoa/company',requireAuth,requireHoa,async(req,res)=>{try{const name=ticketText(req.body&&req.body.name,200);if(!name)return res.status(400).json({error:'name required'});res.json((await pool.query(`UPDATE hoa_management_companies SET name=$1 WHERE id=$2 RETURNING *`,[name,req.hoaCompany.id])).rows[0]);}catch(e){res.status(500).json({error:'company update failed'});}});
 app.get('/api/hoa/members',requireAuth,requireHoa,async(req,res)=>{try{res.json((await pool.query(`SELECT u.id,u.name,u.email,m.company_role FROM hoa_company_members m JOIN users u ON u.id=m.user_id WHERE m.company_id=$1 ORDER BY u.name`,[req.hoaCompany.id])).rows);}catch(e){res.status(500).json({error:'members failed'});}});
-app.post('/api/hoa/members',requireAuth,requireHoa,async(req,res)=>{try{if(req.hoaCompany.company_role!=='administrator')return res.status(403).json({error:'company administrator required'});const email=String(req.body&&req.body.email||'').toLowerCase().trim(),user=(await pool.query(`SELECT id,plan,pro_type FROM users WHERE email=$1 AND active=true`,[email])).rows[0];if(!user||user.plan!=='pro'||!['hoa','property'].includes(user.pro_type))return res.status(404).json({error:'HOA Maintenance Pro or Property Manager Pro user not found'});await pool.query(`DELETE FROM hoa_company_members WHERE user_id=$1`,[user.id]);await pool.query(`INSERT INTO hoa_company_members(company_id,user_id,company_role) VALUES($1,$2,'manager') ON CONFLICT DO NOTHING`,[req.hoaCompany.id,user.id]);res.json({ok:true});}catch(e){res.status(500).json({error:'member add failed'});}});
+app.post('/api/hoa/members',requireAuth,requireHoa,async(req,res)=>{try{if(req.hoaCompany.company_role!=='administrator')return res.status(403).json({error:'company administrator required'});const email=String(req.body&&req.body.email||'').toLowerCase().trim(),user=(await pool.query(`SELECT id,plan,pro_type FROM users WHERE email=$1 AND active=true`,[email])).rows[0];if(!user||user.plan!=='pro'||!['hoa','property'].includes(user.pro_type))return res.status(404).json({error:'HOA Maintenance Pro or Property Manager Pro user not found'});const db=await pool.connect();try{await db.query('BEGIN');
+  // Only the empty company every new account gets automatically may be left
+  // behind. A person in a real company (other members or any communities)
+  // cannot be moved by another company's administrator.
+  const held=(await db.query(`SELECT m.company_id,(SELECT COUNT(*)::int FROM hoa_company_members o WHERE o.company_id=m.company_id AND o.user_id<>m.user_id) others,(SELECT COUNT(*)::int FROM hoa_communities c WHERE c.company_id=m.company_id) communities FROM hoa_company_members m WHERE m.user_id=$1 FOR UPDATE`,[user.id])).rows;
+  if(held.some(row=>row.company_id===req.hoaCompany.id)){await db.query('ROLLBACK').catch(()=>{});return res.json({ok:true});}
+  if(held.some(row=>row.others>0||row.communities>0)){await db.query('ROLLBACK').catch(()=>{});return res.status(409).json({error:'This person already belongs to another management company. They must be removed from it before joining yours.'});}
+  await db.query(`DELETE FROM hoa_company_members WHERE user_id=$1`,[user.id]);await db.query(`INSERT INTO hoa_company_members(company_id,user_id,company_role) VALUES($1,$2,'manager') ON CONFLICT DO NOTHING`,[req.hoaCompany.id,user.id]);await db.query('COMMIT');res.json({ok:true});
+ }catch(e){await db.query('ROLLBACK').catch(()=>{});throw e;}finally{db.release();}}catch(e){res.status(500).json({error:'member add failed'});}});
 app.get('/api/hoa/communities',requireAuth,requireHoa,async(req,res)=>{try{res.json((await pool.query(`SELECT c.*,COUNT(i.id)::int open_items FROM hoa_communities c LEFT JOIN hoa_maintenance_items i ON i.community_id=c.id AND i.status NOT IN ('completed','cancelled') WHERE c.company_id=$1 AND c.active=true GROUP BY c.id ORDER BY c.name`,[req.hoaCompany.id])).rows);}catch(e){res.status(500).json({error:'communities failed'});}});
 app.post('/api/hoa/communities',requireAuth,requireHoa,async(req,res)=>{try{const b=req.body||{},name=ticketText(b.name,200);if(!name)return res.status(400).json({error:'name required'});const row=(await pool.query(`INSERT INTO hoa_communities(company_id,name,address,manager_name,assignment_rules) VALUES($1,$2,$3,$4,$5) RETURNING *`,[req.hoaCompany.id,name,ticketText(b.address,500),ticketText(b.manager_name,200),JSON.stringify(b.assignment_rules&&typeof b.assignment_rules==='object'?b.assignment_rules:{})])).rows[0];logEvent(req.user.id,'hoa_community_create',{});res.json(row);}catch(e){console.error('[hoa.community.create]',e);res.status(500).json({error:'community failed'});}});
 app.post('/api/hoa/communities/:id',requireAuth,requireHoa,async(req,res)=>{try{const id=Number(req.params.id);if(!await hoaOwnsCommunity(req.hoaCompany.id,id))return res.status(404).json({error:'not found'});const b=req.body||{},sets=[],vals=[];for(const [k,max] of [['name',200],['address',500],['manager_name',200]])if(typeof b[k]==='string'){vals.push(ticketText(b[k],max));sets.push(`${k}=$${vals.length}`);}if(b.assignment_rules&&typeof b.assignment_rules==='object'){vals.push(JSON.stringify(b.assignment_rules));sets.push(`assignment_rules=$${vals.length}`);}if(typeof b.active==='boolean'){vals.push(b.active);sets.push(`active=$${vals.length}`);}if(!sets.length)return res.status(400).json({error:'nothing to update'});vals.push(id,req.hoaCompany.id);res.json((await pool.query(`UPDATE hoa_communities SET ${sets.join(',')} WHERE id=$${vals.length-1} AND company_id=$${vals.length} RETURNING *`,vals)).rows[0]);}catch(e){res.status(500).json({error:'community update failed'});}});
@@ -1048,12 +1081,12 @@ app.get('/api/hoa/assets/:id',requireAuth,requireHoa,async(req,res)=>{try{const 
 app.post('/api/hoa/assets/:id/photos',requireAuth,requireHoa,upload.single('photo'),async(req,res)=>{try{const id=Number(req.params.id),asset=(await pool.query(`SELECT * FROM hoa_assets WHERE id=$1 AND company_id=$2`,[id,req.hoaCompany.id])).rows[0];if(!asset||!req.file)return res.status(asset?400:404).json({error:asset?'photo required':'not found'});const dims=await imageDims(req.file.path),photoPath=`/uploads/${req.file.filename}`,cap=(await pool.query(`INSERT INTO captures(user_id,captured_by,photo_path,photo_width,photo_height,note,address,area_tags,kind) VALUES($1,$2,$3,$4,$5,$6,$7,$8,'note') RETURNING *`,[req.user.id,req.user.name,photoPath,dims&&dims.w,dims&&dims.h,ticketText(req.body.note,4000),ticketText(req.body.address,500),[asset.asset_type]])).rows[0];const buffer=fs.readFileSync(req.file.path);await pool.query(`INSERT INTO capture_evidence(capture_id,user_id,original_sha256,original_bytes,original_name) VALUES($1,$2,$3,$4,$5)`,[cap.id,req.user.id,crypto.createHash('sha256').update(buffer).digest('hex'),buffer.length,ticketText(req.file.originalname,255)]);if(await currentProduct(req.user.id)==='property')await pool.query('UPDATE captures SET property_area_id=$1,property_community_id=$2 WHERE id=$3',[asset.property_area_id,asset.community_id,cap.id]);await pool.query(`INSERT INTO hoa_asset_photos(asset_id,capture_id,photo_type) VALUES($1,$2,$3)`,[id,cap.id,['identity','condition','damage','repair','verification'].includes(req.body.photo_type)?req.body.photo_type:'condition']);await pool.query(`UPDATE hoa_assets SET condition=$1,updated_at=now() WHERE id=$2`,[['good','fair','poor','critical','not_assessed'].includes(req.body.condition)?req.body.condition:asset.condition,id]);res.json({ok:true});}catch(e){console.error('[hoa.asset.photo]',e);res.status(500).json({error:'photo failed'});}});
 
 app.get('/api/hoa/routes',requireAuth,requireHoa,async(req,res)=>{try{res.json((await pool.query(`SELECT r.*,c.name community_name,COUNT(s.id)::int stop_count FROM hoa_inspection_routes r JOIN hoa_communities c ON c.id=r.community_id LEFT JOIN hoa_inspection_stops s ON s.route_id=r.id WHERE r.company_id=$1 AND r.active=true AND ($2::integer IS NULL OR EXISTS(SELECT 1 FROM hoa_inspection_stops ps WHERE ps.route_id=r.id AND ps.property_area_id=$2)) GROUP BY r.id,c.name ORDER BY c.name,r.name`,[req.hoaCompany.id,await currentProduct(req.user.id)==='property'&&req.query.property_area_id?Number(req.query.property_area_id):null])).rows);}catch(e){res.status(500).json({error:'routes failed'});}});
-app.post('/api/hoa/routes',requireAuth,requireHoa,async(req,res)=>{const client=await pool.connect();try{const b=req.body||{},communityId=Number(b.community_id),name=ticketText(b.name,200),stops=Array.isArray(b.stops)?b.stops.slice(0,100):[];if(!name||!stops.length||!await hoaOwnsCommunity(req.hoaCompany.id,communityId))return res.status(400).json({error:'community, name, and stops required'});await client.query('BEGIN');const route=(await client.query(`INSERT INTO hoa_inspection_routes(company_id,community_id,name,instructions) VALUES($1,$2,$3,$4) RETURNING *`,[req.hoaCompany.id,communityId,name,ticketText(b.instructions,1000)])).rows[0];for(let x=0;x<stops.length;x++){const s=stops[x]||{},stopName=ticketText(s.name,200);if(!stopName)continue;const areaId=await currentProduct(req.user.id)==='property'?await propertyAreas.validate(client,req.hoaCompany.id,communityId,s.property_area_id):null;const views=Array.isArray(s.required_views)?s.required_views.map(v=>ticketText(v,50)).filter(Boolean).slice(0,8):['overview'];await client.query(`INSERT INTO hoa_inspection_stops(route_id,asset_id,name,instructions,required_views,sort_order,property_area_id) VALUES($1,$2,$3,$4,$5,$6,$7)`,[route.id,Number.isInteger(Number(s.asset_id))?Number(s.asset_id):null,stopName,ticketText(s.instructions,500),views.length?views:['overview'],x,areaId]);}await client.query('COMMIT');res.json(route);}catch(e){await client.query('ROLLBACK');console.error('[hoa.route.create]',e);res.status(e.status||500).json({error:e.status?e.message:'route failed'});}finally{client.release();}});
+app.post('/api/hoa/routes',requireAuth,requireHoa,async(req,res)=>{const client=await pool.connect();try{const b=req.body||{},communityId=Number(b.community_id),name=ticketText(b.name,200),stops=Array.isArray(b.stops)?b.stops.slice(0,100):[];if(!name||!stops.length||!await hoaOwnsCommunity(req.hoaCompany.id,communityId))return res.status(400).json({error:'community, name, and stops required'});await client.query('BEGIN');const route=(await client.query(`INSERT INTO hoa_inspection_routes(company_id,community_id,name,instructions) VALUES($1,$2,$3,$4) RETURNING *`,[req.hoaCompany.id,communityId,name,ticketText(b.instructions,1000)])).rows[0];for(let x=0;x<stops.length;x++){const s=stops[x]||{},stopName=ticketText(s.name,200);if(!stopName)continue;const areaId=await currentProduct(req.user.id)==='property'?await propertyAreas.validate(client,req.hoaCompany.id,communityId,s.property_area_id):null;const views=Array.isArray(s.required_views)?s.required_views.map(v=>ticketText(v,50)).filter(Boolean).slice(0,8):['overview'];const assetId=Number.isInteger(Number(s.asset_id))&&Number(s.asset_id)>0?Number(s.asset_id):null;if(assetId&&!(await client.query(`SELECT 1 FROM hoa_assets WHERE id=$1 AND company_id=$2 AND community_id=$3`,[assetId,req.hoaCompany.id,communityId])).rows[0])throw Object.assign(Error('That asset is not in this community.'),{status:400});await client.query(`INSERT INTO hoa_inspection_stops(route_id,asset_id,name,instructions,required_views,sort_order,property_area_id) VALUES($1,$2,$3,$4,$5,$6,$7)`,[route.id,assetId,stopName,ticketText(s.instructions,500),views.length?views:['overview'],x,areaId]);}await client.query('COMMIT');res.json(route);}catch(e){await client.query('ROLLBACK').catch(()=>{});if(!e.status)console.error('[hoa.route.create]',e);res.status(e.status||500).json({error:e.status?e.message:'route failed'});}finally{client.release();}});
 app.get('/api/hoa/routes/:id',requireAuth,requireHoa,async(req,res)=>{try{const route=(await pool.query(`SELECT r.*,c.name community_name FROM hoa_inspection_routes r JOIN hoa_communities c ON c.id=r.community_id WHERE r.id=$1 AND r.company_id=$2`,[Number(req.params.id),req.hoaCompany.id])).rows[0];if(!route)return res.status(404).json({error:'not found'});route.stops=(await pool.query(`SELECT s.*,(SELECT name FROM property_areas WHERE id=s.property_area_id) property_area_name,a.name asset_name FROM hoa_inspection_stops s LEFT JOIN hoa_assets a ON a.id=s.asset_id WHERE s.route_id=$1 ORDER BY s.sort_order,s.id`,[route.id])).rows;res.json(route);}catch(e){res.status(e.status||500).json({error:e.status?e.message:'route failed'});}});
-app.post('/api/hoa/visits',requireAuth,requireHoa,async(req,res)=>{const client=await pool.connect();try{const routeId=Number(req.body&&req.body.route_id),route=(await client.query(`SELECT * FROM hoa_inspection_routes WHERE id=$1 AND company_id=$2 AND active=true`,[routeId,req.hoaCompany.id])).rows[0];if(!route)return res.status(404).json({error:'route not found'});await client.query('BEGIN');const visit=(await client.query(`INSERT INTO hoa_property_visits(company_id,community_id,route_id,created_by) VALUES($1,$2,$3,$4) RETURNING *`,[req.hoaCompany.id,route.community_id,route.id,req.user.id])).rows[0];await client.query(`INSERT INTO hoa_visit_stops(visit_id,inspection_stop_id,name,instructions,required_views,sort_order,property_area_id) SELECT $1,id,name,instructions,required_views,sort_order,property_area_id FROM hoa_inspection_stops WHERE route_id=$2 ORDER BY sort_order,id`,[visit.id,route.id]);await client.query('COMMIT');res.json(visit);}catch(e){await client.query('ROLLBACK');res.status(500).json({error:'visit failed'});}finally{client.release();}});
+app.post('/api/hoa/visits',requireAuth,requireHoa,async(req,res)=>{const client=await pool.connect();try{const routeId=Number(req.body&&req.body.route_id),route=(await client.query(`SELECT * FROM hoa_inspection_routes WHERE id=$1 AND company_id=$2 AND active=true`,[routeId,req.hoaCompany.id])).rows[0];if(!route)return res.status(404).json({error:'route not found'});await client.query('BEGIN');const visit=(await client.query(`INSERT INTO hoa_property_visits(company_id,community_id,route_id,created_by) VALUES($1,$2,$3,$4) RETURNING *`,[req.hoaCompany.id,route.community_id,route.id,req.user.id])).rows[0];await client.query(`INSERT INTO hoa_visit_stops(visit_id,inspection_stop_id,name,instructions,required_views,sort_order,property_area_id) SELECT $1,id,name,instructions,required_views,sort_order,property_area_id FROM hoa_inspection_stops WHERE route_id=$2 ORDER BY sort_order,id`,[visit.id,route.id]);await client.query('COMMIT');res.json(visit);}catch(e){await client.query('ROLLBACK').catch(()=>{});res.status(500).json({error:'visit failed'});}finally{client.release();}});
 app.get('/api/hoa/visits',requireAuth,requireHoa,async(req,res)=>{try{res.json((await pool.query(`SELECT v.*,c.name community_name,r.name route_name,COUNT(s.id)::int total_stops,COUNT(s.id) FILTER(WHERE s.status='complete')::int completed_stops FROM hoa_property_visits v JOIN hoa_communities c ON c.id=v.community_id LEFT JOIN hoa_inspection_routes r ON r.id=v.route_id LEFT JOIN hoa_visit_stops s ON s.visit_id=v.id WHERE v.company_id=$1 AND ($2::integer IS NULL OR EXISTS(SELECT 1 FROM hoa_visit_stops ps WHERE ps.visit_id=v.id AND ps.property_area_id=$2)) GROUP BY v.id,c.name,r.name ORDER BY v.started_at DESC LIMIT 100`,[req.hoaCompany.id,await currentProduct(req.user.id)==='property'&&req.query.property_area_id?Number(req.query.property_area_id):null])).rows);}catch(e){res.status(500).json({error:'visits failed'});}});
 app.get('/api/hoa/visits/:id',requireAuth,requireHoa,async(req,res)=>{try{const visit=(await pool.query(`SELECT v.*,c.name community_name,r.name route_name FROM hoa_property_visits v JOIN hoa_communities c ON c.id=v.community_id LEFT JOIN hoa_inspection_routes r ON r.id=v.route_id WHERE v.id=$1 AND v.company_id=$2`,[Number(req.params.id),req.hoaCompany.id])).rows[0];if(!visit)return res.status(404).json({error:'not found'});visit.stops=(await pool.query(`SELECT *, (SELECT name FROM property_areas WHERE id=hoa_visit_stops.property_area_id) property_area_name FROM hoa_visit_stops WHERE visit_id=$1 ORDER BY sort_order,id`,[visit.id])).rows;res.json(visit);}catch(e){res.status(500).json({error:'visit failed'});}});
-app.post('/api/hoa/visits/:visitId/stops/:stopId',requireAuth,requireHoa,upload.array('photos',8),async(req,res)=>{try{const visitId=Number(req.params.visitId),stopId=Number(req.params.stopId),row=(await pool.query(`SELECT s.*,(SELECT name FROM property_areas WHERE id=s.property_area_id) property_area_name,v.company_id,v.community_id FROM hoa_visit_stops s JOIN hoa_property_visits v ON v.id=s.visit_id WHERE s.id=$1 AND s.visit_id=$2 AND v.company_id=$3`,[stopId,visitId,req.hoaCompany.id])).rows[0];if(!row)return res.status(404).json({error:'not found'});if(!req.files||!req.files.length)return res.status(400).json({error:'at least one photo required'});const ids=[];for(const file of req.files){const dims=await imageDims(file.path),photoPath=`/uploads/${file.filename}`,cap=(await pool.query(`INSERT INTO captures(user_id,captured_by,photo_path,photo_width,photo_height,note,area_tags,kind) VALUES($1,$2,$3,$4,$5,$6,$7,'note') RETURNING *`,[req.user.id,req.user.name,photoPath,dims&&dims.w,dims&&dims.h,ticketText(req.body.note,4000),['Inspection']])).rows[0],buffer=fs.readFileSync(file.path);ids.push(cap.id);if(await currentProduct(req.user.id)==='property')await pool.query('UPDATE captures SET property_area_id=$1,property_community_id=$2 WHERE id=$3',[row.property_area_id,row.community_id,cap.id]);await pool.query(`INSERT INTO capture_evidence(capture_id,user_id,original_sha256,original_bytes,original_name) VALUES($1,$2,$3,$4,$5)`,[cap.id,req.user.id,crypto.createHash('sha256').update(buffer).digest('hex'),buffer.length,ticketText(file.originalname,255)]);}await pool.query(`UPDATE hoa_visit_stops SET capture_ids=capture_ids || $1::integer[],note=$2,status='complete' WHERE id=$3`,[ids,ticketText(req.body.note,4000),stopId]);const remaining=Number((await pool.query(`SELECT COUNT(*) FROM hoa_visit_stops WHERE visit_id=$1 AND status<>'complete'`,[visitId])).rows[0].count);if(!remaining){await pool.query(`UPDATE hoa_property_visits SET status='completed',completed_at=now() WHERE id=$1`,[visitId]);const followDb=await pool.connect();try{await followDb.query('BEGIN');await photoFollowUps.completeVisit(followDb,req.user,visitId);await followDb.query('COMMIT');}catch(e){await followDb.query('ROLLBACK');console.error('[follow-up.visit]',e.message);}finally{followDb.release();}}res.json({ok:true,capture_ids:ids,visit_completed:!remaining});}catch(e){console.error('[hoa.visit.stop]',e);res.status(500).json({error:'visit photo failed'});}});
+app.post('/api/hoa/visits/:visitId/stops/:stopId',requireAuth,requireHoa,upload.array('photos',8),async(req,res)=>{try{const visitId=Number(req.params.visitId),stopId=Number(req.params.stopId),row=(await pool.query(`SELECT s.*,(SELECT name FROM property_areas WHERE id=s.property_area_id) property_area_name,v.company_id,v.community_id FROM hoa_visit_stops s JOIN hoa_property_visits v ON v.id=s.visit_id WHERE s.id=$1 AND s.visit_id=$2 AND v.company_id=$3`,[stopId,visitId,req.hoaCompany.id])).rows[0];if(!row)return res.status(404).json({error:'not found'});if(!req.files||!req.files.length)return res.status(400).json({error:'at least one photo required'});const ids=[];for(const file of req.files){const dims=await imageDims(file.path),photoPath=`/uploads/${file.filename}`,cap=(await pool.query(`INSERT INTO captures(user_id,captured_by,photo_path,photo_width,photo_height,note,area_tags,kind) VALUES($1,$2,$3,$4,$5,$6,$7,'note') RETURNING *`,[req.user.id,req.user.name,photoPath,dims&&dims.w,dims&&dims.h,ticketText(req.body.note,4000),['Inspection']])).rows[0],buffer=fs.readFileSync(file.path);ids.push(cap.id);if(await currentProduct(req.user.id)==='property')await pool.query('UPDATE captures SET property_area_id=$1,property_community_id=$2 WHERE id=$3',[row.property_area_id,row.community_id,cap.id]);await pool.query(`INSERT INTO capture_evidence(capture_id,user_id,original_sha256,original_bytes,original_name) VALUES($1,$2,$3,$4,$5)`,[cap.id,req.user.id,crypto.createHash('sha256').update(buffer).digest('hex'),buffer.length,ticketText(file.originalname,255)]);}await pool.query(`UPDATE hoa_visit_stops SET capture_ids=capture_ids || $1::integer[],note=$2,status='complete' WHERE id=$3`,[ids,ticketText(req.body.note,4000),stopId]);const remaining=Number((await pool.query(`SELECT COUNT(*) FROM hoa_visit_stops WHERE visit_id=$1 AND status<>'complete'`,[visitId])).rows[0].count);if(!remaining){await pool.query(`UPDATE hoa_property_visits SET status='completed',completed_at=now() WHERE id=$1`,[visitId]);const followDb=await pool.connect();try{await followDb.query('BEGIN');await photoFollowUps.completeVisit(followDb,req.user,visitId);await followDb.query('COMMIT');}catch(e){await followDb.query('ROLLBACK').catch(()=>{});console.error('[follow-up.visit]',e.message);}finally{followDb.release();}}res.json({ok:true,capture_ids:ids,visit_completed:!remaining});}catch(e){console.error('[hoa.visit.stop]',e);res.status(500).json({error:'visit photo failed'});}});
 app.get('/api/hoa/dashboard',requireAuth,requireHoa,async(req,res)=>{try{const row=(await pool.query(`SELECT COUNT(*) FILTER(WHERE status NOT IN('completed','cancelled'))::int open,COUNT(*) FILTER(WHERE priority='emergency' AND status NOT IN('completed','cancelled'))::int emergency,COUNT(*) FILTER(WHERE priority='high' AND status NOT IN('completed','cancelled'))::int high,COUNT(*) FILTER(WHERE target_date<CURRENT_DATE AND status NOT IN('completed','cancelled'))::int overdue,COUNT(*) FILTER(WHERE status='board_decision' OR status='waiting_board')::int board_needed,COUNT(*) FILTER(WHERE status='work_done' OR status='needs_review')::int needs_review,COUNT(*) FILTER(WHERE primary_assignee=$2 AND status NOT IN('completed','cancelled'))::int mine FROM hoa_maintenance_items WHERE company_id=$1`,[req.hoaCompany.id,req.user.name])).rows[0];res.json(row);}catch(e){res.status(500).json({error:'dashboard failed'});}});
 app.get('/api/hoa/items',requireAuth,requireHoa,async(req,res)=>{try{const vals=[req.hoaCompany.id],where=['i.company_id=$1'];for(const k of (await currentProduct(req.user.id)==='property'?['community_id','property_area_id']:['community_id']))if(Number.isInteger(Number(req.query[k]))){vals.push(Number(req.query[k]));where.push(`i.${k}=$${vals.length}`);}for(const [qk,col,allowed] of [['status','status',HOA_STATUSES],['priority','priority',HOA_PRIORITIES],['type','item_type',HOA_TYPES],['budget','budget_source',HOA_BUDGETS]])if(allowed.includes(req.query[qk])){vals.push(req.query[qk]);where.push(`i.${col}=$${vals.length}`);}if(req.query.assignee){vals.push(`%${req.query.assignee}%`);where.push(`COALESCE(i.primary_assignee,'') ILIKE $${vals.length}`);}if(req.query.q){vals.push(`%${req.query.q}%`);where.push(`(i.title ILIKE $${vals.length} OR COALESCE(i.description,'') ILIKE $${vals.length} OR c.name ILIKE $${vals.length} OR i.area ILIKE $${vals.length} OR (SELECT name FROM property_areas WHERE id=i.property_area_id) ILIKE $${vals.length})`);}if(req.query.closed!=='1')where.push(`i.status NOT IN('completed','cancelled')`);const rows=(await pool.query(`SELECT i.*,(SELECT name FROM property_areas WHERE id=i.property_area_id) property_area_name,c.name community_name,c.address community_address,cap.photo_path,cap.address photo_address FROM hoa_maintenance_items i JOIN hoa_communities c ON c.id=i.community_id LEFT JOIN captures cap ON cap.id=i.capture_id WHERE ${where.join(' AND ')} ORDER BY CASE i.priority WHEN 'emergency' THEN 0 WHEN 'high' THEN 1 WHEN 'routine' THEN 2 ELSE 3 END,i.target_date NULLS LAST,i.created_at DESC LIMIT 500`,vals)).rows;res.json(rows);}catch(e){console.error('[hoa.items]',e);res.status(500).json({error:'items failed'});}});
 
@@ -1096,7 +1129,7 @@ app.post('/completion-photos/:token',(req,res,next)=>require('./external-photo-s
   const evidence=await inspectPhotos(req.files);
   db=await pool.connect();await db.query('BEGIN');
   const q=(await db.query(`SELECT q.*,i.area,i.company_id FROM hoa_completion_photo_requests q JOIN hoa_maintenance_items i ON i.id=q.item_id JOIN users u ON u.id=q.created_by AND u.active=true WHERE q.token=$1 AND q.status='open' AND q.expires_at>now() FOR UPDATE OF q`,[req.params.token])).rows[0];
-  if(!q){await db.query('ROLLBACK');await removeUploads(req.files);return res.status(410).send('This request is no longer open.');}
+  if(!q){await db.query('ROLLBACK').catch(()=>{});await removeUploads(req.files);return res.status(410).send('This request is no longer open.');}
   const name=ticketText(req.body.submitter_name,200)||q.recipient_name||'Outside submitter';
   for(let n=0;n<req.files.length;n++)await saveExternalPhoto(db,{file:req.files[n],evidence:evidence[n],userId:q.created_by,name,note:ticketText(req.body.note,4000),tags:[q.area],itemId:q.item_id,stage:'completed_work'});
   await db.query(`UPDATE hoa_completion_photo_requests SET status='submitted',submitted_at=now() WHERE id=$1`,[q.id]);
@@ -1104,7 +1137,7 @@ app.post('/completion-photos/:token',(req,res,next)=>require('./external-photo-s
   await hoaNotifyCompany(q.company_id,q.item_id,'Completion photos submitted',0,db);
   await db.query('COMMIT');committed=true;
   res.send('<!doctype html><meta name="viewport" content="width=device-width"><link rel="stylesheet" href="/help.css?v=376"><script src="/help-catalog.js?v=481" defer></script><script src="/help.js?v=470" defer></script><style>body{font-family:Arial;color:#000;text-align:left;padding:30px 20px}</style><h1>Photos received</h1><p>Thank you. The completion photos were added to the maintenance record.</p>');
- }catch(e){if(db&&!committed)await db.query('ROLLBACK');await removeUploads(req.files);res.status(400).send('Photos could not be submitted. Use supported photographs and try again.');}
+ }catch(e){if(db&&!committed)await db.query('ROLLBACK').catch(()=>{});await removeUploads(req.files);res.status(400).send('Photos could not be submitted. Use supported photographs and try again.');}
  finally{if(db)db.release();}
 });
 
@@ -1281,7 +1314,7 @@ app.post('/api/asphalt-tickets/:id', requireAuth, async (req, res) => {
     client=await pool.connect();await client.query('BEGIN');
     await client.query('SELECT id FROM users WHERE id=$1 FOR UPDATE',[req.user.id]);
     const duplicate=ticketText(b.ticket_number)?(await client.query(`SELECT id FROM asphalt_tickets WHERE user_id=$1 AND id<>$2 AND status='saved' AND lower(trim(ticket_number))=lower(trim($3)) AND COALESCE(lower(trim(plant_name)),'')=COALESCE(lower(trim($4)),'') AND ticket_date IS NOT DISTINCT FROM $5::date LIMIT 1`,[req.user.id,id,ticketText(b.ticket_number),ticketText(b.plant_name),ticketDate(b.ticket_date)])).rows[0]:null;
-    if(duplicate){await client.query('ROLLBACK');return res.status(409).json({error:'This ticket number, plant and date are already saved. The duplicate was not added.'});}
+    if(duplicate){await client.query('ROLLBACK').catch(()=>{});return res.status(409).json({error:'This ticket number, plant and date are already saved. The duplicate was not added.'});}
     const values = [
       ticketText(b.ticket_number), ticketDate(b.ticket_date), ticketText(b.plant_name), ticketText(b.plant_address),
       ticketText(b.mix_description), ticketText(b.mix_code), ticketText(b.truck_number), ticketText(b.job_number),
@@ -1293,7 +1326,7 @@ app.post('/api/asphalt-tickets/:id', requireAuth, async (req, res) => {
        mix_description=$5, mix_code=$6, truck_number=$7, job_number=$8, net_tons=$9,
        dispatch_time=$10, arrival_time=$11, dispatch_temperature_f=$12, job_id=$13, status='saved', updated_at=now()
        WHERE id=$14 AND user_id=$15 RETURNING *`, values)).rows[0];
-    if (!row){await client.query('ROLLBACK');return res.status(404).json({error:'not found'});}
+    if (!row){await client.query('ROLLBACK').catch(()=>{});return res.status(404).json({error:'not found'});}
     await client.query('COMMIT');
     logEvent(req.user.id, 'ticket_save', { has_tons: row.net_tons != null });
     res.json({ ok: true, ticket: row });
@@ -1465,15 +1498,15 @@ app.post('/api/camera-readings/:id', requireAuth, async (req, res) => {
     const fields=cameraReaderFields(req.body&&req.body.fields),title=ticketText(req.body&&req.body.title);
     client=await pool.connect();await client.query('BEGIN');
     const old=(await client.query('SELECT * FROM camera_readings WHERE id=$1 AND user_id=$2 FOR UPDATE',[id,req.user.id])).rows[0];
-    if(!old){await client.query('ROLLBACK');return res.status(404).json({error:'not found'});}
+    if(!old){await client.query('ROLLBACK').catch(()=>{});return res.status(404).json({error:'not found'});}
     const changeJob=Object.prototype.hasOwnProperty.call(req.body||{},'job_id');
     const jobId=req.body?.job_id==null||req.body.job_id===''?null:Number(req.body.job_id);
-    if(changeJob&&jobId!==null&&(!Number.isInteger(jobId)||jobId<1||!(await client.query('SELECT id FROM jobs WHERE id=$1 AND user_id=$2 FOR KEY SHARE',[jobId,req.user.id])).rowCount)){await client.query('ROLLBACK');return res.status(400).json({error:'Invalid job'});}
+    if(changeJob&&jobId!==null&&(!Number.isInteger(jobId)||jobId<1||!(await client.query('SELECT id FROM jobs WHERE id=$1 AND user_id=$2 FOR KEY SHARE',[jobId,req.user.id])).rowCount)){await client.query('ROLLBACK').catch(()=>{});return res.status(400).json({error:'Invalid job'});}
     if(changeJob)await client.query('UPDATE camera_readings SET job_id=$1,job_assignment_set=true WHERE id=$2 AND user_id=$3',[jobId,id,req.user.id]);
     const row=(await client.query("UPDATE camera_readings SET title=$1,fields=$2,status='saved',confidence=COALESCE($5,confidence),updated_at=now() WHERE id=$3 AND user_id=$4 RETURNING *",[title,JSON.stringify(fields),id,req.user.id,['low','medium','high'].includes(req.body?.confidence)?req.body.confidence:null])).rows[0];
     if(old.capture_id&&old.reading_type==='gauge')await client.query('UPDATE captures SET note=$1 WHERE id=$2 AND user_id=$3 AND note=$4',[LinkedPhotoEvidence.originalScannerNote(fields),old.capture_id,req.user.id,LinkedPhotoEvidence.originalScannerNote(old.fields)]);
     await client.query('COMMIT');logEvent(req.user.id,'camera_reader_save',{type:row.reading_type});res.json({ok:true,reading:row});
-  }catch(err){if(client)await client.query('ROLLBACK');console.error('[camera-reader.save]',err);res.status(500).json({error:'save failed'});}finally{if(client)client.release();}
+  }catch(err){if(client)await client.query('ROLLBACK').catch(()=>{});console.error('[camera-reader.save]',err);res.status(500).json({error:'save failed'});}finally{if(client)client.release();}
 });
 
 // Explicitly publish a reviewed scanner record into the existing photo workflow.
@@ -1482,7 +1515,7 @@ app.post('/api/camera-readings/:id/library',requireAuth,async(req,res)=>{
   try{
     client=await pool.connect();await client.query('BEGIN');
     const row=(await client.query("SELECT * FROM camera_readings WHERE id=$1 AND user_id=$2 AND status='saved' FOR UPDATE",[Number(req.params.id),req.user.id])).rows[0];
-    if(!row){await client.query('ROLLBACK');return res.sendStatus(404);}
+    if(!row){await client.query('ROLLBACK').catch(()=>{});return res.sendStatus(404);}
     let id=row.capture_id;
     if(!id){const fields=row.fields||{},note=Object.entries(fields).filter(([,v])=>v).sort(([a],[b])=>{const order=['instrument_type','equipment_name','reading','unit','observed_at'];return (order.includes(a)?order.indexOf(a):99)-(order.includes(b)?order.indexOf(b):99);}).map(([k,v])=>k.replaceAll('_',' ').replace(/\b[a-z]/g,c=>c.toUpperCase())+': '+v).join('\n'),dims=await imageDims(localPhoto(row.photo_path));
       id=(await client.query(`INSERT INTO captures(user_id,captured_by,photo_path,photo_width,photo_height,photo_title,note,address,area_tags,kind) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,'note') RETURNING id`,[req.user.id,req.user.name,row.photo_path,dims&&dims.w,dims&&dims.h,row.title,note,fields.site_address||fields.address||null,[row.reading_type.replaceAll('_',' ')]] )).rows[0].id;
@@ -1861,6 +1894,18 @@ app.post('/api/areas/delete', requireAuth, async (req, res) => {
   } catch (err) { console.error('[areas.delete]', err); res.status(500).json({ error: 'failed to delete area' }); }
 });
 
+// Every text column named *_path that can point at /uploads. Looked up once, so new tables are covered automatically.
+let uploadPathColumns=null;
+async function uploadReferenceColumns(){if(!uploadPathColumns)uploadPathColumns=(await pool.query(`SELECT table_name,column_name FROM information_schema.columns WHERE table_schema=current_schema() AND column_name LIKE '%\\_path' AND data_type IN ('text','character varying')`)).rows;return uploadPathColumns;}
+async function removeUnreferencedUploads(paths){
+  const unique=[...new Set(paths.filter(p=>typeof p==='string'&&p.startsWith('/uploads/')))];if(!unique.length)return;
+  let still=new Set();
+  try{const cols=await uploadReferenceColumns();if(cols.length){const sql=cols.map(c=>`SELECT ${quoteIdent(c.column_name)}::text AS p FROM ${quoteIdent(c.table_name)} WHERE ${quoteIdent(c.column_name)}::text = ANY($1)`).join(' UNION ');still=new Set((await pool.query(sql,[unique])).rows.map(r=>r.p));}}
+  catch(e){console.error('[uploads.references]',e&&e.message);return;} // When unsure, keep the file.
+  for(const p of unique){if(still.has(p))continue;const local=localPhoto(p);if(local)await fs.promises.unlink(local).catch(()=>{});}
+}
+function quoteIdent(name){return '"'+String(name).replace(/"/g,'""')+'"';}
+
 // ---- delete selected captures ----
 app.post('/api/captures/delete', requireAuth, async (req, res) => {
   try {
@@ -1868,12 +1913,9 @@ app.post('/api/captures/delete', requireAuth, async (req, res) => {
       ? req.body.ids.map((n) => parseInt(n, 10)).filter(Number.isInteger)
       : [];
     if (!ids.length) return res.status(400).json({ error: 'no ids provided' });
-    const { rows } = await pool.query(`SELECT photo_path FROM captures WHERE id = ANY($1) AND user_id = $2`, [ids, req.user.id]);
-    await pool.query(`DELETE FROM captures WHERE id = ANY($1) AND user_id = $2`, [ids, req.user.id]);
-    for (const r of rows) {
-      const p = localPhoto(r.photo_path);
-      if (p) { try { fs.unlinkSync(p); } catch (e) {} }
-    }
+    const { rows } = await pool.query(`DELETE FROM captures WHERE id = ANY($1) AND user_id = $2 RETURNING photo_path, photo_original_path`, [ids, req.user.id]);
+    // Files can be shared (for example a Camera Reading saved to the Library), so only remove files nothing else uses.
+    await removeUnreferencedUploads(rows.flatMap(r=>[r.photo_path,r.photo_original_path]));
     logEvent(req.user.id, 'delete', { count: rows.length });
     res.json({ ok: true, deleted: rows.length });
   } catch (err) {
@@ -2231,12 +2273,12 @@ async function addToGroup(groupId,userId,captureIds){
  try{
   await client.query('BEGIN');
   const group=await client.query('SELECT id FROM groups WHERE id=$1 AND user_id=$2 FOR UPDATE',[groupId,userId]);
-  if(!group.rowCount){await client.query('ROLLBACK');return 0;}
+  if(!group.rowCount){await client.query('ROLLBACK').catch(()=>{});return 0;}
   const owned=(await client.query('SELECT id FROM captures WHERE id=ANY($1::int[]) AND user_id=$2 ORDER BY array_position($1::int[],id)',[captureIds,userId])).rows;
   let position=Number((await client.query('SELECT COALESCE(MAX(position),-1) AS m FROM group_items WHERE group_id=$1',[groupId])).rows[0].m)+1,added=0;
   for(const {id} of owned){const result=await client.query('INSERT INTO group_items(group_id,capture_id,position) VALUES($1,$2,$3) ON CONFLICT(group_id,capture_id) DO NOTHING',[groupId,id,position]);if(result.rowCount){position++;added++;}}
   await client.query('COMMIT');return added;
- }catch(e){await client.query('ROLLBACK');throw e;}finally{client.release();}
+ }catch(e){await client.query('ROLLBACK').catch(()=>{});throw e;}finally{client.release();}
 }
 
 app.get('/api/groups', requireAuth, async (req, res) => {
@@ -2395,15 +2437,15 @@ app.post('/api/pairs', requireAuth, async (req, res) => {
     if (!Number.isInteger(beforeId)||!Number.isInteger(afterId)||beforeId===afterId) return res.status(400).json({error:'two distinct captures required'});
     client=await pool.connect();await client.query('BEGIN');
     const photos=(await client.query('SELECT id,job_id FROM captures WHERE user_id=$1 AND id=ANY($2::int[]) ORDER BY id FOR UPDATE',[req.user.id,[beforeId,afterId]])).rows;
-    if(photos.length!==2){await client.query('ROLLBACK');return res.status(403).json({error:'not your captures'});}
+    if(photos.length!==2){await client.query('ROLLBACK').catch(()=>{});return res.status(403).json({error:'not your captures'});}
     const existing=(await client.query('SELECT 1 FROM capture_pairs WHERE user_id=$1 AND (before_id IN ($2,$3) OR after_id IN ($2,$3)) LIMIT 1',[req.user.id,beforeId,afterId])).rows;
-    if(existing.length){await client.query('ROLLBACK');return res.status(409).json({error:'one of these is already paired'});}
+    if(existing.length){await client.query('ROLLBACK').catch(()=>{});return res.status(409).json({error:'one of these is already paired'});}
     const row=(await client.query(`INSERT INTO capture_pairs (user_id,before_id,after_id,comparison_opacity) VALUES($1,$2,$3,$4) RETURNING *`,[req.user.id,beforeId,afterId,b.comparison_opacity==null?null:Math.max(0,Math.min(1,Number(b.comparison_opacity)||0))])).rows[0];
     // Inherit an existing job only for the unassigned photo. Never move assigned evidence between jobs.
     const assigned=photos.find(p=>p.job_id!=null),unassigned=photos.find(p=>p.job_id==null);
     if(assigned&&unassigned)await client.query('UPDATE captures SET job_id=$1 WHERE id=$2 AND user_id=$3 AND job_id IS NULL',[assigned.job_id,unassigned.id,req.user.id]);
     await client.query('COMMIT');logEvent(req.user.id,'pair_create',{});res.json({ok:true,pair:row});
-  }catch(err){if(client)await client.query('ROLLBACK');if(err?.code==='23505')return res.status(409).json({error:'already paired'});console.error('[pairs.create]',err.message);res.status(500).json({error:'pair failed'});}finally{client?.release();}
+  }catch(err){if(client)await client.query('ROLLBACK').catch(()=>{});if(err?.code==='23505')return res.status(409).json({error:'already paired'});console.error('[pairs.create]',err.message);res.status(500).json({error:'pair failed'});}finally{client?.release();}
 });
 
 // Focused preference update, original evidence and pair membership are unchanged.
@@ -2863,7 +2905,7 @@ app.post('/api/admin/users', requireAdmin, async (req, res) => {
     if(access){proType=EDITIONS[access[0]].pro_type;plan=EDITIONS[access[0]].plan;}
     if (name.split(/\s+/).filter(Boolean).length < 2) return res.status(400).json({ error: 'first and last name are required' });
     if (!email || !password) return res.status(400).json({ error: 'email and password are required' });
-    const hash = bcrypt.hashSync(password, 10);
+    const hash = await bcrypt.hash(password, 10);
     const { rows } = await pool.query(
       `INSERT INTO users (email, name, password_hash, role, industry, active, plan, pro_type, edition_access, user_category)
        VALUES ($1,$2,$3,'user',$4,true,$5,$6,$7,$8)
@@ -2924,7 +2966,7 @@ app.post('/api/admin/users/:id/password', requireAdmin, async (req, res) => {
     if (!Number.isInteger(id)) return res.status(400).json({ error: 'bad id' });
     const password = String((req.body && req.body.password) || '');
     if (password.length < 4) return res.status(400).json({ error: 'password too short' });
-    const hash = bcrypt.hashSync(password, 10);
+    const hash = await bcrypt.hash(password, 10);
     const { rowCount } = await pool.query(`UPDATE users SET password_hash = $1 WHERE id = $2`, [hash, id]);
     if (!rowCount) return res.status(404).json({ error: 'not found' });
     logEvent(req.user.id, 'admin_password_reset', { target_user_id:id });
@@ -2993,8 +3035,9 @@ function parseIds(q) {
 }
 function localPhoto(photoPath) {
   if (!photoPath) return null;
-  const fname = photoPath.replace(/^\/uploads\//, '');
-  const p = path.join(UPLOAD_DIR, fname);
+  const fname = String(photoPath).replace(/^\/uploads\//, '');
+  const root = path.resolve(UPLOAD_DIR), p = path.resolve(root, fname);
+  if (!p.startsWith(root + path.sep)) return null; // never reach outside the uploads folder
   return fs.existsSync(p) ? p : null;
 }
 function slug(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''); }
@@ -3635,6 +3678,23 @@ async function backfillPhotoDims() {
   } catch (e) { console.error('[backfill dims]', e); }
 }
 
+// Final error handler: upload limits return a clear JSON status instead of a
+// generic 500 (the phone retries 500s forever), and rejected uploads are removed.
+app.use((err,req,res,next)=>{
+  const files=[req.file,...(Array.isArray(req.files)?req.files:Object.values(req.files||{}).flat())].filter(Boolean);
+  for(const file of files)fs.promises.unlink(file.path).catch(()=>{});
+  if(err instanceof multer.MulterError)return res.status(err.code==='LIMIT_FILE_SIZE'?413:400).json({error:err.code==='LIMIT_FILE_SIZE'?'This file is larger than 25 MB.':'This upload was rejected.'});
+  console.error('[efc] request failed',req.method,req.path,err&&err.message);
+  if(res.headersSent)return res.destroy();
+  res.status(500).json({error:'Request failed'});
+});
+
+// A stray rejected promise or async error must be logged, not crash every user's session.
+if(require.main===module){
+  process.on('unhandledRejection',error=>console.error('[efc] unhandled rejection',error&&(error.stack||error.message||error)));
+  // After a true uncaught exception the process state is unknown: log and exit so Railway restarts it cleanly.
+  process.on('uncaughtException',error=>{console.error('[efc] uncaught exception',error&&(error.stack||error.message||error));process.exit(1);});
+}
 if(require.main===module)init()
   .then(() => {
     const server=app.listen(PORT, () => console.log(`[efc] listening on ${PORT}`));

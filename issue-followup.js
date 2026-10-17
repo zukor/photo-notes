@@ -41,6 +41,6 @@ async function followupIssues(pool){
   }else if(!row.blocked_kind||row.blocked_kind==='repeated_failure'){await c.query('UPDATE issue_reports SET blocked_kind=$2,updated_at=now() WHERE id=$1',[row.id,route==='retry'?'developer':route]);}
  }
  await c.query('COMMIT');return changed;
- }catch(e){await c.query('ROLLBACK');throw e;}finally{c.release();}
+ }catch(e){await c.query('ROLLBACK').catch(()=>{});throw e;}finally{c.release();}
 }
 module.exports={kind,followupIssues};

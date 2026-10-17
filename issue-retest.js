@@ -8,7 +8,7 @@ function registerRetest(app,{pool,requireAuth,ticketText,logEvent}){
   try{
    c=await pool.connect();await c.query('BEGIN');
    const row=(await c.query("SELECT * FROM issue_reports WHERE id=$1 AND user_id=$2 FOR UPDATE",[id,req.user.id])).rows[0];
-   if(!row||!(row.management_status==='retest_requested'||(row.management_status==='ready_to_test'&&row.verification&&row.release_reference))){await c.query('ROLLBACK');return res.status(404).json({error:'issue is not ready for retesting'});}
+   if(!row||!(row.management_status==='retest_requested'||(row.management_status==='ready_to_test'&&row.verification&&row.release_reference))){await c.query('ROLLBACK').catch(()=>{});return res.status(404).json({error:'issue is not ready for retesting'});}
    const count=(await c.query("SELECT count(*)::int n FROM issue_repair_events WHERE issue_id=$1 AND (event='blocked' OR (event='retest' AND detail::text LIKE '%still_happening%'))",[id])).rows[0].n;
    const approved=approvedImplementation(row);
    const retry=result==='still_happening'&&(row.issue_type==='bug_problem'||approved)&&count<1;
@@ -18,7 +18,7 @@ function registerRetest(app,{pool,requireAuth,ticketText,logEvent}){
    await c.query("INSERT INTO issue_repair_events(issue_id,event,detail) VALUES($1,'retest',$2)",[id,JSON.stringify({result,notes,next_status:status})]);
    if(retry){await c.query('DELETE FROM issue_cloud_dispatch WHERE issue_id=$1',[id]);await c.query("INSERT INTO issue_repair_events(issue_id,event,detail) VALUES($1,'automatic_followup',$2)",[id,JSON.stringify({action:'Repair queued',notes})]);}
    await c.query('COMMIT');logEvent(req.user.id,'issue_retest',{issue_id:id,result});res.json({ok:true,status});
-  }catch(e){if(c)await c.query('ROLLBACK');console.error('[issues.retest]',e.message);res.status(500).json({error:'retest failed'});}finally{c?.release();}
+  }catch(e){if(c)await c.query('ROLLBACK').catch(()=>{});console.error('[issues.retest]',e.message);res.status(500).json({error:'retest failed'});}finally{c?.release();}
  });
 }
 module.exports={registerRetest};

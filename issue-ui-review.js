@@ -15,9 +15,9 @@ function registerUiReview(app,{pool,requireAuth}){
   if(!Number.isInteger(id)||id<1||!['implement','clarify','no_change','retest','developer'].includes(decision)||(!text&&!(decision==='retest'))||text.length>5000||!req.body.expected_updated_at)return res.status(400).json({error:'Choose an action and enter 1-5,000 characters explaining it.'});
   const c=await pool.connect();try{
    await c.query('BEGIN');const row=(await c.query('SELECT * FROM issue_reports WHERE id=$1 FOR UPDATE',[id])).rows[0];
-   if(!row||(bugReview?row.issue_type!=='bug_problem':!['ui_improvement','feature_improvement','new_feature'].includes(row.issue_type))){await c.query('ROLLBACK');return res.status(404).json({error:'Improvement idea not found'});}
-   if(new Date(row.updated_at).getTime()!==new Date(req.body.expected_updated_at).getTime()){await c.query('ROLLBACK');return res.status(409).json({error:'This report changed. Reload it before submitting your decision.'});}
-   if(row.repair_lease_until&&new Date(row.repair_lease_until)>new Date()){await c.query('ROLLBACK');return res.status(409).json({error:'Implementation is currently running. Wait for its result before changing this decision.'});}
+   if(!row||(bugReview?row.issue_type!=='bug_problem':!['ui_improvement','feature_improvement','new_feature'].includes(row.issue_type))){await c.query('ROLLBACK').catch(()=>{});return res.status(404).json({error:'Improvement idea not found'});}
+   if(new Date(row.updated_at).getTime()!==new Date(req.body.expected_updated_at).getTime()){await c.query('ROLLBACK').catch(()=>{});return res.status(409).json({error:'This report changed. Reload it before submitting your decision.'});}
+   if(row.repair_lease_until&&new Date(row.repair_lease_until)>new Date()){await c.query('ROLLBACK').catch(()=>{});return res.status(409).json({error:'Implementation is currently running. Wait for its result before changing this decision.'});}
    if(decision==='retest'&&!text)text=retestGuidance.build(row);
    const status=decision==='implement'?'new':decision==='clarify'?'blocked':decision==='retest'?'retest_requested':decision==='developer'?'blocked':'wont_fix';
    const updated=(await c.query(`UPDATE issue_reports SET review_decision=$2,implementation_instructions=$3,review_note=$4,reviewed_by=$5,reviewed_at=now(),management_status=$6,blocked_kind=CASE WHEN $2='developer' THEN 'developer' ELSE NULL END,blocked_reason=$7,repair_claim_hash=NULL,repair_lease_until=NULL,updated_at=now(),resolved_at=CASE WHEN $2='no_change' THEN now() ELSE NULL END,fix_summary=NULL,verification=NULL,fix_commit=NULL,release_reference=NULL,retest_instructions=CASE WHEN $2='retest' THEN $4 ELSE NULL END,tester_result=NULL,tester_notes=NULL,tester_retested_at=NULL,tester_notification_status='in_app',tester_notified_at=now() WHERE id=$1 RETURNING *`,[id,decision,decision==='implement'?text:null,decision==='implement'?null:text,req.user.id,status,['clarify','developer'].includes(decision)?text:null])).rows[0];
@@ -26,7 +26,7 @@ function registerUiReview(app,{pool,requireAuth}){
    await c.query('DELETE FROM issue_cloud_dispatch WHERE issue_id=$1',[id]);
    if(['blocked','retest_requested'].includes(status)&&row.management_status===status)await c.query('INSERT INTO issue_cloud_events(issue_id,status) VALUES($1,$2)',[id,status]);
    await c.query('COMMIT');res.json(updated);
-  }catch(e){await c.query('ROLLBACK');console.error('[ui-review]',e.message);res.status(500).json({error:'Decision could not be saved'});}finally{c.release();}
+  }catch(e){await c.query('ROLLBACK').catch(()=>{});console.error('[ui-review]',e.message);res.status(500).json({error:'Decision could not be saved'});}finally{c.release();}
  });
 }
 module.exports={eligibleIssueSql,registerUiReview,approvedImplementation};

@@ -29,7 +29,7 @@ function register(app,{pool,requireAuth,currentProduct}){
   let db;try{db=await pool.connect();await db.query('BEGIN');
    // Serialize all mutations for an owner, including the single-default transition.
    await db.query('SELECT id FROM users WHERE id=$1 FOR UPDATE',[req.user.id]);
-   if(req.params.id){const owned=await db.query('SELECT id FROM saved_views WHERE id=$1 AND user_id=$2 AND edition=$3 AND workspace=$4 FOR UPDATE',[id,req.user.id,req.savedEdition,w]);if(!owned.rows.length){await db.query('ROLLBACK');return res.status(404).json({error:'Saved View unavailable'});}}
+   if(req.params.id){const owned=await db.query('SELECT id FROM saved_views WHERE id=$1 AND user_id=$2 AND edition=$3 AND workspace=$4 FOR UPDATE',[id,req.user.id,req.savedEdition,w]);if(!owned.rows.length){await db.query('ROLLBACK').catch(()=>{});return res.status(404).json({error:'Saved View unavailable'});}}
    if(req.body.is_default)await db.query('UPDATE saved_views SET is_default=false WHERE user_id=$1 AND edition=$2 AND workspace=$3',[req.user.id,req.savedEdition,w]);
    const values=[req.user.id,req.savedEdition,w,req.body.name.trim(),req.body.description,JSON.stringify(req.body.criteria),req.body.is_default,id];
    const sql=req.params.id?'UPDATE saved_views SET name=$4,description=$5,criteria=$6,is_default=$7,updated_at=now() WHERE user_id=$1 AND edition=$2 AND workspace=$3 AND id=$8 RETURNING id,name,description,criteria,is_default':'INSERT INTO saved_views(user_id,edition,workspace,name,description,criteria,is_default,id) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id,name,description,criteria,is_default';

@@ -60,7 +60,7 @@ function registerPhotoRequests(app,{pool,requireAuth,uploadDir,hoaHistory,hoaNot
    if(req.body.follow_up_occurrence_id)await require('./photo-follow-ups').linkRequest(db,req.user,req.body.follow_up_occurrence_id,row);
    await history(db,row.id,'created');await history(db,row.id,'link_created');await db.query('COMMIT');
    res.json({...row,url:`${req.protocol}://${req.get('host')}/photo-request/${token}`});
-  }catch(e){if(db)await db.query('ROLLBACK');res.status(400).json({error:'Request could not be created. Check the related record.'});}finally{if(db)db.release();}
+  }catch(e){if(db)await db.query('ROLLBACK').catch(()=>{});res.status(400).json({error:'Request could not be created. Check the related record.'});}finally{if(db)db.release();}
  });
  app.get('/api/photo-requests/:id',requireAuth,gate,async(req,res)=>{try{
   await expire(pool);const request=(await pool.query('SELECT * FROM photo_requests WHERE id=$1 AND user_id=$2',[req.params.id,req.user.id])).rows[0];
@@ -111,7 +111,7 @@ function registerPhotoRequests(app,{pool,requireAuth,uploadDir,hoaHistory,hoaNot
    if(status==='completed'){await history(db,r.id,'completed');if(await require('./photo-follow-ups').completeRequest(db,r))await history(db,r.id,'follow_up_completed');}
    if(item){await hoaHistory(r.item_id,null,'photo_request_submission',{request_id:r.id,photo_count:files.length},db);await hoaNotifyCompany(item.company_id,r.item_id,`Requested photos received: ${r.title}`,0,db);}
    await db.query('COMMIT');committed=true;res.json({ok:true,status});
-  }catch(e){if(db&&!committed)await db.query('ROLLBACK');await removeUploads(req.files);const messages=['Choose the requested photos.','Invalid view selection.','This photo request is closed or expired.','Related record is unavailable.','Select a photo for a missing requested view.','Supply every requested view before submitting.','Use a supported photograph (JPEG, PNG, WebP or HEIC).'];res.status(400).json({error:messages.includes(e.message)?e.message:'Photos could not be submitted. Use supported photographs and try again.'});}
+  }catch(e){if(db&&!committed)await db.query('ROLLBACK').catch(()=>{});await removeUploads(req.files);const messages=['Choose the requested photos.','Invalid view selection.','This photo request is closed or expired.','Related record is unavailable.','Select a photo for a missing requested view.','Supply every requested view before submitting.','Use a supported photograph (JPEG, PNG, WebP or HEIC).'];res.status(400).json({error:messages.includes(e.message)?e.message:'Photos could not be submitted. Use supported photographs and try again.'});}
   finally{if(db)db.release();}
  });
 }

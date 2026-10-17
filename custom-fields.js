@@ -83,7 +83,7 @@ function register(app,{pool,requireAuth,currentProduct}){
    const row=(await db.query(`INSERT INTO custom_field_definitions(id,user_id,scope,edition,name,type,prompt,required,active,options,revision,versions) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT(id) DO UPDATE SET name=EXCLUDED.name,prompt=EXCLUDED.prompt,required=EXCLUDED.required,active=EXCLUDED.active,options=EXCLUDED.options,revision=EXCLUDED.revision,versions=EXCLUDED.versions,updated_at=now() WHERE custom_field_definitions.user_id=EXCLUDED.user_id RETURNING *`,[req.params.id,req.user.id,d.scope,d.edition,d.name,d.type,d.prompt,d.required,d.active,JSON.stringify(d.options),revision,JSON.stringify(versions)])).rows[0];
    if(!row)fail('Field unavailable',404);
    await db.query('COMMIT');res.json(row);
-  }catch(e){if(db)await db.query('ROLLBACK');res.status(e.status||503).json({error:e.status?e.message:'Field could not be saved'});}finally{db?.release();}
+  }catch(e){if(db)await db.query('ROLLBACK').catch(()=>{});res.status(e.status||503).json({error:e.status?e.message:'Field could not be saved'});}finally{db?.release();}
  });
  app.put('/api/captures/:id/custom-fields',requireAuth,gate,async(req,res)=>{
   let db;try{
@@ -95,7 +95,7 @@ function register(app,{pool,requireAuth,currentProduct}){
     await db.query(`INSERT INTO capture_history(capture_id,user_id,action,detail) VALUES($1,$2,'custom_fields_updated',$3)`,[c.id,req.user.id,JSON.stringify({fields:[...new Set([...c.custom_fields,...fields].filter(f=>JSON.stringify(fields.find(x=>x.id===f.id))!==JSON.stringify(c.custom_fields.find(x=>x.id===f.id))).map(f=>f.name))],before:c.custom_fields,after:fields})]);
    }
    await db.query('COMMIT');res.json({custom_fields:fields});
-  }catch(e){if(db)await db.query('ROLLBACK');res.status(e.status||503).json({error:e.status?e.message:'Additional Details could not be saved'});}finally{db?.release();}
+  }catch(e){if(db)await db.query('ROLLBACK').catch(()=>{});res.status(e.status||503).json({error:e.status?e.message:'Additional Details could not be saved'});}finally{db?.release();}
  });
 }
 module.exports={normalizeEdition,SCHEMA,EDITIONS,TYPES,LIMITS,definition,value,captureValues,filter,display,lines,register};

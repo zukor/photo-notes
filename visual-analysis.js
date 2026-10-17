@@ -38,10 +38,10 @@ function registerVisualAnalysis(app,dependencies){
  await client.query('BEGIN');
  const photo=(await client.query('SELECT * FROM captures WHERE id=$1 AND user_id=$2 FOR UPDATE',[req.params.id,req.user.id])).rows[0];
  const run=(await client.query("SELECT * FROM visual_analysis_runs WHERE id=$1 AND capture_id=$2 AND user_id=$3 AND domain=$4 FOR UPDATE",[req.params.run,req.params.id,req.user.id,domain])).rows[0];
- if(!photo||!run){await client.query('ROLLBACK');return res.status(404).json({error:'Analysis not found'});}
- if(run.review_status!=='suggested'){await client.query('ROLLBACK');return res.status(409).json({error:'This run has already been reviewed. Rerun for new suggestions.'});}
+ if(!photo||!run){await client.query('ROLLBACK').catch(()=>{});return res.status(404).json({error:'Analysis not found'});}
+ if(run.review_status!=='suggested'){await client.query('ROLLBACK').catch(()=>{});return res.status(409).json({error:'This run has already been reviewed. Rerun for new suggestions.'});}
  if(!reject){
- for(const key of apply){if((photo[reviewFields[key]]||null)!==(req.body.existing?.[key]||null)){await client.query('ROLLBACK');return res.status(409).json({error:'Photo fields changed. Reopen review before applying.'});}}
+ for(const key of apply){if((photo[reviewFields[key]]||null)!==(req.body.existing?.[key]||null)){await client.query('ROLLBACK').catch(()=>{});return res.status(409).json({error:'Photo fields changed. Reopen review before applying.'});}}
  await adapter.applyReview(client,photo,req.user.id,result,apply);
  }
  const status=reject?'rejected':JSON.stringify(result)===JSON.stringify(run.structured_result)?'reviewed':'corrected';

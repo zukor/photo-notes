@@ -32,14 +32,14 @@ function registerEditionRoutes(app,{pool,requireAuth,requireAdmin,setSession,log
       client=await pool.connect();await client.query('BEGIN');
       const user=(await client.query('SELECT * FROM users WHERE id=$1 FOR UPDATE',[req.user.id])).rows[0];
       if(!user||!user.active||!editionAccess(user).includes(key)){
-        await client.query('ROLLBACK');return res.status(403).json({error:'This version is not enabled for your account'});
+        await client.query('ROLLBACK').catch(()=>{});return res.status(403).json({error:'This version is not enabled for your account'});
       }
       const choice=EDITIONS[key];
       const updated=(await client.query('UPDATE users SET plan=$1,pro_type=$2 WHERE id=$3 RETURNING *',[choice.plan,choice.pro_type,user.id])).rows[0];
       await client.query('COMMIT');setSession(res,updated);
       await logEvent(user.id,'edition_switch',{edition:key});
       res.json({ok:true,edition:key});
-    }catch(e){if(client)await client.query('ROLLBACK');res.status(500).json({error:'Version could not be switched'});}
+    }catch(e){if(client)await client.query('ROLLBACK').catch(()=>{});res.status(500).json({error:'Version could not be switched'});}
     finally{if(client)client.release();}
   }
   app.post('/api/switch-edition',requireAuth,switchEdition);
@@ -52,13 +52,13 @@ function registerEditionRoutes(app,{pool,requireAuth,requireAdmin,setSession,log
     try{
       client=await pool.connect();await client.query('BEGIN');
       const user=(await client.query('SELECT * FROM users WHERE id=$1 FOR UPDATE',[id])).rows[0];
-      if(!user){await client.query('ROLLBACK');return res.status(404).json({error:'User not found'});}
+      if(!user){await client.query('ROLLBACK').catch(()=>{});return res.status(404).json({error:'User not found'});}
       const selected=access.includes(currentEdition(user))?currentEdition(user):access[0],choice=EDITIONS[selected];
       await client.query('UPDATE users SET edition_access=$1,plan=$2,pro_type=$3 WHERE id=$4',[access,choice.plan,choice.pro_type,id]);
       await client.query('COMMIT');
       await logEvent(req.user.id,'admin_user_update',{target_user_id:id,fields:['edition_access'],edition_access:access});
       res.json({ok:true,edition_access:access,selected_edition:selected});
-    }catch(e){if(client)await client.query('ROLLBACK');res.status(500).json({error:'Version access could not be saved'});}
+    }catch(e){if(client)await client.query('ROLLBACK').catch(()=>{});res.status(500).json({error:'Version access could not be saved'});}
     finally{if(client)client.release();}
   });
 }

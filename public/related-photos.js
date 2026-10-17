@@ -2,7 +2,7 @@
 (() => {
 'use strict';
 let modal,counts={},countPending=false,countLoaded=false;
-async function request(url,opts={}){const r=await fetch(url,{credentials:'same-origin',headers:{'Content-Type':'application/json'},...opts});const d=await r.json();if(!r.ok)throw Error(d.error||'Request failed');return d;}
+async function request(url,opts={}){const r=await fetch(url,{credentials:'same-origin',headers:{'Content-Type':'application/json'},...opts});const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.error||'Request failed');return d;}
 async function refreshCounts(){if(!isProClient()||countPending)return;countPending=true;try{countLoaded=true;counts=Object.fromEntries((await request('/api/related-photos/counts')).map(r=>[r.photo_id,r.count]));paintCounts();}catch(e){}finally{countPending=false;}}
 function paintCounts(){document.querySelectorAll('[data-related-id]').forEach(b=>{const n=counts[b.dataset.relatedId]||0,text=n?`Related Photos (${n})`:'Related Photos';if(b.textContent!==text)b.textContent=text;});}
 function options(types,value){return `<option value="">Unclassified</option>`+types.map(t=>`<option ${t===value?'selected':''}>${esc(t)}</option>`).join('');}
@@ -19,11 +19,11 @@ async function open(id){
  const status=message=>{if(modal)modal.querySelector('#relatedStatus').textContent=message;};
  const mutate=async(fn)=>{try{await fn();await refreshCounts();await open(id);}catch(e){status(e.message||'Could not save. Keep this window open and retry.');}};
  modal.querySelectorAll('[data-related-open]').forEach(b=>b.onclick=()=>open(Number(b.dataset.relatedOpen)));
- modal.querySelectorAll('[data-related-save]').forEach(b=>b.onclick=()=>{const target=Number(b.dataset.relatedSave);mutate(()=>api(`/api/captures/${id}/related`,{method:'POST',body:JSON.stringify({ids:[target],type:modal.querySelector(`[data-related-type="${target}"]`).value,note:modal.querySelector(`[data-related-note="${target}"]`).value})}));});
- modal.querySelectorAll('[data-related-remove]').forEach(b=>b.onclick=()=>mutate(()=>api(`/api/captures/${id}/related/${b.dataset.relatedRemove}`,{method:'DELETE'})));
- modal.querySelector('#relatedLink').onclick=()=>{const ids=[...chosen];if(!ids.length)return status('Select at least one existing photo.');mutate(()=>api(`/api/captures/${id}/related`,{method:'POST',body:JSON.stringify({ids,type:modal.querySelector('#relatedType').value,note:modal.querySelector('#relatedNote').value})}));};
+ modal.querySelectorAll('[data-related-save]').forEach(b=>b.onclick=()=>{const target=Number(b.dataset.relatedSave);mutate(()=>request(`/api/captures/${id}/related`,{method:'POST',body:JSON.stringify({ids:[target],type:modal.querySelector(`[data-related-type="${target}"]`).value,note:modal.querySelector(`[data-related-note="${target}"]`).value})}));});
+ modal.querySelectorAll('[data-related-remove]').forEach(b=>b.onclick=()=>mutate(()=>request(`/api/captures/${id}/related/${b.dataset.relatedRemove}`,{method:'DELETE'})));
+ modal.querySelector('#relatedLink').onclick=()=>{const ids=[...chosen];if(!ids.length)return status('Select at least one existing photo.');mutate(()=>request(`/api/captures/${id}/related`,{method:'POST',body:JSON.stringify({ids,type:modal.querySelector('#relatedType').value,note:modal.querySelector('#relatedNote').value})}));};
  const chosen=new Set();modal.querySelector('#relatedChoices').onchange=e=>{if(e.target.matches('[data-related-choice]')){const id=Number(e.target.value);if(e.target.checked)chosen.add(id);else chosen.delete(id);}};
- const select=modal.querySelector('#relatedSelect');if(select)select.onclick=()=>{[id,...d.photos.map(c=>c.id)].forEach(x=>state.selectedIds.add(x));close();state.view='create';renderApp();};
+ const select=modal.querySelector('#relatedSelect');if(select)select.onclick=()=>{[id,...d.photos.map(c=>c.id)].forEach(x=>state.selectedIds.add(String(x)));close();state.view='create';renderApp();};
  let offset=0,loading=false,all=[],timer;
  async function candidates(reset=false){if(loading)return;loading=true;try{if(reset){offset=0;all=[];}const query=modal.querySelector('#relatedSearch').value;const rows=await request('/api/related-photos/candidates?limit=100&offset='+offset+'&q='+encodeURIComponent(query));offset+=rows.length;all.push(...rows);modal.querySelector('#relatedChoices').innerHTML=all.filter(c=>c.id!==id&&c.photo_path&&!d.photos.some(p=>p.id===c.id)).map(c=>`<label style="display:flex;gap:8px;align-items:center;padding:8px"><input type="checkbox" data-related-choice value="${c.id}" ${chosen.has(c.id)?'checked':''}>${photo(c)}</label>`).join('');modal.querySelector('#relatedMore').hidden=rows.length<100;}catch(e){status('Photos could not load. Reopen Link Existing Photos to retry.');}finally{loading=false;}}
  modal.querySelector('#relatedPicker').ontoggle=()=>{if(modal?.querySelector('#relatedPicker').open&&!all.length)candidates();};

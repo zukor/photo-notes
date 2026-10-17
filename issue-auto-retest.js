@@ -29,6 +29,6 @@ async function requestFirstRetests(pool){
    requested.push(row.id);
   }
   await client.query('COMMIT');return requested;
- }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
+ }catch(error){await client.query('ROLLBACK').catch(()=>{});throw error;}finally{client.release();}
 }
 module.exports={requestFirstRetests};

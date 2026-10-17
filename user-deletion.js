@@ -71,16 +71,16 @@ function registerUserDeletion(app,{pool,requireAdmin,uploadDir}){
       await client.query('SELECT pg_advisory_xact_lock(731094)');
       await client.query('SELECT id FROM users WHERE id=$1 FOR UPDATE',[id]);
       const preview=await deletionPreview(client,id,req.user.id);
-      if(!preview){await client.query('ROLLBACK');return res.status(404).json({error:'User not found'});}
-      if(preview.blocked){await client.query('ROLLBACK');return res.status(409).json({error:preview.blocked});}
-      if(!req.body||req.body.confirm_email!==preview.user.email){await client.query('ROLLBACK');return res.status(400).json({error:'Type the exact email address to confirm permanent deletion'});}
+      if(!preview){await client.query('ROLLBACK').catch(()=>{});return res.status(404).json({error:'User not found'});}
+      if(preview.blocked){await client.query('ROLLBACK').catch(()=>{});return res.status(409).json({error:preview.blocked});}
+      if(!req.body||req.body.confirm_email!==preview.user.email){await client.query('ROLLBACK').catch(()=>{});return res.status(400).json({error:'Type the exact email address to confirm permanent deletion'});}
       // Lock owned records so their attachment paths cannot change while collected.
       for(const table of ['captures','groups','ewr_photos','asphalt_tickets','camera_readings','road_issue_reports','issue_reports']){
         await client.query(`SELECT id FROM ${table} WHERE user_id=$1 FOR UPDATE`,[id]);
       }
       // Recheck shared references after locking the records they can reference.
       const lockedPreview=await deletionPreview(client,id,req.user.id);
-      if(lockedPreview.blocked){await client.query('ROLLBACK');return res.status(409).json({error:lockedPreview.blocked});}
+      if(lockedPreview.blocked){await client.query('ROLLBACK').catch(()=>{});return res.status(409).json({error:lockedPreview.blocked});}
       const files=(await client.query(FILE_SOURCES.map(([table,col])=>`SELECT ${col} AS file_path FROM ${table} WHERE ${table==='users'?'id':'user_id'}=$1 AND ${col} IS NOT NULL`).join(' UNION '),[id])).rows;
       for(const {file_path} of files){
         if(!uploadFile(uploadDir,file_path))throw new Error('Invalid stored attachment path');
@@ -104,7 +104,7 @@ function registerUserDeletion(app,{pool,requireAdmin,uploadDir}){
       }catch(e){}
       res.json({ok:true,deleted_id:id,file_cleanup_pending});
     }catch(e){
-      if(client&&!committed)await client.query('ROLLBACK');
+      if(client&&!committed)await client.query('ROLLBACK').catch(()=>{});
       res.status(500).json({error:'User could not be deleted. No account changes were committed.'});
     }finally{if(client)client.release();}
   });

@@ -17,11 +17,11 @@ function registerPhotoMarkers(app,{pool,requireAuth,currentProduct}){
    const change=validate(req.body);if(!change)return res.status(400).json({error:'Choose photos and a valid marker change'});
    db=await pool.connect();await db.query('BEGIN');
    const owned=(await db.query('SELECT id FROM captures WHERE user_id=$1 AND id=ANY($2::int[]) AND photo_path IS NOT NULL FOR UPDATE',[req.user.id,change.ids])).rows;
-   if(owned.length!==change.ids.length){await db.query('ROLLBACK');return res.status(404).json({error:'One or more photos are unavailable'});}
+   if(owned.length!==change.ids.length){await db.query('ROLLBACK').catch(()=>{});return res.status(404).json({error:'One or more photos are unavailable'});}
    const values=[req.user.id,change.ids,...change.keys.map(k=>req.body[k])];
    const rows=(await db.query(`UPDATE captures SET ${change.keys.map((k,i)=>`${k}=$${i+3}`).join(',')} WHERE user_id=$1 AND id=ANY($2::int[]) RETURNING id,favorite,flagged`,values)).rows;
    await db.query('COMMIT');res.json(rows);
-  }catch(e){if(db)await db.query('ROLLBACK');res.status(503).json({error:'Markers could not be saved. Please try again.'});}finally{db?.release();}
+  }catch(e){if(db)await db.query('ROLLBACK').catch(()=>{});res.status(503).json({error:'Markers could not be saved. Please try again.'});}finally{db?.release();}
  });
 }
 module.exports={EDITIONS,SCHEMA,validate,registerPhotoMarkers};

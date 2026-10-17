@@ -24,8 +24,11 @@ async function beginCaptureReceipt(req,pool){
    return {db:pool,replay:receipt.response,commit:async()=>{},rollback:async()=>{},release:()=>{}};
   }
   if(currentEdition(user)!==edition)throw new CaptureReceiptError(409,'Select the original Photo Notes version before retrying this photo');
-  return {db:client,async commit(response){await client.query('INSERT INTO capture_upload_receipts(user_id,request_id,request_hash,response) VALUES($1,$2,$3,$4)',[req.user.id,key,fingerprint,JSON.stringify(response)]);await client.query('COMMIT');open=false;},async rollback(){if(open){await client.query('ROLLBACK');open=false;}},release(){client.release();}};
- }catch(error){if(open)await client.query('ROLLBACK');client.release();throw error;}
+  return {db:client,async commit(response){await client.query('INSERT INTO capture_upload_receipts(user_id,request_id,request_hash,response) VALUES($1,$2,$3,$4)',[req.user.id,key,fingerprint,JSON.stringify(response)]);await client.query('COMMIT');open=false;},async rollback(){if(open){await client.query('ROLLBACK').catch(()=>{});open=false;}},release(){client.release();}};
+ }catch(error){
+  // A failed rollback means the connection is unusable: destroy it instead of returning it to the pool.
+  let broken=false;if(open)await client.query('ROLLBACK').catch(()=>{broken=true;});client.release(broken);throw error;
+ }
 }
 function validateCaptureAccount(req,res,next){
  if(!req.get('X-Photo-Notes-Capture-Id'))return next();

@@ -1,5 +1,6 @@
 let issueTestingContext=null;
 let activeIssueCapture=null;
+function issueAppVersion(){try{const script=document.querySelector('script[src*="/app.js?v="]');const m=script&&/[?&]v=(\d{1,12})/.exec(script.getAttribute('src'));return m?m[1]:'unknown';}catch{return 'unknown';}}
 // ================= Shared issue reporter =================
 let issueScreenshotBlob = null, issueVoiceBlob = null, issuePageName = '', issueRecognizer = null, issueMediaRecorder = null, issueMediaStream = null;
 let issueScreenshotURL = null, issueMarkupEditor=null;
@@ -342,7 +343,7 @@ async function submitIssueReport(){
   if(!whatHappened&&!issueVoiceBlob){st.textContent='Please type what went wrong or attach a voice recording before sending.';ta.focus();return;}
   if(issueResultPending){st.textContent=uiPushText('Please wait for the result screenshot to finish loading.');return;}
   btn.disabled=true;btn.textContent='Sending...';st.textContent='Saving your report...';
-  try{const screenshot=issueMarkupEditor?await issueMarkupEditor.exportBlob():issueScreenshotBlob;if(generation!==issueGeneration)return;const fd=new FormData();fd.append('description',issueReportDescription(description));if(issueTestingContext){fd.append('testing_assignment_id',issueTestingContext.assignmentId);fd.append('testing_step_id',issueTestingContext.stepId);}fd.append('issue_type',document.getElementById('issueType')?.value||'bug_problem');fd.append('page_name',issuePageName);fd.append('page_url',location.href);fd.append('viewport',`${window.innerWidth} × ${window.innerHeight}`);fd.append('app_version','367');fd.append('user_agent',navigator.userAgent+' | Photo Notes web 367 | '+((window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches)||navigator.standalone?'installed web app':'browser'));if(screenshot)fd.append('screenshot',screenshot,'issue-screen.jpg');if(issueResultFile)fd.append('result_screenshot',issueResultFile,issueResultFile.name);if(issueVoiceBlob)fd.append('voice',issueVoiceBlob,issueVoiceBlob.type.includes('webm')?'issue-voice.webm':'issue-voice.m4a');const r=await api('/api/issues',{method:'POST',body:fd});const d=await r.json().catch(()=>({}));if(generation!==issueGeneration)return;if(!r.ok)throw new Error(d.error||'');st.textContent=d.email_status==='sent'?`Issue #${d.id} sent. Thank you.`:`Issue #${d.id} saved. Thank you.`;btn.textContent='Sent';setTimeout(()=>{if(generation===issueGeneration)closeIssueReporter();},1800);}catch(e){if(generation!==issueGeneration)return;st.textContent=e.message||'The report could not be sent. Check your connection and try again.';btn.disabled=false;btn.textContent='Send Issue Report';}
+  try{const screenshot=issueMarkupEditor?await issueMarkupEditor.exportBlob():issueScreenshotBlob;if(generation!==issueGeneration)return;const fd=new FormData();fd.append('description',issueReportDescription(description));if(issueTestingContext){fd.append('testing_assignment_id',issueTestingContext.assignmentId);fd.append('testing_step_id',issueTestingContext.stepId);}fd.append('issue_type',document.getElementById('issueType')?.value||'bug_problem');fd.append('page_name',issuePageName);fd.append('page_url',location.href);fd.append('viewport',`${window.innerWidth} × ${window.innerHeight}`);const appVersion=issueAppVersion();fd.append('app_version',appVersion);fd.append('user_agent',navigator.userAgent+' | Photo Notes web '+appVersion+' | '+((window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches)||navigator.standalone?'installed web app':'browser'));if(screenshot)fd.append('screenshot',screenshot,'issue-screen.jpg');if(issueResultFile)fd.append('result_screenshot',issueResultFile,issueResultFile.name);if(issueVoiceBlob)fd.append('voice',issueVoiceBlob,issueVoiceBlob.type.includes('webm')?'issue-voice.webm':'issue-voice.m4a');const r=await api('/api/issues',{method:'POST',body:fd});const d=await r.json().catch(()=>({}));if(generation!==issueGeneration)return;if(!r.ok)throw new Error(d.error||'');st.textContent=d.email_status==='sent'?`Issue #${d.id} sent. Thank you.`:`Issue #${d.id} saved. Thank you.`;btn.textContent='Sent';setTimeout(()=>{if(generation===issueGeneration)closeIssueReporter();},1800);}catch(e){if(generation!==issueGeneration)return;st.textContent=e.message||'The report could not be sent. Check your connection and try again.';btn.disabled=false;btn.textContent='Send Issue Report';}
 }
 
 function issueReporterMarkup(){return `<a id="issueUpdates" class="issue-updates" href="/?issues=1" hidden data-html2canvas-ignore="true"></a>    <div class="issue-modal" id="issueModal" hidden data-html2canvas-ignore="true">
@@ -362,7 +363,12 @@ function issueReporterMarkup(){return `<a id="issueUpdates" class="issue-updates
     </div>`;}
 
 // In-app repair notifications do not depend on email configuration.
+let issueAttentionBusy=false;
 async function refreshIssueAttention(){
+  if(issueAttentionBusy)return;issueAttentionBusy=true;
+  try{await refreshIssueAttentionNow();}finally{issueAttentionBusy=false;}
+}
+async function refreshIssueAttentionNow(){
   const profile=document.getElementById('profileButton'),link=document.getElementById('issueUpdates');
   if((!profile&&!link)||document.hidden)return;
   try{
