@@ -26,9 +26,19 @@ async function main(){
  const file=opt('file');if(!file)throw new Error('Provide --file with the JSON repair details');const body=JSON.parse(fs.readFileSync(file,'utf8'));body.claim_token=claim();
  if(command==='ready'){
    if(!/^[a-f0-9]{40}$/.test(body.fix_commit||'')||!body.verification?.trim())throw new Error('Provide full fix_commit and test verification');
-   const deployments=JSON.parse(execFileSync('railway',['deployment','list','--project','62580ecc-2e07-4e27-b2de-fedbb7bf263d','--environment','production','--service','f1c5c40a-c946-4c48-a750-a38a45ce4877','--limit','1','--json'],{encoding:'utf8',maxBuffer:1024*1024}));
-   const latest=deployments[0],deployed=latest?.meta?.commitHash;
-   if(latest?.status!=='SUCCESS'||!/^[a-f0-9]{40}$/.test(deployed||''))throw new Error('Latest production deployment is not verified successful');
+   // Prefer the Railway CLI. Where it is unavailable (cloud sessions), the running
+   // production server's own release report identifies the serving deployment and commit.
+   let latest,deployed;
+   try{
+    const deployments=JSON.parse(execFileSync('railway',['deployment','list','--project','62580ecc-2e07-4e27-b2de-fedbb7bf263d','--environment','production','--service','f1c5c40a-c946-4c48-a750-a38a45ce4877','--limit','1','--json'],{encoding:'utf8',maxBuffer:1024*1024,stdio:['ignore','pipe','ignore']}));
+    latest=deployments[0];deployed=latest?.meta?.commitHash;
+    if(latest?.status!=='SUCCESS'||!/^[a-f0-9]{40}$/.test(deployed||''))throw new Error('Latest production deployment is not verified successful');
+   }catch(error){
+    if(error?.code!=='ENOENT')throw error;
+    const release=await(await fetch(base+'/api/release',{signal:AbortSignal.timeout(15000),cache:'no-store'})).json();
+    if(!release?.ok||!/^[a-f0-9]{40}$/.test(release.commit||'')||!release.deployment)throw new Error('Production release report is not verified');
+    latest={id:release.deployment,status:'SUCCESS'};deployed=release.commit;
+   }
    execFileSync('git',['merge-base','--is-ancestor',body.fix_commit,deployed]);
    const health=await fetch(base+'/api/health',{signal:AbortSignal.timeout(15000)});if(!health.ok||!(await health.json()).ok)throw new Error('Production health check failed');
    const response=await fetch(base+'/app.js?verify='+deployed,{signal:AbortSignal.timeout(15000)});if(!response.ok)throw new Error('Live app bundle unavailable');
