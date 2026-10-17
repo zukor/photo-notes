@@ -88,8 +88,21 @@ const {chromium}=require('playwright');
   await page.evaluate(()=>{document.getElementById('note').value='';state._note='';});
   await page.locator('#dictate').click();await page.waitForFunction(()=>/live words/.test(document.getElementById('note').value),null,{timeout:15000});
   await page.locator('#dictate').click();await page.waitForFunction(()=>/Final words/.test(document.getElementById('note').value)&&document.getElementById('dictate').textContent==='Record Notes');
+  // 7. Report Issue description: live text on every device, including iPhone (no audio attachment).
+  await page.evaluate(()=>openIssueReporter());await page.locator('#issueRecord').waitFor();
+  await page.locator('#issueRecord').click();
+  await page.waitForFunction(()=>/live words/.test(document.getElementById('issueDescription').value),null,{timeout:15000});
+  await page.locator('#issueRecord').click();
+  await page.waitForFunction(()=>/Final words \d+\./.test(document.getElementById('issueDescription').value)&&!document.getElementById('issueRecord').classList.contains('on'),null,{timeout:15000});
+  await page.evaluate(()=>closeIssueReporter());
+  // 8. Extra Work description.
+  await page.evaluate(()=>{state.plan='pro';state.proType='paving';state.ewrId='new';renderEwrDetail();});
+  await page.locator('#ewrDictate').waitFor();await page.locator('#ewrDictate').click();
+  await page.waitForFunction(()=>/live words/.test(document.getElementById('ewrDesc').value),null,{timeout:15000});
+  await page.locator('#ewrDictate').click();
+  await page.waitForFunction(()=>/Final words \d+\./.test(document.getElementById('ewrDesc').value)&&document.getElementById('ewrDictate').textContent==='Record Voice Note',null,{timeout:15000});
   assert.equal(await page.evaluate(()=>socketLog.filter(s=>!s.terminated&&s.readyState===1).length),0,'every live session terminated');
   await page.close();
-  console.log(label+': live words, Stop final words, repeated recordings, dropped connection recovery, retry, finish-before-save, Feedback and Capture handoff passed');
+  console.log(label+': live words, Stop final words, repeated recordings, dropped connection recovery, retry, finish-before-save, Feedback and Capture handoff, Report Issue and Extra Work passed');
  }}finally{await browser.close();server.close();}
 })().catch(e=>{console.error(e);process.exit(1);});
