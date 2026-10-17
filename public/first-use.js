@@ -20,10 +20,11 @@
   return new Promise((resolve,reject)=>navigator.geolocation.getCurrentPosition(()=>resolve(),reject,{enableHighAccuracy:true,timeout:15000,maximumAge:0}));
  }
 
- function offer(me){
+ // force reopens setup from the Account menu even after it was completed.
+ function offer(me,{force=false}={}){
   if(!me?.email||document.getElementById('firstUseSetup'))return false;
   const key=KEY+encodeURIComponent(me.email);
-  try{if(localStorage.getItem(key))return false;}catch{}
+  if(!force)try{if(localStorage.getItem(key))return false;}catch{}
   const account=me.email,wantIcon=isPhone()&&!isInstalled();
   const status={microphone:'waiting',camera:'waiting',location:'waiting'};let busy=false,phase='permissions';
   const dialog=document.createElement('dialog');dialog.id='firstUseSetup';dialog.className='first-use-dialog';dialog.setAttribute('aria-labelledby','firstUseTitle');

@@ -1,5 +1,5 @@
 const {chromium,webkit}=require('playwright'),assert=require('node:assert/strict'),fs=require('node:fs'),http=require('node:http');
-assert.match(fs.readFileSync('public/index.html','utf8'),/first-use.js\?v=299/);
+{const version=(fs.readFileSync('public/index.html','utf8').match(/first-use\.js\?v=(\d+)/)||[])[1];assert.ok(version,'index.html loads first-use.js');assert.ok(fs.readFileSync('public/sw.js','utf8').includes('/first-use.js?v='+version),'the offline cache uses the same first-use.js version');}
 const server=http.createServer((req,res)=>res.end('<html><body>PhotoNotes</body></html>'));
 const engines=(process.env.PN_FIRST_USE_ENGINES||'chromium,webkit').split(',').map(name=>({chromium,webkit})[name]);
 async function setup(page,{ua='iPhone',email='tester@example.invalid'}={}){

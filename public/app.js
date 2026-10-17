@@ -360,6 +360,8 @@ function renderApp() {
               <button type="button" id="myAssignment" ${state.me?.is_tester||state.me?.is_testing_manager||state.me?.role==='admin'?'':'hidden'}>${uiT(isTestingManager()?'My Testing Dashboard':'Testing Dashboard')}</button>
               <button type="button" id="installHelp">Install Photo Notes</button>
               <button type="button" id="pendingPhotos">Pending Photos</button>
+              <button type="button" id="setupPermissions">Set Up Permissions</button>
+              <button type="button" id="recordNotesSelfTest">Record Notes Self-Test</button>
               <button type="button" id="myIssues" ${state.me?.is_tester||isTestingManager()?'hidden':''}>My Issue Reports</button>
               ${state.me?.is_super_admin ? '<a href="/admin?view=super">Super Admin Dashboard</a>' : ''}
               ${state.me && state.me.role === 'admin' ? '<a href="/admin?view=admin">Admin Dashboard</a>' : ''}
@@ -400,6 +402,8 @@ function renderApp() {
   document.getElementById('installHelp').onclick=showInstallHelp;
   document.getElementById('pendingPhotos').onclick=showPendingPhotos;
   const myIssues=document.getElementById('myIssues');if(myIssues)myIssues.onclick=()=>enterTesting('my-issues');
+  const setupPermissions=document.getElementById('setupPermissions');if(setupPermissions)setupPermissions.onclick=()=>{profileMenu.hidden=true;profileButton.setAttribute('aria-expanded','false');window.PhotoNotesFirstUse?.offer(state.me,{force:true});};
+  const selfTest=document.getElementById('recordNotesSelfTest');if(selfTest)selfTest.onclick=()=>{location.href='/record-notes-self-test.html';};
   const manageTesting=document.getElementById('manageTesting');if(manageTesting)manageTesting.onclick=()=>enterTesting('manage-testing');
   const myAssignment=document.getElementById('myAssignment');if(myAssignment)myAssignment.onclick=()=>enterTesting('my-assignment');
   const editionSwitcher=document.getElementById('editionSwitcher');if(editionSwitcher)editionSwitcher.onchange=async()=>{
