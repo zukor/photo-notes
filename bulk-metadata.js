@@ -35,11 +35,11 @@ function createHandler({pool,currentProduct}){
    let change;try{change=validate(req.body,edition);}catch(e){return res.status(400).json({error:e.message,updated:0,not_updated:req.body.ids?.length||0});}
    ids=change.ids;db=await pool.connect();await db.query('BEGIN');
    const rows=(await db.query(`SELECT id,${Object.keys(change.fields).join(',')} FROM captures WHERE user_id=$1 AND id=ANY($2::int[]) AND photo_path IS NOT NULL ORDER BY id FOR UPDATE`,[req.user.id,ids])).rows;
-   if(rows.length!==ids.length){await db.query('ROLLBACK');return res.status(404).json({error:'One or more selected Photo Notes are unavailable or cannot be edited. Nothing was changed.',updated:0,not_updated:ids.length});}
-   if(change.metadata.job_id!=null&&!(await db.query('SELECT id FROM jobs WHERE id=$1 AND user_id=$2',[change.metadata.job_id,req.user.id])).rowCount){await db.query('ROLLBACK');return res.status(400).json({error:'Job is unavailable. Nothing was changed.',updated:0,not_updated:ids.length});}
+   if(rows.length!==ids.length){await db.query('ROLLBACK').catch(()=>{});return res.status(404).json({error:'One or more selected Photo Notes are unavailable or cannot be edited. Nothing was changed.',updated:0,not_updated:ids.length});}
+   if(change.metadata.job_id!=null&&!(await db.query('SELECT id FROM jobs WHERE id=$1 AND user_id=$2',[change.metadata.job_id,req.user.id])).rowCount){await db.query('ROLLBACK').catch(()=>{});return res.status(400).json({error:'Job is unavailable. Nothing was changed.',updated:0,not_updated:ids.length});}
    const token=snapshot(rows,change.metadata);
    if(req.body.preview===true){await db.query('COMMIT');return res.json({count:rows.length,fields:change.fields,rows,snapshot:token});}
-   if(req.body.snapshot!==token){await db.query('ROLLBACK');return res.status(409).json({error:'Selected metadata changed since the review. Review the changes again. Nothing was changed.',updated:0,not_updated:ids.length});}
+   if(req.body.snapshot!==token){await db.query('ROLLBACK').catch(()=>{});return res.status(409).json({error:'Selected metadata changed since the review. Review the changes again. Nothing was changed.',updated:0,not_updated:ids.length});}
    const keys=Object.keys(change.metadata),history=rows.map(row=>{
     const changed=keys.filter(k=>JSON.stringify(canonical(row[k]??null))!==JSON.stringify(canonical(change.metadata[k])));
     return {id:row.id,detail:{bulk:true,selected_count:ids.length,fields:changed.map(k=>change.fields[k].label),before:Object.fromEntries(changed.map(k=>[k,row[k]??null])),after:Object.fromEntries(changed.map(k=>[k,change.metadata[k]]))}};

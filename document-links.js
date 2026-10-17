@@ -43,7 +43,7 @@ function registerDocumentLinks(app, {pool, requireAuth}) {
       await client.query('DELETE FROM document_share_links WHERE user_id=$1 AND expires_at<=now()',[req.user.id]);
       const usage = (await client.query('SELECT count(*)::int count,COALESCE(sum(octet_length(content)),0)::bigint bytes FROM document_share_links WHERE user_id=$1',[req.user.id])).rows[0];
       if (usage.count >= 100 || Number(usage.bytes) + req.body.length > 100 * 1024 * 1024) {
-        await client.query('ROLLBACK');
+        await client.query('ROLLBACK').catch(()=>{});
         return res.status(409).json({error:'Revoke an existing shared link before creating another. The limit is 100 links or 100 MB.'});
       }
       const token = crypto.randomBytes(32).toString('base64url');

@@ -42,18 +42,18 @@ function register(app,{pool,requireAuth,currentProduct}){
  const cid=Number(req.params.commentId);if(method!=='post'&&!valid(cid))return res.status(400).json({error:'Invalid comment ID'});
  db=await pool.connect();await db.query('BEGIN');
  await db.query('SELECT id FROM captures WHERE id=$1 FOR UPDATE',[req.commentCapture]);
- const a=await access(db,req.commentCapture,req.user,req.commentEdition);if(!a){await db.query('ROLLBACK');return res.status(404).json({error:'Photo not found'});}
+ const a=await access(db,req.commentCapture,req.user,req.commentEdition);if(!a){await db.query('ROLLBACK').catch(()=>{});return res.status(404).json({error:'Photo not found'});}
  let comment;
  if(method==='post'){
- let parent=null;if(reply!=null){parent=(await db.query('SELECT id,reply_to FROM photo_comments WHERE id=$1 AND capture_id=$2 AND deleted_at IS NULL',[reply,req.commentCapture])).rows[0];if(!parent){await db.query('ROLLBACK');return res.status(400).json({error:'Reply comment unavailable'});}}
+ let parent=null;if(reply!=null){parent=(await db.query('SELECT id,reply_to FROM photo_comments WHERE id=$1 AND capture_id=$2 AND deleted_at IS NULL',[reply,req.commentCapture])).rows[0];if(!parent){await db.query('ROLLBACK').catch(()=>{});return res.status(400).json({error:'Reply comment unavailable'});}}
  comment=(await db.query('INSERT INTO photo_comments(capture_id,author_id,author_name,text,reply_to) VALUES($1,$2,$3,$4,$5) RETURNING id',[req.commentCapture,req.user.id,req.user.name||'Team member',text.trim(),parent?(parent.reply_to||parent.id):null])).rows[0];
  for(const member of await recipients(db,a,req.user.id)){
  const mentioned=!!member.name&&text.toLowerCase().includes('@'+member.name.toLowerCase());
  await db.query('INSERT INTO hoa_notifications(user_id,item_id,capture_id,message) VALUES($1,$2,$3,$4)',[member.id,a.contexts.find(c=>c.item_id)?.item_id||null,req.commentCapture,mentioned?'You were mentioned in a Photo Note comment.':`${req.user.name||'A team member'} commented on a Photo Note.`]);}
  }else{
  comment=(await db.query('SELECT * FROM photo_comments WHERE id=$1 AND capture_id=$2 FOR UPDATE',[cid,req.commentCapture])).rows[0];
- if(!comment||comment.deleted_at){await db.query('ROLLBACK');return res.status(404).json({error:'Comment not found'});}
- if(comment.author_id!==req.user.id&&!(method==='delete'&&a.moderate)){await db.query('ROLLBACK');return res.status(403).json({error:'You can only change your own comments'});}
+ if(!comment||comment.deleted_at){await db.query('ROLLBACK').catch(()=>{});return res.status(404).json({error:'Comment not found'});}
+ if(comment.author_id!==req.user.id&&!(method==='delete'&&a.moderate)){await db.query('ROLLBACK').catch(()=>{});return res.status(403).json({error:'You can only change your own comments'});}
  await db.query('INSERT INTO photo_comment_history(comment_id,actor_id,previous_text,action) VALUES($1,$2,$3,$4)',[cid,req.user.id,comment.text,method]);
  if(method==='patch'){
  await db.query('UPDATE photo_comments SET text=$1,edited_at=now() WHERE id=$2',[text.trim(),cid]);
@@ -62,7 +62,7 @@ function register(app,{pool,requireAuth,currentProduct}){
  }else await db.query('UPDATE photo_comments SET deleted_at=now(),deleted_by=$1 WHERE id=$2',[req.user.id,cid]);
  }
  await db.query('COMMIT');res.status(method==='post'?201:200).json({ok:true,id:comment.id});
- }catch(e){if(db)await db.query('ROLLBACK');console.error('[photo-comments]',e.message);res.status(503).json({error:'Comment could not save. Keep your draft and retry when connected.'});}finally{db?.release();}
+ }catch(e){if(db)await db.query('ROLLBACK').catch(()=>{});console.error('[photo-comments]',e.message);res.status(503).json({error:'Comment could not save. Keep your draft and retry when connected.'});}finally{db?.release();}
  });
 }
 module.exports={EDITIONS,SCHEMA,CONTEXT,access,recipients,valid,register};

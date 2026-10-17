@@ -33,6 +33,14 @@
   const remove=id=>transaction('readwrite',store=>store.delete(id));
   const eligible=(row,account,edition)=>row.account===account&&row.edition===edition&&/^[a-f0-9-]{36}$/.test(row.requestId||'');
   const headers=row=>({'X-Photo-Notes-Capture-Id':row.requestId,'X-Photo-Notes-Edition':row.edition,'X-Photo-Notes-Account':row.account});
+  // A follow-up or incident closed while the photo waited offline. Keep the photo as an ordinary PhotoNote.
+  const LINK_FIELDS=['follow_up_occurrence_id','incident_id','incident_view'];
+  const linked=payload=>!!payload&&LINK_FIELDS.some(k=>payload[k]);
+  async function unlink(id){
+    const row=await transaction('readonly',store=>store.get(id));if(!row)return null;
+    for(const k of LINK_FIELDS)delete row.payload[k];
+    await transaction('readwrite',store=>store.put(row));return row;
+  }
   const permanent=status=>[400,401,403,409,413,422].includes(status);
   const draftKey=(account,edition)=>{if(!/^[a-f0-9]{64}$/.test(account)||!edition)throw Error('Sign in first');return account+':'+edition;};
   async function saveDraft(account,edition,draft){
@@ -42,5 +50,5 @@
   }
   async function readDraft(account,edition){const row=await transaction('readonly',store=>store.get(draftKey(account,edition)),'drafts');if(row)row.photo=new Blob([row.photoBytes],{type:row.photoType});return row;}
   const clearDraft=(account,edition)=>transaction('readwrite',store=>store.delete(draftKey(account,edition)),'drafts');
-  return {saveDraft,readDraft,clearDraft,accountKey,create,all,remove,eligible,headers,permanent};
+  return {saveDraft,readDraft,clearDraft,accountKey,create,all,remove,eligible,headers,permanent,linked,unlink,LINK_FIELDS};
 });

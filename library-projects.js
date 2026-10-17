@@ -15,10 +15,10 @@ function register(app,{pool,requireAuth}){
   if(!Array.isArray(raw)||!raw.length||raw.length>500||!raw.every(validId)||!validId(b.project_id)||(group!==null&&!validId(b.group_id)))return res.status(400).json({error:'Choose valid PhotoNotes and project'});
   const ids=[...new Set(raw.map(Number))].sort((a,b)=>a-b);let db;
   try{db=await pool.connect();await db.query('BEGIN');
-   if(!(await db.query('SELECT id FROM jobs WHERE id=$1 AND user_id=$2 FOR KEY SHARE',[project,req.user.id])).rowCount){await db.query('ROLLBACK');return res.status(403).json({error:'Project is unavailable to this account'});}
-   if(group!==null&&!(await db.query('SELECT id FROM project_groups WHERE id=$1 AND job_id=$2 AND user_id=$3 FOR KEY SHARE',[group,project,req.user.id])).rowCount){await db.query('ROLLBACK');return res.status(403).json({error:'Choose a group in this project'});}
+   if(!(await db.query('SELECT id FROM jobs WHERE id=$1 AND user_id=$2 FOR KEY SHARE',[project,req.user.id])).rowCount){await db.query('ROLLBACK').catch(()=>{});return res.status(403).json({error:'Project is unavailable to this account'});}
+   if(group!==null&&!(await db.query('SELECT id FROM project_groups WHERE id=$1 AND job_id=$2 AND user_id=$3 FOR KEY SHARE',[group,project,req.user.id])).rowCount){await db.query('ROLLBACK').catch(()=>{});return res.status(403).json({error:'Choose a group in this project'});}
    const owned=await db.query('SELECT id FROM captures WHERE user_id=$1 AND id=ANY($2::int[]) ORDER BY id FOR UPDATE',[req.user.id,ids]);
-   if(owned.rowCount!==ids.length){await db.query('ROLLBACK');return res.status(403).json({error:'One or more PhotoNotes are unavailable to this account'});}
+   if(owned.rowCount!==ids.length){await db.query('ROLLBACK').catch(()=>{});return res.status(403).json({error:'One or more PhotoNotes are unavailable to this account'});}
    // Preserve existing primary project links and any older memberships.
    await db.query('INSERT INTO capture_project_memberships(user_id,capture_id,job_id) SELECT user_id,id,job_id FROM captures WHERE user_id=$1 AND id=ANY($2::int[]) AND job_id IS NOT NULL ON CONFLICT DO NOTHING',[req.user.id,ids]);
    await db.query('INSERT INTO capture_project_memberships(user_id,capture_id,job_id) SELECT $1,unnest($2::int[]),$3 ON CONFLICT DO NOTHING',[req.user.id,ids,project]);

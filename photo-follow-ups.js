@@ -153,22 +153,24 @@ async function completeVisit(db,user,visitId){
  for(const stop of stops)for(const captureId of stop.capture_ids)await db.query(`INSERT INTO hoa_asset_photos(asset_id,capture_id,photo_type) VALUES($1,$2,'condition') ON CONFLICT DO NOTHING`,[stop.asset_id,captureId]);
  await db.query(`UPDATE photo_follow_up_occurrences SET status='completed',completed_at=now(),completed_by=$1 WHERE id=$2`,[user.id,o.id]);await clearReminders(db,o.id);await generate(db,(await db.query('SELECT * FROM photo_follow_up_schedules WHERE id=$1',[o.schedule_id])).rows[0]);}
 }
+async function isolated(db,label,work){await db.query('SAVEPOINT follow_up_item');try{await work();await db.query('RELEASE SAVEPOINT follow_up_item');}catch(e){await db.query('ROLLBACK TO SAVEPOINT follow_up_item');console.error('[photo-follow-ups.worker]',label,e&&e.message);}}
 async function tick(pool,now=new Date()){
- const db=await pool.connect();try{await db.query('BEGIN');if(!(await db.query('SELECT pg_try_advisory_xact_lock(73910326) AS locked')).rows[0].locked){await db.query('ROLLBACK');return;}
+ const db=await pool.connect();try{await db.query('BEGIN');if(!(await db.query('SELECT pg_try_advisory_xact_lock(73910326) AS locked')).rows[0].locked){await db.query('ROLLBACK').catch(()=>{});return;}
  const schedules=(await db.query(`SELECT s.* FROM photo_follow_up_schedules s JOIN users u ON u.id=s.user_id AND u.active=true WHERE s.active=true FOR UPDATE OF s`)).rows;
- for(const s of schedules)await generate(db,s,now);
+ // One broken schedule or visit is skipped and logged instead of stopping every follow-up.
+ for(const s of schedules)await isolated(db,'schedule '+s.id,()=>generate(db,s,now));
  const completedVisits=(await db.query(`SELECT DISTINCT v.id,v.created_by FROM hoa_property_visits v JOIN photo_follow_up_occurrences o ON o.visit_id=v.id WHERE v.status='completed' AND o.status='pending'`)).rows;
- for(const v of completedVisits){const user=(await db.query('SELECT * FROM users WHERE id=$1 AND active=true',[v.created_by])).rows[0];if(user&&eligible(user)){try{await completeVisit(db,user,v.id);}catch(e){if(!e.status)throw e;}}}
+ for(const v of completedVisits)await isolated(db,'visit '+v.id,async()=>{const user=(await db.query('SELECT * FROM users WHERE id=$1 AND active=true',[v.created_by])).rows[0];if(user&&eligible(user)){try{await completeVisit(db,user,v.id);}catch(e){if(!e.status)throw e;}}});
  const rows=(await db.query(`SELECT o.*,s.user_id,s.assigned_user_id,s.reminder_days,s.subject_type,s.subject_id FROM photo_follow_up_occurrences o JOIN photo_follow_up_schedules s ON s.id=o.schedule_id JOIN users u ON u.id=s.user_id AND u.active=true WHERE o.status='pending'`)).rows;
  for(const o of rows){const date=dateString(o.due_date),local=today(o.timezone,now),advance=new Date(date+'T12:00:00Z');advance.setUTCDate(advance.getUTCDate()-o.reminder_days);const kind=date<=local?'due':o.reminder_days&&advance.toISOString().slice(0,10)<=local?'advance':null;if(!kind)continue;
  const recipient=o.assigned_user_id||o.user_id,user=(await db.query('SELECT * FROM users WHERE id=$1 AND active=true',[recipient])).rows[0];if(!user||!eligible(user))continue;try{await subject(db,user,o.subject_type,o.subject_id);}catch(e){if(e.status)continue;throw e;}
  await db.query(`INSERT INTO photo_follow_up_notifications(occurrence_id,user_id,kind,message) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING`,[o.id,recipient,kind,`${kind==='due'?'Follow-up photograph due':'Upcoming follow-up photograph'}: ${o.title} (${date})`]);}
  await db.query(`INSERT INTO photo_follow_up_worker_state(id,last_tick,last_error) VALUES(1,now(),NULL) ON CONFLICT(id) DO UPDATE SET last_tick=now(),last_error=NULL`);await db.query('COMMIT');
- }catch(e){await db.query('ROLLBACK');await pool.query(`INSERT INTO photo_follow_up_worker_state(id,last_error) VALUES(1,'Due processing failed') ON CONFLICT(id) DO UPDATE SET last_error=excluded.last_error`).catch(()=>{});throw e;}finally{db.release();}
+ }catch(e){await db.query('ROLLBACK').catch(()=>{});await pool.query(`INSERT INTO photo_follow_up_worker_state(id,last_error) VALUES(1,'Due processing failed') ON CONFLICT(id) DO UPDATE SET last_error=excluded.last_error`).catch(()=>{});throw e;}finally{db.release();}
 }
 function register(app,{pool,requireAuth}){
  const gate=(req,res,next)=>eligible(req.user)?next():res.status(403).json({error:'Scheduled photography requires an eligible Pro edition.'});
- const route=(method,path,fn)=>app[method]('/api/photo-follow-ups'+path,requireAuth,gate,async(req,res)=>{let db;try{db=await pool.connect();await db.query('BEGIN');const result=await fn(req,db);await db.query('COMMIT');res.json(result);}catch(e){if(db)await db.query('ROLLBACK');if(!e.status&&!/Enter |Choose /.test(e.message))console.error('[photo-follow-ups]',e.message);res.status(e.status||400).json({error:e.status||/Enter |Choose /.test(e.message)?e.message:'Follow-up could not be saved or loaded.'});}finally{db?.release();}});
+ const route=(method,path,fn)=>app[method]('/api/photo-follow-ups'+path,requireAuth,gate,async(req,res)=>{let db;try{db=await pool.connect();await db.query('BEGIN');const result=await fn(req,db);await db.query('COMMIT');res.json(result);}catch(e){if(db)await db.query('ROLLBACK').catch(()=>{});if(!e.status&&!/Enter |Choose /.test(e.message))console.error('[photo-follow-ups]',e.message);res.status(e.status||400).json({error:e.status||/Enter |Choose /.test(e.message)?e.message:'Follow-up could not be saved or loaded.'});}finally{db?.release();}});
  route('get','',async(req,db)=>{
  const schedules=(await db.query(`SELECT * FROM photo_follow_up_schedules WHERE user_id=$1 OR assigned_user_id=$1 ORDER BY created_at DESC`,[req.user.id])).rows,accessible=[];
  for(const s of schedules){try{await authorize(db,req.user,s);accessible.push(s);}catch(e){if(!e.status)throw e;}}
@@ -193,7 +195,7 @@ function register(app,{pool,requireAuth}){
  throw fail('Unsupported follow-up action.');});
 }
 async function push(pool,send=require('web-push').sendNotification){
- const db=await pool.connect();try{await db.query('BEGIN');if(!(await db.query('SELECT pg_try_advisory_xact_lock(73910327) AS locked')).rows[0].locked){await db.query('ROLLBACK');return;}
+ const db=await pool.connect();try{await db.query('BEGIN');if(!(await db.query('SELECT pg_try_advisory_xact_lock(73910327) AS locked')).rows[0].locked){await db.query('ROLLBACK').catch(()=>{});return;}
  if(!(await db.query("SELECT to_regclass('issue_push_config') AS name")).rows[0].name){await db.query('COMMIT');return;}
  const keys=(await db.query('SELECT * FROM issue_push_config WHERE id=1')).rows[0];if(!keys){await db.query('COMMIT');return;}
  await db.query(`INSERT INTO photo_follow_up_push_delivery(notification_id,subscription_id) SELECT n.id,s.subscription_id FROM photo_follow_up_notifications n JOIN photo_follow_up_push_subscriptions s ON s.user_id=n.user_id JOIN photo_follow_up_occurrences o ON o.id=n.occurrence_id WHERE n.read_at IS NULL AND o.status='pending' ON CONFLICT DO NOTHING`);
@@ -201,7 +203,7 @@ async function push(pool,send=require('web-push').sendNotification){
  for(const r of rows){const user=(await db.query('SELECT * FROM users WHERE id=$1 AND active=true',[r.user_id])).rows[0],o=(await db.query('SELECT s.* FROM photo_follow_up_occurrences o JOIN photo_follow_up_schedules s ON s.id=o.schedule_id WHERE o.id=$1',[r.occurrence_id])).rows[0];if(!user||!eligible(user)||!o)continue;try{await authorize(db,user,o);}catch(e){if(e.status)continue;throw e;}
  try{await send(r.subscription,JSON.stringify({title:'Photo Follow-Up',body:r.message,url:'/?followups=1',tag:'photo-follow-up-'+r.occurrence_id}),{vapidDetails:{subject:'https://photonotesapp.com',publicKey:keys.public_key,privateKey:keys.private_key},TTL:86400,timeout:10000});await db.query('UPDATE photo_follow_up_push_delivery SET sent_at=now(),error=NULL WHERE notification_id=$1 AND subscription_id=$2',[r.notification_id,r.subscription_id]);}
  catch(e){if([404,410].includes(e.statusCode))await db.query('DELETE FROM photo_follow_up_push_subscriptions WHERE subscription_id=$1',[r.subscription_id]);else await db.query(`UPDATE photo_follow_up_push_delivery SET attempts=attempts+1,next_try=now()+interval '1 minute'*power(2,attempts),error='Push delivery failed' WHERE notification_id=$1 AND subscription_id=$2`,[r.notification_id,r.subscription_id]);}}
- await db.query('COMMIT');}catch(e){await db.query('ROLLBACK');throw e;}finally{db.release();}
+ await db.query('COMMIT');}catch(e){await db.query('ROLLBACK').catch(()=>{});throw e;}finally{db.release();}
 }
 function start(pool){let running=false;const run=async()=>{if(running)return;running=true;try{await tick(pool);await push(pool);}catch(e){console.error('[photo-follow-ups.worker]',e.message);}finally{running=false;}};void run();const timer=setInterval(run,60000);timer.unref();return timer;}
 module.exports={EDITIONS,SCHEMA,eligible,dateString,validDate,today,recurrenceDate,validate,subject,authorize,generate,completeCapture,linkRequest,completeRequest,completeVisit,tick,push,register,start};

@@ -23,7 +23,7 @@ async function notifyRequests(pool,{fetcher=fetch,env=process.env}={}){
   if(!env.RESEND_API_KEY)return;
   const rows=(await c.query(`SELECT d.*,u.email,e.issue_id,e.created_at,e.event,i.user_id reporter_id,i.review_note,i.retest_instructions
    FROM issue_request_notices d JOIN issue_repair_events e ON e.id=d.event_id JOIN issue_reports i ON i.id=e.issue_id JOIN users u ON u.id=d.user_id
-   WHERE d.sent_at IS NULL AND d.next_try<=now() AND u.active=true AND (u.id=i.user_id OR u.is_testing_manager=true)
+   WHERE d.sent_at IS NULL AND d.next_try<=now() AND d.attempts<12 AND u.active=true AND (u.id=i.user_id OR u.is_testing_manager=true)
    AND ${awaiting} AND ($1::timestamptz IS NULL OR e.created_at>=$1) AND (i.tester_retested_at IS NULL OR i.tester_retested_at<e.created_at)
    AND NOT EXISTS(SELECT 1 FROM issue_repair_events newer WHERE newer.issue_id=i.id AND ((newer.event IN (${requestEvents}) AND (newer.created_at>e.created_at OR (newer.created_at=e.created_at AND newer.id>e.id))) OR (newer.event='reporter_details' AND newer.created_at>e.created_at)))
    ORDER BY d.event_id,d.user_id LIMIT 2`,[since])).rows;
@@ -35,7 +35,7 @@ async function notifyRequests(pool,{fetcher=fetch,env=process.env}={}){
     const key=crypto.createHash('sha256').update(`initial:${d.event_id}:${d.user_id}`).digest('hex');
     const r=await fetcher('https://api.resend.com/emails',{method:'POST',redirect:'error',signal:AbortSignal.timeout(15000),headers:{'content-type':'application/json',authorization:`Bearer ${env.RESEND_API_KEY}`,'Idempotency-Key':key},body:JSON.stringify(body)});if(!r.ok)throw Error(`Mail service returned ${r.status}`);
    }catch(e){error=/^Mail service returned \d+$/.test(e.message)?e.message:'Email request failed';}
-   await c.query("UPDATE issue_request_notices SET sent_at=CASE WHEN $3::text IS NULL THEN now() END,attempts=attempts+1,error=$3,next_try=now()+interval '1 minute' WHERE event_id=$1 AND user_id=$2",[d.event_id,d.user_id,error]);
+   await c.query("UPDATE issue_request_notices SET sent_at=CASE WHEN $3::text IS NULL THEN now() END,attempts=attempts+1,error=$3,next_try=now()+least(interval '6 hours',interval '1 minute'*power(2,least(attempts,10))) WHERE event_id=$1 AND user_id=$2",[d.event_id,d.user_id,error]);
   }
  }finally{if(locked)await c.query('SELECT pg_advisory_unlock(740195)').catch(()=>{});c.release();}
 }

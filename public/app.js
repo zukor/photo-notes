@@ -1248,9 +1248,13 @@ async function restoreCaptureDraft(){
     state.view=selectedEdition()==='roads'?'road-report':'capture';
   }catch(error){toast('Unfinished photos could not be read. Keep this browser data and try again.');}
 }
-document.addEventListener('input',()=>{if(state.photoFile)void persistCaptureDraft().catch(()=>{});});
-document.addEventListener('change',()=>{if(state.photoFile)void persistCaptureDraft().catch(()=>{});});
-document.addEventListener('visibilitychange',()=>{if(document.hidden)void persistCaptureDraft().catch(()=>{});});
+// Typing saves once per pause instead of rewriting the photo on every keystroke. Leaving the app saves at once.
+let captureDraftTimer=0;
+function flushCaptureDraft(){clearTimeout(captureDraftTimer);captureDraftTimer=0;if(state.photoFile)void persistCaptureDraft().catch(()=>{});}
+document.addEventListener('input',()=>{if(!state.photoFile)return;clearTimeout(captureDraftTimer);captureDraftTimer=setTimeout(flushCaptureDraft,700);});
+document.addEventListener('change',flushCaptureDraft);
+document.addEventListener('visibilitychange',()=>{if(document.hidden)flushCaptureDraft();});
+window.addEventListener('pagehide',flushCaptureDraft);
 window.addEventListener('pagehide',()=>{void persistCaptureDraft().catch(()=>{});});
 
 function onPhotoChosen(file) {
@@ -2181,7 +2185,7 @@ async function showPendingPhotos(){
   const ticker=setInterval(()=>{if(!dialog.isConnected){clearInterval(ticker);return;}update();},1000);dialog.addEventListener('close',()=>{clearInterval(ticker);dialog.remove();});document.body.append(dialog);dialog.showModal();update();
 
 }
-function payloadFormData(p){const fd=new FormData();if(p.photo)fd.append('photo',p.photo,p.photoName||'offline-photo.jpg');fd.append('note',p.note||'');fd.append('area_tags',p.area_tags||'[]');fd.append('kind',p.kind||'note');if(p.custom_fields)fd.append('custom_fields',p.custom_fields);if(p.context_source_id)fd.append('context_source_id',p.context_source_id);if(Object.prototype.hasOwnProperty.call(p,'job_id'))fd.append('job_id',p.job_id||'');if(p.follow_up_occurrence_id)fd.append('follow_up_occurrence_id',p.follow_up_occurrence_id);for(const k of ['security_issue_type','urgency','paving_photo_reason','concrete_phase','concrete_purpose','concrete_element','concrete_stage','concrete_condition','concrete_severity','concrete_location','concrete_mix','hoa_community_id','hoa_title','hoa_item_type','hoa_priority','hoa_area','hoa_directed_to','hoa_budget_source','hoa_photo_stage','hoa_target_date','property_area_id','incident_id','incident_view'])if(p[k])fd.append(k,p[k]);if(p.latitude!=null)fd.append('latitude',p.latitude);if(p.longitude!=null)fd.append('longitude',p.longitude);if(p.address)fd.append('address',p.address);return fd;}
+function payloadFormData(p){const fd=new FormData();if(p.photo)fd.append('photo',p.photo,p.photoName||'offline-photo.jpg');fd.append('note',p.note||'');fd.append('area_tags',p.area_tags||'[]');fd.append('kind',p.kind||'note');if(p.captured_at)fd.append('captured_at',p.captured_at);if(p.custom_fields)fd.append('custom_fields',p.custom_fields);if(p.context_source_id)fd.append('context_source_id',p.context_source_id);if(Object.prototype.hasOwnProperty.call(p,'job_id'))fd.append('job_id',p.job_id||'');if(p.follow_up_occurrence_id)fd.append('follow_up_occurrence_id',p.follow_up_occurrence_id);for(const k of ['security_issue_type','urgency','paving_photo_reason','concrete_phase','concrete_purpose','concrete_element','concrete_stage','concrete_condition','concrete_severity','concrete_location','concrete_mix','hoa_community_id','hoa_title','hoa_item_type','hoa_priority','hoa_area','hoa_directed_to','hoa_budget_source','hoa_photo_stage','hoa_target_date','property_area_id','incident_id','incident_view'])if(p[k])fd.append(k,p[k]);if(p.latitude!=null)fd.append('latitude',p.latitude);if(p.longitude!=null)fd.append('longitude',p.longitude);if(p.address)fd.append('address',p.address);return fd;}
 
 function bgIndicator() {
   document.getElementById('bgstatus')?.remove();
@@ -2196,6 +2200,7 @@ function bgIndicator() {
 
 async function enqueueUpload(payload, hadCoords, options = {}) {
   const row=await queueStore(payload,hadCoords);
+  askPersistentStorage(); // Saved photos waiting to upload should not be cleared when the device is low on space.
   if(row.account!==queueAccount||row.edition!==selectedEdition())return;
   // Migrate a legacy account-wide pause before adding this new capture.
   if(queuePaused()&&!localStorage.getItem(queuePausedIdsKey()))localStorage.setItem(queuePausedIdsKey(),JSON.stringify(bgQueue.map(item=>item.requestId)));
@@ -2203,6 +2208,10 @@ async function enqueueUpload(payload, hadCoords, options = {}) {
   if(!bgOnlineHooked){window.addEventListener('online',()=>void restoreOfflineQueue());bgOnlineHooked=true;}
   bgIndicator();void drainQueue();
 }
+function uploadTimeoutMs(payload){const bytes=Number(payload?.photo?.size)||0;return Math.min(10*60*1000,60000+Math.ceil(bytes/50000)*1000);}
+async function timedFetch(url,opts,ms){const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),ms);try{return await fetch(url,{...opts,signal:controller.signal});}catch(error){if(controller.signal.aborted)throw Object.assign(Error('Upload timed out'),{userMessage:'The connection is too slow right now. Your PhotoNotes are saved on this device and will upload automatically.'});throw error;}finally{clearTimeout(timer);}}
+let storagePersistAsked=false;
+function askPersistentStorage(){if(storagePersistAsked)return;storagePersistAsked=true;try{void navigator.storage?.persist?.().catch(()=>{});}catch{}}
 async function drainQueue() {
   if(bgDraining||!state.me||!queueAccount)return;
   clearTimeout(queueRetryTimer);queueNextRetry=0;
@@ -2216,13 +2225,22 @@ async function drainQueue() {
       if(item.blocked)break;
       if(!PhotoNotesQueue.eligible(item,account,edition))break;
       try{
-        const me=await api('/api/me');
+        const me=await timedFetch('/api/me',{credentials:'same-origin',cache:'no-store'},20000);
         if(!me.ok)throw Object.assign(Error('Sign in to upload your PhotoNotes.'),{blocked:true,userMessage:'Sign in to upload your PhotoNotes.'});
         if(me.headers.get('X-Photo-Notes-Upload-Receipts')!=='1')throw Object.assign(Error('Waiting for upload service update'),{userMessage:'The upload service is updating. Your PhotoNotes are saved on this device.'});
         const identity=await me.json();
         if(await PhotoNotesQueue.accountKey(identity.email)!==account)throw Object.assign(Error('Sign in to the original account to upload these PhotoNotes.'),{blocked:true,userMessage:'Sign in to the original account to upload these PhotoNotes.'});
         if(queueAccount!==account||selectedEdition()!==edition)break;
-        const r=await fetch('/api/captures',{method:'POST',credentials:'same-origin',headers:PhotoNotesQueue.headers(item),body:payloadFormData(item.payload)});
+        // Each upload carries its request ID, so a timed-out upload is retried without creating a duplicate.
+        const r=await timedFetch('/api/captures',{method:'POST',credentials:'same-origin',headers:PhotoNotesQueue.headers(item),body:payloadFormData(item.payload)},uploadTimeoutMs(item.payload));
+        if(!r.ok&&[404,409].includes(r.status)&&PhotoNotesQueue.linked?.(item.payload)){
+          const body=await r.clone().json().catch(()=>({}));
+          if(!/capture identity|original Photo Notes version/i.test(body.error||'')){
+            await PhotoNotesQueue.unlink(item.id);for(const k of PhotoNotesQueue.LINK_FIELDS)delete item.payload[k];
+            toast('The follow-up or incident for a saved photo was closed. The photo will be saved as a regular PhotoNote.');
+            continue;
+          }
+        }
         if(!r.ok){const body=await r.json().catch(()=>({}));throw Object.assign(Error(body.error||'Upload needs attention'),{blocked:PhotoNotesQueue.permanent(r.status),userMessage:({400:'The PhotoNote details were rejected. Report this issue.',401:'Sign in to upload your PhotoNotes.',403:'This account cannot upload these PhotoNotes. Report this issue.',409:'The PhotoNote could not be matched to this account. Report this issue.',413:'The PhotoNote is too large to upload. Report this issue.',422:'The PhotoNote details were rejected. Report this issue.'})[r.status]||'The server could not upload your PhotoNotes. They are saved on this device.'});}
         const saved=await r.json();if(!saved.id)throw Error('Upload confirmation missing');
         if(item.receipt)item.receipt.uploaded=true;
@@ -2274,7 +2292,7 @@ async function saveCaptureDurably(options = {}) {
   if(isHoaClient()&&!globalThis.PhotoNotesIncidents?.active()&&!document.getElementById('hoaTitle').value.trim()&&!note){toast('Enter an issue title or note');return;}
   if (!(await confirmPhotoQuality())) { toast('Photo kept for retaking'); return; }
   // Build the payload from the CURRENT state before we clear the form.
-  const payload={photo:state.photoFile||null,photoName:state.photoFile&&state.photoFile.name||'offline-photo.jpg',note,area_tags:JSON.stringify(isHoaClient()?[document.getElementById('hoaArea').value]:(state.area?[state.area]:[])),kind:'note'};
+  const payload={photo:state.photoFile||null,photoName:state.photoFile&&state.photoFile.name||'offline-photo.jpg',note,area_tags:JSON.stringify(isHoaClient()?[document.getElementById('hoaArea').value]:(state.area?[state.area]:[])),kind:'note',captured_at:new Date().toISOString()};
   if(state._duplicateContext){payload.context_source_id=state._duplicateContext.sourceId;if(state.jobId)payload.job_id=state.jobId;}
   if(isSecurityClient())payload.security_issue_type=document.getElementById('securityIssueType').value;
   if(document.getElementById('captureUrgency'))payload.urgency=state.urgency==='urgent'?'urgent':'standard';
@@ -2291,7 +2309,7 @@ async function saveCaptureDurably(options = {}) {
   if (state.address) payload.address=state.address;
   // Send/Share keeps the draft visible. Reuse its durable save when the user
   // cancels sharing and taps Save again without changing the capture.
-  const signature=JSON.stringify({...payload,photo:null,latitude:undefined,longitude:undefined,address:undefined});
+  const signature=JSON.stringify({...payload,photo:null,latitude:undefined,longitude:undefined,address:undefined,captured_at:undefined});
   const previous=state._captureShareSave;
   const alreadySaved=previous&&previous.photo===payload.photo&&previous.signature===signature&&previous.account===state.me?.email&&previous.edition===selectedEdition();
   const receipt=alreadySaved?previous.receipt:{uploaded:false,captureShare:!!options.preserveDraft};
@@ -3345,9 +3363,9 @@ function startDrag(el, i) {
       const node = st.querySelector(`.ovitem[data-i="${i}"]`);
       if (node) { node.style.left = it.x + '%'; node.style.top = it.y + '%'; }
     };
-    const up = () => { document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); };
+    const up = () => { document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); document.removeEventListener('pointercancel', up); };
     document.addEventListener('pointermove', move);
-    document.addEventListener('pointerup', up);
+    document.addEventListener('pointerup', up); document.addEventListener('pointercancel', up);
   });
 }
 // Corner-resize for box and arrow items: drag the bottom-right handle to set w/h.
@@ -3365,9 +3383,9 @@ function startResize(handle, i) {
       const node = st.querySelector(`.ovitem[data-i="${i}"]`);
       if (node) { node.style.width = it.w + '%'; node.style.height = it.h + '%'; }
     };
-    const up = () => { document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); };
+    const up = () => { document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); document.removeEventListener('pointercancel', up); };
     document.addEventListener('pointermove', move);
-    document.addEventListener('pointerup', up);
+    document.addEventListener('pointerup', up); document.addEventListener('pointercancel', up);
   });
 }
 function renderStampCtl() {
@@ -3569,9 +3587,9 @@ function startCropDrag(el) {
       cropBox.y = Math.max(0, Math.min(100 - cropBox.h, y));
       drawCropBox();
     };
-    const up = () => { document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); };
+    const up = () => { document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); document.removeEventListener('pointercancel', up); };
     document.addEventListener('pointermove', move);
-    document.addEventListener('pointerup', up);
+    document.addEventListener('pointerup', up); document.addEventListener('pointercancel', up);
   });
 }
 function startCropResize(handle, corner) {
@@ -3598,9 +3616,9 @@ function startCropResize(handle, corner) {
       }
       drawCropBox();
     };
-    const up = () => { document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); };
+    const up = () => { document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); document.removeEventListener('pointercancel', up); };
     document.addEventListener('pointermove', move);
-    document.addEventListener('pointerup', up);
+    document.addEventListener('pointerup', up); document.addEventListener('pointercancel', up);
   });
 }
 async function applyCrop() {

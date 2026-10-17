@@ -23,7 +23,7 @@ test('new users can receive multiple versions at creation without changing their
   const ctx=vm.createContext({
     app:{post:(url,middleware,fn)=>handler=fn},requireAdmin(){},
     validateEditions:require('../editions').validateEditions,EDITIONS:require('../editions').EDITIONS,
-    bcrypt:{hashSync:()=> 'test-only-hash'},seedUserAreas:async()=>{},logEvent(){},
+    bcrypt:{hash:async()=> 'test-only-hash'},seedUserAreas:async()=>{},logEvent(){},
     pool:{query:async(sql,params)=>{saved={sql,params};return {rows:[{id:9}]};}}
   });
   const a=source.indexOf("app.post('/api/admin/users',"),b=source.indexOf("app.post('/api/admin/users/:id',",a);
