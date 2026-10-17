@@ -7,7 +7,19 @@ const el=id=>document.getElementById(id);
 function speechEvent(event,detail=''){if(typeof recordDictationEvent==='function')recordDictationEvent(event,detail,{source:'feedback',generation:speechSession,active:speechWanted,pending:!!speechDocument&&!speechReady,finishing:!!speechFinish});}
 function clearWatchdog(){clearTimeout(speechWatchdog);speechWatchdog=null;}
 let speechDocument=null,speechReady=false;
-const isolatedSpeech=()=>/iP(hone|ad|od)/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+const liveSpeech=()=>!!window.PhotoNotesLiveTranscription?.enabled();
+const isolatedSpeech=()=>!liveSpeech()&&(/iP(hone|ad|od)/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1));
+// A recording that could not be transcribed stays on this device until the dialog closes.
+function keptRecording(field){
+ const status=el('feedbackStatus');if(!status)return;el('feedbackRetryTranscription')?.remove();
+ status.textContent='Your recording is kept on this device but could not be turned into text yet. Check your connection, then tap Transcribe Recording.';
+ const button=document.createElement('button');button.type='button';button.className='btn secondary';button.id='feedbackRetryTranscription';button.textContent='Transcribe Recording';
+ const token=generation;
+ button.onclick=async()=>{button.disabled=true;button.textContent='Transcribing...';
+  try{const text=await window.PhotoNotesLiveTranscription.retryPending();if(token!==generation||el('feedbackDescription')!==field)return;if(text)field.value=mergeSpeechTranscript(field.value.trim(),text).slice(0,10000);status.textContent=text?'Words added from your recording.':'No words were found in the recording.';button.remove();}
+  catch{button.disabled=false;button.textContent='Transcribe Recording';status.textContent='Still could not transcribe the recording. Check your connection and try again.';}};
+ status.after(button);
+}
 function speechButton(){
  const button=el('feedbackDictate');if(!button)return;
  button.textContent=speechFinish?'Finishing dictation...':speechWanted?'Stop dictation':speechDocument&&!speechReady?'Preparing microphone...':'Dictate feedback';
@@ -34,7 +46,7 @@ function stopSpeech(cancel=false){
  if(cancel){releaseSpeech();speechFinish?.();speechButton();return Promise.resolve();}
  if(speechFinish)return speechFinish.promise;
  let resolve;const promise=new Promise(done=>resolve=done);
- const timer=setTimeout(()=>{if(recognizer===speech){recognizer=null;try{speech.abort();}catch{}}finish();},8000);
+ const timer=setTimeout(()=>{if(recognizer===speech){recognizer=null;try{speech.abort();}catch{}}finish();},Number(speech.finishTimeoutMs)||8000);
  function finish(){clearTimeout(timer);speechFinish=null;releaseSpeech();if(el('feedbackDialog').open&&!el('feedbackSend').disabled)el('feedbackStatus').textContent='Dictation stopped. Captured words are kept.';resolve();}
  speechFinish=finish;speechFinish.promise=promise;speechButton();
  try{speechEvent('stop');speech.stop();}catch{finish();}return promise;
@@ -44,27 +56,34 @@ function resetFeedback(){
  el('feedbackForm').querySelectorAll('[name="feedbackCategory"]').forEach(input=>{input.checked=false;});
  editor?.destroy();editor=null;blob=null;el('feedbackMarkupHost').replaceChildren();el('feedbackRemoveScreenshot').hidden=true;
 }
-function close(){generation++;el('feedbackDialog').close();void stopSpeech(true);editor?.destroy();editor=null;blob=null;speechButton();returnFocus?.focus();}
+function close(){generation++;el('feedbackRetryTranscription')?.remove();el('feedbackDialog').close();void stopSpeech(true);editor?.destroy();editor=null;blob=null;speechButton();returnFocus?.focus();}
 function mount(){if(el('feedbackFab'))return;
  document.body.insertAdjacentHTML('beforeend',`<button type="button" id="feedbackFab" hidden>Feedback</button><dialog id="feedbackDialog" aria-labelledby="feedbackTitle"><form id="feedbackForm"><h2 id="feedbackTitle">Send Feedback</h2><p>Tell us what you’re experiencing or what would make Photo Notes more useful.</p><fieldset><legend>Choose a category</legend>${categories.map(([key,icon,label,description])=>`<label class="feedback-choice"><input type="radio" name="feedbackCategory" value="${key}" required><span><strong>${icon} ${label}</strong><br>${description}</span></label>`).join('')}</fieldset><label for="feedbackDescription">Your feedback</label><textarea id="feedbackDescription" rows="5" maxlength="10000" required></textarea><button type="button" id="feedbackDictate" hidden>Dictate feedback</button><button type="button" id="feedbackScreenshot">Attach screenshot (optional)</button><button type="button" id="feedbackRemoveScreenshot" hidden>Remove screenshot</button><div id="feedbackMarkupHost"></div><p id="feedbackStatus" role="status" aria-live="polite"></p><div class="feedback-actions"><button type="submit" id="feedbackSend">Send Feedback</button><button type="button" id="feedbackCancel">Cancel</button></div></form></dialog>`);
  const dialog=el('feedbackDialog');el('feedbackFab').onclick=()=>{returnFocus=document.activeElement;resetFeedback();el('feedbackCancel').textContent='Cancel';el('feedbackStatus').textContent='';el('feedbackSend').disabled=false;el('feedbackDictate').disabled=false;el('feedbackScreenshot').disabled=false;el('feedbackRemoveScreenshot').hidden=true;el('feedbackMarkupHost').replaceChildren();dialog.showModal();prepareSpeech();dialog.querySelector('input').focus();};
  dialog.oncancel=e=>{e.preventDefault();close();};el('feedbackCancel').onclick=close;
  el('feedbackRemoveScreenshot').onclick=()=>{editor?.destroy();editor=null;blob=null;el('feedbackMarkupHost').replaceChildren();el('feedbackRemoveScreenshot').hidden=true;};
  el('feedbackScreenshot').onclick=async()=>{const token=generation;el('feedbackScreenshot').disabled=true;el('feedbackStatus').textContent='Capturing screenshot...';dialog.style.visibility='hidden';try{await new Promise(requestAnimationFrame);const shot=await captureIssueScreenshot();if(token!==generation)return;editor?.destroy();blob=shot;el('feedbackMarkupHost').innerHTML=IssueMarkup.markup();const host=el('feedbackMarkupHost').firstElementChild;host.hidden=false;editor=IssueMarkup.create(host,blob);await editor.ready;host.querySelector('#issueMarkupRetake').onclick=()=>el('feedbackScreenshot').click();el('feedbackRemoveScreenshot').hidden=false;el('feedbackStatus').textContent='Screenshot attached. You can mark it with arrows, shapes, or text.';}catch{if(token===generation)el('feedbackStatus').textContent='Screenshot unavailable. You can still send your feedback.';}finally{dialog.style.visibility='';el('feedbackScreenshot').disabled=false;}};
- const Speech=window.SpeechRecognition||window.webkitSpeechRecognition;
+ const Speech=window.SpeechRecognition||window.webkitSpeechRecognition||window.PhotoNotesLiveTranscription?.supported();
  if(Speech){el('feedbackDictate').hidden=false;el('feedbackDictate').onclick=async()=>{
   if(speechWanted||recognizer||speechFinish){void stopSpeech();return;}
+  // Live transcription: iPhone allows audio only from this tap, before any await.
+  const live=liveSpeech();if(live)window.PhotoNotesLiveTranscription.unlock();
+  if(!live&&!(window.SpeechRecognition||window.webkitSpeechRecognition)){el('feedbackStatus').textContent='Dictation is not available in this browser. Type your feedback.';return;}
   const field=el('feedbackDescription'),token=generation;
   speechWanted=true;emptySessions=0;el('feedbackStatus').textContent='Listening. Pause naturally, then keep speaking. Tap Stop dictation when finished.';
   function start(){
    speechRestart=null;
    if(!speechWanted||token!==generation||!el('feedbackDialog').open)return;
-   const base=field.value,Constructor=speechDocument?speechDocument.constructor():Speech;
+   const base=field.value,Constructor=live?window.PhotoNotesLiveTranscription.Recognizer:speechDocument?speechDocument.constructor():(window.SpeechRecognition||window.webkitSpeechRecognition);
    if(!Constructor){speechWanted=false;speechButton();return;}
    const speech=new Constructor();let received=false;speechSession++;speechEvent('request');
    recognizer=speech;speech.lang=document.documentElement.lang||'en-US';speech.continuous=true;speech.interimResults=true;
    speech.onstart=()=>{if(token===generation&&recognizer===speech)speechEvent('started');};
    speech.onaudiostart=()=>{if(token===generation&&recognizer===speech)speechEvent('audio-start');};
+   speech.onstatus=e=>{if(token!==generation||recognizer!==speech&&e.state!=='kept')return;speechEvent('live-'+e.state,e.detail||'');const status=el('feedbackStatus');if(!status)return;
+    if(e.state==='offline')status.textContent='Connection lost. Still recording. Your words will be added when you stop.';
+    else if(e.state==='transcribing')status.textContent='Adding your words from the recording...';
+    else if(e.state==='kept')keptRecording(field);};
    speech.onresult=e=>{if(token!==generation||recognizer!==speech)return;clearWatchdog();speechEvent('result',Array.from(e.results,r=>r.isFinal?'final':'interim').join(','));const parts=Array.from(e.results).map(r=>r[0].transcript);if(parts.some(text=>text.trim()))received=true;field.value=mergeSpeechTranscript(base,combineSpeechResults(parts)).slice(0,10000);};
    function interrupted(){speechWanted=false;clearTimeout(speechRestart);speechRestart=null;if(speechFinish)speechFinish();else releaseSpeech();speechButton();el('feedbackStatus').textContent='Dictation stopped. Captured words are kept. Tap Dictate feedback to continue or type your feedback.';}
    speech.onend=()=>{
@@ -74,6 +93,8 @@ function mount(){if(el('feedbackFab'))return;
     if(speechFinish){recognizer=null;speechFinish();return;}
     recognizer=null;
     if(!speechWanted)return;
+    // The live engine ends only on Stop or when the phone takes the microphone.
+    if(live){interrupted();return;}
     emptySessions=received?0:emptySessions+1;
     if(emptySessions>=2||navigator.onLine===false||document.visibilityState==='hidden'){interrupted();return;}
     // A normal browser session end is not the user's Stop. Preserve the
@@ -87,7 +108,8 @@ function mount(){if(el('feedbackFab'))return;
     // releaseSpeech retires the recognizer before aborting it once.
     interrupted();
    };
-   speechWatchdog=setTimeout(()=>{if(token!==generation||recognizer!==speech||!speechWanted)return;speechEvent('no-result-timeout');interrupted();},30000);
+   // Live recording keeps going through silence and keeps audio through lost connections.
+   if(!live)speechWatchdog=setTimeout(()=>{if(token!==generation||recognizer!==speech||!speechWanted)return;speechEvent('no-result-timeout');interrupted();},30000);
    try{speech.start();el('feedbackDictate').textContent='Stop dictation';}catch(error){speechEvent('start-error',error.name);interrupted();}
   }
   const attempt=++speechSession;
@@ -98,7 +120,7 @@ function mount(){if(el('feedbackFab'))return;
    await finishCaptureDictation();
    if(!current())return;
   }
-  if(isolatedSpeech()&&window.PhotoNotesSpeechDocument?.primeMicrophone){
+  if(!live&&isolatedSpeech()&&window.PhotoNotesSpeechDocument?.primeMicrophone){
    speechButton();el('feedbackStatus').textContent='Starting microphone...';
    speechEvent('microphone-reset');
    try{
