@@ -27,7 +27,7 @@ const {chromium}=require('playwright');
    if(path==='/api/transcription/config')return route.fulfill({json:{live:true,provider:'assemblyai'}});
    if(path==='/api/transcription/session')return route.fulfill({json:{url:'wss://streaming.assemblyai.com/v3/ws?token=t&format_turns=true',sampleRate:16000}});
    if(path==='/api/transcription/recording'){const body=route.request().postDataBuffer();uploads.push(body);return recordingMode==='ok'?route.fulfill({json:{text:'Recovered from the recording.',seconds:3}}):route.fulfill({status:502,json:{error:'down'}});}
-   return route.fulfill({json:path==='/api/me'?{id:1,name:'Test',email:'live@example.invalid',plan:'pro',pro_type:'general',role:'user',edition_access:['pro']}:path==='/api/customer-feedback/access'?{enabled:false}:path==='/api/billing/config'?{checkout_enabled:false}:path==='/api/hoa/context'?{communities:[],members:[]}:[]});
+   return route.fulfill({json:path==='/api/me'?{id:1,name:'Test',email:'live@example.invalid',plan:'pro',pro_type:'general',role:'user',edition_access:['pro']}:path==='/api/customer-feedback/access'?{enabled:true}:path==='/api/billing/config'?{checkout_enabled:false}:path==='/api/hoa/context'?{communities:[],members:[]}:[]});
   });
   await page.goto(`http://127.0.0.1:${server.address().port}`);await page.waitForFunction(()=>state.me);
   await page.waitForFunction(()=>window.PhotoNotesLiveTranscription?.enabled());
@@ -77,7 +77,19 @@ const {chromium}=require('playwright');
   await page.waitForFunction(()=>window.finished,null,{timeout:15000});
   assert.match(await page.locator('#note').inputValue(),/Final words/);
   await page.screenshot({path:`output/live-record-notes-${label}.png`});
+  // 6. Send Feedback dictation uses the same live engine, after a Capture recording, then Capture again.
+  await page.evaluate(()=>{socketMode='normal';refreshCustomerFeedback();});
+  await page.locator('#feedbackFab').waitFor();await page.locator('#feedbackFab').click();
+  await page.locator('#feedbackDictate').click();
+  await page.waitForFunction(()=>/live words/.test(document.getElementById('feedbackDescription').value),null,{timeout:15000});
+  await page.locator('#feedbackDictate').click();
+  await page.waitForFunction(()=>/Final words \d+\./.test(document.getElementById('feedbackDescription').value)&&document.getElementById('feedbackDictate').textContent==='Dictate feedback',null,{timeout:15000});
+  await page.locator('#feedbackCancel').click();
+  await page.evaluate(()=>{document.getElementById('note').value='';state._note='';});
+  await page.locator('#dictate').click();await page.waitForFunction(()=>/live words/.test(document.getElementById('note').value),null,{timeout:15000});
+  await page.locator('#dictate').click();await page.waitForFunction(()=>/Final words/.test(document.getElementById('note').value)&&document.getElementById('dictate').textContent==='Record Notes');
+  assert.equal(await page.evaluate(()=>socketLog.filter(s=>!s.terminated&&s.readyState===1).length),0,'every live session terminated');
   await page.close();
-  console.log(label+': live words, Stop final words, repeated recordings, dropped connection recovery, retry, finish-before-save passed');
+  console.log(label+': live words, Stop final words, repeated recordings, dropped connection recovery, retry, finish-before-save, Feedback and Capture handoff passed');
  }}finally{await browser.close();server.close();}
 })().catch(e=>{console.error(e);process.exit(1);});
