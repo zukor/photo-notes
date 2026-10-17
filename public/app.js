@@ -191,7 +191,7 @@ async function api(path, opts = {}) {
 async function loadStartupSession(){
  for(let attempt=0;attempt<2;attempt++){
   const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),15000);
-  try{const r=await api('/api/me',{signal:controller.signal});if(r.status===401)return null;if(!r.ok)throw Error('Session service '+r.status);const me=await r.json();if(!me||!me.id)throw Error('Invalid session response');return me;}
+  try{const r=await api('/api/me',{signal:controller.signal});if(r.status===401)return null;if(!r.ok)throw Error('Session service '+r.status);const me=await r.json();if(!me||!me.id)throw Error('Invalid session response');void globalThis.PhotoNotesLiveTranscription?.refresh();return me;}
   catch(error){if(attempt===1)throw error;await new Promise(resolve=>setTimeout(resolve,250));}
   finally{clearTimeout(timer);}
  }
@@ -861,7 +861,7 @@ function renderCapture() {
 
   const dictateBtn = document.getElementById('dictate');
   if (dictateBtn) dictateBtn.onclick = toggleDictation;
-  if(isIOS()&&window.PhotoNotesSpeechDocument)window.PhotoNotesSpeechDocument.prepare(({ready,failed})=>{if(document.getElementById('dictate')!==dictateBtn||dictationActive||dictationPending||dictationFinish)return;const restart=document.getElementById('dictationRestart');if(restart)restart.disabled=!ready&&!failed;dictateBtn.disabled=!ready&&!failed;dictateBtn.textContent=ready||failed?'Record Notes':'Preparing microphone...';if(failed){const status=document.getElementById('dictationStatus');if(status)status.textContent='Speech could not initialize. Reload Photo Notes and try Record Notes again.';}});
+  if(isIOS()&&window.PhotoNotesSpeechDocument)window.PhotoNotesSpeechDocument.prepare(({ready,failed})=>{if(document.getElementById('dictate')!==dictateBtn||dictationActive||dictationPending||dictationFinish)return;if(liveRecordNotes()){dictateBtn.disabled=false;dictateBtn.textContent='Record Notes';return;}const restart=document.getElementById('dictationRestart');if(restart)restart.disabled=!ready&&!failed;dictateBtn.disabled=!ready&&!failed;dictateBtn.textContent=ready||failed?'Record Notes':'Preparing microphone...';if(failed){const status=document.getElementById('dictationStatus');if(status)status.textContent='Speech could not initialize. Reload Photo Notes and try Record Notes again.';}});
 
   // preserve any typed note across re-renders
   if (state._note) document.getElementById('note').value = state._note;
@@ -1448,9 +1448,36 @@ function finishCaptureDictation(){
   recordDictationEvent('stop');
   const btn=document.getElementById('dictate');if(btn){btn.disabled=true;btn.textContent='Finishing Notes...';}
   let resolve;const promise=new Promise(done=>resolve=done);
-  dictationFinish={promise,resolve,timer:setTimeout(()=>{recordDictationEvent('stop-timeout');stopCaptureDictation();const status=document.getElementById('dictationStatus');if(status)status.textContent='Recording ended. Check your notes before saving.';},8000)};
+  dictationFinish={promise,resolve,timer:setTimeout(()=>{recordDictationEvent('stop-timeout');stopCaptureDictation();const status=document.getElementById('dictationStatus');if(status)status.textContent='Recording ended. Check your notes before saving.';},Number(recognizer.finishTimeoutMs)||8000)};
   try{recognizer.stop();}catch(e){recordDictationEvent('stop-error',e.name);stopCaptureDictation();}
   return promise;
+}
+
+function liveRecordNotes(){return !!window.PhotoNotesLiveTranscription?.enabled();}
+function clearDictationWatch(generation){if(generation===dictationGeneration&&dictationWatchdog){clearTimeout(dictationWatchdog);dictationWatchdog=null;}}
+// Live Record Notes status. "kept" means the recording is held on this device
+// because transcription could not finish; the person can retry it here.
+function showLiveRecordingStatus(phase,photo,noteEl){
+  const status=document.getElementById('dictationStatus');if(!status)return;
+  document.getElementById('dictationRetryTranscription')?.remove();
+  if(phase==='capture')return;
+  if(phase==='live'){status.textContent='Listening...';return;}
+  if(phase==='offline'){status.textContent='Connection lost. Still recording. Your words will be added when you stop.';return;}
+  if(phase==='transcribing'){status.textContent='Adding your words from the recording...';return;}
+  if(phase!=='kept')return;
+  status.textContent='Your recording is kept on this device but could not be turned into text yet. Check your connection, then tap Transcribe Recording.';
+  const button=document.createElement('button');button.type='button';button.className='btn secondary';button.id='dictationRetryTranscription';button.textContent='Transcribe Recording';
+  button.onclick=async()=>{
+    button.disabled=true;button.textContent='Transcribing...';
+    try{
+      const text=await window.PhotoNotesLiveTranscription.retryPending();
+      if(document.getElementById('note')!==noteEl||state.photoFile!==photo){toast('That recording belongs to an earlier photo, so it was not added here.');button.remove();return;}
+      if(text){noteEl.value=mergeSpeechTranscript(noteEl.value.trim(),text);state._note=noteEl.value;void persistCaptureDraft().catch(()=>{});status.textContent='Words added from your recording.';}
+      else status.textContent='No words were found in the recording.';
+      button.remove();
+    }catch{button.disabled=false;button.textContent='Transcribe Recording';status.textContent='Still could not transcribe the recording. Check your connection and try again.';}
+  };
+  status.after(button);
 }
 
 function isIOS() {
@@ -1461,7 +1488,10 @@ function isIOS() {
 async function toggleDictation() {
   const noteEl = document.getElementById('note');
   const btn = document.getElementById('dictate');
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const live = liveRecordNotes();
+  // iPhone allows audio only from the tap itself, before any await.
+  if (live && !dictationActive && !dictationPending && !dictationFinish) window.PhotoNotesLiveTranscription.unlock();
+  const SR = live ? window.PhotoNotesLiveTranscription.Recognizer : (window.SpeechRecognition || window.webkitSpeechRecognition);
   if (!SR) {
     // Only when the browser has no speech recognition at all: fall back to the
     // keyboard's own mic key so the person can still dictate.
@@ -1476,7 +1506,7 @@ async function toggleDictation() {
     await finishCaptureDictation();
     return;
   }
-  if(isIOS()&&window.PhotoNotesSpeechDocument&&!window.PhotoNotesSpeechDocument.constructor()){const status=document.getElementById('dictationStatus');if(status)status.textContent='Speech is not ready. Reload Photo Notes and try Record Notes again.';return;}
+  if(!live&&isIOS()&&window.PhotoNotesSpeechDocument&&!window.PhotoNotesSpeechDocument.constructor()){const status=document.getElementById('dictationStatus');if(status)status.textContent='Speech is not ready. Reload Photo Notes and try Record Notes again.';return;}
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
     toast('This browser cannot access the microphone. Type the note or reload Photo Notes and try again.');
     return;
@@ -1487,7 +1517,9 @@ async function toggleDictation() {
   if(btn)btn.textContent='Starting microphone... tap to cancel';
   dictationWatchdog=setTimeout(()=>{if(requestGeneration!==dictationGeneration)return;recordDictationEvent('permission-timeout');stopCaptureDictation();showDictationInterruption('The microphone did not start.');},15000);
   try {
-    if(isIOS()&&window.PhotoNotesSpeechDocument?.primeMicrophone){
+    // Live recording requests the microphone itself and keeps it for the whole note.
+    if(live){recordDictationEvent('live-engine');}
+    else if(isIOS()&&window.PhotoNotesSpeechDocument?.primeMicrophone){
       recordDictationEvent('microphone-reset');
       if(!await window.PhotoNotesSpeechDocument.primeMicrophone(()=>requestGeneration===dictationGeneration))return;
     }else{
@@ -1517,14 +1549,14 @@ async function toggleDictation() {
 function startDictationSession(SR, continuedText = '') {
   if (!dictationActive) return;
   const noteEl = document.getElementById('note');
-  let session;const ios=isIOS(),android=!ios&&/Android/i.test(navigator.userAgent);
+  let session;const live=!!SR.isPhotoNotesLive,ios=!live&&isIOS(),android=!live&&!isIOS()&&/Android/i.test(navigator.userAgent);
   // Quiet Android restarts share one deadline across the user's recording.
   // A new recognizer must not reset the silence budget or discard prior words.
   const pauseRemaining=()=>dictationLastResultAt?Math.max(0,60000-(Date.now()-dictationLastResultAt)):0;
   // The prior session has ended. Aborting it here can reset Safari's shared
   // speech service just as the next session starts. Active cancellation still
   // aborts through stopCaptureDictation; completed sessions are only released.
-  try{if(ios&&iosDictationSession){iosDictationSession=null;iosDictationConstructor=null;recordDictationEvent('completed-session-released');}const SessionSR=ios&&window.PhotoNotesSpeechDocument?window.PhotoNotesSpeechDocument.constructor():SR;if(!SessionSR)throw Error('Speech document unavailable');session=new SessionSR();if(ios){if(window.PhotoNotesSpeechDocument)recordDictationEvent('fresh-document');iosDictationSession=session;iosDictationConstructor=SR;}}catch(error){stopCaptureDictation();showDictationInterruption('The microphone could not start. Type your note or reload Photo Notes and try again.');return;}
+  try{if(ios&&iosDictationSession){iosDictationSession=null;iosDictationConstructor=null;recordDictationEvent('completed-session-released');}const SessionSR=!live&&ios&&window.PhotoNotesSpeechDocument?window.PhotoNotesSpeechDocument.constructor():SR;if(!SessionSR)throw Error('Speech document unavailable');session=new SessionSR();if(ios){if(window.PhotoNotesSpeechDocument)recordDictationEvent('fresh-document');iosDictationSession=session;iosDictationConstructor=SR;}}catch(error){stopCaptureDictation();showDictationInterruption('The microphone could not start. Type your note or reload Photo Notes and try again.');return;}
   const generation=++dictationGeneration, photoForSession=state.photoFile;
   recognizer = session;
   session.lang = uiSpeechLanguage();
@@ -1539,12 +1571,16 @@ function startDictationSession(SR, continuedText = '') {
     microphoneStarted = true;
     recordDictationEvent('started');
     const status=document.getElementById('dictationStatus');if(status)status.textContent=ios?'Listening. On iPhone, words may appear after you pause.':'Listening...';
+    if(live)clearDictationWatch(generation);
     const btn=document.getElementById('dictate');if(btn)btn.textContent='Recording... tap to stop';
   };
   // Starting audio is not proof of transcription. Bound a session that never
   // receives its first result, while allowing pauses after words arrive.
   const watchForWords=()=>{
     if(dictationWatchdog)clearTimeout(dictationWatchdog);
+    // The live engine saves audio locally, so silence or a lost connection
+    // never ends the note. Only a microphone that never starts is bounded.
+    if(live){dictationWatchdog=setTimeout(()=>{if(generation!==dictationGeneration||!dictationActive||microphoneStarted)return;recordDictationEvent('start-timeout');stopCaptureDictation();showDictationInterruption('The microphone did not start.');},20000);return;}
     const quietContinuation=android&&dictationLastResultAt>0;
     dictationWatchdog=setTimeout(()=>{
       if(generation!==dictationGeneration||!dictationActive)return;
@@ -1557,7 +1593,7 @@ function startDictationSession(SR, continuedText = '') {
   session.onaudiostart=started;
   session.onspeechstart=started;
   session.onaudioend=()=>{
-    if(generation!==dictationGeneration||!dictationActive||dictationFinish)return;
+    if(live||generation!==dictationGeneration||!dictationActive||dictationFinish)return;
     setTimeout(()=>{
       if(generation!==dictationGeneration||!dictationActive||dictationFinish||recognizer!==session)return;
       recordDictationEvent('audio-ended-without-end');stopCaptureDictation();
@@ -1572,12 +1608,17 @@ function startDictationSession(SR, continuedText = '') {
     const parts=[];
     for (let i=0;i<ev.results.length;i++) parts.push(ev.results[i][0].transcript.trim());
     sessionText=combineSpeechResults(parts);
-    if(sessionText&&!dictationFinish){dictationLastResultAt=Date.now();if(dictationWatchdog)clearTimeout(dictationWatchdog);dictationWatchdog=null;}
+    if(sessionText&&!dictationFinish){dictationLastResultAt=Date.now();if(!live){if(dictationWatchdog)clearTimeout(dictationWatchdog);dictationWatchdog=null;}}
     recordDictationEvent('result',Array.from(ev.results,result=>result.isFinal?'final':'interim').join(','));
 
     if (noteEl) { noteEl.value=mergeSpeechTranscript(dictationBase,recordingText()); state._note=noteEl.value; void persistCaptureDraft().catch(()=>{}); }
     const status=document.getElementById('dictationStatus');if(status&&sessionText)status.textContent='Speech received.';
     if (isIndustryProClient()) applyExtraction(dictationBase+recordingText());
+  };
+  session.onstatus = (e) => {
+    if(generation!==dictationGeneration||document.getElementById('note')!==noteEl)return;
+    recordDictationEvent('live-'+e.state,e.detail||'');
+    showLiveRecordingStatus(e.state,photoForSession,noteEl);
   };
   session.onerror = (e) => {
     if(generation!==dictationGeneration)return;
@@ -1605,7 +1646,7 @@ function startDictationSession(SR, continuedText = '') {
     // Android speech services can end a successful continuous session on
     // cellular networks. Continue with a fresh session while Stop is absent.
     // Empty sessions are bounded to avoid an automatic retry loop.
-    if(interrupted&&current&&android&&navigator.onLine!==false&&document.visibilityState!=='hidden'){
+    if(!live&&interrupted&&current&&android&&navigator.onLine!==false&&document.visibilityState!=='hidden'){
       dictationEmptySessions=sessionText?0:dictationEmptySessions+1;
       if(dictationLastResultAt?pauseRemaining()>0:dictationEmptySessions<2){
         recordDictationEvent('session-continuation');
