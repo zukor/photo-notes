@@ -10,14 +10,16 @@ let speechDocument=null,speechReady=false;
 const liveSpeech=()=>!!window.PhotoNotesLiveTranscription?.enabled();
 const isolatedSpeech=()=>!liveSpeech()&&(/iP(hone|ad|od)/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1));
 // A recording that could not be transcribed stays on this device until the dialog closes.
-function keptRecording(field){
+function keptRecording(field,kept){
  const status=el('feedbackStatus');if(!status)return;el('feedbackRetryTranscription')?.remove();
- status.textContent='Your recording is kept on this device but could not be turned into text yet. Check your connection, then tap Transcribe Recording.';
- const button=document.createElement('button');button.type='button';button.className='btn secondary';button.id='feedbackRetryTranscription';button.textContent='Transcribe Recording';
  const token=generation;
+ const place=text=>{if(token!==generation||el('feedbackDescription')!==field||!el('feedbackDialog')?.open)return false;if(text)field.value=mergeSpeechTranscript(field.value.trim(),text).slice(0,10000);const s=el('feedbackStatus');if(s)s.textContent=text?'Words added from your recording.':'No words were found in the recording.';el('feedbackRetryTranscription')?.remove();return true;};
+ if(kept)window.PhotoNotesLiveTranscription.claimKept(kept.id,place);
+ status.textContent='Your recording is saved on this device and will be turned into text automatically when the connection returns. You can also tap Transcribe Recording.';
+ const button=document.createElement('button');button.type='button';button.className='btn secondary';button.id='feedbackRetryTranscription';button.textContent='Transcribe Recording';
  button.onclick=async()=>{button.disabled=true;button.textContent='Transcribing...';
-  try{const text=await window.PhotoNotesLiveTranscription.retryPending();if(token!==generation||el('feedbackDescription')!==field)return;if(text)field.value=mergeSpeechTranscript(field.value.trim(),text).slice(0,10000);status.textContent=text?'Words added from your recording.':'No words were found in the recording.';button.remove();}
-  catch{button.disabled=false;button.textContent='Transcribe Recording';status.textContent='Still could not transcribe the recording. Check your connection and try again.';}};
+  try{const text=await window.PhotoNotesLiveTranscription.retryPending(kept?.id);if(text)place(text);}
+  catch{button.disabled=false;button.textContent='Transcribe Recording';status.textContent='Still could not transcribe the recording. It stays saved and will be retried automatically.';}};
  status.after(button);
 }
 function speechButton(){
@@ -77,13 +79,15 @@ function mount(){if(el('feedbackFab'))return;
    const base=field.value,Constructor=live?window.PhotoNotesLiveTranscription.Recognizer:speechDocument?speechDocument.constructor():(window.SpeechRecognition||window.webkitSpeechRecognition);
    if(!Constructor){speechWanted=false;speechButton();return;}
    const speech=new Constructor();let received=false;speechSession++;speechEvent('request');
+   if(live)speech.surface='feedback';
    recognizer=speech;speech.lang=document.documentElement.lang||'en-US';speech.continuous=true;speech.interimResults=true;
    speech.onstart=()=>{if(token===generation&&recognizer===speech)speechEvent('started');};
    speech.onaudiostart=()=>{if(token===generation&&recognizer===speech)speechEvent('audio-start');};
    speech.onstatus=e=>{if(token!==generation||recognizer!==speech&&e.state!=='kept')return;speechEvent('live-'+e.state,e.detail||'');const status=el('feedbackStatus');if(!status)return;
-    if(e.state==='offline')status.textContent='Connection lost. Still recording. Your words will be added when you stop.';
-    else if(e.state==='transcribing')status.textContent='Adding your words from the recording...';
-    else if(e.state==='kept')keptRecording(field);};
+    if(e.state==='offline')status.textContent='Connection lost. Still recording. Reconnecting; your words will be added when you stop.';
+    else if(e.state==='transcribing')status.textContent='Checking your words against the recording...';
+    else if(e.state==='kept')keptRecording(field,speech.keptRecording);
+    else if(e.state==='live'&&speechWanted)status.textContent='Listening. Pause naturally, then keep speaking. Tap Stop dictation when finished.';};
    speech.onresult=e=>{if(token!==generation||recognizer!==speech)return;clearWatchdog();speechEvent('result',Array.from(e.results,r=>r.isFinal?'final':'interim').join(','));const parts=Array.from(e.results).map(r=>r[0].transcript);if(parts.some(text=>text.trim()))received=true;field.value=mergeSpeechTranscript(base,combineSpeechResults(parts)).slice(0,10000);};
    function interrupted(){speechWanted=false;clearTimeout(speechRestart);speechRestart=null;if(speechFinish)speechFinish();else releaseSpeech();speechButton();el('feedbackStatus').textContent='Dictation stopped. Captured words are kept. Tap Dictate feedback to continue or type your feedback.';}
    speech.onend=()=>{

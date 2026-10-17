@@ -1457,25 +1457,30 @@ function liveRecordNotes(){return !!window.PhotoNotesLiveTranscription?.enabled(
 function clearDictationWatch(generation){if(generation===dictationGeneration&&dictationWatchdog){clearTimeout(dictationWatchdog);dictationWatchdog=null;}}
 // Live Record Notes status. "kept" means the recording is held on this device
 // because transcription could not finish; the person can retry it here.
-function showLiveRecordingStatus(phase,photo,noteEl){
+function showLiveRecordingStatus(phase,photo,noteEl,kept){
   const status=document.getElementById('dictationStatus');if(!status)return;
-  document.getElementById('dictationRetryTranscription')?.remove();
   if(phase==='capture')return;
+  document.getElementById('dictationRetryTranscription')?.remove();
   if(phase==='live'){status.textContent='Listening...';return;}
-  if(phase==='offline'){status.textContent='Connection lost. Still recording. Your words will be added when you stop.';return;}
-  if(phase==='transcribing'){status.textContent='Adding your words from the recording...';return;}
+  if(phase==='offline'){status.textContent='Connection lost. Still recording. Reconnecting; your words will be added when you stop.';return;}
+  if(phase==='transcribing'){status.textContent='Checking your words against the recording...';return;}
   if(phase!=='kept')return;
-  status.textContent='Your recording is kept on this device but could not be turned into text yet. Check your connection, then tap Transcribe Recording.';
+  // The recording is saved on this device and retried automatically. While this
+  // photo is still open, the words are added here; otherwise they appear under
+  // Recovered recordings.
+  const place=text=>{
+    if(document.getElementById('note')!==noteEl||state.photoFile!==photo||!noteEl.isConnected)return false;
+    if(text){noteEl.value=mergeSpeechTranscript(noteEl.value.trim(),text);state._note=noteEl.value;void persistCaptureDraft().catch(()=>{});}
+    const current=document.getElementById('dictationStatus');if(current)current.textContent=text?'Words added from your recording.':'No words were found in the recording.';
+    document.getElementById('dictationRetryTranscription')?.remove();return true;
+  };
+  if(kept)window.PhotoNotesLiveTranscription.claimKept(kept.id,place);
+  status.textContent='Your recording is saved on this device and will be turned into text automatically when the connection returns. You can also tap Transcribe Recording.';
   const button=document.createElement('button');button.type='button';button.className='btn secondary';button.id='dictationRetryTranscription';button.textContent='Transcribe Recording';
   button.onclick=async()=>{
     button.disabled=true;button.textContent='Transcribing...';
-    try{
-      const text=await window.PhotoNotesLiveTranscription.retryPending();
-      if(document.getElementById('note')!==noteEl||state.photoFile!==photo){toast('That recording belongs to an earlier photo, so it was not added here.');button.remove();return;}
-      if(text){noteEl.value=mergeSpeechTranscript(noteEl.value.trim(),text);state._note=noteEl.value;void persistCaptureDraft().catch(()=>{});status.textContent='Words added from your recording.';}
-      else status.textContent='No words were found in the recording.';
-      button.remove();
-    }catch{button.disabled=false;button.textContent='Transcribe Recording';status.textContent='Still could not transcribe the recording. Check your connection and try again.';}
+    try{const text=await window.PhotoNotesLiveTranscription.retryPending(kept?.id);if(text)place(text);}
+    catch{button.disabled=false;button.textContent='Transcribe Recording';status.textContent='Still could not transcribe the recording. It stays saved and will be retried automatically.';}
   };
   status.after(button);
 }
@@ -1618,7 +1623,7 @@ function startDictationSession(SR, continuedText = '') {
   session.onstatus = (e) => {
     if(generation!==dictationGeneration||document.getElementById('note')!==noteEl)return;
     recordDictationEvent('live-'+e.state,e.detail||'');
-    showLiveRecordingStatus(e.state,photoForSession,noteEl);
+    showLiveRecordingStatus(e.state,photoForSession,noteEl,session.keptRecording);
   };
   session.onerror = (e) => {
     if(generation!==dictationGeneration)return;
@@ -1636,7 +1641,7 @@ function startDictationSession(SR, continuedText = '') {
       'Speech recognition stopped before you pressed Stop.';
     stopCaptureDictation();showDictationInterruption(reason);
   };
-  session.onend = () => {
+  session.onend = (endEvent) => {
     if(generation!==dictationGeneration)return;
     recordDictationEvent('ended');
     const interrupted=dictationActive&&!dictationFinish;
@@ -1661,7 +1666,8 @@ function startDictationSession(SR, continuedText = '') {
     cleanupDictation();
     if(interrupted&&current){
       const status=document.getElementById('dictationStatus');if(status)status.textContent='Recording stopped early. Your captured words are kept.';
-      showDictationInterruption('Speech recognition stopped before you pressed Stop.');
+      if(live&&endEvent?.interrupted)showDictationInterruption(endEvent.reason==='background'?'Recording paused because PhotoNotes left the screen. Tap Restart Recording to continue the same note.':'Recording paused because the phone used the microphone, for example a call or Siri. Tap Restart Recording to continue the same note.');
+      else showDictationInterruption('Speech recognition stopped before you pressed Stop.');
     }
   };
   try { session.start(); }
@@ -4478,7 +4484,7 @@ let ewrRecognizer = null;
 function cleanupEwrDict(btn) { ewrRecognizer = null; if (btn) { btn.textContent = 'Record Voice Note'; btn.classList.remove('on'); } }
 function dictateInto(el, btn) {
   // Live transcription when configured: words appear as spoken; a kept recording recovers lost connections.
-  if (!ewrRecognizer && window.PhotoNotesLiveTranscription?.dictateField({ field: el, button: btn, idleLabel: 'Record Voice Note', retryId: 'ewrRetryTranscription', language: uiSpeechLanguage() })) return;
+  if (!ewrRecognizer && window.PhotoNotesLiveTranscription?.dictateField({ field: el, button: btn, idleLabel: 'Record Voice Note', retryId: 'ewrRetryTranscription', language: uiSpeechLanguage(), surface: 'ewr' })) return;
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) { el.focus(); toast('Tap the microphone key on your keyboard, then talk'); return; }
   if (ewrRecognizer) { try { ewrRecognizer.stop(); } catch (e) {} return; }
