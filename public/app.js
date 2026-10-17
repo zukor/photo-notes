@@ -4477,6 +4477,8 @@ async function loadEwrList() {
 let ewrRecognizer = null;
 function cleanupEwrDict(btn) { ewrRecognizer = null; if (btn) { btn.textContent = 'Record Voice Note'; btn.classList.remove('on'); } }
 function dictateInto(el, btn) {
+  // Live transcription when configured: words appear as spoken; a kept recording recovers lost connections.
+  if (!ewrRecognizer && window.PhotoNotesLiveTranscription?.dictateField({ field: el, button: btn, idleLabel: 'Record Voice Note', retryId: 'ewrRetryTranscription', language: uiSpeechLanguage() })) return;
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) { el.focus(); toast('Tap the microphone key on your keyboard, then talk'); return; }
   if (ewrRecognizer) { try { ewrRecognizer.stop(); } catch (e) {} return; }

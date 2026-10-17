@@ -237,8 +237,46 @@ class LiveRecognizer{
  _end(){if(this._ended)return;this._ended=true;const aborted=this._state==='aborted';this._state=aborted?'aborted':'ended';setTimeout(()=>this._emit('end',{interrupted:!!this._interrupted}),0);}
 }
 
+// Simple text-field dictation for secondary fields (Extra Work description,
+// Report Issue description). Call from the button tap. Tapping again stops and
+// waits for the final words. Returns true when the live engine handled the tap.
+const fieldSessions=new Map();
+function dictateField({field,button,status,idleLabel,retryId,language='en-US',onText}){
+ if(!field||!button)return false;
+ const active=fieldSessions.get(button);
+ if(active){if(active.state==='recording'){active.state='finishing';button.disabled=true;button.textContent='Finishing...';try{active.recognizer.stop();}catch{}}return true;}
+ if(!enabled())return false;
+ unlock();
+ const say=text=>{if(status)status.textContent=text;else if(typeof window.toast==='function')window.toast(text);};
+ const merge=(a,b)=>typeof window.mergeSpeechTranscript==='function'?window.mergeSpeechTranscript(a,b):[String(a||'').trim(),String(b||'').trim()].filter(Boolean).join(' ');
+ document.getElementById(retryId)?.remove();
+ const base=field.value.trim(),recognizer=new LiveRecognizer(),session={recognizer,state:'recording'};
+ fieldSessions.set(button,session);recognizer.lang=language;
+ const reset=()=>{fieldSessions.delete(button);button.disabled=false;button.textContent=idleLabel;button.classList.remove('on');};
+ recognizer.onstart=()=>{if(session.state==='recording'){button.textContent='Recording... tap to stop';say('Listening...');}};
+ recognizer.onresult=e=>{const text=e.results[0][0].transcript;field.value=merge(base,text);onText?.(field.value);};
+ recognizer.onstatus=e=>{
+  if(e.state==='offline')say('Connection lost. Still recording. Your words will be added when you stop.');
+  else if(e.state==='transcribing')say('Adding your words from the recording...');
+  else if(e.state==='kept'){
+   say('Your recording is kept on this device but could not be turned into text yet. Check your connection, then tap Transcribe Recording.');
+   const retry=document.createElement('button');retry.type='button';retry.className='btn secondary';retry.id=retryId;retry.textContent='Transcribe Recording';
+   retry.onclick=async()=>{retry.disabled=true;retry.textContent='Transcribing...';
+    try{const text=await window.PhotoNotesLiveTranscription.retryPending();if(!field.isConnected){retry.remove();return;}if(text){field.value=merge(field.value,text);onText?.(field.value);}say(text?'Words added from your recording.':'No words were found in the recording.');retry.remove();}
+    catch{retry.disabled=false;retry.textContent='Transcribe Recording';say('Still could not transcribe the recording. Check your connection and try again.');}};
+   button.after(retry);
+  }};
+ recognizer.onerror=e=>{say(e.error==='not-allowed'?'Allow microphone access for this website, then try again. You can also type.':'The microphone stopped. Your words are kept. Tap to record again or type.');};
+ recognizer.onend=e=>{reset();if(e&&e.interrupted)say('Recording stopped early. Your words are kept.');else if(status&&/Listening|Adding/.test(status.textContent))status.textContent='';};
+ button.textContent='Starting microphone... tap to stop';button.classList.add('on');
+ try{recognizer.start();}catch{reset();return false;}
+ return true;
+}
+function fieldActive(button){return fieldSessions.has(button);}
+function stopField(button){const active=fieldSessions.get(button);if(active){fieldSessions.delete(button);try{active.recognizer.abort();}catch{}}}
+
 window.PhotoNotesLiveTranscription={
- refresh,enabled,supported,unlock,Recognizer:LiveRecognizer,
+ refresh,enabled,supported,unlock,Recognizer:LiveRecognizer,dictateField,stopField,fieldActive,
  pendingRecording(){return lastFailed;},
  async retryPending(){if(!lastFailed)return '';const item=lastFailed;const text=await transcribeRecording(item.wav,item.language);lastFailed=null;return text;},
  discardPending(){lastFailed=null;},

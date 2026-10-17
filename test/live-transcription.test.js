@@ -262,7 +262,7 @@ test('Capture uses the live engine without iPhone speech-document priming and ke
   const html = fs.readFileSync('public/index.html', 'utf8');
   assert.ok(html.indexOf('/live-transcription.js') < html.indexOf('/app.js'));
   const sw = fs.readFileSync('public/sw.js', 'utf8');
-  assert.match(sw, /\/live-transcription\.js\?v=1/); assert.match(sw, /\/pcm-capture-worklet\.js\?v=1/);
+  assert.match(sw, /\/live-transcription\.js\?v=\d+/); assert.match(sw, /\/pcm-capture-worklet\.js\?v=1/);
   const server = fs.readFileSync('server.js', 'utf8');
   assert.match(server, /connect-src[^"]*wss:\/\/streaming\.assemblyai\.com/);
 });
