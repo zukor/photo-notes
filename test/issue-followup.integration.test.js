@@ -39,5 +39,15 @@ test('bug follow-up is transactional, bounded, owner-safe and keeps tester evide
  const ready=await post(technical.id,'automation/issues/ID',{management_status:'ready_to_test',claim_token:claim.claim_token,fix_commit:'a'.repeat(40),deployed_commit:'b'.repeat(40),fix_summary:'Corrected output',verification:'Synthetic verification',retest_instructions:'Repeat the original case.'},auth);assert.equal(ready.status,200);
  assert.equal((await pool.query('SELECT tester_result FROM issue_reports WHERE id=$1',[technical.id])).rows[0].tester_result,null);
  await pool.query('UPDATE issue_reports SET blocked_kind=NULL WHERE id=$1',[sensitive.id]);const held=(await pool.query('SELECT * FROM issue_reports WHERE id=$1',[sensitive.id])).rows[0];assert.equal((await post(sensitive.id,'automation/issues/ID/claim',{resume:true,expected_updated_at:held.updated_at},auth)).status,409);
+ const decision=await make('bug_problem','blocked','Choose a recording behavior.');await pool.query("UPDATE issue_reports SET blocked_kind='decision' WHERE id=$1",[decision.id]);
+ let row=(await pool.query('SELECT * FROM issue_reports WHERE id=$1',[decision.id])).rows[0];
+ assert.equal((await post(decision.id,'automation/issues/ID/claim',{resume:true,expected_updated_at:row.updated_at},auth)).status,409,'a decision hold needs a stated reason');
+ assert.equal((await post(decision.id,'automation/issues/ID/claim',{resume:true,expected_updated_at:row.updated_at,supersede_reason:'decided'},auth)).status,400,'the reason must be specific');
+ const reason='Sam approved replacing browser dictation with live transcription, which is deployed.';
+ assert.equal((await post(decision.id,'automation/issues/ID/claim',{resume:true,expected_updated_at:row.updated_at,supersede_reason:reason},auth)).status,200);
+ const logged=(await pool.query("SELECT detail FROM issue_repair_events WHERE issue_id=$1 AND event='hold_superseded'",[decision.id])).rows[0];assert.equal(JSON.parse(logged.detail).reason,reason);assert.equal(JSON.parse(logged.detail).previous_kind,'decision');
+ const asked=await make('bug_problem','blocked','Please send the exact steps.');await pool.query("UPDATE issue_reports SET blocked_kind='evidence',review_decision='clarify' WHERE id=$1",[asked.id]);
+ row=(await pool.query('SELECT * FROM issue_reports WHERE id=$1',[asked.id])).rows[0];
+ assert.equal((await post(asked.id,'automation/issues/ID/claim',{resume:true,expected_updated_at:row.updated_at,supersede_reason:reason},auth)).status,409,'a question waiting on the tester is never taken over');
  }finally{await new Promise(r=>server.close(r));await pool.query('DELETE FROM issue_reports WHERE id=ANY($1::int[])',[ids]);await pool.query('DELETE FROM users WHERE id=$1',[user]);await pool.end();}
 });
