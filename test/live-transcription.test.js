@@ -334,12 +334,14 @@ test('outcome and reliability routes store and summarize without content', async
   const handlers = {};
   const app = { get(p, ...f) { handlers['GET ' + p] = f; }, post(p, ...f) { handlers['POST ' + p] = f; } };
   live.register(app, { requireAuth: (q, r, n) => n(), requireAdmin: (q, r, n) => n(), pool, env: {}, fetchImpl: async () => json({}), logger: { warn() {}, error() {} } });
-  const run = async (key, req) => { const res = { statusCode: 200, set() { return this; }, status(c) { this.statusCode = c; return this; }, json(b) { this.body = b; return this; } }; for (const fn of handlers[key]) { if (fn.length === 3) await new Promise(d => fn(req, res, d)); else await fn(req, res); } return res; };
+  const run = async (key, req) => { const res = { statusCode: 200, set() { return this; }, status(c) { this.statusCode = c; return this; }, json(b) { this.body = b; return this; } }; for (const fn of handlers[key]) { if (fn.length === 3) { let passed = false; await new Promise(d => { const json = res.json; res.json = b => { res.json = json; json.call(res, b); d(); return res; }; fn(req, res, () => { passed = true; res.json = json; d(); }); }); if (!passed) return res; } else await fn(req, res); } return res; };
   const ok = await run('POST /api/transcription/outcome', { user: { id: 3 }, body: { surface: 'feedback', outcome: 'live', seconds: 4 }, get: () => 'Android 14 Chrome/130' });
   assert.equal(ok.statusCode, 200);
   assert.match(queries[0].sql, /record_notes_outcome/); assert.equal(JSON.parse(queries[0].params[1]).os, 'Android');
   assert.equal((await run('POST /api/transcription/outcome', { user: { id: 3 }, body: { surface: 'x', outcome: 'live' }, get: () => '' })).statusCode, 400);
-  const report = await run('GET /api/admin/record-notes-reliability', { user: { id: 1 }, query: { days: '30' } });
+  const report = await run('GET /api/admin/record-notes-reliability', { user: { id: 1, role: 'admin' }, query: { days: '30' } });
+  assert.equal((await run('GET /api/admin/record-notes-reliability', { user: { id: 2, role: 'user', is_testing_manager: true }, query: {} })).statusCode, 200, 'the testing manager can view reliability');
+  assert.equal((await run('GET /api/admin/record-notes-reliability', { user: { id: 4, role: 'user' }, query: {} })).statusCode, 403, 'other users cannot');
   assert.deepEqual(report.body.totals, [{ outcome: 'live', count: 9 }, { outcome: 'kept', count: 1 }]);
   assert.equal(report.body.days, 30);
 });
