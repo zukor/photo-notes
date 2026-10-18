@@ -162,11 +162,11 @@
   </style>
   <link rel="stylesheet" href="/testing-hub.css?v=277">
   <script src="/testing-hub.js?v=350"></script>
-<link rel="stylesheet" href="/theme.css?v=389"><script src="/theme.js?v=389"></script><link rel="stylesheet" href="/help.css?v=376"><script src="/help-catalog.js?v=481" defer></script><script src="/help.js?v=470" defer></script><script src="/admin-feedback.js?v=3"></script>
+<link rel="stylesheet" href="/theme.css?v=389"><script src="/theme.js?v=389"></script><link rel="stylesheet" href="/help.css?v=376"><script src="/help-catalog.js?v=482" defer></script><script src="/help.js?v=470" defer></script><script src="/admin-feedback.js?v=3"></script>
 </head>
 <body>
   <div id="app"></div>
-  <script src="/admin-ai.js?v=2"></script><script src="/admin-user-usage.js?v=2"></script><script src="/admin-record-notes.js?v=1"></script>
+  <script src="/admin-ai.js?v=2"></script><script src="/admin-user-usage.js?v=2"></script><script src="/admin-record-notes.js?v=2"></script>
   <script src="/account-menu.js?v=277"></script>
   <script src="/issue-retest-guidance.js?v=320"></script>
   <script src="/issue-review-guidance.js?v=277"></script>
@@ -450,7 +450,7 @@
 
           <h1 class="admin-page-title">${currentUser?.is_super_admin?'Super Admin':'Admin'}</h1>
           <h2 class="admin-tools-heading">Admin Tools</h2>
-          ${currentUser?.is_super_admin?'<div id="aiAdminHost"></div><div id="userUsageHost"></div><div id="recordNotesReliabilityHost"></div>':''}
+          ${currentUser?.is_super_admin?'<div id="aiAdminHost"></div><div id="userUsageHost"></div>':''}<div id="recordNotesReliabilityHost"></div>
           <div id="customerFeedbackHost"></div>
           <details id="usersSection" class="admin-section" data-admin-tool="users"><summary id="usersHeading">Users</summary><div class="admin-section-body">
             <div class="users-heading"><div><p class="helper">${currentUser?.is_super_admin?'Select a user to edit their details, password, and version access.':'Select a user to view their details and change version access.'}</p></div><button class="btn" type="button" id="addUser" aria-expanded="false" aria-controls="createUserPanel">Add User</button></div>
@@ -548,15 +548,18 @@
         <button class="issue-fab" id="issueFab" type="button" data-html2canvas-ignore="true">Report Issue</button>
         ${issueReporterMarkup()}`;
       if(!currentUser?.is_super_admin&&!currentUser?.is_testing_manager)document.querySelectorAll('[data-admin-tool="issues"],[data-admin-tool="system-status"],[data-admin-tool="health"],[data-admin-tool="billing"],[data-admin-tool="activity"],.issue-diagnostics,#issueSystemNotice,#addUser,#createUserPanel,#userTotals').forEach(section=>section.remove());
-      if(currentUser?.is_testing_manager&&!currentUser?.is_super_admin){document.querySelectorAll('[data-admin-tool]').forEach(section=>{if(!['issues','testing'].includes(section.dataset.adminTool))section.remove();});document.querySelector('.admin-page-title').textContent='Testing Management';document.querySelector('.admin-tools-heading').textContent='Issues and Testing';}
+      if(currentUser?.is_testing_manager&&!currentUser?.is_super_admin){document.querySelectorAll('[data-admin-tool]').forEach(section=>{if(!['issues','testing','record-notes-reliability'].includes(section.dataset.adminTool))section.remove();});document.querySelector('.admin-page-title').textContent='Testing Management';document.querySelector('.admin-tools-heading').textContent='Issues and Testing';}
       if(currentUser?.is_super_admin)PhotoNotesAdminUsage.mount(document.getElementById('userUsageHost'),api);
-      if(currentUser?.is_super_admin)PhotoNotesAdminRecordNotes.mount(document.getElementById('recordNotesReliabilityHost'),api);
+      PhotoNotesAdminRecordNotes.mount(document.getElementById('recordNotesReliabilityHost'),api);
       mountCustomerFeedbackAdmin(document.getElementById('customerFeedbackHost'),api);
       if(currentUser?.is_super_admin)PhotoNotesAdminAI.mount(document.getElementById('aiAdminHost'),api);
       window.PhotoNotesAccountMenu.sort();
       const tools=[...document.querySelectorAll('[data-admin-tool]')];
       tools.sort((a,b)=>a.querySelector('summary').textContent.trim().localeCompare(b.querySelector('summary').textContent.trim(),'en',{sensitivity:'base'}));
-      tools.forEach(tool=>tool.parentElement.appendChild(tool));
+      // Panels mounted inside their own host keep the host (it carries their styles) and sort with the other tools.
+      const toolUnit=tool=>tool.parentElement?.matches('[id$="Host"]')&&tool.parentElement.children.length<=2?tool.parentElement:tool;
+      const toolList=tools.map(toolUnit).find(unit=>!unit.matches('[id$="Host"]'))?.parentElement;
+      if(toolList)tools.forEach(tool=>toolList.appendChild(toolUnit(tool)));
       if(new URLSearchParams(location.search).get('tool')==='issues'){const issues=document.querySelector('[data-admin-tool="issues"]');if(issues){issues.open=true;issues.scrollIntoView();}}
       document.getElementById('issueFab').onclick=openIssueReporter;
       refreshIssueAttention();

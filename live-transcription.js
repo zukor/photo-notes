@@ -179,8 +179,10 @@ function register(app, { requireAuth, requireAdmin, pool, env = process.env, fet
     try { await pool.query(`INSERT INTO events(user_id,action,detail) VALUES($1,'record_notes_outcome',$2)`, [req.user.id, JSON.stringify(detail)]); res.json({ ok: true }); }
     catch { res.status(503).json({ error: 'Outcome unavailable' }); }
   });
-  if (!requireAdmin) return;
-  app.get('/api/admin/record-notes-reliability', requireAdmin, async (req, res) => {
+  // Admins and the testing manager can review reliability. Results never contain words or audio.
+  const requireReliabilityViewer = (req, res, next) => requireAuth(req, res, () =>
+    req.user && (req.user.role === 'admin' || req.user.is_testing_manager === true) ? next() : res.status(403).json({ error: 'Admin or testing manager access required' }));
+  app.get('/api/admin/record-notes-reliability', requireReliabilityViewer, async (req, res) => {
     const days = Math.min(90, Math.max(1, parseInt(req.query.days, 10) || 7));
     const where = `e.action='record_notes_outcome' AND e.created_at >= now()-($1::int*interval '1 day')`;
     try {
