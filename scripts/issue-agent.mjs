@@ -15,7 +15,7 @@ async function main(){
  if(command==='queue'){console.log(JSON.stringify(await(await request('/api/automation/testing-queue')).json(),null,2));return;}
  if(!Number.isInteger(id)||id<1)throw new Error('Provide a positive issue ID');
  if(command==='claim'||command==='renew'||command==='resume'){
-   const d=await(await request(`/api/automation/issues/${id}/claim`,command==='renew'?{claim_token:claim()}:command==='resume'?{resume:true,expected_updated_at:opt('updated')}:{})).json();
+   const d=await(await request(`/api/automation/issues/${id}/claim`,command==='renew'?{claim_token:claim()}:command==='resume'?{resume:true,expected_updated_at:opt('updated'),...(opt('supersede')?{supersede_reason:opt('supersede')}:{})}:{})).json();
    fs.mkdirSync(dir,{recursive:true,mode:0o700});fs.writeFileSync(claimPath(),JSON.stringify(d),{mode:0o600});console.log(JSON.stringify({issue_id:id,claimed:true,expires:d.repair_lease_until}));return;
  }
  if(command==='attachment'){

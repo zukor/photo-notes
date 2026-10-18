@@ -19,7 +19,7 @@ const MAX_BATCH_BYTES = 40 * 1024 * 1024; // About 20 minutes of 16 kHz mono PCM
 // Vocabulary the transcription service should favor. Each term is at most 50
 // characters and the list stays under the 100-term streaming limit.
 const KEYTERMS = Object.freeze([
-  'PhotoNotes', 'Photo Notes', 'Record Notes', 'tap record', 'Zukor', 'Capture', 'Library', 'Send Feedback', 'Report Issue',
+  'PhotoNotes', 'Photo Notes', 'Record Notes', 'tap record', 'tab record', 'Zukor', 'Capture', 'Library', 'Send Feedback', 'Report Issue',
   'rebar', 'wire mesh', 'formwork', 'slab', 'slab on grade', 'footing', 'foundation', 'driveway', 'sidewalk', 'patio', 'curb', 'gutter',
   'curb and gutter', 'retaining wall', 'expansion joint', 'control joint', 'saw cut', 'broom finish', 'stamped concrete', 'flatwork',
   'cubic yards', 'square feet', 'linear feet', 'PSI', 'compaction', 'base course', 'subgrade', 'asphalt', 'sealcoat', 'crack sealing',
