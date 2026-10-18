@@ -48,6 +48,8 @@ test('bug follow-up is transactional, bounded, owner-safe and keeps tester evide
  const logged=(await pool.query("SELECT detail FROM issue_repair_events WHERE issue_id=$1 AND event='hold_superseded'",[decision.id])).rows[0];assert.equal(JSON.parse(logged.detail).reason,reason);assert.equal(JSON.parse(logged.detail).previous_kind,'decision');
  const asked=await make('bug_problem','blocked','Please send the exact steps.');await pool.query("UPDATE issue_reports SET blocked_kind='evidence',review_decision='clarify' WHERE id=$1",[asked.id]);
  row=(await pool.query('SELECT * FROM issue_reports WHERE id=$1',[asked.id])).rows[0];
- assert.equal((await post(asked.id,'automation/issues/ID/claim',{resume:true,expected_updated_at:row.updated_at,supersede_reason:reason},auth)).status,409,'a question waiting on the tester is never taken over');
+ assert.equal((await post(asked.id,'automation/issues/ID/claim',{resume:true,expected_updated_at:row.updated_at},auth)).status,409,'a question waiting on the tester is not taken over without a reason');
+ assert.equal((await post(asked.id,'automation/issues/ID/claim',{resume:true,expected_updated_at:row.updated_at,supersede_reason:reason},auth)).status,200,'an outdated question can be replaced with a stated reason');
+ row=(await pool.query('SELECT review_decision,review_note FROM issue_reports WHERE id=$1',[asked.id])).rows[0];assert.equal(row.review_decision,null);
  }finally{await new Promise(r=>server.close(r));await pool.query('DELETE FROM issue_reports WHERE id=ANY($1::int[])',[ids]);await pool.query('DELETE FROM users WHERE id=$1',[user]);await pool.end();}
 });
