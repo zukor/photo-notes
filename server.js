@@ -86,6 +86,9 @@ registerStripeWebhook(app, { pool });
 app.use('/api/ramo-intake',express.json({limit:'2mb'}));
 app.use(express.json());
 app.use(cookieParser());
+// Large document exports take turns so several at once cannot run the server out of memory.
+const exportGate=require('./export-gate');
+app.use(exportGate.EXPORT_PATHS,exportGate.createExportGate({max:Math.max(1,Number(process.env.EXPORT_CONCURRENCY)||2)}).middleware);
 
 // ---- static frontend + uploaded photos ----
 // Uploads from a request that failed are removed unless the database already uses them.
@@ -109,6 +112,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads/customer-feedback',requireAuth,async(req,res)=>{
  try{const file=path.basename(req.path);const row=(await pool.query('SELECT user_id FROM issue_reports WHERE screenshot_path=$1 AND feedback_category IS NOT NULL',['/uploads/customer-feedback/'+file])).rows[0];if(!row||(row.user_id!==req.user.id&&!require('./customer-feedback').canReview(req.user)))return res.status(404).end();res.set('Cache-Control','private, no-store');res.sendFile(path.join(UPLOAD_DIR,'.private-feedback',file),{dotfiles:'allow'});}catch{res.status(500).end();}
 });
+require('./thumbnails').register(app,{uploadDir:UPLOAD_DIR,sharp});
 app.use('/uploads',(req,res,next)=>{try{if(decodeURIComponent(req.path).split('/').includes('.private-feedback'))return res.status(404).end();next();}catch{res.status(400).end();}});
 // Uploaded files are user content. Serve them sandboxed so no file can run
 // script on this site, and download anything that is not an image or audio.
@@ -968,9 +972,9 @@ app.get('/api/captures', requireAuth, async (req, res) => {
     let rows;
     if (area) {
       ({ rows } = await pool.query(
-        `SELECT c.*,(SELECT community_id FROM hoa_maintenance_items WHERE capture_id=c.id LIMIT 1) duplicate_community_id,(SELECT area FROM hoa_maintenance_items WHERE capture_id=c.id LIMIT 1) duplicate_category,(SELECT item_type FROM hoa_maintenance_items WHERE capture_id=c.id LIMIT 1) duplicate_record_type,(SELECT name FROM property_areas WHERE id=c.property_area_id) property_area_name,j.name job_name,j.job_number FROM captures c LEFT JOIN jobs j ON j.id=c.job_id WHERE c.user_id = $1 AND $2 = ANY(c.area_tags) ORDER BY c.created_at DESC`, [req.user.id, area]));
+        `SELECT c.*,h.community_id duplicate_community_id,h.area duplicate_category,h.item_type duplicate_record_type,(SELECT name FROM property_areas WHERE id=c.property_area_id) property_area_name,j.name job_name,j.job_number FROM captures c LEFT JOIN jobs j ON j.id=c.job_id LEFT JOIN LATERAL (SELECT community_id,area,item_type FROM hoa_maintenance_items WHERE capture_id=c.id LIMIT 1) h ON true WHERE c.user_id = $1 AND $2 = ANY(c.area_tags) ORDER BY c.created_at DESC`, [req.user.id, area]));
     } else {
-      ({ rows } = await pool.query(`SELECT c.*,(SELECT community_id FROM hoa_maintenance_items WHERE capture_id=c.id LIMIT 1) duplicate_community_id,(SELECT area FROM hoa_maintenance_items WHERE capture_id=c.id LIMIT 1) duplicate_category,(SELECT item_type FROM hoa_maintenance_items WHERE capture_id=c.id LIMIT 1) duplicate_record_type,(SELECT name FROM property_areas WHERE id=c.property_area_id) property_area_name,j.name job_name,j.job_number FROM captures c LEFT JOIN jobs j ON j.id=c.job_id WHERE c.user_id = $1 ORDER BY c.created_at DESC`, [req.user.id]));
+      ({ rows } = await pool.query(`SELECT c.*,h.community_id duplicate_community_id,h.area duplicate_category,h.item_type duplicate_record_type,(SELECT name FROM property_areas WHERE id=c.property_area_id) property_area_name,j.name job_name,j.job_number FROM captures c LEFT JOIN jobs j ON j.id=c.job_id LEFT JOIN LATERAL (SELECT community_id,area,item_type FROM hoa_maintenance_items WHERE capture_id=c.id LIMIT 1) h ON true WHERE c.user_id = $1 ORDER BY c.created_at DESC`, [req.user.id]));
     }
     await libraryProjects.attach(pool,req.user.id,rows);
     await LinkedPhotoEvidence.attach(pool,req.user.id,await currentProduct(req.user.id),rows);
@@ -1013,7 +1017,7 @@ app.get('/api/concrete/report',requireAuth,requireConcrete,async(req,res)=>{try{
   const vals=[req.user.id],where=['c.user_id=$1','c.photo_path IS NOT NULL'];
   if(req.query.job_id==='unassigned')where.push('c.job_id IS NULL');
     else if(req.query.job_id&&Number.isInteger(Number(req.query.job_id))){vals.push(Number(req.query.job_id));where.push(`c.job_id=$${vals.length}`);}
-  const rows=(await pool.query(`SELECT c.*,(SELECT community_id FROM hoa_maintenance_items WHERE capture_id=c.id LIMIT 1) duplicate_community_id,(SELECT area FROM hoa_maintenance_items WHERE capture_id=c.id LIMIT 1) duplicate_category,(SELECT item_type FROM hoa_maintenance_items WHERE capture_id=c.id LIMIT 1) duplicate_record_type,(SELECT name FROM property_areas WHERE id=c.property_area_id) property_area_name,j.name job_name,j.job_number FROM captures c LEFT JOIN jobs j ON j.id=c.job_id WHERE ${where.join(' AND ')} AND COALESCE(c.concrete_stage,'')<>'batch_ticket' ORDER BY c.created_at DESC LIMIT 500`,vals)).rows;
+  const rows=(await pool.query(`SELECT c.*,h.community_id duplicate_community_id,h.area duplicate_category,h.item_type duplicate_record_type,(SELECT name FROM property_areas WHERE id=c.property_area_id) property_area_name,j.name job_name,j.job_number FROM captures c LEFT JOIN jobs j ON j.id=c.job_id LEFT JOIN LATERAL (SELECT community_id,area,item_type FROM hoa_maintenance_items WHERE capture_id=c.id LIMIT 1) h ON true WHERE ${where.join(' AND ')} AND COALESCE(c.concrete_stage,'')<>'batch_ticket' ORDER BY c.created_at DESC LIMIT 500`,vals)).rows;
   const ids=rows.map(r=>r.id),links=ids.length?(await pool.query(`SELECT l.placement_capture_id,l.reference_type,c.* FROM concrete_ticket_links l JOIN captures c ON c.id=l.ticket_capture_id WHERE l.user_id=$1 AND l.placement_capture_id=ANY($2::int[]) ORDER BY l.created_at`,[req.user.id,ids])).rows:[];
   for(const row of rows)row.supporting_photos=links.filter(link=>link.placement_capture_id===row.id);
   const footprints=ids.length?(await pool.query('SELECT * FROM concrete_footprints WHERE user_id=$1 AND capture_id=ANY($2::int[]) ORDER BY created_at',[req.user.id,ids])).rows:[];
@@ -1047,7 +1051,7 @@ app.get('/api/captures/search', requireAuth, async (req,res)=>{
     if(req.query.missing_address==='1')where.push(`COALESCE(c.address,'')=''`);
     for(const marker of ['favorite','flagged'])if(req.query[marker]==='1')where.push(`c.${marker}=true`);
     if(req.query.has_photo==='1')where.push(`c.photo_path IS NOT NULL`);
-    const rows=(await pool.query(`SELECT c.*,(SELECT community_id FROM hoa_maintenance_items WHERE capture_id=c.id LIMIT 1) duplicate_community_id,(SELECT area FROM hoa_maintenance_items WHERE capture_id=c.id LIMIT 1) duplicate_category,(SELECT item_type FROM hoa_maintenance_items WHERE capture_id=c.id LIMIT 1) duplicate_record_type,(SELECT name FROM property_areas WHERE id=c.property_area_id) property_area_name,j.name job_name,j.job_number FROM captures c LEFT JOIN jobs j ON j.id=c.job_id WHERE ${where.join(' AND ')} ORDER BY c.created_at DESC LIMIT 500`,vals)).rows;
+    const rows=(await pool.query(`SELECT c.*,h.community_id duplicate_community_id,h.area duplicate_category,h.item_type duplicate_record_type,(SELECT name FROM property_areas WHERE id=c.property_area_id) property_area_name,j.name job_name,j.job_number FROM captures c LEFT JOIN jobs j ON j.id=c.job_id LEFT JOIN LATERAL (SELECT community_id,area,item_type FROM hoa_maintenance_items WHERE capture_id=c.id LIMIT 1) h ON true WHERE ${where.join(' AND ')} ORDER BY c.created_at DESC LIMIT 500`,vals)).rows;
     await libraryProjects.attach(pool,req.user.id,rows);
     res.json(rows);
   }catch(err){console.error('[captures.search]',err);res.status(500).json({error:'search failed'});}
@@ -1902,7 +1906,7 @@ async function removeUnreferencedUploads(paths){
   let still=new Set();
   try{const cols=await uploadReferenceColumns();if(cols.length){const sql=cols.map(c=>`SELECT ${quoteIdent(c.column_name)}::text AS p FROM ${quoteIdent(c.table_name)} WHERE ${quoteIdent(c.column_name)}::text = ANY($1)`).join(' UNION ');still=new Set((await pool.query(sql,[unique])).rows.map(r=>r.p));}}
   catch(e){console.error('[uploads.references]',e&&e.message);return;} // When unsure, keep the file.
-  for(const p of unique){if(still.has(p))continue;const local=localPhoto(p);if(local)await fs.promises.unlink(local).catch(()=>{});}
+  for(const p of unique){if(still.has(p))continue;const local=localPhoto(p);if(local)await fs.promises.unlink(local).catch(()=>{});const thumb=require('./thumbnails').thumbPathFor(UPLOAD_DIR,p);if(thumb)await fs.promises.unlink(thumb).catch(()=>{});}
 }
 function quoteIdent(name){return '"'+String(name).replace(/"/g,'""')+'"';}
 

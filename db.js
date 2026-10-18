@@ -870,6 +870,9 @@ async function init() {
   await pool.query(require('fs').readFileSync(require('path').join(__dirname,'qr-codes-schema.sql'),'utf8'));
   await pool.query(require('./ai-settings').SCHEMA);
   await pool.query(require('./customer-feedback').SCHEMA);
+  // Library lookups by photo. These columns exist only after the migrations above.
+  await pool.query(`CREATE INDEX IF NOT EXISTS hoa_items_capture_idx ON hoa_maintenance_items (capture_id)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS camera_readings_capture_idx ON camera_readings (user_id, capture_id)`);
   console.log('[db] schema ready');
 }
 
