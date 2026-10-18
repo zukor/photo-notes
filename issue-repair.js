@@ -4,7 +4,10 @@ const crypto=require('crypto'),path=require('path');
 const digest=value=>crypto.createHash('sha256').update(String(value||'')).digest('hex');
 const sha=value=>typeof value==='string'&&/^[a-f0-9]{40}$/.test(value);
 function validateRepairUpdate(body){
-  if(!['reviewing','fixing','testing','blocked','ready_to_test'].includes(body.management_status))throw new Error('Worker may review, fix, block, or request retesting; only a person confirms resolution');
+  // The worker never marks an issue resolved; only a person confirms a repair. It may close a report that is not an
+  // issue (a test note, a duplicate) as Won't Fix, with a written reason that is kept in the issue history.
+  if(!['reviewing','fixing','testing','blocked','ready_to_test','wont_fix'].includes(body.management_status))throw new Error('Worker may review, fix, block, request retesting, or close a non-issue; only a person confirms resolution');
+  if(body.management_status==='wont_fix'&&(typeof body.close_reason!=='string'||body.close_reason.trim().length<30||body.close_reason.length>2000))throw new Error('Closing needs a 30 to 2000 character reason');
   if(body.investigation_review!==undefined&&(body.investigation_review!==true||body.management_status!=='blocked'||body.blocked_kind!=='developer'))throw new Error('Investigation reviews must record a developer hold');
   const fields={};if(body.blocked_kind!==undefined){if(!['decision','developer','evidence','retry'].includes(body.blocked_kind))throw new Error('Invalid blocker type');fields.blocked_kind=body.blocked_kind;}for(const [k,max] of Object.entries({fix_summary:5000,retest_instructions:5000,verification:10000,blocked_reason:3000,admin_notes:10000}))if(body[k]!==undefined){if(typeof body[k]!=='string'||body[k].length>max)throw new Error('Invalid '+k);fields[k]=body[k].trim();}
   if(body.management_status==='blocked'&&!fields.blocked_reason)throw new Error('A blocked issue needs a concrete explanation or question');
@@ -16,6 +19,7 @@ function validateRepairUpdate(body){
     if(!fields.fix_summary||!fields.retest_instructions||!fields.verification||!sha(body.fix_commit)||!sha(body.deployed_commit))throw new Error('A tested, deployed fix requires full commit IDs, verification, summary, and retest instructions');
     fields.release_reference=body.deployed_commit;fields.fix_commit=body.fix_commit;
   }
+  if(body.management_status==='wont_fix'){fields.admin_notes=('Closed by the repair worker: '+body.close_reason.trim()).slice(0,10000);}
   return fields;
 }
 function registerIssueRepair(app,{pool,requireAuth,requireAdmin,requireTestingQueueToken,uploadDir}){
@@ -64,11 +68,12 @@ function registerIssueRepair(app,{pool,requireAuth,requireAdmin,requireTestingQu
       if(req.body.management_status!=='blocked')sets.push('blocked_kind=NULL');
       if(req.body.management_status==='ready_to_test')sets.push("tester_notification_status='in_app'",'tester_notified_at=now()','tester_notification_error=NULL','blocked_reason=NULL','tester_result=NULL','tester_notes=NULL','tester_retested_at=NULL');
       if(req.body.clarification_instructions)sets.push("tester_notification_status='in_app'",'tester_notified_at=now()','tester_notification_error=NULL');
-      if(['blocked','ready_to_test'].includes(req.body.management_status))sets.push('repair_claim_hash=NULL','repair_lease_until=NULL');
+      if(['blocked','ready_to_test','wont_fix'].includes(req.body.management_status))sets.push('repair_claim_hash=NULL','repair_lease_until=NULL');
+      if(req.body.management_status==='wont_fix')sets.push('resolved_at=now()');
       vals.push(id,digest(req.body.claim_token));
       const {rows}=await client.query(`UPDATE issue_reports SET ${sets.join(',')} WHERE id=$${vals.length-1} AND ${eligibleIssueSql()} AND repair_claim_hash=$${vals.length} AND repair_lease_until>now() AND management_status IN ('reviewing','fixing','testing') RETURNING id,management_status,release_reference`,vals);
       if(!rows.length){await client.query('ROLLBACK').catch(()=>{});return res.status(409).json({error:'Claim expired or issue changed; reload the queue'});}
-      const detail=JSON.stringify({status:req.body.management_status,...fields});
+      const detail=JSON.stringify({status:req.body.management_status,...fields,...(req.body.management_status==='wont_fix'?{close_reason:req.body.close_reason.trim()}:{})});
       await client.query("INSERT INTO issue_repair_events(issue_id,event,detail) VALUES($1,$2,$3)",[id,req.body.clarification_instructions?'automatic_clarification':req.body.investigation_review===true?'developer_investigation':req.body.management_status,detail]);await client.query('COMMIT');res.json({ok:true,...rows[0]});
     }catch(e){if(client)await client.query('ROLLBACK').catch(()=>{});res.status(500).json({error:'Repair update failed'});}finally{client?.release();}
   });
