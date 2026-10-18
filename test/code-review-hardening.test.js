@@ -33,15 +33,15 @@ test('stored file paths cannot reach outside the uploads folder',()=>{
 });
 
 test('deleting Photo Notes keeps files that something else still uses',async()=>{
-  const removed=[],ctx=vm.createContext({console,fs:{promises:{unlink:async p=>{removed.push(p);}}},localPhoto:p=>'/disk'+p,
+  const removed=[],ctx=vm.createContext({require:id=>require('../'+id.slice(2)),UPLOAD_DIR:'/nowhere',console,fs:{promises:{unlink:async p=>{removed.push(p);}}},localPhoto:p=>'/disk'+p,
     pool:{query:async(sql)=>/information_schema/.test(sql)?{rows:[{table_name:'captures',column_name:'photo_path'},{table_name:'camera_readings',column_name:'photo_path'}]}:{rows:[{p:'/uploads/shared.jpg'}]}}});
   vm.runInContext(slice('let uploadPathColumns','// ---- delete selected captures ----'),ctx);
   await ctx.removeUnreferencedUploads(['/uploads/shared.jpg','/uploads/only.jpg',null,'/uploads/only.jpg']);
-  assert.deepEqual(removed,['/disk/uploads/only.jpg']);
+  assert.deepEqual(removed,['/disk/uploads/only.jpg','/nowhere/.thumbs/only.jpg.w480.jpg'],'the thumbnail goes with the photo');
 });
 
 test('when the reference check fails, no files are removed',async()=>{
-  const removed=[],ctx=vm.createContext({console:{error(){}},fs:{promises:{unlink:async p=>{removed.push(p);}}},localPhoto:p=>p,pool:{query:async()=>{throw Error('down');}}});
+  const removed=[],ctx=vm.createContext({require:id=>require('../'+id.slice(2)),UPLOAD_DIR:'/nowhere',console:{error(){}},fs:{promises:{unlink:async p=>{removed.push(p);}}},localPhoto:p=>p,pool:{query:async()=>{throw Error('down');}}});
   vm.runInContext(slice('let uploadPathColumns','// ---- delete selected captures ----'),ctx);
   await ctx.removeUnreferencedUploads(['/uploads/a.jpg']);assert.deepEqual(removed,[]);
 });

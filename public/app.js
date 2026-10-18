@@ -133,9 +133,15 @@ function photoSrc(p) { return p ? `${p}?v=${state.imgv}` : ''; }
 function retryPhotoImages(container){
  container.querySelectorAll('img').forEach(img=>{
   let attempts=0;
-  const retry=()=>{if(attempts>=2||!img.isConnected)return;const url=new URL(img.src,location.href);if(url.origin!==location.origin||!/^\/(uploads|api\/captures)\//.test(url.pathname))return;attempts++;setTimeout(()=>{if(!img.isConnected)return;url.searchParams.set('retry',Date.now());img.src=url.href;},attempts*600);};
+  const retry=()=>{if(attempts>=2||!img.isConnected)return;const url=new URL(img.src,location.href);if(url.origin!==location.origin||!/^\/(uploads|thumbs|api\/captures)\//.test(url.pathname))return;attempts++;setTimeout(()=>{if(!img.isConnected)return;url.searchParams.set('retry',Date.now());img.src=url.href;},attempts*600);};
   img.addEventListener('error',retry);if(img.complete&&!img.naturalWidth)retry();
  });
+}
+// Lists show a small thumbnail; the viewer, editing and documents keep the full photo.
+function captureThumbSrc(c) {
+  if(!c||c._comparisonUrl||(Array.isArray(c.overlays)&&c.overlays.length))return capturePhotoSrc(c);
+  const m=/^\/uploads\/([A-Za-z0-9][A-Za-z0-9._-]*\.(?:jpe?g|png|webp|heic|heif|gif))$/i.exec(String(c.photo_path||''));
+  return m?`/thumbs/${m[1]}`:capturePhotoSrc(c);
 }
 function capturePhotoSrc(c) {
   if(c&&c._comparisonUrl)return c._comparisonUrl;
@@ -183,6 +189,7 @@ function toast(msg, duration=2200) {
   t._hideTimer=setTimeout(() => { t.style.display = 'none'; }, duration);
 }
 
+const EXPORT_BUSY = 'Several documents are being made right now. Please try again in a minute.';
 async function api(path, opts = {}) {
   const r = await fetch(path, { credentials: 'same-origin', ...opts });
   return r;
@@ -1052,7 +1059,7 @@ async function renderAlignmentTool() {
   if(!embedded)document.getElementById('alignBack').onclick=()=>{state.view='camera-tools';renderApp();};
   const list=document.getElementById('alignBeforeList');try{const [r,p]=await Promise.all([api('/api/captures'),api('/api/pairs')]);const captures=r.ok?await r.json():[];const pairs=p.ok?await p.json():[];if(document.getElementById('alignBeforeList')!==list)return;alignmentCaptures=captures;alignmentPairedIds=new Set();pairs.forEach(x=>{alignmentPairedIds.add(Number(x.before_id));alignmentPairedIds.add(Number(x.after_id));});renderAlignmentChoices();if(direct){if(alignmentPairedIds.has(Number(direct.id))){toast('This photo already belongs to a pair. Unpair it before creating another pair.');}else{if(!alignmentCaptures.some(c=>c.id===direct.id))alignmentCaptures.push(direct);chooseAlignmentBefore(direct.id);}}}catch(e){if(document.getElementById('alignBeforeList')!==list)return;list.innerHTML='<p class="status">Photos could not be loaded.</p>';}
 }
-function renderAlignmentChoices(){const box=document.getElementById('alignBeforeList');if(!box)return;const photos=alignmentCaptures.filter(c=>c.photo_path&&!alignmentPairedIds.has(Number(c.id))).slice(0,30);box.innerHTML=photos.length?`<div class="alignment-choice-grid">${photos.map(c=>`<button class="alignment-choice" data-id="${c.id}"><span class="photo-title">${esc(c.photo_title||'Untitled photo')}</span><img src="${capturePhotoSrc(c)}" alt=""><span><strong>GPS</strong><br>${esc(formatGpsClient(c))}<br><strong>Address</strong><br>${esc(c.address||'No address')}</span></button>`).join('')}</div>`:'<p class="empty">There are no unpaired project photos available. Save a new project photo first, then return here.</p>';box.querySelectorAll('.alignment-choice').forEach(b=>b.onclick=()=>chooseAlignmentBefore(Number(b.dataset.id)));}
+function renderAlignmentChoices(){const box=document.getElementById('alignBeforeList');if(!box)return;const photos=alignmentCaptures.filter(c=>c.photo_path&&!alignmentPairedIds.has(Number(c.id))).slice(0,30);box.innerHTML=photos.length?`<div class="alignment-choice-grid">${photos.map(c=>`<button class="alignment-choice" data-id="${c.id}"><span class="photo-title">${esc(c.photo_title||'Untitled photo')}</span><img loading="lazy" decoding="async" src="${captureThumbSrc(c)}" alt=""><span><strong>GPS</strong><br>${esc(formatGpsClient(c))}<br><strong>Address</strong><br>${esc(c.address||'No address')}</span></button>`).join('')}</div>`:'<p class="empty">There are no unpaired project photos available. Save a new project photo first, then return here.</p>';box.querySelectorAll('.alignment-choice').forEach(b=>b.onclick=()=>chooseAlignmentBefore(Number(b.dataset.id)));}
 function chooseAlignmentBefore(id){if(alignmentSavedAfter)return toast('Retry pairing the saved photo, or return to the library.');alignmentBefore=alignmentCaptures.find(c=>c.id===id);if(!alignmentBefore)return;alignmentAfterFile=null;document.getElementById('alignCompareStep').hidden=true;if(isConcreteClient()){const phase=document.getElementById('alignPhase'),purpose=document.getElementById('alignPurpose');phase.value=alignmentBefore.concrete_phase||'';const paint=()=>{purpose.innerHTML='<option value="">Choose purpose</option>'+(ConcreteCapture.phase(phase.value)?.purposes||[]).map(p=>`<option value="${p[0]}">${esc(p[1])}</option>`).join('');};paint();purpose.value=alignmentBefore.concrete_purpose||'';phase.onchange=paint;}document.querySelectorAll('.alignment-choice').forEach(b=>b.classList.toggle('selected',Number(b.dataset.id)===id));document.getElementById('alignReference').src=photoSrc(alignmentBefore.photo_path);document.getElementById('alignTakeStep').hidden=false;document.getElementById('alignTake').onclick=()=>document.getElementById('alignCam').click();const live=document.getElementById('alignMatchCamera');if(live)live.onclick=()=>window.PhotoNotesMatchCamera.open(capturePhotoSrc(alignmentBefore),f=>{alignmentAfterFile=f;alignmentUploadForm=null;alignmentUploadId=crypto.randomUUID();showAlignmentComparison();},native=>{if(!document.getElementById('alignTake'))return;if(native)document.getElementById('alignCam').click();else{toast('Live preview unavailable. Use Take After Photo, then compare and retake.');document.getElementById('alignTake').focus();}});document.getElementById('alignChoose').onclick=()=>document.getElementById('alignLib').click();const pick=e=>{const f=e.target.files&&e.target.files[0];if(!f)return;alignmentAfterFile=f;alignmentSavedAfter=null;alignmentUploadForm=null;alignmentUploadId=crypto.randomUUID();showAlignmentComparison();e.target.value='';};document.getElementById('alignCam').onchange=pick;document.getElementById('alignLib').onchange=pick;document.getElementById('alignTakeStep').scrollIntoView({behavior:'smooth'});}
 function showAlignmentComparison(){document.getElementById('alignBeforeImage').src=photoSrc(alignmentBefore.photo_path);if(alignmentPreviewUrl)URL.revokeObjectURL(alignmentPreviewUrl);alignmentPreviewUrl=URL.createObjectURL(alignmentAfterFile);document.getElementById('alignAfterImage').src=alignmentPreviewUrl;document.getElementById('alignCompareStep').hidden=false;const range=document.getElementById('alignOpacity'),after=document.getElementById('alignAfterImage');range.oninput=()=>after.style.opacity=String(Number(range.value)/100);after.style.opacity=String(Number(range.value)/100);document.getElementById('alignRetake').onclick=()=>document.getElementById('alignCam').click();document.getElementById('alignSave').onclick=saveAlignedPair;document.getElementById('alignCompareStep').scrollIntoView({behavior:'smooth'});}
 async function saveAlignedPair(){
@@ -2853,14 +2860,14 @@ async function doExportSelected() {
   for (const f of fmts) {
     try {
       const r = await api(`/api/export/${f}?ids=${ids.join(',')}&res=${imgRes}&fmt=${imgFmt}`);
-      if (!r.ok) throw new Error('bad');
+      if (!r.ok) throw new Error(r.status === 503 ? EXPORT_BUSY : 'bad');
       const blob = await r.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a'); a.href = url; a.download = names[f];
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 1500);
       await new Promise(res => setTimeout(res, 500));
-    } catch (e) { toast('Download failed for ' + f); }
+    } catch (e) { toast(e.message === EXPORT_BUSY ? EXPORT_BUSY : 'Download failed for ' + f); }
   }
   btn.disabled = false; btn.textContent = 'Export';
   toast('Exported');
@@ -2994,7 +3001,7 @@ function libraryCardHtml(c){
   const groups=memberships.flatMap(project=>(project.groups||[]).map(group=>esc(project.name+': '+group.name))).join(', ')||'None';
   return `<article class="card library-photo-card" data-library-photo="${c.id}">
     <label class="library-photo-select"><input type="checkbox" class="capchk" value="${c.id}" aria-label="Select ${esc(c.photo_title||'Untitled PhotoNote')}"></label>
-    ${c.photo_path?`<img data-capture-photo="${c.id}" src="${capturePhotoSrc(c)}" alt="${esc(c.photo_title||'PhotoNote')}">`:''}
+    ${c.photo_path?`<img data-capture-photo="${c.id}" loading="lazy" decoding="async" src="${captureThumbSrc(c)}" data-full-src="${capturePhotoSrc(c)}" alt="${esc(c.photo_title||'PhotoNote')}">`:''}
     <div class="photo-title">${esc(c.photo_title||'Untitled PhotoNote')}</div>
     <div class="library-details"><div class="library-note"><strong>Notes:</strong> ${esc(c.note||'None')}</div>
     <div class="library-membership"><strong>Project(s):</strong> ${projects}</div>
@@ -3026,7 +3033,7 @@ function captureCardHtml(c) {
       ${titleAction?`<button class="editlink edittitle" data-id="${c.id}" type="button">${titleAction}</button>`:''}
     </div>
     ${photoMarkerControls(c)}
-    ${c.photo_path ? `<img data-capture-photo="${c.id}" src="${capturePhotoSrc(c)}" alt="capture" />` : ''}
+    ${c.photo_path ? `<img data-capture-photo="${c.id}" loading="lazy" decoding="async" src="${captureThumbSrc(c)}" data-full-src="${capturePhotoSrc(c)}" alt="capture" />` : ''}
     ${window.PhotoComments?.enabled()&&c.photo_path?`<button class="btn secondary slim" data-html2canvas-ignore="true" data-comments-id="${c.id}">Comments</button>`:''}
     <div class="meta">${when}</div>
     ${c.job_name?`<div class="badge">${esc(c.job_number?c.job_number+' — '+c.job_name:c.job_name)}</div>`:''}
@@ -3105,7 +3112,7 @@ function openPhotoViewer(src,title='Photo'){
 }
 
 function installPhotoViewerButtons(root=document){
-  root.querySelectorAll('.card img').forEach(img=>{if(img.closest('.photo-viewer-modal,.library-photo-card')||img.nextElementSibling?.classList.contains('photo-viewer-button'))return;const button=document.createElement('button');button.type='button';button.className='btn secondary slim photo-viewer-button';button.textContent=img.closest('[data-reading-type="gauge"]')?'View':'View & Zoom';button.onclick=e=>{e.stopPropagation();const card=img.closest('.card'),title=card&&card.querySelector('.photo-title');openPhotoViewer(img.currentSrc||img.src,title&&title.textContent||img.alt||'Photo');};img.insertAdjacentElement('afterend',button);img.style.cursor='zoom-in';img.onclick=()=>button.click();});
+  root.querySelectorAll('.card img').forEach(img=>{if(img.closest('.photo-viewer-modal,.library-photo-card')||img.nextElementSibling?.classList.contains('photo-viewer-button'))return;const button=document.createElement('button');button.type='button';button.className='btn secondary slim photo-viewer-button';button.textContent=img.closest('[data-reading-type="gauge"]')?'View':'View & Zoom';button.onclick=e=>{e.stopPropagation();const card=img.closest('.card'),title=card&&card.querySelector('.photo-title');openPhotoViewer(img.dataset.fullSrc||img.currentSrc||img.src,title&&title.textContent||img.alt||'Photo');};img.insertAdjacentElement('afterend',button);img.style.cursor='zoom-in';img.onclick=()=>button.click();});
 }
 const photoViewerObserver=new MutationObserver(records=>{for(const record of records)for(const node of record.addedNodes)if(node.nodeType===1){installPhotoViewerButtons(node.matches&&node.matches('.card')?node:node);}});
 photoViewerObserver.observe(document.body,{childList:true,subtree:true});
@@ -3123,7 +3130,7 @@ function pairCardHtml(before, after, pair={}) {
         <input type="checkbox" class="capchk" value="${c.id}" style="width:18px;height:18px"> Select
       </label>
       <div class="phototitlewrap" data-id="${c.id}"><div class="photo-title">${esc(c.photo_title||'Untitled photo')}</div>${titleAction?`<button class="editlink edittitle" data-id="${c.id}" type="button">${titleAction}</button>`:''}</div>
-      ${c.photo_path ? `<img data-capture-photo="${c.id}" src="${capturePhotoSrc(c)}" alt="${label}" />` : ''}
+      ${c.photo_path ? `<img data-capture-photo="${c.id}" loading="lazy" decoding="async" src="${captureThumbSrc(c)}" data-full-src="${capturePhotoSrc(c)}" alt="${label}" />` : ''}
       <div class="rotaterow">${rotateButtons(c.id)}</div>
       ${badge ? `<div style="margin:4px 0">${badge}</div>` : ''}
       ${photoLocationHtml(c)}
@@ -3531,7 +3538,7 @@ function returnFromCrop(context=cropReturnContext){
 }
 function updateCroppedPhoto(context,capture,patch){
  Object.assign(capture,patch);capture._photoVersion=Date.now();delete capture._comparisonUrl;
- context.fragment.querySelectorAll(`[data-capture-photo="${capture.id}"]`).forEach(img=>{img.src=capturePhotoSrc(capture);});
+ context.fragment.querySelectorAll(`[data-capture-photo="${capture.id}"]`).forEach(img=>{img.src=captureThumbSrc(capture);img.dataset.fullSrc=capturePhotoSrc(capture);});
  const cropButton=context.fragment.querySelector(`.cropbtn[data-id="${capture.id}"]`);
  if(cropButton&&!context.fragment.querySelector(`.restorebtn[data-id="${capture.id}"]`)){const restore=document.createElement('button');restore.className='btn secondary slim restorebtn';restore.dataset.id=String(capture.id);restore.textContent='Restore Original Photo';restore.onclick=()=>restoreOriginal(capture.id);cropButton.after(restore);}
 }
@@ -4064,7 +4071,7 @@ function renderSendPhotoLibrary(){
   capBox.innerHTML = visible.length ? visible.map(c => `
     <article class="send-capture-row">
       <input type="checkbox" class="sendchk" value="${c.id}" aria-label="Select ${esc(c.photo_title || 'Photo Note')}" ${state.selectedIds.has(String(c.id)) ? 'checked' : ''}>
-      ${c.photo_path ? `<img loading="lazy" src="${capturePhotoSrc(c)}" alt="${esc(c.photo_title || 'Photo Note')}">` : '<span class="send-no-photo">Note</span>'}
+      ${c.photo_path ? `<img loading="lazy" decoding="async" src="${captureThumbSrc(c)}" alt="${esc(c.photo_title || 'Photo Note')}">` : '<span class="send-no-photo">Note</span>'}
       <span class="send-capture-details"><strong>${esc(c.photo_title || 'Untitled Photo')}</strong><small>${esc((c.area_tags || []).join(', ') || 'Unfiled')}</small><small>${esc(c.note || 'No notes')}</small></span>
       <button class="send-delete-capture" type="button" data-delete-capture="${c.id}">Delete Photo Note</button>
     </article>`).join('') : `<p class="empty">${uiT((window._sendCaptures||[]).length?'No Photo Notes match these filters.':'Nothing has been captured yet.')}</p>`;
@@ -4363,7 +4370,7 @@ function validateNewDocumentTitle(){readNewDocumentSetup();if(!newDocumentSetup.
 function wireNewDocumentSetup(){const sections=[...document.querySelectorAll('.new-document-settings details')];sections.forEach(section=>section.ontoggle=()=>{if(section.open)sections.forEach(other=>{if(other!==section)other.open=false;});});document.querySelectorAll('.new-document-setup input,.new-document-setup textarea,.new-document-setup select').forEach(el=>{if(el.id!=='documentSetupPreset'&&el.id!=='newDocumentTemplate')el.oninput=readNewDocumentSetup;});document.getElementById('documentSetupPreset').onchange=e=>{const p=documentPresets().find(p=>p.id===e.target.value);if(p){const title=newDocumentSetup.title,description=newDocumentSetup.description;newDocumentSetup={title,description,layout:structuredClone(p.layout)};renderGroups();}};document.getElementById('newDocumentTemplate').onchange=e=>newDocumentSetup.template=e.target.files[0]||null;const next=()=>{if(!validateNewDocumentTitle())return;documentCreateStep='photos';renderGroups();};document.getElementById('useDocumentSettings').onclick=next;document.getElementById('saveDefaultSettings').onclick=()=>{if(!validateNewDocumentTitle())return;writeDocumentSetting('default',{title:'',description:'',layout:structuredClone(newDocumentSetup.layout)});toast('Default document settings saved.');next();};document.getElementById('savePresetSettings').onclick=()=>{if(!validateNewDocumentTitle())return;const name=prompt(uiT('Preset name:'));if(!name?.trim())return;const rows=documentPresets();rows.push({id:crypto.randomUUID(),name:name.trim(),layout:structuredClone(newDocumentSetup.layout)});writeDocumentSetting('presets',rows);toast('Document settings preset saved.');next();};document.getElementById('cancelNewDocument').onclick=()=>{documentCreateStep='list';renderGroups();};}
 async function renderNewDocumentPhotos(){const body=document.getElementById('body');body.className='workflow-create';body.innerHTML=`<div class="create-heading"><h1>Choose Photos</h1></div><div class="document-photo-toolbar"><input id="newDocumentPhotoSearch" type="search" placeholder="Search PhotoNotes and details"><button class="btn secondary slim" id="selectAllDocumentPhotos">Select All</button><button class="btn secondary slim" id="clearDocumentPhotos">Clear All</button></div><div class="row"><div><label for="newDocumentTopic">Filter by Topic</label><select id="newDocumentTopic" disabled><option value="">All Topics</option></select></div><div><label for="newDocumentJob">Filter by Job</label><select id="newDocumentJob" disabled><option value="">All Jobs</option></select></div></div><div id="newDocumentPhotoList" class="document-source-photos"><p class="status">Loading PhotoNotes...</p></div><div class="new-document-final-actions"><button class="btn secondary" id="backDocumentSetup">Back to Document Setup</button><button class="btn" id="gcreate" disabled>Save New Document</button></div>`;document.getElementById('backDocumentSetup').onclick=()=>{documentCreateStep='setup';renderGroups();};document.getElementById('gcreate').onclick=createGroup;try{const r=await api('/api/captures');if(!r.ok)throw Error();newDocumentPhotos=(await r.json()).filter(p=>p.photo_path);const topics=[...new Set(newDocumentPhotos.flatMap(p=>p.area_tags||[]))].sort((a,b)=>a.localeCompare(b));const jobs=[...new Map(newDocumentPhotos.filter(p=>p.job_id!=null).map(p=>[String(p.job_id),p.job_name||'Job '+p.job_id])).entries()].sort((a,b)=>a[1].localeCompare(b[1]));const topic=document.getElementById('newDocumentTopic'),job=document.getElementById('newDocumentJob');topic.innerHTML='<option value="">All Topics</option>'+topics.map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join('');job.innerHTML='<option value="">All Jobs</option>'+jobs.map(([id,name])=>`<option value="${esc(id)}">${esc(name)}</option>`).join('');topic.value=newDocumentPhotoTopic;job.value=newDocumentPhotoJob;if(!topic.value)newDocumentPhotoTopic='';if(!job.value)newDocumentPhotoJob='';topic.disabled=false;job.disabled=false;topic.onchange=()=>{newDocumentPhotoTopic=topic.value;renderNewDocumentPhotoList();};job.onchange=()=>{newDocumentPhotoJob=job.value;renderNewDocumentPhotoList();};if(!newDocumentPhotoIds.size)for(const id of state.selectedIds)newDocumentPhotoIds.add(String(id));renderNewDocumentPhotoList();document.getElementById('newDocumentPhotoSearch').oninput=renderNewDocumentPhotoList;document.getElementById('selectAllDocumentPhotos').onclick=()=>{for(const p of visibleNewDocumentPhotos())newDocumentPhotoIds.add(String(p.id));renderNewDocumentPhotoList();};document.getElementById('clearDocumentPhotos').onclick=()=>{newDocumentPhotoIds.clear();renderNewDocumentPhotoList();};}catch{document.getElementById('newDocumentPhotoList').innerHTML='<p class="status">PhotoNotes could not be loaded. Return and try again.</p>';}}
 function visibleNewDocumentPhotos(){const q=document.getElementById('newDocumentPhotoSearch')?.value.toLowerCase()||'';return newDocumentPhotos.filter(p=>(!newDocumentPhotoTopic||(p.area_tags||[]).includes(newDocumentPhotoTopic))&&(!newDocumentPhotoJob||String(p.job_id)===newDocumentPhotoJob)&&`${p.photo_title||''} ${p.note||''} ${p.address||''}`.toLowerCase().includes(q));}
-function renderNewDocumentPhotoList(){const box=document.getElementById('newDocumentPhotoList');if(!box)return;const photos=visibleNewDocumentPhotos();box.innerHTML=photos.length?photos.map(p=>`<label class="document-source-photo"><input type="checkbox" data-document-source-photo="${p.id}"${newDocumentPhotoIds.has(String(p.id))?' checked':''}><img loading="lazy" src="${capturePhotoSrc(p)}" alt="${esc(p.photo_title||'PhotoNote')}"><span><strong>${esc(p.photo_title||'PhotoNote')}</strong><br>${esc(p.note||'')}</span></label>`).join(''):'<p class="empty">No PhotoNotes match this search.</p>';box.querySelectorAll('[data-document-source-photo]').forEach(input=>input.onchange=()=>{if(input.checked)newDocumentPhotoIds.add(input.dataset.documentSourcePhoto);else newDocumentPhotoIds.delete(input.dataset.documentSourcePhoto);updateNewDocumentSave();});updateNewDocumentSave();}
+function renderNewDocumentPhotoList(){const box=document.getElementById('newDocumentPhotoList');if(!box)return;const photos=visibleNewDocumentPhotos();box.innerHTML=photos.length?photos.map(p=>`<label class="document-source-photo"><input type="checkbox" data-document-source-photo="${p.id}"${newDocumentPhotoIds.has(String(p.id))?' checked':''}><img loading="lazy" decoding="async" src="${captureThumbSrc(p)}" alt="${esc(p.photo_title||'PhotoNote')}"><span><strong>${esc(p.photo_title||'PhotoNote')}</strong><br>${esc(p.note||'')}</span></label>`).join(''):'<p class="empty">No PhotoNotes match this search.</p>';box.querySelectorAll('[data-document-source-photo]').forEach(input=>input.onchange=()=>{if(input.checked)newDocumentPhotoIds.add(input.dataset.documentSourcePhoto);else newDocumentPhotoIds.delete(input.dataset.documentSourcePhoto);updateNewDocumentSave();});updateNewDocumentSave();}
 function updateNewDocumentSave(){const button=document.getElementById('gcreate');if(button)button.disabled=documentCreationPending||!newDocumentPhotoIds.size;}
 async function createGroup(){if(documentCreationPending||!newDocumentSetup?.title.trim()||!newDocumentPhotoIds.size)return;const btn=document.getElementById('gcreate');documentCreationPending=true;btn.disabled=true;try{const r=await api('/api/groups',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:newDocumentSetup.title.trim(),description:newDocumentSetup.description.trim(),ids:[...newDocumentPhotoIds],layout:newDocumentSetup.layout})});const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.error||'Could not save document');if(newDocumentSetup.template){const fd=new FormData();fd.append('template',newDocumentSetup.template);fd.append('group',String(d.id));await api('/api/document-settings/template',{method:'POST',body:fd});}state.selectedIds.clear();newDocumentPhotoIds.clear();state.groups=null;state.groupId=d.id;documentCreateStep='list';toast('New document saved.');renderGroups();}catch(e){toast(e.message||'Could not save document');}finally{documentCreationPending=false;if(btn.isConnected)updateNewDocumentSave();}}
 async function loadGroups(){const list=document.getElementById('glist');if(!list)return;const r=await api('/api/groups');if(!r.ok){list.innerHTML='<p class="status">Could not load documents.</p>';return;}state.groups=await r.json();if(list.isConnected)renderGroupCards(list,state.groups);}
@@ -4968,14 +4975,14 @@ async function groupExport() {
   for (const f of fmts) {
     try {
       const r = await api(`/api/export/${f}?group=${state.groupId}&res=${imgRes}&fmt=${imgFmt}${window.PhotoNotesExportPresets?.query()||''}`);
-      if (!r.ok) throw new Error('bad');
+      if (!r.ok) throw new Error(r.status === 503 ? EXPORT_BUSY : 'bad');
       const blob = await r.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a'); a.href = url; a.download = names[f];
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 1500);
       await new Promise(res => setTimeout(res, 500));
-    } catch (e) { toast('Export failed for ' + f); }
+    } catch (e) { toast(e.message === EXPORT_BUSY ? EXPORT_BUSY : 'Export failed for ' + f); }
   }
   btn.disabled = false; btn.textContent = 'Download Selected Formats';
   toast('Download ready');
@@ -4988,14 +4995,14 @@ async function exportProposal(doc) {
   if (btn) { btn.disabled = true; btn.textContent = 'Building...'; }
   try {
     const r = await api(`/api/export/proposal?group=${state.groupId}&doc=${doc}&res=${imgRes}&fmt=${imgFmt}`);
-    if (!r.ok) throw new Error('bad');
+    if (!r.ok) throw new Error(r.status === 503 ? EXPORT_BUSY : 'bad');
     const blob = await r.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a'); a.href = url; a.download = doc === 'pdf' ? 'proposal.pdf' : 'proposal.docx';
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1500);
     toast('Proposal ready');
-  } catch (e) { toast('Proposal export failed'); }
+  } catch (e) { toast(e.message === EXPORT_BUSY ? EXPORT_BUSY : 'Proposal export failed'); }
   finally { if (btn) { btn.disabled = false; btn.textContent = doc === 'pdf' ? 'Proposal PDF' : 'Proposal Word'; } }
 }
 
