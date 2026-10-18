@@ -46,6 +46,6 @@ async function main(){
    if(crypto.createHash('sha256').update(live).digest('hex')!==crypto.createHash('sha256').update(expected).digest('hex'))throw new Error('Live app does not match the deployed commit');
    body.management_status='ready_to_test';body.deployed_commit=deployed;body.verification+=`\nVerified Railway deployment ${latest.id}: SUCCESS; fix is contained in ${deployed}; live health and app bundle match.`;
  }else if(body.management_status==='ready_to_test')throw new Error('Use ready to verify deployment before requesting a retest');
- const result=await(await request(`/api/automation/issues/${id}`,body)).json();if(['blocked','ready_to_test'].includes(body.management_status))fs.rmSync(claimPath(),{force:true});console.log(JSON.stringify(result));
+ const result=await(await request(`/api/automation/issues/${id}`,body)).json();if(['blocked','ready_to_test','wont_fix'].includes(body.management_status))fs.rmSync(claimPath(),{force:true});console.log(JSON.stringify(result));
 }
 main().catch(e=>{console.error(e.message||'Issue agent failed');process.exitCode=1;});

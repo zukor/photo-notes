@@ -22,3 +22,11 @@ test('developer investigation reviews remain holds rather than fabricated repair
  assert.doesNotThrow(()=>validateRepairUpdate({management_status:'blocked',blocked_kind:'developer',blocked_reason:'Investigation needs original-device evidence',investigation_review:true}));
  for(const management_status of ['ready_to_test','reviewing','fixing'])assert.throws(()=>validateRepairUpdate({management_status,blocked_kind:'developer',blocked_reason:'Review',investigation_review:true}));
 });
+
+test('the worker can close a non-issue only with a written reason, and still never resolves',()=>{
+ const {validateRepairUpdate}=require('../issue-repair');
+ const fields=validateRepairUpdate({management_status:'wont_fix',close_reason:'Tester dictation practice note, not a report of a problem.'});
+ assert.match(fields.admin_notes,/^Closed by the repair worker: Tester dictation practice note/);
+ assert.throws(()=>validateRepairUpdate({management_status:'wont_fix',close_reason:'test'}),/30 to 2000/);
+ assert.throws(()=>validateRepairUpdate({management_status:'resolved',close_reason:'Tester dictation practice note, not a report of a problem.'}));
+});
