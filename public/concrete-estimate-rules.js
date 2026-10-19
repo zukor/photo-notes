@@ -1,10 +1,11 @@
 // Concrete Pro estimating: measured-area geometry, quantity takeoff, pricing, options and bid versus actual.
 // Shared by the server (proposals, exports) and the app (live totals).
 (function (root, factory) {
-  const api = factory();
+  const geo = typeof module === 'object' && module.exports ? require('./geo-measure.js') : root.PhotoNotesGeoMeasure;
+  const api = factory(geo);
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.PhotoNotesConcreteEstimate = api;
-})(typeof self !== 'undefined' ? self : this, function () {
+})(typeof self !== 'undefined' ? self : this, function (GEO) {
   'use strict';
   const num = v => { if (v === '' || v == null) return null; const n = Number(String(v).replace(/,/g, '')); return Number.isFinite(n) ? n : null; };
   const r = (v, d = 2) => v == null || !Number.isFinite(v) ? null : Math.round(v * 10 ** d) / 10 ** d;
@@ -45,6 +46,7 @@
     { id: 'tape', label: 'Tape measure', confidence: 'High', contingency_pct: 0 },
     { id: 'card', label: 'Measuring card photo', confidence: 'Good', contingency_pct: 2 },
     { id: 'plans', label: 'From plans', confidence: 'Good', contingency_pct: 3 },
+    { id: 'photo_ref', label: 'Photo with a known length', confidence: 'Fair', contingency_pct: 10 },
     { id: 'entered', label: 'Entered without measuring', confidence: 'Fair', contingency_pct: 5 },
     { id: 'map_checked', label: 'Satellite map, checked with a tape', confidence: 'Good', contingency_pct: 3 },
     { id: 'map', label: 'Satellite map outline', confidence: 'Rough', contingency_pct: 10 }
@@ -72,8 +74,10 @@
       notes: ['City of Kyle driveway approach: 5 in minimum, 3,000 psi, #3 bars at 18 in on chairs at mid-depth, 2 in sand bedding.', 'Wire mesh and fiber are not allowed in the right-of-way.', 'A center joint is required on drives wider than 12 ft.', 'Right-of-way inspection before the pour.'], permit: true },
     { id: 'westu', label: 'West University Place, TX (driveway)', spec: { thickness_in: 6, reinforcement: { type: 'rebar', bar: '#4', spacing_in: 18 }, base_in: 2 },
       notes: ['West University Place: 6 in, #4 bars at 18 in maximum on 2 in chairs.', '2 in select base (PI 7 to 20) compacted to 95%.', '3/4 in redwood expansion joints every 20 ft maximum and at curbs and hydrants.', 'Maximum driveway grade 12%.'], permit: true },
-    { id: 'sanantonio', label: 'San Antonio, TX (permit steps only)', spec: {},
-      notes: ['A new or widened driveway needs a Development Services permit; a new or changed curb cut also needs a right-of-way permit.', 'Inspections at the approach before paving and at final.', 'Thickness and reinforcement are not preset: confirm the current city standard detail with Development Services.'], permit: true }
+    { id: 'sanantonio', label: 'San Antonio, TX (residential driveway)', spec: { thickness_in: 5, reinforcement: { type: 'rebar', bar: '#3', spacing_in: 12 }, base_in: 2 },
+      notes: ['San Antonio residential driveway (city Concrete Driveway Standards, Item 503.1): 5 in Class A concrete, #3 bars 12 in apart both ways (or 6x6 W/D5 wire mesh), over 2 in minimum flexible or cement-treated base.', 'Residential driveway width 10 to 20 ft at the property line. Slope 14% maximum.', 'Dummy joints line up with the sidewalk joints; two smooth dowel bars (3/4 in by 18 in, 18 in apart) at each expansion joint.', 'A new or widened driveway needs a Development Services permit; a new or changed curb cut also needs a right-of-way permit. The city drawing is dated 2009, so confirm it is current.'], permit: true },
+    { id: 'sanantonio_com', label: 'San Antonio, TX (commercial driveway)', spec: { thickness_in: 6, reinforcement: { type: 'rebar', bar: '#4', spacing_in: 12 }, base_in: 2 },
+      notes: ['San Antonio commercial driveway (city Concrete Driveway Standards, Item 503.2): 6 in Class A concrete, #4 bars 12 in apart both ways (or 6x6 W/D10 wire mesh), over 2 in minimum base.', 'Width 12 to 20 ft one way, 24 to 30 ft two way. Slope 14% maximum.', 'Development Services and right-of-way permits required. The city drawing is dated 2009, so confirm it is current.'], permit: true }
   ];
 
   // ---------- Specification choices ----------
@@ -95,6 +99,7 @@
     ['rebar_lf', 'Rebar, supplied and placed', 'per linear foot'], ['chair_ea', 'Rebar chairs', 'each'], ['mesh_sheet', 'Wire mesh', 'per 5 x 10 ft sheet'], ['fiber_lb', 'Fiber', 'per pound'],
     ['forms_lf', 'Forms set and stripped', 'per linear foot'], ['base_cy', 'Base material placed and compacted', 'per cubic yard'], ['vapor_sf', 'Vapor barrier', 'per square foot'],
     ['labor_place_sf', 'Place and broom finish', 'per square foot'], ['finish_exposed_sf', 'Exposed aggregate (added to broom)', 'per square foot'], ['finish_colored_sf', 'Color (added to broom)', 'per square foot'], ['finish_stamped_sf', 'Stamping (added to broom)', 'per square foot'],
+    ['crack_repair_lf', 'Crack repair (rout and seal)', 'per linear foot'], ['resurface_sf', 'Resurface existing concrete', 'per square foot'],
     ['sawcut_lf', 'Saw-cut control joints', 'per linear foot'], ['isolation_lf', 'Isolation or expansion joints', 'per linear foot'], ['sealer_sf', 'Cure and seal', 'per square foot'],
     ['demo_sf', 'Remove existing concrete, unreinforced', 'per square foot'], ['demo_reinforced_sf', 'Remove existing concrete, reinforced', 'per square foot'], ['haul_ton', 'Haul-off and disposal', 'per ton'],
     ['buggy_pour', 'Buggy placement', 'per pour'], ['pump_line_pour', 'Line pump', 'per pour (minimum charge)'], ['pump_boom_pour', 'Boom pump', 'per pour (minimum charge)'],
@@ -109,7 +114,59 @@
   // spec: thickness_in, reinforcement {type, bar, spacing_in, fiber_lb_cy}, base_in, vapor, joints (true for saw-cut layout),
   // isolation_lf, formless_lf, demo {sqft, thickness_in, reinforced}, placement, pours, miles, weekend, sealer, permit, mobilizations.
   function controlJointSpacing(thickness) { return Math.min(15, Math.max(4, 2.5 * thickness)); }
+  // The area's outline in feet for drawing and joint layout: from the satellite trace, or from the shape and its sizes.
+  function planOutline(a = {}) {
+    const g = a.geometry || {};
+    if (Array.isArray(g.points) && g.points.length >= 3 && GEO) { const xy = GEO.toPlan(g.points), k = Number(g.scale) || 1; return xy ? xy.map(p => ({ x: p.x * k, y: p.y * k })) : null; }
+    if (g.photo && a.repair_kind !== 'crack') { const pm = photoMeasure(g.photo); if (pm.ok && pm.outline_ft) return pm.outline_ft; }
+    const d = a.dims || {}, f = k => parseFeet(d[k]);
+    if (a.shape === 'rect') { const L = f('length'), W = f('width'); return L > 0 && W > 0 ? [{ x: 0, y: 0 }, { x: L, y: 0 }, { x: L, y: W }, { x: 0, y: W }] : null; }
+    if (a.shape === 'l') { const L = f('length'), W = f('width'), nl = f('notch_length') || 0, nw = f('notch_width') || 0; return L > 0 && W > 0 ? [{ x: 0, y: 0 }, { x: L, y: 0 }, { x: L, y: W - nw }, { x: L - nl, y: W - nw }, { x: L - nl, y: W }, { x: 0, y: W }] : null; }
+    if (a.shape === 'circle') { const D = f('diameter'); if (!(D > 0)) return null; return [...Array(48).keys()].map(i => ({ x: D / 2 + D / 2 * Math.cos(i * Math.PI / 24), y: D / 2 + D / 2 * Math.sin(i * Math.PI / 24) })); }
+    return null;
+  }
+  // A repair traced on a photo. Points and the two scale points are fractions (0 to 1) of the photo's width and height;
+  // image is the photo's size in pixels; ref_ft is the real length between the two scale points.
+  // kind 'replace' or 'resurface' is an outline (area); 'crack' is a line (length).
+  function photoMeasure(m = {}) {
+    const W = Number(m.image && m.image.w), H = Number(m.image && m.image.h), refFt = Number(m.ref_ft);
+    const px = list => (Array.isArray(list) ? list : []).map(p => ({ x: Number(p && p.x), y: Number(p && p.y) })).filter(p => p.x >= 0 && p.x <= 1 && p.y >= 0 && p.y <= 1).map(p => ({ x: p.x * W, y: p.y * H }));
+    if (!(W > 0 && H > 0)) return { ok: false, error: 'The photo size is missing.' };
+    const ref = px(m.ref);
+    if (ref.length !== 2 || !(refFt > 0)) return { ok: false, error: 'Set the scale: tap both ends of something with a known length and enter that length.' };
+    const refPx = Math.hypot(ref[1].x - ref[0].x, ref[1].y - ref[0].y);
+    if (refPx < 20) return { ok: false, error: 'The two scale points are too close together. Use a longer known length.' };
+    const k = refFt / refPx, pts = px(m.points), kind = ['replace', 'resurface', 'crack'].includes(m.kind) ? m.kind : 'replace';
+    const ft = pts.map(p => ({ x: p.x * k, y: p.y * k }));
+    if (kind === 'crack') {
+      if (ft.length < 2) return { ok: false, error: 'Tap along the crack: at least two points.' };
+      let L = 0; for (let i = 1; i < ft.length; i++) L += Math.hypot(ft[i].x - ft[i - 1].x, ft[i].y - ft[i - 1].y);
+      return { ok: L > 0, kind, length_ft: r(L, 1), ft_per_px: k, outline_ft: ft };
+    }
+    if (ft.length < 3) return { ok: false, error: 'Tap at least three corners around the damaged area.' };
+    let A = 0, P = 0; for (let i = 0; i < ft.length; i++) { const a = ft[i], b = ft[(i + 1) % ft.length]; A += a.x * b.y - b.x * a.y; P += Math.hypot(b.x - a.x, b.y - a.y); }
+    A = Math.abs(A) / 2;
+    return { ok: A > 0, kind, area_sqft: r(A, 1), perimeter_ft: r(P, 1), ft_per_px: k, outline_ft: ft };
+  }
+  function jointLayout(a, thickness) { const xy = planOutline(a); return xy && GEO ? GEO.jointLayoutXY(xy, controlJointSpacing(thickness)) : null; }
+  // A plan drawing of one area with its control joints dashed, for the app and the proposal.
+  function planSvg(a, thickness, size = 360) {
+    const xy = planOutline(a); if (!xy) return null;
+    const layout = GEO ? GEO.jointLayoutXY(xy, controlJointSpacing(thickness)) : { segments: [] };
+    const minX = Math.min(...xy.map(p => p.x)), maxX = Math.max(...xy.map(p => p.x)), minY = Math.min(...xy.map(p => p.y)), maxY = Math.max(...xy.map(p => p.y));
+    const w = maxX - minX || 1, h = maxY - minY || 1, pad = 40, sc = (size - 2 * pad) / Math.max(w, h), W = Math.max(size, Math.round(w * sc + 2 * pad)), H = Math.round(h * sc + 2 * pad + 28);
+    const P = p => `${(pad + (p.x - minX) * sc).toFixed(1)},${(pad + (p.y - minY) * sc).toFixed(1)}`;
+    const esc = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+    const sp = r(controlJointSpacing(thickness), 1);
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(a.name || 'Area')} plan with control joints"><rect width="${W}" height="${H}" fill="#fff"/>`
+      + `<polygon points="${xy.map(P).join(' ')}" fill="#e8e8e8" stroke="#000" stroke-width="3"/>`
+      + layout.segments.map(([p, q]) => `<line x1="${P(p).split(',')[0]}" y1="${P(p).split(',')[1]}" x2="${P(q).split(',')[0]}" y2="${P(q).split(',')[1]}" stroke="#000" stroke-width="2" stroke-dasharray="8 6"/>`).join('')
+      + `<text x="${(pad + w * sc / 2).toFixed(1)}" y="${pad - 12}" text-anchor="middle" font-family="Arial" font-size="15" fill="#000">${esc(formatFeet(w))}</text>`
+      + `<text x="${pad - 10}" y="${(pad + h * sc / 2).toFixed(1)}" text-anchor="middle" font-family="Arial" font-size="15" fill="#000" transform="rotate(-90 ${pad - 10} ${(pad + h * sc / 2).toFixed(1)})">${esc(formatFeet(h))}</text>`
+      + `<text x="${pad}" y="${H - 10}" font-family="Arial" font-size="14" fill="#000">${esc(a.name || 'Area')}: dashed lines are control joints, about ${sp} ft apart.</text></svg>`;
+  }
   function jointLength(a, thickness) {
+    const lay = jointLayout(a, thickness); if (lay) return lay.length_ft;
     const g = geometry(a); if (!g.ok) return 0;
     const sp = controlJointSpacing(thickness);
     if ((a.shape === 'rect') && g.length_ft && g.width_ft) {
@@ -124,8 +181,12 @@
     const reinf = spec.reinforcement || { type: 'none' };
     let area = 0, perimeter = 0, placed = 0, contingencyArea = 0, jointLf = 0, worst = null;
     const detail = [];
+    let crackLf = 0, resurfaceSf = 0, replaceDemo = [];
     for (const a of areas) {
+      if (a.repair_kind === 'crack') { const lf = num(a.repair_lf); if (lf > 0) { crackLf += lf; detail.push({ id: a.id, name: a.name, repair: 'crack', length_ft: lf, method: (METHODS.find(x => x.id === a.method) || {}).label || a.method }); } continue; }
       const g = geometry(a); if (!g.ok) { warnings.push(`${a.name || 'An area'} has no valid size and is left out.`); continue; }
+      if (a.repair_kind === 'resurface') { resurfaceSf += g.area_sqft; detail.push({ id: a.id, name: a.name, repair: 'resurface', area_sqft: g.area_sqft, method: (METHODS.find(x => x.id === a.method) || {}).label || a.method }); continue; }
+      if (a.repair_kind === 'replace') replaceDemo.push({ sqft: g.area_sqft, thickness: num(a.thickness_in) || num(spec.thickness_in) || 4 });
       const th = num(a.thickness_in) || num(spec.thickness_in) || 4;
       let cy = g.area_sqft * th / 324;
       const e = a.edge || {}, edgeDepth = num(e.depth_in), edgeWidth = num(e.width_in);
@@ -133,11 +194,18 @@
       const m = METHODS.find(x => x.id === a.method) || METHODS.find(x => x.id === 'entered');
       if (!worst || m.contingency_pct > worst.contingency_pct) worst = m;
       const cont = m.contingency_pct / 100;
-      area += g.area_sqft; perimeter += g.perimeter_ft || 0; placed += cy * (1 + cont); contingencyArea += g.area_sqft * cont;
+      // A replacement patch is saw-cut out of existing concrete, so its edges need no forms.
+      area += g.area_sqft; if (a.repair_kind !== 'replace') perimeter += g.perimeter_ft || 0; placed += cy * (1 + cont); contingencyArea += g.area_sqft * cont;
       if (spec.joints !== false) jointLf += jointLength(a, th);
-      detail.push({ id: a.id, name: a.name, area_sqft: g.area_sqft, perimeter_ft: g.perimeter_ft, thickness_in: th, cubic_yards: r(cy), method: m.label, confidence: m.confidence, contingency_pct: m.contingency_pct });
+      detail.push({ id: a.id, name: a.name, repair: a.repair_kind === 'replace' ? 'replace' : undefined, area_sqft: g.area_sqft, perimeter_ft: g.perimeter_ft, thickness_in: th, cubic_yards: r(cy), method: m.label, confidence: m.confidence, contingency_pct: m.contingency_pct });
     }
     const add = (key, label, placedQty, unit, purchaseQty, note) => lines.push({ key, label, unit, placed: r(placedQty), purchase: r(purchaseQty == null ? placedQty : purchaseQty), note: note || null });
+    if (!area && (crackLf || resurfaceSf)) {
+      if (crackLf) add('crack_repair_lf', 'Crack repair (rout and seal)', crackLf, 'linear feet', s.round_up ? up(crackLf) : crackLf);
+      if (resurfaceSf) add('resurface_sf', 'Resurface existing concrete', resurfaceSf, 'square feet', s.round_up ? up(resurfaceSf) : resurfaceSf);
+      add('mobilization_ea', 'Mobilization', num(spec.mobilizations) || 1, 'trips');
+      return { ok: true, area_sqft: r(resurfaceSf, 1), perimeter_ft: 0, placed_cy: 0, purchase_cy: 0, lines, warnings, areas: detail, settings: s, confidence: null };
+    }
     if (!area) return { ok: false, area_sqft: 0, lines, warnings: warnings.concat('Add at least one measured area.'), areas: detail };
     const adjArea = area + contingencyArea;
     const cyPurchase = s.round_up ? up(placed * (1 + s.concrete_waste_pct / 100)) : r(placed * (1 + s.concrete_waste_pct / 100));
@@ -162,6 +230,14 @@
     if (jointLf > 0) add('sawcut_lf', 'Saw-cut control joints', jointLf, 'linear feet', null, `Spacing about ${r(controlJointSpacing(num(spec.thickness_in) || 4), 1)} ft (2.5 times the thickness in inches, 15 ft maximum).`);
     if (num(spec.isolation_lf) > 0) add('isolation_lf', 'Isolation or expansion joints', num(spec.isolation_lf), 'linear feet', null, 'Where the slab meets the building, curbs, poles or other fixed objects.');
     if (spec.sealer) add('sealer_sf', 'Cure and seal', adjArea, 'square feet');
+    if (crackLf) add('crack_repair_lf', 'Crack repair (rout and seal)', crackLf, 'linear feet', s.round_up ? up(crackLf) : crackLf);
+    if (resurfaceSf) add('resurface_sf', 'Resurface existing concrete', resurfaceSf, 'square feet', s.round_up ? up(resurfaceSf) : resurfaceSf);
+    // Areas marked "remove and replace" include removing the damaged concrete, at the area's thickness.
+    for (const d of replaceDemo) {
+      const tons = d.sqft * d.thickness / 324 * s.concrete_tons_per_cy;
+      add('demo_sf', `Remove damaged concrete for replacement, ${d.thickness} in`, d.sqft, 'square feet', s.round_up ? up(d.sqft) : d.sqft);
+      add('haul_ton', 'Haul-off and disposal', tons, 'tons', s.round_up ? up(tons) : tons);
+    }
     const demo = spec.demo || {}, dsf = num(demo.sqft);
     if (dsf > 0) {
       const dth = num(demo.thickness_in) || 4, tons = dsf * dth / 324 * s.concrete_tons_per_cy;
@@ -239,5 +315,5 @@
     return { jobs: vals.length, average_waste_pct: r(avg, 1), suggested_pct: Math.max(0, up(avg)) };
   }
 
-  return { parseFeet, formatFeet, SHAPES, METHODS, geometry, CITY_PRESETS, FINISHES, REINFORCEMENT, PLACEMENT, PRICE_ITEMS, EXAMPLE_PRICES, DEFAULT_SETTINGS, controlJointSpacing, jointLength, takeoff, price, priceOptions, describe, CHECKLIST, checklistStatus, compareActual, suggestedWaste };
+  return { parseFeet, formatFeet, SHAPES, METHODS, geometry, photoMeasure, planOutline, jointLayout, planSvg, CITY_PRESETS, FINISHES, REINFORCEMENT, PLACEMENT, PRICE_ITEMS, EXAMPLE_PRICES, DEFAULT_SETTINGS, controlJointSpacing, jointLength, takeoff, price, priceOptions, describe, CHECKLIST, checklistStatus, compareActual, suggestedWaste };
 });

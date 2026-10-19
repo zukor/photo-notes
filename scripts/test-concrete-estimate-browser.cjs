@@ -63,6 +63,30 @@ const assert = require('node:assert/strict'), jwt = require('jsonwebtoken'), { c
     await page.locator('#cestSave').click(); await page.waitForFunction(() => /Saved\./.test(document.getElementById('cestStatusLine').textContent));
     const saved = (await pool.query("SELECT checklist, options FROM concrete_estimates WHERE kind='detailed'")).rows[0];
     assert.equal(saved.checklist.access.answer, 'Gate is 12 ft wide, no overhead lines'); assert.equal(saved.options.length, 3);
+    // Plan and Control Joints drawn for the driveway.
+    await page.locator('[data-cest-plan]').first().click();
+    assert.match(await page.locator('.cest-plan svg').first().getAttribute('aria-label'), /control joints/);
+    assert.ok(await page.locator('.cest-plan svg line').count() > 0, 'joint lines drawn');
+
+    // Measure Repair on a Photo: a 1000 by 800 job photo, 200 px is 2 ft, a 4 ft by 2 ft broken panel.
+    const sharp = require('sharp'), fs = require('fs'), path = require('path'); fs.mkdirSync(process.env.UPLOAD_DIR, { recursive: true });
+    fs.writeFileSync(path.join(process.env.UPLOAD_DIR, 'crack.jpg'), await sharp({ create: { width: 1000, height: 800, channels: 3, background: '#9a9a9a' } }).jpeg().toBuffer());
+    await pool.query("INSERT INTO captures(user_id,job_id,photo_path,note) VALUES($1,$2,'/uploads/crack.jpg','Broken panel')", [user, job]);
+    await page.locator('#cestRepair').click();
+    await page.locator('[data-cest-repair-photo]').first().click();
+    await page.waitForFunction(() => { const i = document.getElementById('roImg'); return i && i.complete && i.naturalWidth === 1000; }, null, { timeout: 8000 }).catch(async e => { console.log('DEBUG', await page.evaluate(() => ({ ro: !!document.getElementById('repairOutline'), src: document.getElementById('roImg') && document.getElementById('roImg').src, nw: document.getElementById('roImg') && document.getElementById('roImg').naturalWidth, pick: document.getElementById('cestRepairPhotos').innerHTML.slice(0, 300) }))); throw e; });
+    const tapImg = async (fx, fy) => { const b = await page.locator('#roImg').boundingBox(); await page.mouse.click(b.x + b.width * fx, b.y + b.height * fy); };
+    await page.locator('#roName').fill('Broken panel');
+    await tapImg(0.1, 0.5); await tapImg(0.3, 0.5);
+    await page.locator('#roRefFt').fill('2 ft'); await page.locator('#roTraceMode').click();
+    for (const [x, y] of [[0.4, 0.25], [0.8, 0.25], [0.8, 0.5], [0.4, 0.5]]) await tapImg(x, y);
+    const measured = Number((await page.locator('#roResult').innerText()).match(/([\d.]+) sq ft/)[1]);
+    assert.ok(Math.abs(measured - 8) < 0.3, 'about 8 sq ft: ' + measured);
+    await page.locator('#roSave').click();
+    await page.waitForFunction(() => !document.getElementById('repairOutline') && /Remove and replace/.test(document.getElementById('cestAreas').innerText), null, { timeout: 15000 });
+    await page.waitForFunction(() => /Remove damaged concrete/.test(document.getElementById('cestResults').textContent), null, { timeout: 15000 });
+    const rep = (await pool.query("SELECT repair_kind, method, capture_id FROM concrete_areas WHERE name='Broken panel'")).rows[0];
+    assert.equal(rep.repair_kind, 'replace'); assert.equal(rep.method, 'photo_ref'); assert.ok(rep.capture_id);
     assert.deepEqual(errors, []);
     console.log('concrete-estimate-browser PASS');
   } finally { await browser.close(); server.close(); await pool.end(); }

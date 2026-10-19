@@ -2,6 +2,7 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
+const sharp = require('sharp');
 const E = require('./public/concrete-estimate-rules.js');
 
 const text = (v, max = 300) => { if (v == null) return null; const s = String(v).trim(); return s ? s.slice(0, max) : null; };
@@ -104,7 +105,15 @@ function register(app, { pool, requireAuth, requireConcrete, upload, logEvent, o
   });
   async function saveArea(req, res, id) {
     try {
-      const b = req.body || {}, a = cleanArea(b);
+      const b = req.body || {};
+      if (id) {
+        const prev = (await pool.query(`SELECT repair_kind FROM concrete_areas WHERE id=$1 AND user_id=$2 AND status='saved'`, [id, req.user.id])).rows[0];
+        if (prev && prev.repair_kind === 'crack') {
+          const row = (await pool.query(`UPDATE concrete_areas SET name=COALESCE($3,name),notes=$4,updated_at=now() WHERE id=$1 AND user_id=$2 RETURNING *`, [id, req.user.id, text(b.name, 120), text(b.notes, 2000)])).rows[0];
+          return res.json({ ok: true, area: row });
+        }
+      }
+      const a = cleanArea(b);
       if (id) {
         const row = (await pool.query(`UPDATE concrete_areas SET name=$3,shape=$4,dims=$5,cutouts=$6,edge=$7,thickness_in=$8,method=$9,area_sqft=$10,perimeter_ft=$11,notes=$12,updated_at=now() WHERE id=$1 AND user_id=$2 AND status='saved' RETURNING *`,
           [id, req.user.id, a.name, a.shape, JSON.stringify(a.dims), JSON.stringify(a.cutouts), JSON.stringify(a.edge), a.thickness_in, a.method, a.area_sqft, a.perimeter_ft, a.notes])).rows[0];
@@ -157,6 +166,42 @@ function register(app, { pool, requireAuth, requireConcrete, upload, logEvent, o
       logEvent(req.user.id, 'concrete_area_import', { rows: saved.length });
       res.json({ ok: true, areas: saved });
     } catch (e) { fail(res, e, 'concrete.areas.import', 'The takeoff could not be imported.'); }
+  });
+
+  // Photos on the job to choose from for Measure Repair Area.
+  app.get('/api/concrete/repairs/photos', ...guard, async (req, res) => {
+    try {
+      const job = await jobOrThrow(req.user.id, req.query.job_id);
+      const rows = (await pool.query(`SELECT id, photo_path, note, created_at FROM captures WHERE user_id=$1 AND job_id=$2 AND photo_path IS NOT NULL ORDER BY created_at DESC LIMIT 60`, [req.user.id, job])).rows;
+      res.json({ photos: rows });
+    } catch (e) { fail(res, e, 'concrete.repairs.photos', 'Photos could not be loaded.'); }
+  });
+  // A repair measured on a job photo: the damaged area to replace or resurface, or a crack to rout and seal.
+  // The scale comes from two points a known distance apart (a tape, a joint spacing, or the measuring card).
+  app.post('/api/concrete/repairs', ...guard, async (req, res) => {
+    try {
+      const b = req.body || {};
+      const cap = (await pool.query('SELECT id, job_id, photo_path FROM captures WHERE id=$1 AND user_id=$2', [Number(b.capture_id), req.user.id])).rows[0];
+      if (!cap) return res.status(404).json({ error: 'Photo not found.' });
+      if (!cap.job_id) return res.status(400).json({ error: 'Add this photo to a job first, so the repair can go into that job\'s estimate.' });
+      const local = localPhoto(cap.photo_path), dims = local ? await imageDims(local) : null;
+      if (!dims) return res.status(400).json({ error: 'The photo file is unavailable.' });
+      const kind = ['replace', 'resurface', 'crack'].includes(b.kind) ? b.kind : null;
+      if (!kind) return res.status(400).json({ error: 'Choose replace, resurface or crack.' });
+      const clip = l => (Array.isArray(l) ? l : []).slice(0, 60).map(p => ({ x: Number(p && p.x), y: Number(p && p.y) }));
+      const photo = { kind, points: clip(b.points), ref: clip(b.ref).slice(0, 2), ref_ft: num(b.ref_ft), image: dims, ref_label: text(b.ref_label, 60) };
+      const m = E.photoMeasure(photo);
+      if (!m.ok) return res.status(400).json({ error: m.error || 'Trace the repair on the photo.' });
+      if ((m.area_sqft || 0) > 20000 || (m.length_ft || 0) > 5000) return res.status(400).json({ error: 'That is larger than a photo repair should be. Check the scale length.' });
+      const th = num(b.thickness_in); if (th != null && (th <= 0 || th > 48)) return res.status(400).json({ error: 'Thickness must be between 1 and 48 inches.' });
+      const method = b.method === 'card' ? 'card' : 'photo_ref';
+      const name = text(b.name, 120) || (kind === 'crack' ? 'Crack repair' : kind === 'resurface' ? 'Resurface area' : 'Replace damaged slab');
+      const dimsJson = kind === 'crack' ? {} : { area_sqft: String(m.area_sqft), perimeter_ft: String(m.perimeter_ft) };
+      const row = (await pool.query(`INSERT INTO concrete_areas (user_id,job_id,capture_id,name,shape,dims,thickness_in,method,area_sqft,perimeter_ft,notes,geometry,repair_kind,repair_lf) VALUES ($1,$2,$3,$4,'custom',$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
+        [req.user.id, cap.job_id, cap.id, name, JSON.stringify(dimsJson), th, method, kind === 'crack' ? null : m.area_sqft, kind === 'crack' ? null : m.perimeter_ft, text(b.notes, 2000), JSON.stringify({ photo }), kind, kind === 'crack' ? m.length_ft : null])).rows[0];
+      logEvent(req.user.id, 'concrete_repair_save', { kind, method });
+      res.json({ ok: true, area: row, measure: { area_sqft: m.area_sqft, perimeter_ft: m.perimeter_ft, length_ft: m.length_ft } });
+    } catch (e) { fail(res, e, 'concrete.repairs.save', 'The repair could not be saved.'); }
   });
 
   // Registered after the named routes above so 'import' and 'from-outline' are not read as an id.
@@ -271,7 +316,11 @@ function register(app, { pool, requireAuth, requireConcrete, upload, logEvent, o
       const photoIds = E.CHECKLIST.flatMap(i => (obj(est.checklist[i.key]).photos || [])).slice(0, 6);
       const photos = photoIds.length ? (await pool.query(`SELECT id, photo_path, note FROM captures WHERE user_id=$1 AND id=ANY($2::int[])`, [req.user.id, photoIds])).rows : [];
       const cust = obj(est.customer), date = new Date().toLocaleDateString('en-US', { dateStyle: 'long' });
-      const areaRows = ((ev.options[0] && ev.options[0].takeoff.areas) || []).map(a => [a.name, `${qty(a.area_sqft)} sq ft`, `${a.thickness_in} in`, `${a.method} (${a.confidence})`]);
+      const areaText = a => a.repair === 'crack' ? `${a.name}: ${qty(a.length_ft)} ft of crack to rout and seal. Measured by ${a.method}.`
+        : a.repair === 'resurface' ? `${a.name}: ${qty(a.area_sqft)} sq ft to resurface. Measured by ${a.method}.`
+        : `${a.name}: ${qty(a.area_sqft)} sq ft, ${a.thickness_in} in${a.repair === 'replace' ? ', remove and replace' : ''}. Measured by ${a.method}${a.confidence ? ' (' + a.confidence + ')' : ''}.`;
+      const areaRows = ((ev.options[0] && ev.options[0].takeoff.areas) || []).map(areaText);
+      const drawings = await proposalDrawings(req.user.id, est, ev.areas);
       const siteNotes = E.CHECKLIST.map(i => obj(est.checklist[i.key]).answer ? `${i.label}: ${obj(est.checklist[i.key]).answer}` : null).filter(Boolean);
       const exclusions = ['Work not listed above.', 'Unforeseen subsurface conditions, rock, or unsuitable soil found during excavation.', 'Repairs to sprinkler lines, utilities or landscaping not marked before work begins.', 'Permit fees unless listed.'];
       const any = ev.options.some(o => !o.pricing.complete);
@@ -288,9 +337,10 @@ function register(app, { pool, requireAuth, requireConcrete, upload, logEvent, o
         pdf.fillColor('#000').font('Helvetica-Bold').fontSize(20).text(`Concrete Proposal: ${est.name}`).font('Helvetica').fontSize(12).moveDown(0.5);
         for (const l of lines.intro) pdf.text(l);
         const section = t => { if (pdf.y > 640) pdf.addPage(); pdf.moveDown().font('Helvetica-Bold').fontSize(14).text(t).font('Helvetica').fontSize(12); };
-        section('Areas'); for (const r of areaRows) pdf.text(`${r[0]}: ${r[1]}, ${r[2]}. Measured by ${r[3]}.`);
+        section('Areas'); for (const r of areaRows) pdf.text(r);
         pdf.text(lines.measurement);
         section('Options'); for (const o of lines.options) { pdf.font('Helvetica-Bold').text(`${o[0]}: ${o[2]}${o[3] ? ' (' + o[3] + ')' : ''}`).font('Helvetica').text(o[1]).moveDown(0.3); }
+        if (drawings.length) { section('Layout and joints'); for (const d of drawings) { if (pdf.y > 400) pdf.addPage(); pdf.image(d.buffer, { fit: [500, 320] }); pdf.moveDown(0.3).text(d.caption).moveDown(0.6); } }
         if (siteNotes.length) { section('Site conditions noted'); for (const n of siteNotes) pdf.text(n); }
         if (lines.notes.length) { section('Requirements and notes'); for (const n of lines.notes) pdf.text(n); }
         section('Not included'); for (const n of exclusions) pdf.text(n);
@@ -301,8 +351,9 @@ function register(app, { pool, requireAuth, requireConcrete, upload, logEvent, o
       const { Document, Packer, Paragraph, TextRun, HeadingLevel, ImageRun } = docx;
       const P = (t, bold) => new Paragraph({ children: [new TextRun({ text: t, bold: !!bold, font: 'Arial', size: 24, color: '000000' })] });
       const H = t => new Paragraph({ heading: HeadingLevel.HEADING_2, children: [new TextRun({ text: t, bold: true, font: 'Arial', size: 28, color: '000000' })] });
-      const kids = [new Paragraph({ heading: HeadingLevel.HEADING_1, children: [new TextRun({ text: `Concrete Proposal: ${est.name}`, bold: true, font: 'Arial', size: 36, color: '000000' })] }), ...lines.intro.map(l => P(l)), H('Areas'), ...areaRows.map(r => P(`${r[0]}: ${r[1]}, ${r[2]}. Measured by ${r[3]}.`)), P(lines.measurement), H('Options')];
+      const kids = [new Paragraph({ heading: HeadingLevel.HEADING_1, children: [new TextRun({ text: `Concrete Proposal: ${est.name}`, bold: true, font: 'Arial', size: 36, color: '000000' })] }), ...lines.intro.map(l => P(l)), H('Areas'), ...areaRows.map(r => P(r)), P(lines.measurement), H('Options')];
       for (const o of lines.options) kids.push(P(`${o[0]}: ${o[2]}${o[3] ? ' (' + o[3] + ')' : ''}`, true), P(o[1]));
+      if (drawings.length) { kids.push(H('Layout and joints')); for (const d of drawings) kids.push(new Paragraph({ children: [new ImageRun({ type: d.type, data: d.buffer, transformation: await fittedWordImage(d.buffer, 480, 320) })] }), P(d.caption)); }
       if (siteNotes.length) kids.push(H('Site conditions noted'), ...siteNotes.map(n => P(n)));
       if (lines.notes.length) kids.push(H('Requirements and notes'), ...lines.notes.map(n => P(n)));
       kids.push(H('Not included'), ...exclusions.map(n => P(n)));
@@ -312,6 +363,46 @@ function register(app, { pool, requireAuth, requireConcrete, upload, logEvent, o
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'); res.setHeader('Content-Disposition', `attachment; filename="concrete-proposal-${est.id}.docx"`); res.send(buffer);
     } catch (e) { if (!res.headersSent) fail(res, e, 'concrete.estimates.proposal', 'The proposal could not be created.'); }
   });
+  // Drawings for the proposal: each area's plan with its control joints, the satellite pictures, and job photos with
+  // the repair outline drawn on. Returns PNG or JPEG buffers with a caption, at most 12.
+  async function proposalDrawings(userId, est, areas) {
+    const out = [], seen = new Set(), spec = est.spec || {};
+    for (const a of areas.slice(0, 12)) {
+      const th = Number(a.thickness_in) || Number(spec.thickness_in) || 4, g = a.geometry || {};
+      if (a.capture_id && !seen.has(a.capture_id)) {
+        seen.add(a.capture_id);
+        const cap = (await pool.query('SELECT photo_path FROM captures WHERE id=$1 AND user_id=$2', [a.capture_id, userId])).rows[0];
+        const local = cap && localPhoto(cap.photo_path);
+        if (local) {
+          try {
+            let img = sharp(local).rotate().resize({ width: 1400, height: 1400, fit: 'inside', withoutEnlargement: true });
+            const buf = await img.jpeg({ quality: 85 }).toBuffer(), meta = await sharp(buf).metadata();
+            let final = buf, caption = g.points ? `Satellite picture: ${a.name}` : `Job photo: ${a.name}`;
+            const marks = areas.filter(x => x.capture_id === a.capture_id && x.geometry && x.geometry.photo);
+            if (marks.length) {
+              const W = meta.width, H = meta.height, lw = Math.max(3, Math.round(W / 250));
+              const shapes = marks.map(x => {
+                const ph = x.geometry.photo, pts = (ph.points || []).map(p => `${(p.x * W).toFixed(1)},${(p.y * H).toFixed(1)}`).join(' ');
+                const ref = (ph.ref || []).map(p => `${(p.x * W).toFixed(1)},${(p.y * H).toFixed(1)}`).join(' ');
+                const tag = x.repair_kind === 'crack' ? `<polyline points="${pts}" fill="none" stroke="#000" stroke-width="${lw * 2.2}"/><polyline points="${pts}" fill="none" stroke="#ffd400" stroke-width="${lw}"/>`
+                  : `<polygon points="${pts}" fill="rgba(255,212,0,0.18)" stroke="#000" stroke-width="${lw * 2.2}"/><polygon points="${pts}" fill="none" stroke="#ffd400" stroke-width="${lw}"/>`;
+                return tag + (ref ? `<polyline points="${ref}" fill="none" stroke="#fff" stroke-width="${lw}" stroke-dasharray="${lw * 3} ${lw * 2}"/>` : '');
+              }).join('');
+              final = await sharp(buf).composite([{ input: Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}">${shapes}</svg>`) }]).jpeg({ quality: 85 }).toBuffer();
+              caption = `Job photo: ${marks.map(x => `${x.name} (${x.repair_kind === 'crack' ? qty(Number(x.repair_lf)) + ' ft of crack' : qty(Number(x.area_sqft)) + ' sq ft, ' + (x.repair_kind === 'resurface' ? 'resurface' : 'remove and replace')})`).join('; ')}. The yellow outline is the repair; the white dashed line is the known length used for scale.`;
+            }
+            out.push({ buffer: final, type: 'jpg', caption });
+          } catch (e) { /* a missing or unreadable photo is left out */ }
+        }
+      }
+      if (spec.joints !== false && a.repair_kind !== 'crack' && a.repair_kind !== 'resurface') {
+        const svg = E.planSvg(a, th, 520);
+        if (svg) { try { out.push({ buffer: await sharp(Buffer.from(svg)).png().toBuffer(), type: 'png', caption: `Plan of ${a.name} with planned control joints (saw-cut lines). Joint layout is a guide and may be adjusted in the field.` }); } catch (e) { /* skip */ } }
+      }
+      if (out.length >= 12) break;
+    }
+    return out.slice(0, 12);
+  }
   // Bid versus actual across the company's estimates that have batch tickets.
   async function accuracy(userId) {
     const rows = (await pool.query(`SELECT e.id, e.job_id, e.result FROM concrete_estimates e WHERE e.user_id=$1 AND e.status IN ('won','sent','draft') AND e.job_id IS NOT NULL AND e.result IS NOT NULL ORDER BY e.updated_at DESC LIMIT 100`, [userId])).rows;
