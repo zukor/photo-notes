@@ -30,7 +30,7 @@ function editionSwitcherOptions() {
 function selectedEdition(){return isSecurityClient()?'security':isIssueReporterClient()?'issue':isBasicClient()?'basic':isRoadIssuesClient()?'roads':isGeneralProClient()?'pro':state.proType;}
 function issueFabLabel(){return 'Report Issue';}
 function featureOn(name) { if(name==='camera_readers'&&state.proType==='general')return false;return (['camera_readers','before_after'].includes(name) ? isProClient() && ['general','paving','asphalt','concrete','property','hoa','contractor','roofer'].includes(state.proType) : isPavingClient()) && (!state.me || !state.me.feature_access || state.me.feature_access[name] !== false); }
-function measurementOn(){return isConcreteClient()||featureOn('measurements');}
+function measurementOn(){return isConcreteClient()?!(state.me&&state.me.feature_access&&state.me.feature_access.measurements===false):featureOn('measurements');}
 function beforeAfterOn(){return featureOn('before_after');}
 function isMacClient() { return /Macintosh|MacIntel/.test(navigator.userAgent + ' ' + navigator.platform) && !isIOS(); }
 let recognizer = null;
@@ -790,7 +790,7 @@ function mountDuplicateContext(){
 }
 
 // ---- Precision Measure (measuring card) ----
-function precisionMeasureOn(){return !!window.PhotoNotesPrecisionMeasure&&isIndustryProClient()&&featureOn('measurements')&&(isPavingClient()||isConcreteClient());}
+function precisionMeasureOn(){return !!window.PhotoNotesPrecisionMeasure&&isIndustryProClient()&&measurementOn()&&(isPavingClient()||isConcreteClient());}
 function precisionCanValidate(){return !!(state.me&&(state.me.is_tester||state.me.is_testing_manager||state.me.role==='admin'));}
 function precisionDims(d){
   const r2=v=>v==null?'':String(Math.round(v*100)/100);
@@ -807,7 +807,7 @@ function precisionMeasureFields(){
   return {dim_length:d.length,dim_length_unit:'in',dim_width:d.width,dim_width_unit:'in',dim_depth:d.depth,dim_shape:d.shape,dim_area_sqft:d.area,dim_source:'card',dim_confidence:'high',dim_confirmed:'true',dim_ai:JSON.stringify(rec)};
 }
 function startPrecisionMeasure(){
-  window.PhotoNotesPrecisionMeasure.open({mode:'live',canValidate:precisionCanValidate(),validate:sessionStorageGet('pn_pm_validate')==='1',
+  window.PhotoNotesPrecisionMeasure.open({surface:isConcreteClient()?'concrete':'paving',mode:'live',canValidate:precisionCanValidate(),validate:sessionStorageGet('pn_pm_validate')==='1',
     onDone:({file,dims,record})=>{
       state._precisionFile=file;onPhotoChosen(file);state._dims=precisionDims(dims);state._measureRecord=record;
       sessionStorageSet('pn_pm_validate',record.validation?'1':'');
@@ -1044,12 +1044,12 @@ async function scanCameraReader() {
 }
 function renderCameraReaderReview() {
   const cfg=readerConfigs[cameraReaderType], f=cameraReaderDraft.fields||{}, box=document.getElementById('readerReview');
-  box.innerHTML=`<section class="ticket-review-panel camera-reader-review"><div class="formhead">2. Review and Save</div>${!cameraReaderFile&&cameraReaderDraft.photo_path?`<img class="reader-review-source" src="${photoSrc(cameraReaderDraft.photo_path)}" alt="Source photo for verifying readings">`:''}<div class="status">AI confidence: <strong>${esc(cameraReaderDraft.confidence||'low')}</strong>. The photograph is the source of truth.</div><div class="ticket-form-grid">${cfg.fields.map(([key,label,kind])=>`<div>${kind==='textarea'?`<label for="cr_${key}">${label}</label><textarea id="cr_${key}">${esc(f[key]||'')}</textarea>`:ticketField('cr_'+key,label,f[key])}</div>`).join('')}</div><label for="cr_title">Record Name</label><input id="cr_title" value="${esc(cameraReaderDraft.title||'')}"><label for="readerJobAssignment">Record job</label><select id="readerJobAssignment">${cameraReaderJobOptions(cameraReaderDraft.job_id||(cameraReaderDraft.status==='saved'?'':(/^\d+$/.test(cameraReaderJobFilter)?cameraReaderJobFilter:'')))}</select><button class="btn" id="readerSave">Save Record</button></section>`;
+  box.innerHTML=`<section class="ticket-review-panel camera-reader-review"><div class="formhead">2. Review and Save</div>${!cameraReaderFile&&cameraReaderDraft.photo_path?`<img class="reader-review-source" src="${photoSrc(cameraReaderDraft.photo_path)}" alt="Source photo for verifying readings">`:''}<div class="status">AI confidence: <strong>${esc(cameraReaderDraft.confidence||'low')}</strong>. The photograph is the source of truth.</div><div class="ticket-form-grid">${cfg.fields.map(([key,label,kind])=>`<div>${kind==='textarea'?`<label for="cr_${key}">${label}</label><textarea id="cr_${key}">${esc(f[key]||'')}</textarea>`:ticketField('cr_'+key,label,f[key])}</div>`).join('')}</div><label for="cr_title">Record Name</label><input id="cr_title" value="${esc(cameraReaderDraft.title||'')}"><label for="readerJobAssignment">Record job</label><select id="readerJobAssignment">${cameraReaderJobOptions(cameraReaderDraft.job_id||(cameraReaderDraft.status==='saved'?'':(/^\d+$/.test(cameraReaderJobFilter)?cameraReaderJobFilter:'')))}</select>${(cameraReaderDraft.confidence||'low')==='low'?'<label class="feature-item"><input type="checkbox" id="readerConfirm"> This was hard to read. I checked every value against the photo.</label>':''}<button class="btn" id="readerSave">Save Record</button></section>`;
   document.getElementById('readerSave').onclick=saveCameraReading;
 }
 async function saveCameraReading() {
-  const cfg=readerConfigs[cameraReaderType], fields={...(cameraReaderDraft.fields||{})}; cfg.fields.forEach(([key])=>fields[key]=document.getElementById('cr_'+key).value.trim()); const btn=document.getElementById('readerSave'); btn.disabled=true; btn.textContent='Saving...';
-  setPavingToolBusy(['readerTake','readerChoose'],true);try{const r=await api(`/api/camera-readings/${cameraReaderDraft.id}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:document.getElementById('cr_title').value.trim(),fields,confidence:cameraReaderDraft.confidence,job_id:document.getElementById('readerJobAssignment').value||null})});
+  const cfg=readerConfigs[cameraReaderType], fields={...(cameraReaderDraft.fields||{})}; cfg.fields.forEach(([key])=>fields[key]=document.getElementById('cr_'+key).value.trim()); const btn=document.getElementById('readerSave'),confirmBox=document.getElementById('readerConfirm'); if(confirmBox&&!confirmBox.checked){toast('Check every value against the photo, then tick the confirmation box.');return;} btn.disabled=true; btn.textContent='Saving...';
+  setPavingToolBusy(['readerTake','readerChoose'],true);try{const r=await api(`/api/camera-readings/${cameraReaderDraft.id}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:document.getElementById('cr_title').value.trim(),fields,confidence:cameraReaderDraft.confidence,confirmed:!!confirmBox?.checked,job_id:document.getElementById('readerJobAssignment').value||null})});
   if(document.getElementById('readerSave')!==btn)return;if(!r.ok)throw new Error();toast('Record saved');setPavingToolBusy([],false);renderCameraReader();}catch(e){if(document.getElementById('readerSave')===btn){toast('Record could not be saved');btn.disabled=false;btn.textContent='Save Record';}}finally{if(document.getElementById('readerSave')===btn)setPavingToolBusy(['readerTake','readerChoose'],false);}
 }
 async function loadCameraReadings() {
@@ -2098,7 +2098,7 @@ async function measureSavedWithCard(c,button){
   button.disabled=true;
   try{
     const r=await fetch(c.photo_path,{credentials:'same-origin'});if(!r.ok)throw Error();const blob=await r.blob();
-    window.PhotoNotesPrecisionMeasure.open({mode:'existing',file:new File([blob],'photo.jpg',{type:blob.type||'image/jpeg'}),canValidate:precisionCanValidate(),
+    window.PhotoNotesPrecisionMeasure.open({surface:isConcreteClient()?'concrete':'paving',mode:'existing',file:new File([blob],'photo.jpg',{type:blob.type||'image/jpeg'}),canValidate:precisionCanValidate(),
       onCancel:()=>{button.disabled=false;},
       onDone:async({dims,record})=>{
         const d=precisionDims(dims),body={dim_length:d.length,dim_length_unit:'in',dim_width:d.width,dim_width_unit:'in',dim_depth:d.depth,dim_shape:d.shape,dim_area_sqft:d.area,dim_source:'card',dim_confidence:'high',dim_confirmed:true,dim_ai:record};
@@ -2145,7 +2145,7 @@ function fmtDimsClient(c) {
   const lw = [l, w].filter(Boolean);
   let line = lw.length ? lw.join(' x ') : '';
   if (c.dim_depth_in != null && isFinite(Number(c.dim_depth_in))) line = line ? `${line} x ${trimNumC(Number(c.dim_depth_in))} in deep` : `${trimNumC(Number(c.dim_depth_in))} in deep`;
-  if (c.dim_area_sqft != null && isFinite(Number(c.dim_area_sqft))) { const a = `${Number(c.dim_area_sqft).toFixed(1)} sq ft`; const al = c.dim_shape === 'irregular' ? `approx. ${a}` : a; line = line ? `${line}, ${al}` : al; }
+  if (c.dim_area_sqft != null && isFinite(Number(c.dim_area_sqft))) { const a = `${Number(c.dim_area_sqft).toFixed(1)} sq ft`; const al = c.dim_shape === 'irregular' && c.dim_source !== 'card' ? `approx. ${a}` : a; line = line ? `${line}, ${al}` : al; }
   if (line && c.dim_confirmed === false) line += ' (AI estimate, not confirmed; not used in documents)';
   return line;
 }
@@ -2391,7 +2391,7 @@ async function saveCaptureDurably(options = {}) {
   // Sizes spoken during Record Notes ("three by two feet, four inches deep") are saved with the photo.
   const spoken=state._dims,cardFields=typeof precisionMeasureFields==='function'?precisionMeasureFields():null;
   if(cardFields)Object.assign(payload,cardFields);
-  else if(typeof isIndustryProClient==='function'&&isIndustryProClient()&&featureOn('measurements')&&spoken&&(spoken.length||spoken.width||spoken.depth))Object.assign(payload,{dim_length:spoken.length,dim_length_unit:spoken.lengthUnit,dim_width:spoken.width,dim_width_unit:spoken.widthUnit,dim_depth:spoken.depth,dim_shape:spoken.shape,dim_area_sqft:spoken.areaOverridden?spoken.area:'',dim_source:'voice'});
+  else if(typeof isIndustryProClient==='function'&&isIndustryProClient()&&measurementOn()&&spoken&&(spoken.length||spoken.width||spoken.depth))Object.assign(payload,{dim_length:spoken.length,dim_length_unit:spoken.lengthUnit,dim_width:spoken.width,dim_width_unit:spoken.widthUnit,dim_depth:spoken.depth,dim_shape:spoken.shape,dim_area_sqft:spoken.areaOverridden?spoken.area:'',dim_source:'voice'});
   const hadCoords = !!state.location;
   if (state.location) { payload.latitude=state.location.lat;payload.longitude=state.location.lng; }
   if (state.address) payload.address=state.address;
@@ -4491,7 +4491,8 @@ async function renderGroupDetail(id) {
   const score = data.score || null;
   const zsum = data.zones || null;
   let scoreHtml = '';
-  if (isIndustryProClient() && score) {
+  // The score comes from pavement defect classification, so only editions that can classify are asked to.
+  if (isIndustryProClient() && score && (score.score != null || featureOn('measurements'))) {
     if (score.score == null) {
       scoreHtml = `<div class="card" style="text-align:center"><div class="fieldval">Not yet scored</div><div class="meta">Classify captures in this site to generate a condition score.</div></div>`;
     } else {

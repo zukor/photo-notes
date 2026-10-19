@@ -17,10 +17,11 @@ test('core editions keep help and issue reporting while shared camera readers re
 });
 
 test('Pro-only analytics and reports require a Pro plan on the server', () => {
-  const guards = server.match(/if \(await currentPlan\(req\.user\.id\) !== 'pro'\) return res\.status\(403\)\.json\(\{ error: 'pro only' \}\);/g) || [];
+  // currentProduct is 'basic' unless the account is Pro, so an edition guard is also a Pro plan guard.
+  const guards = server.match(/if \(await currentProduct\(req\.user\.id\) !== 'paving'\) return res\.status\(403\)/g) || [];
   assert.ok(guards.length >= 1, 'expected server-side Pro plan guards');
   assert.match(app, /isIndustryProClient\(\) && c\.defect_type/);
-  assert.match(server, /app\.get\('\/api\/export\/proposal', requireAuth,[\s\S]*?currentPlan\(req\.user\.id\) !== 'pro'/);
+  assert.match(server, /app\.get\('\/api\/export\/proposal', requireAuth,[\s\S]*?currentProduct\(req\.user\.id\) !== 'paving'/,'the proposal is Paving Pro only, which also requires Pro');
 });
 
 test('a single assigned version does not show an unnecessary switcher', () => {

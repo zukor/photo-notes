@@ -56,7 +56,8 @@
       ctx.setBusy(['tempTake', 'tempChoose', 'tempManual'], true);
       try {
         const fd = new FormData(); fd.append('photo', file); fd.append('taken_at', new Date(e.target.id === 'tempCam' ? Date.now() : (file.lastModified || Date.now())).toISOString());
-        const loc = await ctx.location().catch(() => null); if (loc) { fd.append('latitude', loc.lat); fd.append('longitude', loc.lng); }
+        // GPS is recorded only for a photo taken now; a saved photo may come from somewhere else.
+        const loc = e.target.id === 'tempCam' ? await ctx.location().catch(() => null) : null; if (loc) { fd.append('latitude', loc.lat); fd.append('longitude', loc.lng); }
         const r = await ctx.api('/api/paving/temperatures/scan', { method: 'POST', body: fd }), d = await r.json().catch(() => ({}));
         if (!r.ok || !d.reading) throw Error(d.error || 'The photo could not be read.');
         tempDraft = d.reading;
@@ -108,7 +109,7 @@
       const btn = $('tempSave'); if (btn.disabled) return;
       const body = { reading_f: $('tempReading').value, kind: $('tempKind').value, binder: $('tempBinder').value || null, minimum_f: $('tempMinimum').value, job_id: $('tempJob').value, ticket_id: $('tempTicket').value, location_note: $('tempWhere').value, note: $('tempNote').value };
       if (!body.reading_f) { ctx.toast('Enter the temperature reading.'); return; }
-      if (!t.id) { const loc = await ctx.location().catch(() => null); if (loc) { body.latitude = loc.lat; body.longitude = loc.lng; } }
+      if (!t.id && !tempFile) { const loc = await ctx.location().catch(() => null); if (loc) { body.latitude = loc.lat; body.longitude = loc.lng; } }
       btn.disabled = true; btn.textContent = 'Saving...';
       try {
         const r = await ctx.api(t.id ? `/api/paving/temperatures/${t.id}` : '/api/paving/temperatures', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }), d = await r.json().catch(() => ({}));

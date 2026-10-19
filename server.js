@@ -640,9 +640,11 @@ async function currentFeatureAccess(userId) {
     const edition = normalizeProType(row.pro_type);
     if (!['general','paving','concrete','property','hoa','contractor','roofer'].includes(edition)) return {};
     const saved = row.feature_access && typeof row.feature_access === 'object' ? row.feature_access : {};
-    return Object.fromEntries(MANAGED_FEATURES.map(k => [k, ['camera_readers','before_after'].includes(k) ? (k!=='camera_readers'||edition!=='general')&&saved[k] !== false : edition === 'concrete' ? k === 'measurements' : edition === 'paving' && saved[k] !== false]));
+    return Object.fromEntries(MANAGED_FEATURES.map(k => [k, ['camera_readers','before_after'].includes(k) ? (k!=='camera_readers'||edition!=='general')&&saved[k] !== false : edition === 'concrete' ? k === 'measurements' && saved[k] !== false : edition === 'paving' && saved[k] !== false]));
   } catch { return {}; }
 }
+// Pavement defect classification and map zone takeoffs use the pavement taxonomy; Concrete has its own tools.
+async function pavingMeasurementsAllowed(userId){return (await currentProduct(userId))==='paving'&&await featureAllowed(userId,'measurements');}
 async function featureAllowed(userId, feature) {
   const access = await currentFeatureAccess(userId);
   return access[feature] === true;
@@ -1129,7 +1131,7 @@ app.post('/api/hoa/items/:id',requireAuth,requireHoa,async(req,res)=>{try{const 
 app.get('/api/hoa/notifications',requireAuth,requireHoa,async(req,res)=>{try{res.json((await pool.query(`SELECT * FROM hoa_notifications WHERE user_id=$1 ORDER BY created_at DESC LIMIT 100`,[req.user.id])).rows);}catch(e){res.status(500).json({error:'notifications failed'});}});
 app.post('/api/hoa/notifications/read',requireAuth,requireHoa,async(req,res)=>{try{await pool.query(`UPDATE hoa_notifications SET read_at=now() WHERE user_id=$1 AND read_at IS NULL`,[req.user.id]);res.json({ok:true});}catch(e){res.status(500).json({error:'notifications failed'});}});
 
-app.get('/completion-photos/:token',async(req,res)=>{try{const row=(await pool.query(`SELECT q.*,i.title,i.description,c.name community_name,cap.photo_path original_photo FROM hoa_completion_photo_requests q JOIN hoa_maintenance_items i ON i.id=q.item_id JOIN hoa_communities c ON c.id=i.community_id LEFT JOIN captures cap ON cap.id=i.capture_id WHERE q.token=$1`,[req.params.token])).rows[0];if(!row)return res.status(404).send('Photo request not found.');if(row.status!=='open'||new Date(row.expires_at)<new Date())return res.status(410).send('This photo request is no longer open.');res.send(`<!doctype html><html><head><meta name="viewport" content="width=device-width"><link rel="stylesheet" href="/help.css?v=376"><script src="/help-catalog.js?v=485" defer></script><script src="/help.js?v=470" defer></script><title>Submit Completion Photos</title><style>body{font-family:Arial,sans-serif;max-width:720px;margin:auto;padding:20px;color:#111}img{width:100%;max-height:480px;object-fit:contain;border-radius:10px;background:#eee}input,textarea,button{box-sizing:border-box;width:100%;padding:14px;margin:7px 0;font-size:16px}button{background:#2455d9;color:#fff;border:0;border-radius:9px;font-weight:700}.box{background:#eef3ff;border-radius:10px;padding:14px}</style></head><body><h1>Submit Completion Photos</h1><div class="box"><b>${escXml(row.community_name)}</b><h2>${escXml(row.title)}</h2><p>${escXml(row.description||'')}</p></div>${row.original_photo?`<h3>Original issue</h3><img src="${escXml(row.original_photo)}" alt="Original maintenance issue">`:''}<h3>Show the completed work</h3><p>Take clear overview and close-up photos. These photos will be added directly to this maintenance record.</p><form method="post" action="/completion-photos/${row.token}" enctype="multipart/form-data"><input name="submitter_name" value="${escXml(row.recipient_name||'')}" placeholder="Your name" required><input type="file" name="photos" accept="image/*" capture="environment" multiple required><textarea name="note" placeholder="What work was completed?"></textarea><button>Send Completion Photos</button></form></body></html>`);}catch(e){res.status(500).send('Photo request unavailable.');}});
+app.get('/completion-photos/:token',async(req,res)=>{try{const row=(await pool.query(`SELECT q.*,i.title,i.description,c.name community_name,cap.photo_path original_photo FROM hoa_completion_photo_requests q JOIN hoa_maintenance_items i ON i.id=q.item_id JOIN hoa_communities c ON c.id=i.community_id LEFT JOIN captures cap ON cap.id=i.capture_id WHERE q.token=$1`,[req.params.token])).rows[0];if(!row)return res.status(404).send('Photo request not found.');if(row.status!=='open'||new Date(row.expires_at)<new Date())return res.status(410).send('This photo request is no longer open.');res.send(`<!doctype html><html><head><meta name="viewport" content="width=device-width"><link rel="stylesheet" href="/help.css?v=376"><script src="/help-catalog.js?v=486" defer></script><script src="/help.js?v=470" defer></script><title>Submit Completion Photos</title><style>body{font-family:Arial,sans-serif;max-width:720px;margin:auto;padding:20px;color:#111}img{width:100%;max-height:480px;object-fit:contain;border-radius:10px;background:#eee}input,textarea,button{box-sizing:border-box;width:100%;padding:14px;margin:7px 0;font-size:16px}button{background:#2455d9;color:#fff;border:0;border-radius:9px;font-weight:700}.box{background:#eef3ff;border-radius:10px;padding:14px}</style></head><body><h1>Submit Completion Photos</h1><div class="box"><b>${escXml(row.community_name)}</b><h2>${escXml(row.title)}</h2><p>${escXml(row.description||'')}</p></div>${row.original_photo?`<h3>Original issue</h3><img src="${escXml(row.original_photo)}" alt="Original maintenance issue">`:''}<h3>Show the completed work</h3><p>Take clear overview and close-up photos. These photos will be added directly to this maintenance record.</p><form method="post" action="/completion-photos/${row.token}" enctype="multipart/form-data"><input name="submitter_name" value="${escXml(row.recipient_name||'')}" placeholder="Your name" required><input type="file" name="photos" accept="image/*" capture="environment" multiple required><textarea name="note" placeholder="What work was completed?"></textarea><button>Send Completion Photos</button></form></body></html>`);}catch(e){res.status(500).send('Photo request unavailable.');}});
 app.post('/completion-photos/:token',(req,res,next)=>require('./external-photo-submission').externalPhotoUpload(UPLOAD_DIR)(req,res,async error=>{if(error){await require('./external-photo-submission').removeUploads(req.files);return res.status(400).send('Use at most 8 photographs, up to 25 MB each.');}next();}),async(req,res)=>{
  const {inspectPhotos,saveExternalPhoto,removeUploads}=require('./external-photo-submission');
  let db,committed=false;
@@ -1145,7 +1147,7 @@ app.post('/completion-photos/:token',(req,res,next)=>require('./external-photo-s
   await hoaHistory(q.item_id,null,'completion_photos_submitted',{submitted_by:name,photo_count:req.files.length},db);
   await hoaNotifyCompany(q.company_id,q.item_id,'Completion photos submitted',0,db);
   await db.query('COMMIT');committed=true;
-  res.send('<!doctype html><meta name="viewport" content="width=device-width"><link rel="stylesheet" href="/help.css?v=376"><script src="/help-catalog.js?v=485" defer></script><script src="/help.js?v=470" defer></script><style>body{font-family:Arial;color:#000;text-align:left;padding:30px 20px}</style><h1>Photos received</h1><p>Thank you. The completion photos were added to the maintenance record.</p>');
+  res.send('<!doctype html><meta name="viewport" content="width=device-width"><link rel="stylesheet" href="/help.css?v=376"><script src="/help-catalog.js?v=486" defer></script><script src="/help.js?v=470" defer></script><style>body{font-family:Arial;color:#000;text-align:left;padding:30px 20px}</style><h1>Photos received</h1><p>Thank you. The completion photos were added to the maintenance record.</p>');
  }catch(e){if(db&&!committed)await db.query('ROLLBACK').catch(()=>{});await removeUploads(req.files);res.status(400).send('Photos could not be submitted. Use supported photographs and try again.');}
  finally{if(db)db.release();}
 });
@@ -1175,7 +1177,7 @@ app.get('/review/:token/photos/:id',async(req,res)=>{
     res.setHeader('Cache-Control','private, no-store');res.type('jpeg').send(rendered.buffer);
   }catch(e){res.sendStatus(500);}
 });
-app.get('/review/:token',async(req,res)=>{try{const p=(await pool.query(`SELECT * FROM approval_packages WHERE token=$1`,[req.params.token])).rows[0];if(!p)return res.status(404).send('Review link not found.');if(new Date(p.expires_at)<new Date())return res.status(410).send('This review link has expired.');const photos=(await pool.query(`SELECT id,photo_path,note,address,created_at FROM captures WHERE user_id=$1 AND id=ANY($2) ORDER BY created_at`,[p.user_id,p.capture_ids])).rows;const cards=photos.map(c=>`<article><img src="/review/${encodeURIComponent(p.token)}/photos/${c.id}" alt="Project photo"><p><b>${escXml(c.address||'')}</b></p><p>${escXml(c.note||'')}</p><small>${new Date(c.created_at).toLocaleString()}</small></article>`).join('');res.send(`<!doctype html><html><head><meta name="viewport" content="width=device-width"><link rel="stylesheet" href="/help.css?v=376"><script src="/help-catalog.js?v=485" defer></script><script src="/help.js?v=470" defer></script><title>${escXml(p.title)}</title><style>body{font-family:Arial;margin:auto;max-width:850px;padding:20px;color:#111}article{border:1px solid #ccc;border-radius:10px;padding:12px;margin:18px 0}img{width:100%;max-height:650px;object-fit:contain}textarea,input,button{box-sizing:border-box;width:100%;padding:12px;margin:6px 0;font-size:16px}button{background:#2455d9;color:white;border:0;border-radius:8px;font-weight:bold}.changes{background:#555}.status{padding:12px;background:#eef3ff}</style></head><body><h1>${escXml(p.title)}</h1>${p.message?`<p>${escXml(p.message)}</p>`:''}<div class="status">Status: ${escXml(p.status)}</div>${cards}${p.status==='pending'?`<form method="post" action="/review/${p.token}"><input name="customer_name" placeholder="Your name" required><textarea name="comment" placeholder="Comment (optional)"></textarea><button name="decision" value="approved">Approve Photos</button><button class="changes" name="decision" value="changes_requested">Request Changes</button></form>`:`<p><b>Response received. Thank you.</b></p>`}</body></html>`);}catch(e){res.status(500).send('Review unavailable.');}});
+app.get('/review/:token',async(req,res)=>{try{const p=(await pool.query(`SELECT * FROM approval_packages WHERE token=$1`,[req.params.token])).rows[0];if(!p)return res.status(404).send('Review link not found.');if(new Date(p.expires_at)<new Date())return res.status(410).send('This review link has expired.');const photos=(await pool.query(`SELECT id,photo_path,note,address,created_at FROM captures WHERE user_id=$1 AND id=ANY($2) ORDER BY created_at`,[p.user_id,p.capture_ids])).rows;const cards=photos.map(c=>`<article><img src="/review/${encodeURIComponent(p.token)}/photos/${c.id}" alt="Project photo"><p><b>${escXml(c.address||'')}</b></p><p>${escXml(c.note||'')}</p><small>${new Date(c.created_at).toLocaleString()}</small></article>`).join('');res.send(`<!doctype html><html><head><meta name="viewport" content="width=device-width"><link rel="stylesheet" href="/help.css?v=376"><script src="/help-catalog.js?v=486" defer></script><script src="/help.js?v=470" defer></script><title>${escXml(p.title)}</title><style>body{font-family:Arial;margin:auto;max-width:850px;padding:20px;color:#111}article{border:1px solid #ccc;border-radius:10px;padding:12px;margin:18px 0}img{width:100%;max-height:650px;object-fit:contain}textarea,input,button{box-sizing:border-box;width:100%;padding:12px;margin:6px 0;font-size:16px}button{background:#2455d9;color:white;border:0;border-radius:8px;font-weight:bold}.changes{background:#555}.status{padding:12px;background:#eef3ff}</style></head><body><h1>${escXml(p.title)}</h1>${p.message?`<p>${escXml(p.message)}</p>`:''}<div class="status">Status: ${escXml(p.status)}</div>${cards}${p.status==='pending'?`<form method="post" action="/review/${p.token}"><input name="customer_name" placeholder="Your name" required><textarea name="comment" placeholder="Comment (optional)"></textarea><button name="decision" value="approved">Approve Photos</button><button class="changes" name="decision" value="changes_requested">Request Changes</button></form>`:`<p><b>Response received. Thank you.</b></p>`}</body></html>`);}catch(e){res.status(500).send('Review unavailable.');}});
 app.post('/review/:token',express.urlencoded({extended:false}),async(req,res)=>{try{const decision=req.body.decision==='approved'?'approved':'changes_requested';const row=(await pool.query(`UPDATE approval_packages SET status=$1,customer_name=$2,customer_comment=$3,responded_at=now() WHERE token=$4 AND status='pending' AND expires_at>now() RETURNING token`,[decision,ticketText(req.body.customer_name,200),ticketText(req.body.comment,1000),req.params.token])).rows[0];if(!row)return res.status(400).send('This review can no longer be changed.');res.redirect(`/review/${row.token}`);}catch(e){res.status(500).send('Response could not be saved.');}});
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
@@ -1211,8 +1213,9 @@ app.post('/api/measure', requireAuth, upload.single('photo'), async (req, res) =
     const refLabel = refType === 'ruler_12in' ? 'a standard 12-inch ruler'
       : refType === 'tape_25ft' ? 'a tape measure extended to a known length'
       : 'a reference object';
+    const concrete = (await currentProduct(req.user.id)) === 'concrete';
     const prompt =
-`You are measuring a pavement defect for a paving contractor. The photo contains ${refLabel} placed in frame as a scale reference. Its exact real-world length is ${refLenIn} inches.
+`You are measuring ${concrete ? 'concrete damage or a concrete work area (a crack, spall, scaling, a broken or settled slab section, or a placement or repair area) for a concrete contractor' : 'a pavement defect for a paving contractor'}. The photo contains ${refLabel} placed in frame as a scale reference. Its exact real-world length is ${refLenIn} inches.
 Locate the reference object, use its known length to establish the image scale, then estimate the primary defect's length, width, and (only if judgeable from shadow/relief) depth, all in inches. Also give the defect's overall shape.
 Respond with ONLY a JSON object, no prose, no markdown, with exactly these keys:
 {"length_in": number, "width_in": number, "depth_in": number or null, "shape": "rectangle"|"circle"|"irregular", "confidence": "high"|"medium"|"low", "warning": string or null}
@@ -1574,13 +1577,15 @@ app.post('/api/camera-readings/:id', requireAuth, async (req, res) => {
     client=await pool.connect();await client.query('BEGIN');
     const old=(await client.query('SELECT * FROM camera_readings WHERE id=$1 AND user_id=$2 FOR UPDATE',[id,req.user.id])).rows[0];
     if(!old){await client.query('ROLLBACK').catch(()=>{});return res.status(404).json({error:'not found'});}
+    // A hard-to-read scan is saved only after the person confirms they checked every value, as with delivery tickets.
+    if((old.confidence==='low'||req.body?.confidence==='low'||!old.confidence)&&req.body?.confirmed!==true){await client.query('ROLLBACK').catch(()=>{});return res.status(400).json({error:'This record was hard to read. Check every value against the photo and confirm before saving.'});}
     const changeJob=Object.prototype.hasOwnProperty.call(req.body||{},'job_id');
     const jobId=req.body?.job_id==null||req.body.job_id===''?null:Number(req.body.job_id);
     if(changeJob&&jobId!==null&&(!Number.isInteger(jobId)||jobId<1||!(await client.query('SELECT id FROM jobs WHERE id=$1 AND user_id=$2 FOR KEY SHARE',[jobId,req.user.id])).rowCount)){await client.query('ROLLBACK').catch(()=>{});return res.status(400).json({error:'Invalid job'});}
     if(changeJob)await client.query('UPDATE camera_readings SET job_id=$1,job_assignment_set=true WHERE id=$2 AND user_id=$3',[jobId,id,req.user.id]);
     const row=(await client.query("UPDATE camera_readings SET title=$1,fields=$2,status='saved',confidence=COALESCE($5,confidence),updated_at=now() WHERE id=$3 AND user_id=$4 RETURNING *",[title,JSON.stringify(fields),id,req.user.id,['low','medium','high'].includes(req.body?.confidence)?req.body.confidence:null])).rows[0];
     if(old.capture_id&&old.reading_type==='gauge')await client.query('UPDATE captures SET note=$1 WHERE id=$2 AND user_id=$3 AND note=$4',[LinkedPhotoEvidence.originalScannerNote(fields),old.capture_id,req.user.id,LinkedPhotoEvidence.originalScannerNote(old.fields)]);
-    await client.query('COMMIT');logEvent(req.user.id,'camera_reader_save',{type:row.reading_type});res.json({ok:true,reading:row});
+    await client.query('COMMIT');logEvent(req.user.id,'camera_reader_save',{type:row.reading_type,confirmed:req.body?.confirmed===true,confidence:row.confidence});res.json({ok:true,reading:row});
   }catch(err){if(client)await client.query('ROLLBACK').catch(()=>{});console.error('[camera-reader.save]',err);res.status(500).json({error:'save failed'});}finally{if(client)client.release();}
 });
 
@@ -1881,7 +1886,7 @@ Respond with ONLY a JSON object, no prose, no markdown, with exactly these keys:
 
 app.post('/api/captures/:id/classify', requireAuth, async (req, res) => {
   try {
-    if (!(await featureAllowed(req.user.id, 'measurements'))) return res.status(403).json({ error: 'feature unavailable' });
+    if (!(await pavingMeasurementsAllowed(req.user.id))) return res.status(403).json({ error: 'feature unavailable' });
     const id = parseInt(req.params.id, 10);
     if (!Number.isInteger(id)) return res.status(400).json({ error: 'bad id' });
     const r = await classifyCapture(req.user.id, id);
@@ -1892,7 +1897,7 @@ app.post('/api/captures/:id/classify', requireAuth, async (req, res) => {
 
 app.post('/api/captures/classify-batch', requireAuth, async (req, res) => {
   try {
-    if (!(await featureAllowed(req.user.id, 'measurements'))) return res.status(403).json({ error: 'feature unavailable' });
+    if (!(await pavingMeasurementsAllowed(req.user.id))) return res.status(403).json({ error: 'feature unavailable' });
     const ids = Array.isArray(req.body && req.body.ids) ? req.body.ids.map(n => parseInt(n, 10)).filter(Number.isInteger) : [];
     if (!ids.length) return res.status(400).json({ error: 'no ids' });
     const results = [];
@@ -1909,7 +1914,7 @@ app.post('/api/captures/classify-batch', requireAuth, async (req, res) => {
 // touches defect_ai (the AI's original answer is kept for accuracy analysis).
 app.post('/api/captures/:id/classify-set', requireAuth, async (req, res) => {
   try {
-    if (!(await featureAllowed(req.user.id, 'measurements'))) return res.status(403).json({ error: 'feature unavailable' });
+    if (!(await pavingMeasurementsAllowed(req.user.id))) return res.status(403).json({ error: 'feature unavailable' });
     const id = parseInt(req.params.id, 10);
     if (!Number.isInteger(id)) return res.status(400).json({ error: 'bad id' });
     const b = req.body || {};
@@ -2048,7 +2053,7 @@ app.post('/api/captures/:id', requireAuth, async (req, res) => {
     }
     const hasDims = ['dim_length','dim_length_unit','dim_width','dim_width_unit','dim_depth','dim_shape','dim_area_sqft','dim_source'].some(k => Object.prototype.hasOwnProperty.call(b, k));
     if (hasDims) {
-      if (await currentProduct(req.user.id)!=='concrete' && !(await featureAllowed(req.user.id, 'measurements'))) return res.status(403).json({ error: 'feature unavailable' });
+      if (!(await featureAllowed(req.user.id, 'measurements'))) return res.status(403).json({ error: 'feature unavailable' });
       const lenUnit = b.dim_length_unit === 'in' ? 'in' : 'ft';
       const widUnit = b.dim_width_unit === 'in' ? 'in' : 'ft';
       const lenIn = toInches(b.dim_length, lenUnit);
@@ -2413,7 +2418,7 @@ app.get('/api/groups/:id', requireAuth, async (req, res) => {
     const pairs=relatedPairs.filter(p=>itemIds.includes(p.before_id)&&itemIds.includes(p.after_id));
     const incomplete_pairs=relatedPairs.filter(p=>!itemIds.includes(p.before_id)||!itemIds.includes(p.after_id)).map(p=>({id:p.id,missing_capture_id:itemIds.includes(p.before_id)?p.after_id:p.before_id,missing_role:itemIds.includes(p.before_id)?'After':'Before'}));
     let zones = null;
-    if (await featureAllowed(req.user.id, 'measurements')) zones = await groupZoneSummary(req.user.id, id);
+    if (await pavingMeasurementsAllowed(req.user.id)) zones = await groupZoneSummary(req.user.id, id);
     res.json({ group: g, items, pairs, incomplete_pairs, score, zones });
   } catch (err) { console.error('[groups.get]', err); res.status(500).json({ error: 'failed' }); }
 });
@@ -2583,7 +2588,7 @@ app.get('/api/pairs/suggestions', requireAuth, async (req, res) => {
 // ---- measurement zones (Pro) ----
 app.get('/api/zones', requireAuth, async (req, res) => {
   try {
-    if (!(await featureAllowed(req.user.id, 'measurements'))) return res.json([]);
+    if (!(await pavingMeasurementsAllowed(req.user.id))) return res.json([]);
     const groupId = req.query.group ? parseInt(req.query.group, 10) : null;
     let rows;
     if (Number.isInteger(groupId)) rows = (await pool.query(`SELECT * FROM measure_zones WHERE user_id=$1 AND group_id=$2 ORDER BY created_at DESC`, [req.user.id, groupId])).rows;
@@ -2594,7 +2599,7 @@ app.get('/api/zones', requireAuth, async (req, res) => {
 
 app.post('/api/zones', requireAuth, async (req, res) => {
   try {
-    if (!(await featureAllowed(req.user.id, 'measurements'))) return res.status(403).json({ error: 'feature unavailable' });
+    if (!(await pavingMeasurementsAllowed(req.user.id))) return res.status(403).json({ error: 'feature unavailable' });
     const b = req.body || {};
     const name = b.name ? String(b.name).trim() : '';
     const zoneType = b.zone_type === 'span' ? 'span' : (b.zone_type === 'polygon' ? 'polygon' : null);
@@ -2618,7 +2623,7 @@ app.post('/api/zones', requireAuth, async (req, res) => {
 
 app.post('/api/zones/:id', requireAuth, async (req, res) => {
   try {
-    if (!(await featureAllowed(req.user.id, 'measurements'))) return res.status(403).json({ error: 'feature unavailable' });
+    if (!(await pavingMeasurementsAllowed(req.user.id))) return res.status(403).json({ error: 'feature unavailable' });
     const id = parseInt(req.params.id, 10);
     if (!Number.isInteger(id)) return res.status(400).json({ error: 'bad id' });
     const z = (await pool.query(`SELECT * FROM measure_zones WHERE id=$1 AND user_id=$2`, [id, req.user.id])).rows[0];
@@ -2641,7 +2646,7 @@ app.post('/api/zones/:id', requireAuth, async (req, res) => {
 
 app.post('/api/zones/:id/delete', requireAuth, async (req, res) => {
   try {
-    if (!(await featureAllowed(req.user.id, 'measurements'))) return res.status(403).json({ error: 'feature unavailable' });
+    if (!(await pavingMeasurementsAllowed(req.user.id))) return res.status(403).json({ error: 'feature unavailable' });
     const id = parseInt(req.params.id, 10);
     await pool.query(`DELETE FROM measure_zones WHERE id=$1 AND user_id=$2`, [id, req.user.id]);
     logEvent(req.user.id, 'zone_delete', {});
@@ -2651,7 +2656,7 @@ app.post('/api/zones/:id/delete', requireAuth, async (req, res) => {
 
 app.get('/api/zones/:id/defects', requireAuth, async (req, res) => {
   try {
-    if (!(await featureAllowed(req.user.id, 'measurements'))) return res.status(403).json({ error: 'feature unavailable' });
+    if (!(await pavingMeasurementsAllowed(req.user.id))) return res.status(403).json({ error: 'feature unavailable' });
     const id = parseInt(req.params.id, 10);
     const z = (await pool.query(`SELECT * FROM measure_zones WHERE id=$1 AND user_id=$2`, [id, req.user.id])).rows[0];
     if (!z) return res.status(404).json({ error: 'not found' });
@@ -3570,7 +3575,7 @@ app.get('/api/export/bundle', requireAuth, async (req, res) => {
 // ---- Proposal report (Pro, group only): PDF or Word ----
 app.get('/api/export/proposal', requireAuth, async (req, res) => {
   try {
-    if (await currentPlan(req.user.id) !== 'pro') return res.status(403).json({ error: 'pro only' });
+    if (await currentProduct(req.user.id) !== 'paving') return res.status(403).json({ error: 'Paving Pro required' });
     const groupId = req.query.group ? parseInt(req.query.group, 10) : null;
     if (!Number.isInteger(groupId)) return res.status(400).json({ error: 'group required' });
     const g = (await pool.query(`SELECT * FROM groups WHERE id = $1 AND user_id = $2`, [groupId, req.user.id])).rows[0];
