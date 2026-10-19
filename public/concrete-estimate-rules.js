@@ -46,6 +46,7 @@
     { id: 'card', label: 'Measuring card photo', confidence: 'Good', contingency_pct: 2 },
     { id: 'plans', label: 'From plans', confidence: 'Good', contingency_pct: 3 },
     { id: 'entered', label: 'Entered without measuring', confidence: 'Fair', contingency_pct: 5 },
+    { id: 'map_checked', label: 'Satellite map, checked with a tape', confidence: 'Good', contingency_pct: 3 },
     { id: 'map', label: 'Satellite map outline', confidence: 'Rough', contingency_pct: 10 }
   ];
   function geometry(a = {}) {

@@ -58,7 +58,7 @@
       <p>Job: <strong>${ctx.esc(est.job_name || '')}</strong>. ${quick ? 'Quick Estimate.' : commercial ? 'Commercial estimate.' : 'Detailed estimate.'}</p>
       <details ${quick ? '' : 'open'}><summary>Customer</summary><div class="cest-grid">${['name', 'phone', 'email', 'address'].map(k => `<div><label for="cestCust_${k}">${k[0].toUpperCase() + k.slice(1)}</label><input type="text" id="cestCust_${k}" value="${ctx.esc((est.customer || {})[k] || '')}"></div>`).join('')}</div></details>
       <details open><summary>Measured Areas</summary><div id="cestAreas"></div>
-        <div class="row"><button type="button" class="btn secondary slim" id="cestAddArea">Add Area</button>${ctx.precisionMeasure ? '<button type="button" class="btn secondary slim" id="cestCardArea">Measure with Card</button>' : ''}</div>
+        <div class="row"><button type="button" class="btn secondary slim" id="cestAddArea">Add Area</button>${ctx.satellite ? '<button type="button" class="btn secondary slim" id="cestSatellite">Measure from Satellite</button>' : ''}${ctx.precisionMeasure ? '<button type="button" class="btn secondary slim" id="cestCardArea">Measure with Card</button>' : ''}</div>
         <div id="cestAreaForm"></div><div id="cestOutlines"></div>
         ${commercial || !quick ? `<details><summary>Import Takeoff from Plans</summary><p>Paste rows exported from your plan takeoff (for example the Ramo Optimizer, STACK or PlanSwift): name, square feet, edge length in feet, thickness in inches. One area per line.</p><textarea id="cestImport" rows="5"></textarea><button type="button" class="btn secondary slim" id="cestImportGo">Import Areas</button></details>` : ''}
       </details>
@@ -145,6 +145,8 @@
       $('cestAName').focus();
     };
     $('cestAddArea').onclick = () => areaForm();
+    if ($('cestSatellite')) $('cestSatellite').onclick = () => ctx.satellite({ title: 'Measure from Satellite', address: (est.customer || {}).address || est.job_address || '', types: ['area'],
+      onSave: async payload => { const d = await post(ctx, '/api/concrete/areas/satellite', { ...payload, job_id: est.job_id }); est.area_ids = [...(est.area_ids || []), ...d.areas.map(a => a.id)]; await loadAreas(); queueSave(); ctx.toast(d.picture_failed ? 'Areas saved. The satellite picture could not be made.' : 'Areas saved from satellite'); } });
     if ($('cestCardArea')) $('cestCardArea').onclick = () => ctx.precisionMeasure(dims => { const L = Number(dims.length_in) / 12, W = Number(dims.width_in) / 12; areaForm({ name: 'Measured area', shape: 'custom', method: 'card', dims: { area_sqft: dims.area_sqft, perimeter_ft: L && W ? Math.round(2 * (L + W) * 10) / 10 : '' } }); });
     if ($('cestImportGo')) $('cestImportGo').onclick = async () => { try { const d = await post(ctx, '/api/concrete/areas/import', { job_id: est.job_id, csv: $('cestImport').value }); est.area_ids = [...(est.area_ids || []), ...d.areas.map(a => a.id)]; $('cestImport').value = ''; await loadAreas(); queueSave(); ctx.toast(`${d.areas.length} areas imported`); } catch (e) { ctx.toast(e.message); } };
 

@@ -481,6 +481,28 @@ CREATE TABLE IF NOT EXISTS concrete_estimates (
   updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS concrete_estimates_user_idx ON concrete_estimates (user_id, updated_at DESC);
+ALTER TABLE concrete_areas ADD COLUMN IF NOT EXISTS geometry JSONB;
+-- Paving Pro satellite takeoff: parking lots and other areas, streets (centerline and width) and lines, by job.
+CREATE TABLE IF NOT EXISTS paving_takeoff_items (
+  id           SERIAL PRIMARY KEY,
+  user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  job_id       INTEGER REFERENCES jobs(id) ON DELETE SET NULL,
+  capture_id   INTEGER REFERENCES captures(id) ON DELETE SET NULL,
+  name         TEXT NOT NULL,
+  kind         TEXT NOT NULL,
+  points       JSONB NOT NULL,
+  cutouts      JSONB NOT NULL DEFAULT '[]'::jsonb,
+  width_ft     NUMERIC(8,2),
+  scale        NUMERIC(8,4) NOT NULL DEFAULT 1,
+  checked      BOOLEAN NOT NULL DEFAULT false,
+  source       TEXT,
+  area_sqft    NUMERIC(14,1),
+  length_ft    NUMERIC(12,1),
+  perimeter_ft NUMERIC(12,1),
+  status       TEXT NOT NULL DEFAULT 'saved',
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS paving_takeoff_job_idx ON paving_takeoff_items (user_id, job_id);
 -- Basic-app issue reports. Reports are stored before email is attempted so a
 -- mail-provider outage can never discard a tester's feedback.
 CREATE TABLE IF NOT EXISTS issue_reports (
