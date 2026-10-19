@@ -1119,8 +1119,10 @@ ${embedded?'':'<div class="workflow-intro"><strong>Paving Delivery Ticket Scanne
       <div class="status" id="ticketScanStatus"></div>
     </div>
     <div id="ticketReview"></div>
-    <div class="formhead" style="margin-top:28px">Today’s Saved Tickets</div>
+    <div class="formhead" style="margin-top:28px">Saved Tickets</div>
+    <div class="ticket-filters row compact"><label for="ticketDay">Ticket date</label><input type="date" id="ticketDay" value="${localDateString()}"><label for="ticketJobFilter">Job</label><select id="ticketJobFilter"><option value="">All jobs</option>${state.jobs.map(job=>`<option value="${job.id}">${esc(job.job_number?job.job_number+' - '+job.name:job.name)}</option>`).join('')}</select></div>
     <div id="ticketToday"><p class="status">Loading tickets...</p></div>`;
+  document.getElementById('ticketDay').onchange=()=>loadTodayTickets();document.getElementById('ticketJobFilter').onchange=()=>loadTodayTickets();
   if(!embedded)document.getElementById('ticketBack').onclick = () => { ticketPhotoFile = null; ticketDraft = null; state.view='camera-tools'; renderApp(); };
   document.getElementById('ticketTake').onclick = () => document.getElementById('ticketCam').click();
   document.getElementById('ticketChoose').onclick = () => document.getElementById('ticketLib').click();
@@ -1182,13 +1184,14 @@ function renderTicketReview(t) {
     <section class="ticket-review-panel">
       <div class="formhead">2. Review and Save</div>
       <div class="status">AI confidence: <strong>${esc(t.confidence || 'low')}</strong>. The photographed ticket is the source of truth.</div>
+      ${(t.confidence||'low')==='low'?'<label class="feature-item"><input type="checkbox" id="tkConfirm"> This ticket was hard to read. I checked every field against the ticket photo.</label>':''}
       <label for="tkJobLink">Link Ticket Photo to Job</label><select id="tkJobLink"><option value="">No job selected</option>${state.jobs.map(job=>`<option value="${job.id}" ${String(t.job_id||state.jobId||'')===String(job.id)?'selected':''}>${esc(job.job_number?job.job_number+' - '+job.name:job.name)}</option>`).join('')}</select>
       <div class="ticket-form-grid">
         <div>${ticketField('tkNumber','Ticket Number',t.ticket_number)}${ticketField('tkDate','Ticket Date',t.ticket_date ? String(t.ticket_date).slice(0,10) : '', 'date')}</div>
         <div>${ticketField('tkJob','Job Number',t.job_number)}${ticketField('tkTruck','Truck Number',t.truck_number)}</div>
         <div>${ticketField('tkPlant','Plant Name',t.plant_name)}${ticketField('tkPlantAddress','Plant Address',t.plant_address)}</div>
         <div>${ticketField('tkMix','Mix Description',t.mix_description)}${ticketField('tkMixCode','Mix Code',t.mix_code)}</div>
-        <div>${ticketField('tkTons','Net Tons',t.net_tons,'number','step="0.01" inputmode="decimal"')}${ticketField('tkTemp','Dispatch Temperature (°F)',t.dispatch_temperature_f,'number','step="0.1" inputmode="decimal"')}</div>
+        <div>${ticketField('tkTons','Net Tons (short tons; divide pounds by 2,000)',t.net_tons,'number','step="0.01" min="0" max="40" inputmode="decimal"')}${ticketField('tkTemp','Dispatch Temperature (°F)',t.dispatch_temperature_f,'number','step="0.1" inputmode="decimal"')}</div>
         <div>${ticketField('tkDispatch','Dispatch Time',t.dispatch_time)}${ticketField('tkArrival','Arrival Time',t.arrival_time)}</div>
       </div>
       <button class="btn" id="ticketSave">Save Ticket</button>
@@ -1203,8 +1206,10 @@ async function saveTicketReview() {
     ticket_number:value('tkNumber'), ticket_date:value('tkDate'), job_number:value('tkJob'), truck_number:value('tkTruck'),
     plant_name:value('tkPlant'), plant_address:value('tkPlantAddress'), mix_description:value('tkMix'), mix_code:value('tkMixCode'),
     net_tons:value('tkTons'), dispatch_temperature_f:value('tkTemp'), dispatch_time:value('tkDispatch'), arrival_time:value('tkArrival'),
-    job_id:value('tkJobLink'),
+    job_id:value('tkJobLink'), confirmed:!!document.getElementById('tkConfirm')?.checked,
   };
+  const tons=Number(body.net_tons);if(body.net_tons&&(!Number.isFinite(tons)||tons<=0||tons>40)){toast('Net tons must be between 0 and 40 for one truck. If the ticket shows pounds, divide by 2,000.');return;}
+  if(document.getElementById('tkConfirm')&&!body.confirmed){toast('Check every field against the ticket photo, then tick the confirmation box.');return;}
   const btn = document.getElementById('ticketSave'); btn.disabled = true; btn.textContent = 'Saving...';
   setPavingToolBusy(['ticketTake','ticketChoose'],true);try{const r = await api(`/api/asphalt-tickets/${ticketDraft.id}`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
   if(document.getElementById('ticketSave')!==btn)return;if(!r.ok){const d=await r.json().catch(()=>({}));throw new Error(d.error||'Ticket could not be saved');}
@@ -1212,18 +1217,32 @@ async function saveTicketReview() {
   }catch(e){if(document.getElementById('ticketSave')===btn){toast(e.message||'Ticket could not be saved');btn.disabled=false;btn.textContent='Save Ticket';}}finally{if(document.getElementById('ticketSave')===btn)setPavingToolBusy(['ticketTake','ticketChoose'],false);}
 }
 
+function localDateString(d=new Date()){return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
+// Saved tickets for the date printed on the ticket, optionally one job. Totals cover every ticket, not only those shown.
 async function loadTodayTickets() {
   const box = document.getElementById('ticketToday');
   if (!box) return;
+  const day=document.getElementById('ticketDay')?.value||localDateString(),job=document.getElementById('ticketJobFilter')?.value||'';
+  const tz=(()=>{try{return Intl.DateTimeFormat().resolvedOptions().timeZone||'';}catch{return '';}})();
   try {
-    const r = await api(`/api/asphalt-tickets?saved_from=${encodeURIComponent(new Date(new Date().setHours(0,0,0,0)).toISOString())}&saved_to=${encodeURIComponent(new Date(new Date().setHours(24,0,0,0)).toISOString())}`);
+    const r = await api(`/api/asphalt-tickets?date=${encodeURIComponent(day)}&tz=${encodeURIComponent(tz)}${job?'&job_id='+encodeURIComponent(job):''}`);
     if (!r.ok) throw new Error('bad');
     const d = await r.json(); const rows = d.tickets || [];
-    box.innerHTML = `<div class="ticket-total"><span>Today’s Total</span><strong>${Number(d.total_tons || 0).toLocaleString(uiLocale(),{minimumFractionDigits:2,maximumFractionDigits:2})} tons</strong></div>` +
-      (rows.length ? `<div class="ticket-list">${rows.map(t => `<article class="card ticket-card"><div class="ticket-card-photo">${t.photo_path ? `<img src="${photoSrc(t.photo_path)}" alt="Ticket" />` : ''}</div><div><strong>Ticket ${esc(t.ticket_number || 'number not entered')}</strong><div>${esc(t.plant_name || 'Plant not entered')}</div><div class="meta">${esc(t.mix_description || t.mix_code || 'Mix not entered')} · ${esc(t.truck_number || 'No truck')}</div><div class="ticket-tons">${t.net_tons == null ? 'Tons not entered' : Number(t.net_tons).toFixed(2) + ' tons'}</div><details data-ticket-details><summary>View Details</summary>${Object.entries(t).filter(([k,v])=>v!=null&&!['id','user_id','photo_path','raw_ai','capture_id','status','confidence','created_at','updated_at'].includes(k)).map(([k,v])=>`<p><strong>${esc(k.replaceAll('_',' ').replace(/\b[a-z]/g,c=>c.toUpperCase()))}:</strong> ${esc(v)}</p>`).join('')}</details><button class="btn secondary slim" data-ticket-edit="${t.id}">Edit Record</button><label for="ticketFormat${t.id}">Report format</label><select id="ticketFormat${t.id}"><option value="pdf">PDF</option><option value="docx">Word</option></select><div class="row compact"><button class="btn secondary slim" data-ticket-download="${t.id}">Download Report</button><button class="btn secondary slim" data-ticket-share="${t.id}">Share Report</button></div></div></article>`).join('')}</div>` : '<p class="empty">No tickets saved today.</p>');
+    if(box!==document.getElementById('ticketToday'))return;
+    const fmt=n=>Number(n||0).toLocaleString(uiLocale(),{minimumFractionDigits:2,maximumFractionDigits:2});
+    const label=day===localDateString()?'Today’s Total':'Total for '+day;
+    box.innerHTML = `<div class="ticket-total"><span>${label}</span><strong>${fmt(d.total_tons)} tons</strong></div>`+
+      `<p class="status">${d.ticket_count||0} ticket${d.ticket_count===1?'':'s'}${d.missing_tons?` · <strong>${d.missing_tons} without net tons</strong> (not counted; edit to add tons)`:''}${d.shown<d.ticket_count?` · showing the latest ${d.shown}`:''}</p>`+
+      ((d.by_mix||[]).length>1?`<p class="status">By mix: ${d.by_mix.map(m=>`${esc(m.mix)} ${fmt(m.tons)} tons (${m.tickets})`).join(' · ')}</p>`:'')+
+      (rows.length ? `<div class="ticket-list">${rows.map(t => `<article class="card ticket-card"><div class="ticket-card-photo">${t.photo_path ? `<img src="${photoSrc(t.photo_path)}" alt="Ticket" />` : ''}</div><div><strong>Ticket ${esc(t.ticket_number || 'number not entered')}</strong><div>${esc(t.plant_name || 'Plant not entered')}</div><div class="meta">${esc(t.ticket_day||'')} · ${esc(t.mix_description || t.mix_code || 'Mix not entered')} · ${esc(t.truck_number || 'No truck')}</div><div class="ticket-tons">${t.net_tons == null ? 'Tons not entered' : Number(t.net_tons).toFixed(2) + ' tons'}</div><details data-ticket-details><summary>View Details</summary>${Object.entries(t).filter(([k,v])=>v!=null&&!['id','user_id','photo_path','raw_ai','capture_id','status','confidence','created_at','updated_at','ticket_day','job_id','user_confirmed'].includes(k)).map(([k,v])=>`<p><strong>${esc(k.replaceAll('_',' ').replace(/\b[a-z]/g,c=>c.toUpperCase()))}:</strong> ${esc(v)}</p>`).join('')}</details><div class="row compact"><button class="btn secondary slim" data-ticket-edit="${t.id}">Edit Record</button><button class="btn secondary slim" data-ticket-delete="${t.id}">Delete Ticket</button></div><label for="ticketFormat${t.id}">Report format</label><select id="ticketFormat${t.id}"><option value="pdf">PDF</option><option value="docx">Word</option></select><div class="row compact"><button class="btn secondary slim" data-ticket-download="${t.id}">Download Report</button><button class="btn secondary slim" data-ticket-share="${t.id}">Share Report</button></div></div></article>`).join('')}</div>` : '<p class="empty">No tickets saved for this date.</p>');
     box.querySelectorAll('[data-ticket-edit]').forEach(b=>b.onclick=()=>{ticketDraft=rows.find(t=>t.id===Number(b.dataset.ticketEdit));renderTicketReview(ticketDraft);document.getElementById('ticketReview').scrollIntoView({block:'start'});});
+    // Two taps to delete, without a browser dialog: the first tap asks, the second removes the ticket from totals.
+    box.querySelectorAll('[data-ticket-delete]').forEach(b=>b.onclick=async()=>{
+      if(b.dataset.armed!=='1'){b.dataset.armed='1';b.textContent='Tap Again to Delete';setTimeout(()=>{if(b.isConnected){b.dataset.armed='';b.textContent='Delete Ticket';}},5000);return;}
+      b.disabled=true;try{const r=await api('/api/asphalt-tickets/'+b.dataset.ticketDelete,{method:'DELETE'});if(!r.ok)throw Error();toast('Ticket deleted. It no longer counts in totals.');if(ticketDraft&&ticketDraft.id===Number(b.dataset.ticketDelete)){ticketDraft=null;document.getElementById('ticketReview').innerHTML='';}loadTodayTickets();}catch{b.disabled=false;toast('The ticket could not be deleted. Try again.');}
+    });
     for(const action of ['download','share'])box.querySelectorAll('[data-ticket-'+action+']').forEach(b=>b.onclick=()=>deliverScannerReport(Number(b.getAttribute('data-ticket-'+action)),action,b,'ticket'));
-  } catch (e) { box.innerHTML = '<p class="status">Today’s tickets could not be loaded.</p>'; }
+  } catch (e) { if(box===document.getElementById('ticketToday'))box.innerHTML = '<p class="status">Saved tickets could not be loaded.</p>'; }
 }
 
 // Persist immediately, before waiting for location or a note. Serialize writes so
@@ -1739,7 +1758,7 @@ function dimBlockHtml() {
     </select>
     <label style="margin-top:10px">Area (Sq Ft)</label>
     <input type="text" inputmode="decimal" id="dimArea" placeholder="Auto-calculated" value="${esc(d.area)}" />
-    <div class="status" id="dimAreaHint" style="margin-top:4px">${anySug ? 'Highlighted values were filled in from your recording. Tap to confirm or edit.' : ''}</div>`;
+    <div class="status" id="dimAreaHint" style="margin-top:4px">${anySug ? 'Highlighted values were filled in automatically, from your recording or the AI estimate. Check each one, then edit or keep it.' : ''}</div>`;
 }
 
 function wireDims() {
@@ -1893,7 +1912,7 @@ function refreshHint() {
   const hint = document.getElementById('dimAreaHint');
   if (!hint) return;
   const anySug = d.suggested.length || d.suggested.width || d.suggested.depth;
-  hint.textContent = anySug ? 'Highlighted values were filled in from your recording. Tap to confirm or edit.' : '';
+  hint.textContent = anySug ? 'Highlighted values were filled in automatically, from your recording or the AI estimate. Check each one, then edit or keep it.' : '';
 }
 
 function clientToInches(value, unit) {
@@ -2016,6 +2035,8 @@ function dimsFromCapture(c) {
   d.shape = ['rectangle', 'circle', 'irregular'].includes(c.dim_shape) ? c.dim_shape : 'rectangle';
   d.area = c.dim_area_sqft == null ? '' : trimNumC(Number(c.dim_area_sqft));
   d.areaOverridden = d.area !== '';
+  // Saved values count as entered by the person, so a new AI estimate fills only empty fields.
+  d.touched = { length: d.length !== '', width: d.width !== '', depth: d.depth !== '', shape: true, area: d.areaOverridden };
   return d;
 }
 
@@ -2038,7 +2059,9 @@ async function saveSavedDims() {
   const c = state._editMeasureCapture;
   if (!c) return;
   const payload = collectDims();
-  if (state._measure) {
+  const typed = state._dims && Object.entries(state._dims.touched || {}).some(([k, v]) => v && k !== 'shape');
+  // Any size the person typed or kept makes this a person-confirmed measurement, even after an AI estimate.
+  if (state._measure && !typed) {
     payload.dim_source = 'photo_ai';
     payload.dim_confidence = state._measure.confidence || 'low';
     payload.dim_confirmed = !!state._measure.confirmed;
@@ -2047,6 +2070,7 @@ async function saveSavedDims() {
   } else {
     payload.dim_source = 'manual';
     payload.dim_confirmed = true;
+    if (state._measure) { payload.dim_ai = state._measure.raw || null; payload.measure_reference = state._measure.reference || ''; }
   }
   const btn = document.getElementById('saveDims');
   btn.disabled = true; btn.textContent = 'Saving...';
@@ -2070,6 +2094,7 @@ function fmtDimsClient(c) {
   let line = lw.length ? lw.join(' x ') : '';
   if (c.dim_depth_in != null && isFinite(Number(c.dim_depth_in))) line = line ? `${line} x ${trimNumC(Number(c.dim_depth_in))} in deep` : `${trimNumC(Number(c.dim_depth_in))} in deep`;
   if (c.dim_area_sqft != null && isFinite(Number(c.dim_area_sqft))) { const a = `${Number(c.dim_area_sqft).toFixed(1)} sq ft`; const al = c.dim_shape === 'irregular' ? `approx. ${a}` : a; line = line ? `${line}, ${al}` : al; }
+  if (line && c.dim_confirmed === false) line += ' (AI estimate, not confirmed; not used in documents)';
   return line;
 }
 // ================= end Pro dimension fields =================
@@ -2192,7 +2217,7 @@ async function showPendingPhotos(){
   const ticker=setInterval(()=>{if(!dialog.isConnected){clearInterval(ticker);return;}update();},1000);dialog.addEventListener('close',()=>{clearInterval(ticker);dialog.remove();});document.body.append(dialog);dialog.showModal();update();
 
 }
-function payloadFormData(p){const fd=new FormData();if(p.photo)fd.append('photo',p.photo,p.photoName||'offline-photo.jpg');fd.append('note',p.note||'');fd.append('area_tags',p.area_tags||'[]');fd.append('kind',p.kind||'note');if(p.captured_at)fd.append('captured_at',p.captured_at);if(p.custom_fields)fd.append('custom_fields',p.custom_fields);if(p.context_source_id)fd.append('context_source_id',p.context_source_id);if(Object.prototype.hasOwnProperty.call(p,'job_id'))fd.append('job_id',p.job_id||'');if(p.follow_up_occurrence_id)fd.append('follow_up_occurrence_id',p.follow_up_occurrence_id);for(const k of ['security_issue_type','urgency','paving_photo_reason','concrete_phase','concrete_purpose','concrete_element','concrete_stage','concrete_condition','concrete_severity','concrete_location','concrete_mix','hoa_community_id','hoa_title','hoa_item_type','hoa_priority','hoa_area','hoa_directed_to','hoa_budget_source','hoa_photo_stage','hoa_target_date','property_area_id','incident_id','incident_view'])if(p[k])fd.append(k,p[k]);if(p.latitude!=null)fd.append('latitude',p.latitude);if(p.longitude!=null)fd.append('longitude',p.longitude);if(p.address)fd.append('address',p.address);return fd;}
+function payloadFormData(p){const fd=new FormData();if(p.photo)fd.append('photo',p.photo,p.photoName||'offline-photo.jpg');fd.append('note',p.note||'');fd.append('area_tags',p.area_tags||'[]');fd.append('kind',p.kind||'note');if(p.captured_at)fd.append('captured_at',p.captured_at);if(p.custom_fields)fd.append('custom_fields',p.custom_fields);if(p.context_source_id)fd.append('context_source_id',p.context_source_id);if(Object.prototype.hasOwnProperty.call(p,'job_id'))fd.append('job_id',p.job_id||'');if(p.follow_up_occurrence_id)fd.append('follow_up_occurrence_id',p.follow_up_occurrence_id);for(const k of ['dim_length','dim_length_unit','dim_width','dim_width_unit','dim_depth','dim_shape','dim_area_sqft','dim_source','security_issue_type','urgency','paving_photo_reason','concrete_phase','concrete_purpose','concrete_element','concrete_stage','concrete_condition','concrete_severity','concrete_location','concrete_mix','hoa_community_id','hoa_title','hoa_item_type','hoa_priority','hoa_area','hoa_directed_to','hoa_budget_source','hoa_photo_stage','hoa_target_date','property_area_id','incident_id','incident_view'])if(p[k])fd.append(k,p[k]);if(p.latitude!=null)fd.append('latitude',p.latitude);if(p.longitude!=null)fd.append('longitude',p.longitude);if(p.address)fd.append('address',p.address);return fd;}
 
 function bgIndicator() {
   document.getElementById('bgstatus')?.remove();
@@ -2311,6 +2336,9 @@ async function saveCaptureDurably(options = {}) {
   try{globalThis.PhotoNotesIncidents?.payload(payload);}catch(e){toast(e.message);return false;}
   try{globalThis.PhotoNotesFollowUps?.payload(payload);}catch(e){toast(e.message);return false;}
   if(Object.prototype.hasOwnProperty.call(options,'jobId'))payload.job_id=options.jobId||'';
+  // Sizes spoken during Record Notes ("three by two feet, four inches deep") are saved with the photo.
+  const spoken=state._dims;
+  if(typeof isIndustryProClient==='function'&&isIndustryProClient()&&featureOn('measurements')&&spoken&&(spoken.length||spoken.width||spoken.depth))Object.assign(payload,{dim_length:spoken.length,dim_length_unit:spoken.lengthUnit,dim_width:spoken.width,dim_width_unit:spoken.widthUnit,dim_depth:spoken.depth,dim_shape:spoken.shape,dim_area_sqft:spoken.areaOverridden?spoken.area:'',dim_source:'voice'});
   const hadCoords = !!state.location;
   if (state.location) { payload.latitude=state.location.lat;payload.longitude=state.location.lng; }
   if (state.address) payload.address=state.address;
@@ -2464,6 +2492,7 @@ async function renderList() {
       <label for="libraryAssignGroup" id="libraryAssignGroupLabel" hidden>Group (Optional)<select id="libraryAssignGroup"><option value="">No Group</option></select></label>
       <button class="btn" id="libraryAssign" type="button">Add to Project</button>
       <button class="btn secondary" id="libraryCreateAndAssign" type="button">Create New Project</button>
+      ${featureOn('measurements')?'<button class="btn secondary" id="classifybatch" type="button">Classify Selected (AI)</button><span class="status" id="classifyprog" role="status" aria-live="polite"></span>':''}
     </section>
     <div class="organize-library-heading"><h2>Saved PhotoNotes</h2><div class="row compact"><button class="btn secondary slim" id="librarySelectAll">Select All</button><button class="btn secondary slim" id="libraryClearSelection">Clear Selection</button></div></div>
     <section class="library-specialty-actions" id="librarySpecialtyActions" hidden>
@@ -2488,6 +2517,7 @@ async function renderList() {
   document.getElementById('createJobBtn').onclick=()=>openLibraryProjectDialog(false);
   document.getElementById('libraryCreateAndAssign').onclick=()=>openLibraryProjectDialog(true);
   document.getElementById('libraryAssign').onclick=assignSelectedToProject;
+  const classifyBatch=document.getElementById('classifybatch');if(classifyBatch)classifyBatch.onclick=classifySelected;
   document.getElementById('libraryAssignProject').onchange=()=>loadLibraryGroups('assign');
   document.getElementById('createProjectGroup').onclick=openLibraryGroupDialog;
   document.getElementById('libraryFilters').onclick=()=>toggleLibraryPanel('libraryFilterPanel','libraryFilters');
@@ -2760,8 +2790,8 @@ async function classifyOne(id) {
 }
 
 async function classifySelected() {
-  const ids = Array.from(document.querySelectorAll('.capchk:checked')).map(x => parseInt(x.value, 10));
-  if (!ids.length) { toast('Select at least one capture'); return; }
+  const ids = selectedCaptureIds();
+  if (!ids.length) { toast('Select at least one photo'); return; }
   const prog = document.getElementById('classifyprog');
   const btn = document.getElementById('classifybatch');
   btn.disabled = true;
@@ -2773,7 +2803,7 @@ async function classifySelected() {
   }
   if (prog) prog.textContent = serviceMessage || (`Classified ${done} of ${ids.length}` + (failed ? `, ${failed} could not be classified` : ''));
   btn.disabled = false;
-  loadCards(document.getElementById('filter').value || '');
+  loadCards((document.getElementById('filter')||{}).value || '');
 }
 
 function startOverride(id, rows) {
@@ -4422,6 +4452,8 @@ async function renderGroupDetail(id) {
       </div>`;
     }
   }
+  // Paving Proposal: repair recommendation and estimated quantity for each classified location.
+  if (isPavingClient()) scoreHtml += `<div class="card proposal-export"><strong>Repair Proposal</strong><div class="meta">One page per classified location with the damage, confirmed size, recommended repair and estimated quantity, plus a summary of work. Classify photos and confirm their measurements first.</div><div class="row compact"><button class="btn secondary slim" id="proppdf" type="button">Proposal PDF</button><button class="btn secondary slim" id="propdocx" type="button">Proposal Word</button></div></div>`;
   body.innerHTML = `
     <button class="backlink" id="gback">‹ All Documents</button>
     <div class="workflow-intro"><strong>Build Your Document</strong><span>Review the title, arrange the photos and captions, and remove anything you do not want included.</span></div>
@@ -4466,6 +4498,8 @@ async function renderGroupDetail(id) {
   document.getElementById('greverse').onclick = reverseItems;
   document.getElementById('exhibit-open').onclick = () => window.PhotoNotesExhibit.open({group:currentGroup,items:currentGroupItems,photoSrc:capturePhotoSrc,userId:state.me.id});
   const gm = document.getElementById('gotoMap'); if (gm) gm.onclick = () => { state.view = 'map'; state.groupId = null; renderApp(); };
+  const pp = document.getElementById('proppdf'); if (pp) pp.onclick = () => exportProposal('pdf');
+  const pw = document.getElementById('propdocx'); if (pw) pw.onclick = () => exportProposal('docx');
   const en = document.getElementById('ewrNew'); if (en) en.onclick = () => { state.ewrId = 'new'; renderGroups(); };
   renderTitleView();
   renderDescView();
@@ -4598,7 +4632,8 @@ function renderEwrCreate(body) {
   document.getElementById('ewrDictate').onclick = (e) => dictateInto(document.getElementById('ewrDesc'), e.currentTarget);
   document.getElementById('ewrTake').onclick = () => document.getElementById('ewrCam').click();
   document.getElementById('ewrChoose').onclick = () => document.getElementById('ewrLib').click();
-  const onPick = (e) => { if (e.target.files[0]) { window._ewrNewPhotos.push(e.target.files[0]); renderEwrThumbs(); } e.target.value = ''; };
+  // Only photos taken now get this phone's current location; a photo chosen from the library may have been taken elsewhere.
+  const onPick = (e) => { const f=e.target.files[0]; if (f) { f._pnTakenNow = e.target.id === 'ewrCam'; window._ewrNewPhotos.push(f); renderEwrThumbs(); } e.target.value = ''; };
   document.getElementById('ewrCam').onchange = onPick;
   document.getElementById('ewrLib').onchange = onPick;
   document.getElementById('ewrSave').onclick = saveNewEwr;
@@ -4636,13 +4671,14 @@ async function saveNewEwr() {
     const d = await r.json();
     if (!r.ok || !d.record) throw new Error(d.error || 'save failed');
     const id = d.record.id;
+    let failed = 0;
     for (const f of photos) {
       const fd = new FormData(); fd.append('photo', f);
-      if (loc) { fd.append('latitude', loc.lat); fd.append('longitude', loc.lng); }
-      try { await api(`/api/ewr/${id}/photo`, { method: 'POST', body: fd }); } catch (e) {}
+      if (loc && f._pnTakenNow) { fd.append('latitude', loc.lat); fd.append('longitude', loc.lng); }
+      try { const pr = await api(`/api/ewr/${id}/photo`, { method: 'POST', body: fd }); if (!pr.ok) failed++; } catch (e) { failed++; }
     }
     window._ewrNewPhotos = [];
-    toast('Extra Work Record saved to this job');
+    toast(failed ? `Record saved, but ${failed} of ${photos.length} photo${photos.length===1?'':'s'} did not upload. Add ${failed===1?'it':'them'} again in this record.` : 'Extra Work Record saved to this job');
     state.ewrId = id; renderGroups();
   } catch (e) { toast(e.message || 'Save failed'); btn.disabled = false; btn.textContent = 'Save Record'; }
 }
@@ -4719,16 +4755,16 @@ function renderEwrView(body, data) {
     const r = await api(`/api/ewr/${e.id}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) });
     toast(r.ok ? 'Saved' : 'Save failed');
   };
-  const addPhoto = async (file) => {
+  const addPhoto = async (file, takenNow) => {
     const fd = new FormData(); fd.append('photo', file);
-    const loc = await getLocationOnce(); if (loc) { fd.append('latitude', loc.lat); fd.append('longitude', loc.lng); }
+    if (takenNow) { const loc = await getLocationOnce(); if (loc) { fd.append('latitude', loc.lat); fd.append('longitude', loc.lng); } }
     const r = await api(`/api/ewr/${e.id}/photo`, { method: 'POST', body: fd });
     if (r.ok) { toast('Photo added'); renderEwrDetail(); } else toast('Upload failed');
   };
   document.getElementById('ewrTake').onclick = () => document.getElementById('ewrCam').click();
   document.getElementById('ewrChoose').onclick = () => document.getElementById('ewrLib').click();
-  document.getElementById('ewrCam').onchange = (ev) => { if (ev.target.files[0]) addPhoto(ev.target.files[0]); };
-  document.getElementById('ewrLib').onchange = (ev) => { if (ev.target.files[0]) addPhoto(ev.target.files[0]); };
+  document.getElementById('ewrCam').onchange = (ev) => { if (ev.target.files[0]) addPhoto(ev.target.files[0], true); };
+  document.getElementById('ewrLib').onchange = (ev) => { if (ev.target.files[0]) addPhoto(ev.target.files[0], false); };
   document.getElementById('ewrExport').onclick = async () => {
     try {
       const r = await api(`/api/ewr/${e.id}/export`);

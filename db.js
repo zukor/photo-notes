@@ -736,6 +736,7 @@ async function init() {
   // backed up here so the original can always be restored.
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS photo_original_path TEXT`);
   await pool.query(`ALTER TABLE asphalt_tickets ADD COLUMN IF NOT EXISTS job_id INTEGER REFERENCES jobs(id) ON DELETE SET NULL`);
+  await pool.query(`ALTER TABLE asphalt_tickets ADD COLUMN IF NOT EXISTS user_confirmed BOOLEAN NOT NULL DEFAULT false`);
   await pool.query(`ALTER TABLE capture_pairs ADD COLUMN IF NOT EXISTS comparison_opacity NUMERIC`);
   await pool.query(`ALTER TABLE camera_readings ADD COLUMN IF NOT EXISTS capture_id INTEGER REFERENCES captures(id) ON DELETE SET NULL`);
   await pool.query(`ALTER TABLE camera_readings ADD COLUMN IF NOT EXISTS job_id INTEGER REFERENCES jobs(id) ON DELETE SET NULL`);
