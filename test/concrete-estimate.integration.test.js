@@ -55,6 +55,31 @@ test('concrete estimating: areas, price list, estimate, site photo, proposal, qu
 
     // Proposal, quantities and bid versus actual.
     for (const doc of ['pdf', 'docx']) { const r = await call(`/api/concrete/estimates/${est.id}/proposal?doc=${doc}`); assert.equal(r.status, 200); assert.ok(r.body.byteLength > 1500, doc); }
+    const plainSize = (await call(`/api/concrete/estimates/${est.id}/proposal?doc=pdf`)).body.byteLength;
+
+    // Repairs measured on a job photo, saved as measured areas, priced and drawn in the proposal.
+    const shot = await sharp({ create: { width: 1000, height: 800, channels: 3, background: '#999' } }).jpeg().toBuffer();
+    fs.writeFileSync(path.join(process.env.UPLOAD_DIR, 'damage.jpg'), shot);
+    const dmg = (await pool.query("INSERT INTO captures(user_id,job_id,photo_path) VALUES($1,$2,'/uploads/damage.jpg') RETURNING id", [user, job])).rows[0].id;
+    const loose = (await pool.query("INSERT INTO captures(user_id,photo_path) VALUES($1,'/uploads/damage.jpg') RETURNING id", [user])).rows[0].id;
+    const ref = [{ x: 0.1, y: 0.5 }, { x: 0.3, y: 0.5 }];
+    assert.equal((await call('/api/concrete/repairs/photos?job_id=' + job)).body.photos.some(p => p.id === dmg), true);
+    assert.equal((await call('/api/concrete/repairs', { capture_id: loose, kind: 'replace', ref, ref_ft: 2, points: [] })).status, 400, 'the photo needs a job');
+    assert.equal((await call('/api/concrete/repairs', { capture_id: dmg, kind: 'replace', ref, ref_ft: 2, points: [{ x: 0.4, y: 0.25 }] })).status, 400, 'needs three corners');
+    assert.equal((await call('/api/concrete/repairs', { capture_id: dmg, kind: 'replace', ref, ref_ft: 2, points: [] }, other)).status, 404, 'another account cannot use the photo');
+    const rep = await call('/api/concrete/repairs', { capture_id: dmg, kind: 'replace', name: 'Broken panel', thickness_in: 4, ref, ref_ft: 2, points: [{ x: 0.4, y: 0.25 }, { x: 0.8, y: 0.25 }, { x: 0.8, y: 0.5 }, { x: 0.4, y: 0.5 }] });
+    assert.equal(rep.status, 200, JSON.stringify(rep.body)); assert.equal(Number(rep.body.area.area_sqft), 8); assert.equal(rep.body.area.repair_kind, 'replace'); assert.equal(rep.body.area.method, 'photo_ref');
+    const crk = await call('/api/concrete/repairs', { capture_id: dmg, kind: 'crack', ref, ref_ft: 2, points: [{ x: 0.1, y: 0.1 }, { x: 0.5, y: 0.1 }, { x: 0.5, y: 0.6 }] });
+    assert.equal(crk.status, 200); assert.equal(Number(crk.body.area.repair_lf), 8);
+    assert.equal((await call('/api/concrete/areas/' + crk.body.area.id, { name: 'Driveway crack' })).body.area.name, 'Driveway crack', 'a crack can be renamed');
+    const withRepairs = await call('/api/concrete/estimates/' + est.id, { area_ids: [a1.body.area.id, a2.body.area.id, rep.body.area.id, crk.body.area.id] });
+    const keys = withRepairs.body.options[0].takeoff.lines.map(l => l.key);
+    assert.ok(keys.includes('demo_sf') && keys.includes('haul_ton') && keys.includes('crack_repair_lf'), keys.join());
+    const drawn = await call(`/api/concrete/estimates/${est.id}/proposal?doc=pdf`);
+    assert.equal(drawn.status, 200); assert.ok(drawn.body.byteLength > plainSize + 5000, 'plans and the outlined photo are in the proposal');
+    const word = await call(`/api/concrete/estimates/${est.id}/proposal?doc=docx`); assert.equal(word.status, 200);
+    assert.match(Buffer.from(word.body).toString('latin1'), /word\/media\//, 'drawings embedded in Word');
+
     const csv = Buffer.from((await call(`/api/concrete/estimates/${est.id}/quantities.csv`)).body).toString();
     assert.match(csv, /Back patio,240/); assert.match(csv, /Option: Best/);
     await pool.query("INSERT INTO concrete_tickets(user_id,job_id,load_yd3,status) VALUES($1,$2,4.9,'saved')", [user, job]);

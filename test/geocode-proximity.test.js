@@ -11,7 +11,6 @@ test('street-address reverse geocoding is limited to a nearby mapped point', () 
   assert.match(server, /haversineMeters\(lat, lng, candidateLat, candidateLng\)/);
   assert.match(server, /geocodeCandidateIsNearby\(lat, lng, match\.y, match\.x\)/);
   assert.match(server, /geocodeCandidateIsNearby\(lat, lng, point\.lat, point\.lng\)/);
-  assert.match(server, /geocodeCandidateIsNearby\(lat, lng, center\[1\], center\[0\]\)/);
   assert.match(server, /geocodeCandidateIsNearby\(lat, lng, data\.lat, data\.lon\)/);
 });
 
@@ -38,3 +37,8 @@ test('remote locations fall back to a named geographic area, not a road', () => 
  assert.equal(label(point,10.3116231,123.8544703),'Puti, Cebu City, Central Visayas');
  assert.equal(label({category:'boundary',name:'Tisa',address:{suburb:'Tisa',city:'Cebu City',region:'Central Visayas'}},10.30156,123.86880),'Tisa, Central Visayas');
  });
+
+test('photo addresses are not looked up with Mapbox, whose standard terms do not allow saving results', () => {
+  const fn = server.slice(server.indexOf('async function reverseGeocode('), server.indexOf('async function reverseGeocode(') + 6000);
+  assert.doesNotMatch(fn, /api\.mapbox\.com\/geocoding/);
+});

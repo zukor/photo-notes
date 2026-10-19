@@ -90,5 +90,32 @@
     if (!all.length) return null;
     return { south: Math.min(...all.map(p => p.lat)), north: Math.max(...all.map(p => p.lat)), west: Math.min(...all.map(p => p.lng)), east: Math.max(...all.map(p => p.lng)) };
   }
-  return { measure, squareCorners, scaleFromTape, bounds, clean };
+  // Control-joint layout inside any outline given in feet. Joints run both ways, lined up with the longest edge,
+  // in equal panels no wider than the spacing. Returns the joint segments and their total length.
+  function jointLayoutXY(xy, spacing) {
+    if (!Array.isArray(xy) || xy.length < 3 || !(spacing > 0)) return { segments: [], length_ft: 0 };
+    let best = 0, angle = 0;
+    for (let i = 0; i < xy.length; i++) { const a = xy[i], b = xy[(i + 1) % xy.length], d = dist(a, b); if (d > best) { best = d; angle = Math.atan2(b.y - a.y, b.x - a.x); } }
+    const c = Math.cos(-angle), s = Math.sin(-angle), r = xy.map(p => ({ x: p.x * c - p.y * s, y: p.x * s + p.y * c }));
+    const minX = Math.min(...r.map(p => p.x)), maxX = Math.max(...r.map(p => p.x)), minY = Math.min(...r.map(p => p.y)), maxY = Math.max(...r.map(p => p.y));
+    const segs = [];
+    const cut = (horizontal, at) => {
+      const hits = [];
+      for (let i = 0; i < r.length; i++) {
+        const a = r[i], b = r[(i + 1) % r.length], ka = horizontal ? a.y : a.x, kb = horizontal ? b.y : b.x;
+        if ((ka <= at && kb > at) || (kb <= at && ka > at)) { const t = (at - ka) / (kb - ka); hits.push(horizontal ? a.x + t * (b.x - a.x) : a.y + t * (b.y - a.y)); }
+      }
+      hits.sort((p, q) => p - q);
+      for (let i = 0; i + 1 < hits.length; i += 2) if (hits[i + 1] - hits[i] > 0.5) segs.push(horizontal ? [{ x: hits[i], y: at }, { x: hits[i + 1], y: at }] : [{ x: at, y: hits[i] }, { x: at, y: hits[i + 1] }]);
+    };
+    const nx = Math.max(1, Math.ceil((maxX - minX) / spacing - 1e-9)), ny = Math.max(1, Math.ceil((maxY - minY) / spacing - 1e-9));
+    for (let k = 1; k < nx; k++) cut(false, minX + k * (maxX - minX) / nx);
+    for (let k = 1; k < ny; k++) cut(true, minY + k * (maxY - minY) / ny);
+    const c2 = Math.cos(angle), s2 = Math.sin(angle), back = p => ({ x: p.x * c2 - p.y * s2, y: p.x * s2 + p.y * c2 });
+    const segments = segs.map(([a, b]) => [back(a), back(b)]);
+    return { segments, length_ft: round(segments.reduce((t, [a, b]) => t + dist(a, b), 0), 1), panel_ft: [round((maxX - minX) / nx, 1), round((maxY - minY) / ny, 1)] };
+  }
+  // Satellite outline to feet, so it can be drawn as a plan and given a joint layout.
+  function toPlan(points) { const pts = clean(points); if (pts.length < 3) return null; const o = origin(pts); return toFeet(pts, o).map(p => ({ x: p.x, y: -p.y })); }
+  return { measure, squareCorners, scaleFromTape, bounds, clean, jointLayoutXY, toPlan, shoelace };
 });

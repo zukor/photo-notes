@@ -52,7 +52,8 @@ test('pricing flags missing prices; options price each finish', () => {
 
 test('city presets, checklist status and bid versus actual', () => {
   assert.equal(E.CITY_PRESETS.find(c => c.id === 'kyle').spec.thickness_in, 5);
-  assert.equal(E.CITY_PRESETS.find(c => c.id === 'sanantonio').spec.thickness_in, undefined, 'San Antonio thickness is not guessed');
+  assert.equal(E.CITY_PRESETS.find(c => c.id === 'sanantonio').spec.thickness_in, 5, 'San Antonio residential is 5 in per the city drawing');
+  assert.equal(E.CITY_PRESETS.find(c => c.id === 'sanantonio_com').spec.reinforcement.bar, '#4');
   assert.equal(E.checklistStatus({ access: { answer: 'Gate 10 ft', photos: [1] } }).answered, 1);
   const c = E.compareActual(10, 11, 11.5); assert.equal(c.actual_waste_pct, 15); assert.equal(c.status, 'over');
   assert.deepEqual(E.suggestedWaste([{ actual_waste_pct: 6 }, { actual_waste_pct: 8 }, { actual_waste_pct: 7.5 }]), { jobs: 3, average_waste_pct: 7.2, suggested_pct: 8 });
@@ -65,4 +66,43 @@ test('server cleaning: areas need sizes, specs and options are limited, CSV is p
   assert.equal(S.cleanSpec({ finish: 'gold' }).finish, 'broom'); assert.equal(S.cleanOptions([1, 2, 3, 4, 5].map(() => ({}))).length, 3);
   assert.deepEqual(S.parseCsv('name,sqft\n"Bay 1, north",1200,140,6'), [['name', 'sqft'], ['Bay 1, north', '1200', '140', '6']]);
   assert.ok(Math.abs(S.outlinePerimeterFt([{ lat: 29.4, lng: -98.5 }, { lat: 29.4001, lng: -98.5 }, { lat: 29.4001, lng: -98.4999 }, { lat: 29.4, lng: -98.4999 }]) - 136.7) < 1);
+});
+
+test('control joints are laid out inside the outline and drawn as a plan', () => {
+  const G = require('../public/geo-measure.js');
+  const rect = G.jointLayoutXY([{ x: 0, y: 0 }, { x: 20, y: 0 }, { x: 20, y: 12 }, { x: 0, y: 12 }], 10);
+  assert.equal(rect.length_ft, 32, 'one joint across 12 ft and one across 20 ft');
+  const L = G.jointLayoutXY([{ x: 0, y: 0 }, { x: 30, y: 0 }, { x: 30, y: 10 }, { x: 15, y: 10 }, { x: 15, y: 20 }, { x: 0, y: 20 }], 10);
+  assert.ok(L.segments.every(([a, b]) => !(a.x > 15.5 && a.y > 10.5) && !(b.x > 15.5 && b.y > 10.5)), 'no joint in the notch');
+  const svg = E.planSvg({ name: 'Patio', shape: 'rect', dims: { length: '20', width: '12' } }, 4);
+  assert.match(svg, /<svg/); assert.match(svg, /stroke-dasharray/); assert.match(svg, /control joints, about 10 ft apart/);
+  assert.equal(E.jointLength({ name: 'P', shape: 'rect', dims: { length: '20', width: '12' } }, 4), 32);
+});
+
+test('a repair traced on a photo gives an area or a crack length from the known length', () => {
+  const base = { image: { w: 1000, h: 800 }, ref: [{ x: 0.1, y: 0.5 }, { x: 0.3, y: 0.5 }], ref_ft: 2 }; // 200 px = 2 ft
+  const area = E.photoMeasure({ ...base, kind: 'replace', points: [{ x: 0.4, y: 0.25 }, { x: 0.8, y: 0.25 }, { x: 0.8, y: 0.5 }, { x: 0.4, y: 0.5 }] });
+  assert.equal(area.area_sqft, 8); assert.equal(area.perimeter_ft, 12); // 4 ft by 2 ft
+  const crack = E.photoMeasure({ ...base, kind: 'crack', points: [{ x: 0.1, y: 0.1 }, { x: 0.5, y: 0.1 }, { x: 0.5, y: 0.6 }] });
+  assert.equal(crack.length_ft, 8);
+  assert.equal(E.photoMeasure({ ...base, ref_ft: 0, kind: 'replace', points: [] }).ok, false);
+  assert.equal(E.photoMeasure({ ...base, ref: [{ x: 0.1, y: 0.1 }, { x: 0.101, y: 0.1 }], kind: 'crack', points: [] }).ok, false, 'scale points too close');
+});
+
+test('repairs flow into the takeoff: removal and haul-off, resurfacing and crack repair', () => {
+  const photo = { image: { w: 1000, h: 800 }, ref: [{ x: 0.1, y: 0.5 }, { x: 0.3, y: 0.5 }], ref_ft: 2, kind: 'replace', points: [{ x: 0.4, y: 0.25 }, { x: 0.8, y: 0.25 }, { x: 0.8, y: 0.5 }, { x: 0.4, y: 0.5 }] };
+  const areas = [
+    { id: 1, name: 'Broken panel', shape: 'custom', dims: { area_sqft: '8', perimeter_ft: '12.8' }, method: 'photo_ref', repair_kind: 'replace', thickness_in: 4, geometry: { photo } },
+    { id: 2, name: 'Worn walk', shape: 'custom', dims: { area_sqft: '40', perimeter_ft: '28' }, method: 'photo_ref', repair_kind: 'resurface' },
+    { id: 3, name: 'Crack', shape: 'custom', dims: {}, method: 'photo_ref', repair_kind: 'crack', repair_lf: 12 }
+  ];
+  const t = E.takeoff(areas, { thickness_in: 4, reinforcement: { type: 'none' }, joints: true });
+  const line = k => t.lines.find(l => l.key === k);
+  assert.ok(line('demo_sf') && line('demo_sf').purchase >= 8, 'removal of the replaced area');
+  assert.ok(line('haul_ton'), 'haul-off');
+  assert.equal(line('crack_repair_lf').purchase, 12);
+  assert.equal(line('resurface_sf').purchase, 40);
+  assert.ok(!line('forms_lf') || line('forms_lf').purchase === 0, 'a saw-cut patch needs no forms');
+  assert.equal(t.areas.find(a => a.id === 1).repair, 'replace');
+  assert.ok(E.planOutline(areas[0]).length === 4, 'the photo outline is used for the plan');
 });

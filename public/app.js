@@ -942,6 +942,8 @@ function cameraToolCard(title, description, action, id) {
   return `<article class="camera-tool-card"><div><strong>${title}</strong><span>${description}</span></div><button class="btn secondary slim" data-camera-tool id="${id}">${action}</button></article>`;
 }
 // Concrete Pro estimating: estimate list, one estimate, and the price list.
+// Measure Repair Area: trace damage on a job photo; the repair becomes a measured area on the job.
+function openRepairOutline(o){if(!window.PhotoNotesRepairOutline)return;window.PhotoNotesRepairOutline.open({api,toast,esc,...o});}
 function renderConcreteEstimating(view,title){
   const body=document.getElementById('body'),ui=window.PhotoNotesConcreteEstimateUI;
   if(!ui){state.view='camera-tools';renderCameraTools();return;}
@@ -954,6 +956,7 @@ function renderConcreteEstimating(view,title){
     openList:()=>{state.view='concrete-estimates';renderApp();},
     openPriceBook:()=>{state.view='concrete-price-book';renderApp();},
     satellite:opts=>openSatelliteMeasure(opts),
+    repair:window.PhotoNotesRepairOutline?o=>openRepairOutline(o):null,
     precisionMeasure:window.PhotoNotesPrecisionMeasure&&measurementOn()?done=>window.PhotoNotesPrecisionMeasure.open({surface:'concrete',mode:'live',canValidate:false,onDone:r=>done(r.dims||{}),onCancel:()=>{}}):null};
   const mount=document.getElementById('concreteToolMount');
   if(view==='concrete-estimate')ui.renderEditor(mount,ctx,state.concreteEstimateId);
@@ -3208,6 +3211,7 @@ function captureCardHtml(c) {
     ${c.paving_photo_reason?`<div class="paving-photo-reason-label">${esc(PAVING_PHOTO_REASONS.find(r=>r.id===c.paving_photo_reason)?.label||c.paving_photo_reason)}</div>`:''}
     ${concreteRow}
     ${isConcreteClient()&&c.concrete_stage!=='batch_ticket'?`<button type="button" class="btn secondary slim editconcrete" data-id="${c.id}">Edit Concrete Details</button>`:''}
+    ${isConcreteClient()&&c.photo_path&&c.job_id&&c.concrete_stage!=='batch_ticket'&&window.PhotoNotesRepairOutline?`<button type="button" class="btn secondary slim repairOutline" data-id="${c.id}">Measure Repair Area</button>`:''}
     ${isConcreteClient()&&c.photo_path?`<button class="btn secondary slim concrete-area-button" data-id="${c.id}">${(c.footprints||[]).length?'View / Edit Saved Areas ('+c.footprints.length+')':'Measure Patio / Foundation Area'}</button>`:''}
     ${photoEvidencePreview(c)}
     ${state.view === 'organize' && measurementOn() && c.defect_type ? `<div class="meta saved-classification"><strong>Classification:</strong> ${esc(defectLabelClient(c.defect_type))}${c.defect_type !== 'none' && c.defect_severity ? ' - ' + esc(c.defect_severity) : ''}</div>` : ''}
@@ -3355,6 +3359,7 @@ function wireCards(cards, rows) {
   cards.querySelectorAll('.restorebtn').forEach(b => b.onclick = () => restoreOriginal(parseInt(b.getAttribute('data-id'), 10)));
   cards.querySelectorAll('[data-delete-organize]').forEach(button => button.onclick = () => deleteOrganizePhotoNote(button.dataset.deleteOrganize, button));
   cards.querySelectorAll('.concrete-ticket-file').forEach(input=>input.onchange=()=>attachConcreteTicket(Number(input.dataset.id),input));
+  cards.querySelectorAll('.repairOutline').forEach(b=>b.onclick=()=>{const c=rows.find(r=>r.id===Number(b.dataset.id));if(c)openRepairOutline({capture:c,onSaved:()=>{}});});
   cards.querySelectorAll('.editconcrete').forEach(b=>b.onclick=()=>{const c=rows.find(r=>r.id===Number(b.dataset.id));if(c)openConcreteDetailsEditor(c);});
 }
 

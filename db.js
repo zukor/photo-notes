@@ -482,6 +482,9 @@ CREATE TABLE IF NOT EXISTS concrete_estimates (
 );
 CREATE INDEX IF NOT EXISTS concrete_estimates_user_idx ON concrete_estimates (user_id, updated_at DESC);
 ALTER TABLE concrete_areas ADD COLUMN IF NOT EXISTS geometry JSONB;
+-- Repairs measured on a photo: replace (remove and pour new), resurface, or crack (linear feet).
+ALTER TABLE concrete_areas ADD COLUMN IF NOT EXISTS repair_kind TEXT;
+ALTER TABLE concrete_areas ADD COLUMN IF NOT EXISTS repair_lf NUMERIC(10,1);
 -- Paving Pro satellite takeoff: parking lots and other areas, streets (centerline and width) and lines, by job.
 CREATE TABLE IF NOT EXISTS paving_takeoff_items (
   id           SERIAL PRIMARY KEY,
