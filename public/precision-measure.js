@@ -240,7 +240,7 @@ function renderValidation(opts,s){
  <label for="pmTapeL">Tape length, inches</label><input id="pmTapeL" type="number" step="0.0625" inputmode="decimal">
  <label for="pmTapeW">Tape width, inches</label><input id="pmTapeW" type="number" step="0.0625" inputmode="decimal">
  <label for="pmTapeD">Tape depth at the deepest point, inches (optional)</label><input id="pmTapeD" type="number" step="0.0625" inputmode="decimal">
- <label for="pmTapeNote">Notes (optional)</label><input id="pmTapeNote" maxlength="300" placeholder="Example: sunny, wet edges">
+ <label for="pmTapeNote">Notes (optional, for example: sunny, wet edges)</label><input id="pmTapeNote" maxlength="300">
  <div class="row"><button class="btn" id="pmTapeSave" type="button">Save Field Test</button><button class="btn secondary" id="pmTapeSkip" type="button">Skip</button></div>`;
  body.querySelector('#pmTapeSkip').onclick=()=>finish(opts,s);
  body.querySelector('#pmTapeSave').onclick=async()=>{
