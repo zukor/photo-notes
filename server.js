@@ -326,6 +326,8 @@ function recommendFix(type, sev) {
 // Material quantity for one capture under its recommended fix. Never fabricates
 // numbers: missing dimensions yield "measure on site".
 function fixQuantity(fix, c) {
+  // An AI size nobody confirmed never drives a quantity.
+  if (c && c.dim_confirmed === false) return { unit: fix === 'Crack Seal' ? 'lf' : fix === 'Saw-Cut Patch' ? 'tons' : 'sq ft', value: null, text: 'confirm the measurement first', measureOnSite: true };
   if (fix === 'Crack Seal') {
     if (c.dim_length_in == null) return { unit: 'lf', value: null, text: 'measure on site', measureOnSite: true };
     const lf = Number(c.dim_length_in) / 12;
@@ -337,7 +339,7 @@ function fixQuantity(fix, c) {
     const depth = depthDefaulted ? 2 : Number(c.dim_depth_in);
     let tons = Number(c.dim_area_sqft) * depth * 145 / 12 / 2000 * 1.10;
     tons = Math.ceil(tons * 100) / 100;
-    return { unit: 'tons', value: tons, text: `${tons.toFixed(2)} tons${depthDefaulted ? ' (2 in depth assumed)' : ''}` };
+    return { unit: 'tons', value: tons, depthAssumed: depthDefaulted, text: `${tons.toFixed(2)} tons${depthDefaulted ? ' (DEPTH NOT MEASURED: 2 in assumed)' : ''}` };
   }
   if (fix === 'Mill and Overlay') {
     if (c.dim_area_sqft == null) return { unit: 'sq ft', value: null, text: 'measure on site', measureOnSite: true };
@@ -632,7 +634,8 @@ async function currentFeatureAccess(userId) {
   try {
     const row = (await pool.query(`SELECT plan,pro_type,feature_access FROM users WHERE id=$1`, [userId])).rows[0];
     if (!row || row.plan !== 'pro') return {};
-    const edition = row.pro_type === 'asphalt' ? 'paving' : row.pro_type;
+    // The same edition rules as /api/me, so an account never sees a tool it cannot use.
+    const edition = normalizeProType(row.pro_type);
     if (!['general','paving','concrete','property','hoa','contractor','roofer'].includes(edition)) return {};
     const saved = row.feature_access && typeof row.feature_access === 'object' ? row.feature_access : {};
     return Object.fromEntries(MANAGED_FEATURES.map(k => [k, ['camera_readers','before_after'].includes(k) ? (k!=='camera_readers'||edition!=='general')&&saved[k] !== false : edition === 'concrete' ? k === 'measurements' : edition === 'paving' && saved[k] !== false]));
@@ -1124,7 +1127,7 @@ app.post('/api/hoa/items/:id',requireAuth,requireHoa,async(req,res)=>{try{const 
 app.get('/api/hoa/notifications',requireAuth,requireHoa,async(req,res)=>{try{res.json((await pool.query(`SELECT * FROM hoa_notifications WHERE user_id=$1 ORDER BY created_at DESC LIMIT 100`,[req.user.id])).rows);}catch(e){res.status(500).json({error:'notifications failed'});}});
 app.post('/api/hoa/notifications/read',requireAuth,requireHoa,async(req,res)=>{try{await pool.query(`UPDATE hoa_notifications SET read_at=now() WHERE user_id=$1 AND read_at IS NULL`,[req.user.id]);res.json({ok:true});}catch(e){res.status(500).json({error:'notifications failed'});}});
 
-app.get('/completion-photos/:token',async(req,res)=>{try{const row=(await pool.query(`SELECT q.*,i.title,i.description,c.name community_name,cap.photo_path original_photo FROM hoa_completion_photo_requests q JOIN hoa_maintenance_items i ON i.id=q.item_id JOIN hoa_communities c ON c.id=i.community_id LEFT JOIN captures cap ON cap.id=i.capture_id WHERE q.token=$1`,[req.params.token])).rows[0];if(!row)return res.status(404).send('Photo request not found.');if(row.status!=='open'||new Date(row.expires_at)<new Date())return res.status(410).send('This photo request is no longer open.');res.send(`<!doctype html><html><head><meta name="viewport" content="width=device-width"><link rel="stylesheet" href="/help.css?v=376"><script src="/help-catalog.js?v=482" defer></script><script src="/help.js?v=470" defer></script><title>Submit Completion Photos</title><style>body{font-family:Arial,sans-serif;max-width:720px;margin:auto;padding:20px;color:#111}img{width:100%;max-height:480px;object-fit:contain;border-radius:10px;background:#eee}input,textarea,button{box-sizing:border-box;width:100%;padding:14px;margin:7px 0;font-size:16px}button{background:#2455d9;color:#fff;border:0;border-radius:9px;font-weight:700}.box{background:#eef3ff;border-radius:10px;padding:14px}</style></head><body><h1>Submit Completion Photos</h1><div class="box"><b>${escXml(row.community_name)}</b><h2>${escXml(row.title)}</h2><p>${escXml(row.description||'')}</p></div>${row.original_photo?`<h3>Original issue</h3><img src="${escXml(row.original_photo)}" alt="Original maintenance issue">`:''}<h3>Show the completed work</h3><p>Take clear overview and close-up photos. These photos will be added directly to this maintenance record.</p><form method="post" action="/completion-photos/${row.token}" enctype="multipart/form-data"><input name="submitter_name" value="${escXml(row.recipient_name||'')}" placeholder="Your name" required><input type="file" name="photos" accept="image/*" capture="environment" multiple required><textarea name="note" placeholder="What work was completed?"></textarea><button>Send Completion Photos</button></form></body></html>`);}catch(e){res.status(500).send('Photo request unavailable.');}});
+app.get('/completion-photos/:token',async(req,res)=>{try{const row=(await pool.query(`SELECT q.*,i.title,i.description,c.name community_name,cap.photo_path original_photo FROM hoa_completion_photo_requests q JOIN hoa_maintenance_items i ON i.id=q.item_id JOIN hoa_communities c ON c.id=i.community_id LEFT JOIN captures cap ON cap.id=i.capture_id WHERE q.token=$1`,[req.params.token])).rows[0];if(!row)return res.status(404).send('Photo request not found.');if(row.status!=='open'||new Date(row.expires_at)<new Date())return res.status(410).send('This photo request is no longer open.');res.send(`<!doctype html><html><head><meta name="viewport" content="width=device-width"><link rel="stylesheet" href="/help.css?v=376"><script src="/help-catalog.js?v=483" defer></script><script src="/help.js?v=470" defer></script><title>Submit Completion Photos</title><style>body{font-family:Arial,sans-serif;max-width:720px;margin:auto;padding:20px;color:#111}img{width:100%;max-height:480px;object-fit:contain;border-radius:10px;background:#eee}input,textarea,button{box-sizing:border-box;width:100%;padding:14px;margin:7px 0;font-size:16px}button{background:#2455d9;color:#fff;border:0;border-radius:9px;font-weight:700}.box{background:#eef3ff;border-radius:10px;padding:14px}</style></head><body><h1>Submit Completion Photos</h1><div class="box"><b>${escXml(row.community_name)}</b><h2>${escXml(row.title)}</h2><p>${escXml(row.description||'')}</p></div>${row.original_photo?`<h3>Original issue</h3><img src="${escXml(row.original_photo)}" alt="Original maintenance issue">`:''}<h3>Show the completed work</h3><p>Take clear overview and close-up photos. These photos will be added directly to this maintenance record.</p><form method="post" action="/completion-photos/${row.token}" enctype="multipart/form-data"><input name="submitter_name" value="${escXml(row.recipient_name||'')}" placeholder="Your name" required><input type="file" name="photos" accept="image/*" capture="environment" multiple required><textarea name="note" placeholder="What work was completed?"></textarea><button>Send Completion Photos</button></form></body></html>`);}catch(e){res.status(500).send('Photo request unavailable.');}});
 app.post('/completion-photos/:token',(req,res,next)=>require('./external-photo-submission').externalPhotoUpload(UPLOAD_DIR)(req,res,async error=>{if(error){await require('./external-photo-submission').removeUploads(req.files);return res.status(400).send('Use at most 8 photographs, up to 25 MB each.');}next();}),async(req,res)=>{
  const {inspectPhotos,saveExternalPhoto,removeUploads}=require('./external-photo-submission');
  let db,committed=false;
@@ -1140,7 +1143,7 @@ app.post('/completion-photos/:token',(req,res,next)=>require('./external-photo-s
   await hoaHistory(q.item_id,null,'completion_photos_submitted',{submitted_by:name,photo_count:req.files.length},db);
   await hoaNotifyCompany(q.company_id,q.item_id,'Completion photos submitted',0,db);
   await db.query('COMMIT');committed=true;
-  res.send('<!doctype html><meta name="viewport" content="width=device-width"><link rel="stylesheet" href="/help.css?v=376"><script src="/help-catalog.js?v=482" defer></script><script src="/help.js?v=470" defer></script><style>body{font-family:Arial;color:#000;text-align:left;padding:30px 20px}</style><h1>Photos received</h1><p>Thank you. The completion photos were added to the maintenance record.</p>');
+  res.send('<!doctype html><meta name="viewport" content="width=device-width"><link rel="stylesheet" href="/help.css?v=376"><script src="/help-catalog.js?v=483" defer></script><script src="/help.js?v=470" defer></script><style>body{font-family:Arial;color:#000;text-align:left;padding:30px 20px}</style><h1>Photos received</h1><p>Thank you. The completion photos were added to the maintenance record.</p>');
  }catch(e){if(db&&!committed)await db.query('ROLLBACK').catch(()=>{});await removeUploads(req.files);res.status(400).send('Photos could not be submitted. Use supported photographs and try again.');}
  finally{if(db)db.release();}
 });
@@ -1170,7 +1173,7 @@ app.get('/review/:token/photos/:id',async(req,res)=>{
     res.setHeader('Cache-Control','private, no-store');res.type('jpeg').send(rendered.buffer);
   }catch(e){res.sendStatus(500);}
 });
-app.get('/review/:token',async(req,res)=>{try{const p=(await pool.query(`SELECT * FROM approval_packages WHERE token=$1`,[req.params.token])).rows[0];if(!p)return res.status(404).send('Review link not found.');if(new Date(p.expires_at)<new Date())return res.status(410).send('This review link has expired.');const photos=(await pool.query(`SELECT id,photo_path,note,address,created_at FROM captures WHERE user_id=$1 AND id=ANY($2) ORDER BY created_at`,[p.user_id,p.capture_ids])).rows;const cards=photos.map(c=>`<article><img src="/review/${encodeURIComponent(p.token)}/photos/${c.id}" alt="Project photo"><p><b>${escXml(c.address||'')}</b></p><p>${escXml(c.note||'')}</p><small>${new Date(c.created_at).toLocaleString()}</small></article>`).join('');res.send(`<!doctype html><html><head><meta name="viewport" content="width=device-width"><link rel="stylesheet" href="/help.css?v=376"><script src="/help-catalog.js?v=482" defer></script><script src="/help.js?v=470" defer></script><title>${escXml(p.title)}</title><style>body{font-family:Arial;margin:auto;max-width:850px;padding:20px;color:#111}article{border:1px solid #ccc;border-radius:10px;padding:12px;margin:18px 0}img{width:100%;max-height:650px;object-fit:contain}textarea,input,button{box-sizing:border-box;width:100%;padding:12px;margin:6px 0;font-size:16px}button{background:#2455d9;color:white;border:0;border-radius:8px;font-weight:bold}.changes{background:#555}.status{padding:12px;background:#eef3ff}</style></head><body><h1>${escXml(p.title)}</h1>${p.message?`<p>${escXml(p.message)}</p>`:''}<div class="status">Status: ${escXml(p.status)}</div>${cards}${p.status==='pending'?`<form method="post" action="/review/${p.token}"><input name="customer_name" placeholder="Your name" required><textarea name="comment" placeholder="Comment (optional)"></textarea><button name="decision" value="approved">Approve Photos</button><button class="changes" name="decision" value="changes_requested">Request Changes</button></form>`:`<p><b>Response received. Thank you.</b></p>`}</body></html>`);}catch(e){res.status(500).send('Review unavailable.');}});
+app.get('/review/:token',async(req,res)=>{try{const p=(await pool.query(`SELECT * FROM approval_packages WHERE token=$1`,[req.params.token])).rows[0];if(!p)return res.status(404).send('Review link not found.');if(new Date(p.expires_at)<new Date())return res.status(410).send('This review link has expired.');const photos=(await pool.query(`SELECT id,photo_path,note,address,created_at FROM captures WHERE user_id=$1 AND id=ANY($2) ORDER BY created_at`,[p.user_id,p.capture_ids])).rows;const cards=photos.map(c=>`<article><img src="/review/${encodeURIComponent(p.token)}/photos/${c.id}" alt="Project photo"><p><b>${escXml(c.address||'')}</b></p><p>${escXml(c.note||'')}</p><small>${new Date(c.created_at).toLocaleString()}</small></article>`).join('');res.send(`<!doctype html><html><head><meta name="viewport" content="width=device-width"><link rel="stylesheet" href="/help.css?v=376"><script src="/help-catalog.js?v=483" defer></script><script src="/help.js?v=470" defer></script><title>${escXml(p.title)}</title><style>body{font-family:Arial;margin:auto;max-width:850px;padding:20px;color:#111}article{border:1px solid #ccc;border-radius:10px;padding:12px;margin:18px 0}img{width:100%;max-height:650px;object-fit:contain}textarea,input,button{box-sizing:border-box;width:100%;padding:12px;margin:6px 0;font-size:16px}button{background:#2455d9;color:white;border:0;border-radius:8px;font-weight:bold}.changes{background:#555}.status{padding:12px;background:#eef3ff}</style></head><body><h1>${escXml(p.title)}</h1>${p.message?`<p>${escXml(p.message)}</p>`:''}<div class="status">Status: ${escXml(p.status)}</div>${cards}${p.status==='pending'?`<form method="post" action="/review/${p.token}"><input name="customer_name" placeholder="Your name" required><textarea name="comment" placeholder="Comment (optional)"></textarea><button name="decision" value="approved">Approve Photos</button><button class="changes" name="decision" value="changes_requested">Request Changes</button></form>`:`<p><b>Response received. Thank you.</b></p>`}</body></html>`);}catch(e){res.status(500).send('Review unavailable.');}});
 app.post('/review/:token',express.urlencoded({extended:false}),async(req,res)=>{try{const decision=req.body.decision==='approved'?'approved':'changes_requested';const row=(await pool.query(`UPDATE approval_packages SET status=$1,customer_name=$2,customer_comment=$3,responded_at=now() WHERE token=$4 AND status='pending' AND expires_at>now() RETURNING token`,[decision,ticketText(req.body.customer_name,200),ticketText(req.body.comment,1000),req.params.token])).rows[0];if(!row)return res.status(400).send('This review can no longer be changed.');res.redirect(`/review/${row.token}`);}catch(e){res.status(500).send('Response could not be saved.');}});
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
@@ -1250,8 +1253,29 @@ function ticketText(value, max = 200) {
 }
 function ticketNumber(value) {
   if (value == null || value === '') return null;
-  const n = Number(String(value).replace(/,/g, '').replace(/[^0-9.-]/g, ''));
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  let s = String(value).trim();
+  // "12,5" or "12,50" is a decimal comma; "1,250" or "1,250.5" uses a thousands separator.
+  if (/^-?\d+,\d{1,2}$/.test(s.replace(/[^0-9,.-]/g, ''))) s = s.replace(',', '.');
+  const n = Number(s.replace(/,/g, '').replace(/[^0-9.-]/g, ''));
   return Number.isFinite(n) ? n : null;
+}
+// Tickets print net weight in tons, pounds, kilograms or metric tonnes. Store short tons.
+const TICKET_WEIGHT_UNITS = { tons: 1, ton: 1, tn: 1, lb: 1 / 2000, lbs: 1 / 2000, pounds: 1 / 2000, kg: 1 / 907.18474, tonnes: 1.10231131, t: 1.10231131, mt: 1.10231131 };
+function ticketTons(value, unit) {
+  const n = ticketNumber(value); if (n == null) return null;
+  const factor = TICKET_WEIGHT_UNITS[String(unit || 'tons').trim().toLowerCase()];
+  return factor ? Math.round(n * factor * 100) / 100 : null;
+}
+const MAX_TONS_PER_TICKET = 40;
+function ticketFahrenheit(value, unit) {
+  const n = ticketNumber(value); if (n == null) return null;
+  return String(unit || 'F').trim().toUpperCase() === 'C' ? Math.round((n * 9 / 5 + 32) * 10) / 10 : n;
+}
+function ticketDateText(value) {
+  if (!value) return '';
+  if (Object.prototype.toString.call(value) === '[object Date]') return Number.isFinite(+value) ? value.toISOString().slice(0, 10) : '';
+  return ticketDate(value) || String(value).slice(0, 10);
 }
 function ticketDate(value) {
   const raw = String(value || '').trim();
@@ -1263,6 +1287,13 @@ function ticketDate(value) {
   return date.getUTCFullYear()===y&&date.getUTCMonth()===m-1&&date.getUTCDate()===d ? `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}` : null;
 }
 
+// A reading is only as trustworthy as its weakest part: an unknown or out-of-range weight lowers confidence.
+function scanConfidence(data) {
+  let c = ['high','medium','low'].includes(data.confidence) ? data.confidence : 'low';
+  const tons = ticketTons(data.net_weight ?? data.net_tons, data.net_weight_unit || 'tons');
+  if ((data.net_weight ?? data.net_tons) != null && (!data.net_weight_unit || tons == null || tons <= 0 || tons > MAX_TONS_PER_TICKET)) c = 'low';
+  return c;
+}
 async function ownedJobId(userId, value) {
   const id = Number.parseInt(value, 10);
   if (!Number.isInteger(id)) return null;
@@ -1279,8 +1310,8 @@ app.post('/api/asphalt-tickets/scan', requireAuth, upload.single('photo'), async
     const prompt =
 `You are reading an asphalt plant delivery ticket for a paving contractor. Extract only information visibly printed or written on the ticket. Never guess a missing, blurred or partly obscured value. Do not complete digits from context or plausible totals. Use null for every uncertain field, even if other fields are clear.
 Respond with ONLY one JSON object, no prose and no markdown, using exactly these keys:
-{"ticket_number": string|null, "ticket_date": "YYYY-MM-DD"|null, "plant_name": string|null, "plant_address": string|null, "mix_description": string|null, "mix_code": string|null, "truck_number": string|null, "job_number": string|null, "net_tons": number|null, "dispatch_time": string|null, "arrival_time": string|null, "dispatch_temperature_f": number|null, "confidence": "high"|"medium"|"low"}
-Use net tons, not gross or tare weight. Preserve ticket and job identifiers exactly. Times may use the clearly printed format. If a field is unreadable or absent, use null.`;
+{"ticket_number": string|null, "ticket_date": "YYYY-MM-DD"|null, "plant_name": string|null, "plant_address": string|null, "mix_description": string|null, "mix_code": string|null, "truck_number": string|null, "job_number": string|null, "net_weight": number|null, "net_weight_unit": "tons"|"lb"|"kg"|"tonnes"|null, "dispatch_time": string|null, "arrival_time": string|null, "dispatch_temperature": number|null, "dispatch_temperature_unit": "F"|"C"|null, "confidence": "high"|"medium"|"low"}
+Use the NET weight, not gross or tare weight, exactly as printed, and give the unit printed beside it (short tons, pounds, kilograms or metric tonnes). If the unit is not printed, use null for the unit. Give the temperature as printed with its unit. Preserve ticket and job identifiers exactly. Times may use the clearly printed format. If a field is unreadable or absent, use null.`;
     const vision = await visionJSON(req.file.path, prompt, { maxTokens: 1000 });
     const ai = vision.data;
     const data = ai || {};
@@ -1289,8 +1320,8 @@ Use net tons, not gross or tare weight. Preserve ticket and job identifiers exac
       req.user.id, photoPath, ticketText(data.ticket_number), ticketDate(data.ticket_date),
       ticketText(data.plant_name), ticketText(data.plant_address), ticketText(data.mix_description),
       ticketText(data.mix_code), ticketText(data.truck_number), ticketText(data.job_number),
-      ticketNumber(data.net_tons), ticketText(data.dispatch_time, 40), ticketText(data.arrival_time, 40),
-      ticketNumber(data.dispatch_temperature_f), ['high','medium','low'].includes(data.confidence) ? data.confidence : 'low',
+      ticketTons(data.net_weight ?? data.net_tons, data.net_weight_unit || 'tons'), ticketText(data.dispatch_time, 40), ticketText(data.arrival_time, 40),
+      ticketFahrenheit(data.dispatch_temperature ?? data.dispatch_temperature_f, data.dispatch_temperature_unit), scanConfidence(data),
       ai ? JSON.stringify(ai) : null,
     ];
     const row = (await pool.query(
@@ -1315,20 +1346,26 @@ app.post('/api/asphalt-tickets/:id', requireAuth, async (req, res) => {
     const b = req.body || {};
     const jobId = await ownedJobId(req.user.id, b.job_id);
     if(b.job_id && !jobId)return res.status(400).json({error:'Selected job is unavailable. Choose a job again.'});
+    const tons=ticketNumber(b.net_tons);
+    if(tons!=null&&(tons<=0||tons>MAX_TONS_PER_TICKET))return res.status(400).json({error:`Net tons must be between 0 and ${MAX_TONS_PER_TICKET} for one truck. If the ticket shows pounds, divide by 2,000.`});
+    const current=(await pool.query('SELECT confidence FROM asphalt_tickets WHERE id=$1 AND user_id=$2',[id,req.user.id])).rows[0];
+    if(!current)return res.status(404).json({error:'not found'});
+    if(current.confidence==='low'&&b.confirmed!==true)return res.status(400).json({error:'This ticket was hard to read. Check every field against the ticket photo, then tick the confirmation box.'});
     client=await pool.connect();await client.query('BEGIN');
     await client.query('SELECT id FROM users WHERE id=$1 FOR UPDATE',[req.user.id]);
     const duplicate=ticketText(b.ticket_number)?(await client.query(`SELECT id FROM asphalt_tickets WHERE user_id=$1 AND id<>$2 AND status='saved' AND lower(trim(ticket_number))=lower(trim($3)) AND COALESCE(lower(trim(plant_name)),'')=COALESCE(lower(trim($4)),'') AND ticket_date IS NOT DISTINCT FROM $5::date LIMIT 1`,[req.user.id,id,ticketText(b.ticket_number),ticketText(b.plant_name),ticketDate(b.ticket_date)])).rows[0]:null;
-    if(duplicate){await client.query('ROLLBACK').catch(()=>{});return res.status(409).json({error:'This ticket number, plant and date are already saved. The duplicate was not added.'});}
+    const sameLoad=!ticketText(b.ticket_number)&&ticketText(b.truck_number)&&ticketText(b.dispatch_time)&&ticketDate(b.ticket_date)?(await client.query(`SELECT id FROM asphalt_tickets WHERE user_id=$1 AND id<>$2 AND status='saved' AND lower(trim(truck_number))=lower(trim($3)) AND lower(trim(dispatch_time))=lower(trim($4)) AND ticket_date=$5::date LIMIT 1`,[req.user.id,id,ticketText(b.truck_number),ticketText(b.dispatch_time,40),ticketDate(b.ticket_date)])).rows[0]:null;
+    if(duplicate||sameLoad){await client.query('ROLLBACK').catch(()=>{});return res.status(409).json({error:duplicate?'This ticket number, plant and date are already saved. The duplicate was not added.':'A ticket for this truck, dispatch time and date is already saved. The duplicate was not added.'});}
     const values = [
       ticketText(b.ticket_number), ticketDate(b.ticket_date), ticketText(b.plant_name), ticketText(b.plant_address),
       ticketText(b.mix_description), ticketText(b.mix_code), ticketText(b.truck_number), ticketText(b.job_number),
-      ticketNumber(b.net_tons), ticketText(b.dispatch_time, 40), ticketText(b.arrival_time, 40),
-      ticketNumber(b.dispatch_temperature_f), jobId, id, req.user.id,
+      tons, ticketText(b.dispatch_time, 40), ticketText(b.arrival_time, 40),
+      ticketNumber(b.dispatch_temperature_f), jobId, id, req.user.id, b.confirmed===true,
     ];
     const row = (await client.query(
       `UPDATE asphalt_tickets SET ticket_number=$1, ticket_date=$2, plant_name=$3, plant_address=$4,
        mix_description=$5, mix_code=$6, truck_number=$7, job_number=$8, net_tons=$9,
-       dispatch_time=$10, arrival_time=$11, dispatch_temperature_f=$12, job_id=$13, status='saved', updated_at=now()
+       dispatch_time=$10, arrival_time=$11, dispatch_temperature_f=$12, job_id=$13, status='saved', user_confirmed=(user_confirmed OR $16::boolean), updated_at=now()
        WHERE id=$14 AND user_id=$15 RETURNING *`, values)).rows[0];
     if (!row){await client.query('ROLLBACK').catch(()=>{});return res.status(404).json({error:'not found'});}
     await client.query('COMMIT');
@@ -1337,31 +1374,55 @@ app.post('/api/asphalt-tickets/:id', requireAuth, async (req, res) => {
   } catch (err) { if(client)await client.query('ROLLBACK').catch(()=>{});console.error('[ticket.save]', err); res.status(500).json({ error: 'ticket save failed' }); }finally{if(client)client.release();}
 });
 
+// Ticket history by the date printed on the ticket (or the day it was scanned, in the
+// person's own time zone, when no date was read). Totals are summed in the database
+// so they never stop at the number of rows shown.
+function validTimeZone(tz){try{Intl.DateTimeFormat('en-US',{timeZone:tz});return tz;}catch{return null;}}
 app.get('/api/asphalt-tickets', requireAuth, async (req, res) => {
   try {
-    if (!(await featureAllowed(req.user.id, 'ticket_scanner'))) return res.json({ tickets: [], total_tons: 0 });
-    const date = ticketDate(req.query.date);
-    const params = [req.user.id];
+    if (!(await featureAllowed(req.user.id, 'ticket_scanner'))) return res.json({ tickets: [], total_tons: 0, ticket_count: 0, missing_tons: 0 });
+    const tz=validTimeZone(String(req.query.tz||''))||'America/Chicago';
+    const params = [req.user.id,tz];
     let where = `user_id=$1 AND status='saved'`;
-    if (date) { params.push(date); where += ` AND ticket_date=$2`; }
-    if(req.query.saved_from && req.query.saved_to){const from=new Date(req.query.saved_from),to=new Date(req.query.saved_to);if(!Number.isFinite(+from)||!Number.isFinite(+to)||to<=from)return res.status(400).json({error:'invalid saved date range'});params.push(from.toISOString(),to.toISOString());where+=` AND updated_at >= $${params.length-1} AND updated_at < $${params.length}`;}
-    const rows = (await pool.query(`SELECT * FROM asphalt_tickets WHERE ${where} ORDER BY COALESCE(ticket_date, created_at::date) DESC, created_at DESC LIMIT 100`, params)).rows;
-    const total = rows.reduce((sum, row) => sum + (Number(row.net_tons) || 0), 0);
-    res.json({ tickets: rows, total_tons: Math.round(total * 100) / 100 });
+    const day=`COALESCE(ticket_date,(created_at AT TIME ZONE $2)::date)`;
+    const date = ticketDate(req.query.date), from=ticketDate(req.query.from), to=ticketDate(req.query.to);
+    if (date) { params.push(date); where += ` AND ${day}=$${params.length}::date`; }
+    if (from) { params.push(from); where += ` AND ${day}>=$${params.length}::date`; }
+    if (to) { params.push(to); where += ` AND ${day}<=$${params.length}::date`; }
+    if (req.query.job_id) { const job=await ownedJobId(req.user.id,req.query.job_id); if(!job)return res.status(400).json({error:'Selected job is unavailable.'}); params.push(job); where += ` AND job_id=$${params.length}`; }
+    if(req.query.saved_from && req.query.saved_to){const f=new Date(req.query.saved_from),t=new Date(req.query.saved_to);if(!Number.isFinite(+f)||!Number.isFinite(+t)||t<=f)return res.status(400).json({error:'invalid saved date range'});params.push(f.toISOString(),t.toISOString());where+=` AND updated_at >= $${params.length-1} AND updated_at < $${params.length}`;}
+    const totals=(await pool.query(`SELECT COALESCE(sum(net_tons),0)::float AS total, count(*)::int AS n, count(*) FILTER (WHERE net_tons IS NULL)::int AS missing FROM asphalt_tickets WHERE ${where}`, params)).rows[0];
+    const byMix=(await pool.query(`SELECT COALESCE(NULLIF(trim(mix_code),''),NULLIF(trim(mix_description),''),'Mix not entered') AS mix, COALESCE(sum(net_tons),0)::float AS tons, count(*)::int AS tickets FROM asphalt_tickets WHERE ${where} GROUP BY 1 ORDER BY 2 DESC`, params)).rows;
+    const rows = (await pool.query(`SELECT *, ${day} AS ticket_day FROM asphalt_tickets WHERE ${where} ORDER BY ${day} DESC, created_at DESC LIMIT 300`, params)).rows;
+    for(const row of rows){row.ticket_date=ticketDateText(row.ticket_date)||null;row.ticket_day=ticketDateText(row.ticket_day);}
+    res.json({ tickets: rows, total_tons: Math.round(totals.total * 100) / 100, ticket_count: totals.n, missing_tons: totals.missing, shown: rows.length, by_mix: byMix.map(m=>({...m,tons:Math.round(m.tons*100)/100})) });
   } catch (err) { console.error('[ticket.list]', err); res.status(500).json({ error: 'ticket list failed' }); }
+});
+// Removing a ticket keeps its photo and record for the history; it no longer counts in totals.
+app.delete('/api/asphalt-tickets/:id', requireAuth, async (req, res) => {
+  try {
+    if (!(await featureAllowed(req.user.id, 'ticket_scanner'))) return res.status(403).json({ error: 'feature unavailable' });
+    const id = parseInt(req.params.id, 10); if (!Number.isInteger(id)) return res.status(400).json({ error: 'bad id' });
+    const row=(await pool.query(`UPDATE asphalt_tickets SET status='deleted', updated_at=now() WHERE id=$1 AND user_id=$2 AND status IN ('saved','draft') RETURNING id,ticket_number,net_tons`,[id,req.user.id])).rows[0];
+    if(!row)return res.status(404).json({error:'not found'});
+    logEvent(req.user.id,'ticket_delete',{ticket_id:id,ticket_number:row.ticket_number,net_tons:row.net_tons});
+    res.json({ok:true});
+  } catch (err) { console.error('[ticket.delete]', err); res.status(500).json({ error: 'ticket delete failed' }); }
 });
 
 // Photo-first Paving job report. Delivery tickets and extra-work records only
 // appear when they can be tied back to the same job's photographed evidence.
+// Damage type and confirmed size for a Paving photo, for the job report.
+function pavingDamageLines(c){const lines=[];if(c.defect_type)lines.push('Damage: '+defectLabel(c.defect_type)+(c.defect_severity?' ('+c.defect_severity+')':''));const dims=exportDims(c);if(dims)lines.push('Size: '+dims);return lines;}
 function pavingEvidenceChecklist(captures,tickets,pairRows){const paired=new Set();for(const p of pairRows){paired.add(p.before_id);paired.add(p.after_id);}return evidenceChecklist([
   {key:'photos',label:'Job has photo evidence',complete:captures.length>0,warning:'Add at least one job photo.'},
   {key:'notes',label:'Every job photo has a note',complete:captures.length>0&&captures.every(c=>String(c.note||'').trim()),warning:'Add notes to every job photo.'},
   {key:'locations',label:'Every job photo has an address or GPS',complete:captures.length>0&&captures.every(c=>c.address||(c.latitude!=null&&c.longitude!=null)),warning:'Add an address or GPS location to every job photo.'},
   {key:'before_after',label:'Before and after photos are paired',complete:paired.size>=2,warning:'Pair at least one before photo with its after photo.'},
-  {key:'completion',label:'Completed work is photographed',complete:captures.some(c=>/complete|completed|finish|after/i.test(String(c.note||'')+' '+String(c.area_tags||'')))||paired.size>=2,warning:'Add a completed-work photo.'},
-  {key:'tickets',label:'Delivery ticket evidence is linked',complete:tickets.length>0,warning:'Link at least one delivery ticket to this photographed job.'}
+  {key:'completion',label:'Completed work is photographed',complete:captures.some(c=>c.paving_photo_reason==='completed_work')||pairRows.length>0,warning:'Add a photo with the Completed Work photo reason, or pair a before photo with its after photo.'},
+  {key:'tickets',label:'Delivery ticket evidence is linked',complete:tickets.length>0&&tickets.every(t=>t.net_tons!=null),warning:tickets.length?'Enter net tons on every linked delivery ticket.':'Link at least one delivery ticket to this photographed job.'}
 ]);}
-app.get('/api/paving/jobs/:id/completeness',requireAuth,async(req,res)=>{try{if(await currentProduct(req.user.id)!=='paving')return res.status(403).json({error:'Paving Pro required'});const jobId=Number(req.params.id),job=(await pool.query(`SELECT id FROM jobs WHERE id=$1 AND user_id=$2`,[jobId,req.user.id])).rows[0];if(!job)return res.status(404).json({error:'job not found'});const captures=(await pool.query(`SELECT * FROM captures WHERE user_id=$1 AND job_id=$2 AND photo_path IS NOT NULL`,[req.user.id,jobId])).rows,tickets=(await pool.query(`SELECT * FROM asphalt_tickets WHERE user_id=$1 AND job_id=$2 AND status='saved'`,[req.user.id,jobId])).rows,pairs=(await userPairs(req.user.id)).filter(p=>captures.some(c=>c.id===p.before_id||c.id===p.after_id));res.json(pavingEvidenceChecklist(captures,tickets,pairs));}catch(e){res.status(500).json({error:'completeness failed'});}});
+app.get('/api/paving/jobs/:id/completeness',requireAuth,async(req,res)=>{try{if(await currentProduct(req.user.id)!=='paving')return res.status(403).json({error:'Paving Pro required'});const jobId=Number(req.params.id),job=(await pool.query(`SELECT id FROM jobs WHERE id=$1 AND user_id=$2`,[jobId,req.user.id])).rows[0];if(!job)return res.status(404).json({error:'job not found'});const captures=(await pool.query(`SELECT * FROM captures WHERE user_id=$1 AND job_id=$2 AND photo_path IS NOT NULL`,[req.user.id,jobId])).rows,tickets=(await pool.query(`SELECT * FROM asphalt_tickets WHERE user_id=$1 AND job_id=$2 AND status='saved'`,[req.user.id,jobId])).rows,pairs=(await userPairs(req.user.id)).filter(p=>captures.some(c=>c.id===p.before_id)&&captures.some(c=>c.id===p.after_id));res.json(pavingEvidenceChecklist(captures,tickets,pairs));}catch(e){res.status(500).json({error:'completeness failed'});}});
 app.get('/api/paving/jobs/:id/report', requireAuth, async (req, res) => {
   try {
     if (await currentProduct(req.user.id) !== 'paving') return res.status(403).json({ error:'Paving Pro required' });
@@ -1378,7 +1439,7 @@ app.get('/api/paving/jobs/:id/report', requireAuth, async (req, res) => {
     const extraPhotos=extraWork.length?(await pool.query(`SELECT * FROM ewr_photos WHERE user_id=$1 AND ewr_id=ANY($2) ORDER BY created_at,id`,[req.user.id,extraWork.map(e=>e.id)])).rows:[];
     for(const record of extraWork)record.photos=extraPhotos.filter(p=>p.ewr_id===record.id);
     const captureIds=new Set(captures.map(c=>c.id)),userPairRows=(await userPairs(req.user.id)).filter(p=>captureIds.has(p.before_id)&&captureIds.has(p.after_id)),pairs = buildRenderUnits(captures,userPairRows),completeness=pavingEvidenceChecklist(captures,tickets,userPairRows);
-    const totalTons = tickets.reduce((sum, ticket) => sum + (Number(ticket.net_tons) || 0), 0);
+    const totalTons = tickets.reduce((sum, ticket) => sum + (Number(ticket.net_tons) || 0), 0),missingTons=tickets.filter(t=>t.net_tons==null).length;
     const format = req.query.doc === 'docx' ? 'docx' : 'pdf';
     logEvent(req.user.id, 'paving_job_report', { job_id:jobId, format, photos:captures.length, tickets:tickets.length, extra_work:extraWork.length });
     if (format === 'pdf') {
@@ -1388,7 +1449,7 @@ app.get('/api/paving/jobs/:id/report', requireAuth, async (req, res) => {
       pdf.fontSize(20).fillColor('#000').text('Paving Pro - Job Photo Evidence', { align:'center' });
       pdf.fontSize(15).text(job.name, { align:'center' });
       pdf.font(PdfEvidence.fontPath);await PdfEvidence.text(pdf,[job.job_number,job.customer,job.address].filter(Boolean).join(' | '),{size:11});
-      pdf.moveDown(); pdf.fontSize(11).text(`${captures.length} job photos | ${tickets.length} delivery tickets | ${totalTons.toFixed(2)} documented tons | ${extraWork.length} extra-work records`, { align:'center' });
+      pdf.moveDown(); pdf.fontSize(11).text(`${captures.length} job photos | ${tickets.length} delivery tickets | ${totalTons.toFixed(2)} documented tons${missingTons?` (${missingTons} without tons)`:''} | ${extraWork.length} extra-work records`, { align:'center' });
       pdf.moveDown().fontSize(11).text(`Evidence readiness: ${completeness.complete}/${completeness.total}`);for(const warning of completeness.warnings)pdf.fontSize(9).text(`Missing: ${warning}`);
       pdf.font(PdfEvidence.fontPath);
       let evidenceStarted=false;
@@ -1398,13 +1459,13 @@ app.get('/api/paving/jobs/:id/report', requireAuth, async (req, res) => {
         const entries=[];
         for(const [label,capture] of (unit.pair?[['Before',unit.pair.before],['After',unit.pair.after]]:[['Photo',unit.single]])){
           const image=localPhoto(capture.photo_path),rendered=image?await renderForEmbedStamped(image,'standard','jpeg',capture):null;
-          entries.push({label,image:rendered?.buffer,details:[capture.photo_title,capture.note||'(no note)',require('./custom-fields').lines(capture)&&'Additional Details (user-entered)\n'+require('./custom-fields').lines(capture),'Date: '+fmtWhen(capture.created_at),(capture.area_tags||[]).length?'Topic: '+capture.area_tags.join(', '):'',capture.address&&'Location: '+capture.address].filter(Boolean)});
+          entries.push({label,image:rendered?.buffer,details:[capture.photo_title,capture.note||'(no note)',require('./custom-fields').lines(capture)&&'Additional Details (user-entered)\n'+require('./custom-fields').lines(capture),...pavingDamageLines(capture),'Date: '+fmtWhen(capture.created_at),(capture.area_tags||[]).length?'Topic: '+capture.area_tags.join(', '):'',capture.address&&'Location: '+capture.address].filter(Boolean)});
         }
         await PdfEvidence.pair(pdf,entries);
       }
       for(const ticket of tickets){
         startEvidence();const image=localPhoto(ticket.photo_path),rendered=image?await renderForEmbed(image,'standard','jpeg'):null;
-        await PdfEvidence.pair(pdf,[{label:'Delivery Ticket Evidence',image:rendered?.buffer,details:[`Date: ${ticket.ticket_date?String(ticket.ticket_date).slice(0,10):'Not Entered'}`,`Ticket: ${ticket.ticket_number||'Not Entered'}`,`Mix: ${ticket.mix_description||ticket.mix_code||'Not Entered'}`,`Tons: ${ticket.net_tons==null?'Not Entered':Number(ticket.net_tons).toFixed(2)}`]}]);
+        await PdfEvidence.pair(pdf,[{label:'Delivery Ticket Evidence',image:rendered?.buffer,details:[`Date: ${ticket.ticket_date?ticketDateText(ticket.ticket_date):'Not Entered'}`,`Ticket: ${ticket.ticket_number||'Not Entered'}`,`Mix: ${ticket.mix_description||ticket.mix_code||'Not Entered'}`,`Tons: ${ticket.net_tons==null?'Not Entered':Number(ticket.net_tons).toFixed(2)}`]}]);
       }
       for(const item of extraWork){
         for(const photo of (item.photos.length?item.photos:[null])){
@@ -1414,9 +1475,9 @@ app.get('/api/paving/jobs/:id/report', requireAuth, async (req, res) => {
       }
       pdf.end(); return;
     }
-    const children=[new Paragraph({heading:HeadingLevel.HEADING_1,children:[new TextRun({text:'Paving Pro - Job Photo Evidence',bold:true,font:'Arial'})]}),new Paragraph({children:[new TextRun({text:job.name,bold:true,font:'Arial'})]}),new Paragraph({children:[new TextRun({text:[job.job_number,job.customer,job.address].filter(Boolean).join(' | '),font:'Arial'})]}),new Paragraph({children:[new TextRun({text:`${captures.length} job photos | ${tickets.length} delivery tickets | ${totalTons.toFixed(2)} documented tons | ${extraWork.length} extra-work records`,font:'Arial'})]}),new Paragraph({children:[new TextRun({text:`Evidence readiness: ${completeness.complete}/${completeness.total}`,bold:true,font:'Arial'})]}),...completeness.warnings.map(w=>new Paragraph({children:[new TextRun({text:`Missing: ${w}`,font:'Arial'})]}))];
-    for(const unit of pairs){const entries=unit.pair?[['BEFORE',unit.pair.before],['AFTER',unit.pair.after]]:[['PHOTO',unit.single]];const cells=[];for(const [label,capture] of entries){const kids=[new Paragraph({children:[new TextRun({text:label,bold:true,font:'Arial'})]})];const image=localPhoto(capture.photo_path);if(image){const rendered=await renderForEmbedStamped(image,'standard','jpeg',capture);if(rendered)kids.push(new Paragraph({children:[new ImageRun({type:rendered.ext==='.png'?'png':'jpg',data:rendered.buffer,transformation:await fittedWordImage(rendered.buffer,unit.pair?245:400,unit.pair?184:300)})]}));}kids.push(new Paragraph({children:[new TextRun({text:[capture.note||'(no note)',require('./custom-fields').lines(capture)&&'Additional Details (user-entered)\n'+require('./custom-fields').lines(capture)].filter(Boolean).join('\n'),font:'Arial'})]}));cells.push(new TableCell({children:kids}));}children.push(new Table({width:{size:100,type:WidthType.PERCENTAGE},rows:[new TableRow({children:cells})]}));}
-    for(const ticket of tickets){children.push(new Paragraph({pageBreakBefore:true,heading:HeadingLevel.HEADING_2,children:[new TextRun({text:'Delivery Ticket Evidence',bold:true,font:'Arial'})]}),new Paragraph({children:[new TextRun({text:`${ticket.ticket_date?String(ticket.ticket_date).slice(0,10):''} | Ticket ${ticket.ticket_number||'not entered'} | ${ticket.mix_description||ticket.mix_code||'Mix not entered'} | ${ticket.net_tons==null?'Tons not entered':Number(ticket.net_tons).toFixed(2)+' tons'}`,font:'Arial'})]}));const image=localPhoto(ticket.photo_path);if(image){const rendered=await renderForEmbed(image,'standard','jpeg');if(rendered)children.push(new Paragraph({children:[new ImageRun({type:rendered.ext==='.png'?'png':'jpg',data:rendered.buffer,transformation:await fittedWordImage(rendered.buffer,480,550)})]}));}}
+    const children=[new Paragraph({heading:HeadingLevel.HEADING_1,children:[new TextRun({text:'Paving Pro - Job Photo Evidence',bold:true,font:'Arial'})]}),new Paragraph({children:[new TextRun({text:job.name,bold:true,font:'Arial'})]}),new Paragraph({children:[new TextRun({text:[job.job_number,job.customer,job.address].filter(Boolean).join(' | '),font:'Arial'})]}),new Paragraph({children:[new TextRun({text:`${captures.length} job photos | ${tickets.length} delivery tickets | ${totalTons.toFixed(2)} documented tons${missingTons?` (${missingTons} without tons)`:''} | ${extraWork.length} extra-work records`,font:'Arial'})]}),new Paragraph({children:[new TextRun({text:`Evidence readiness: ${completeness.complete}/${completeness.total}`,bold:true,font:'Arial'})]}),...completeness.warnings.map(w=>new Paragraph({children:[new TextRun({text:`Missing: ${w}`,font:'Arial'})]}))];
+    for(const unit of pairs){const entries=unit.pair?[['BEFORE',unit.pair.before],['AFTER',unit.pair.after]]:[['PHOTO',unit.single]];const cells=[];for(const [label,capture] of entries){const kids=[new Paragraph({children:[new TextRun({text:label,bold:true,font:'Arial'})]})];const image=localPhoto(capture.photo_path);if(image){const rendered=await renderForEmbedStamped(image,'standard','jpeg',capture);if(rendered)kids.push(new Paragraph({children:[new ImageRun({type:rendered.ext==='.png'?'png':'jpg',data:rendered.buffer,transformation:await fittedWordImage(rendered.buffer,unit.pair?245:400,unit.pair?184:300)})]}));}kids.push(new Paragraph({children:[new TextRun({text:[capture.note||'(no note)',...pavingDamageLines(capture),require('./custom-fields').lines(capture)&&'Additional Details (user-entered)\n'+require('./custom-fields').lines(capture)].filter(Boolean).join('\n'),font:'Arial'})]}));cells.push(new TableCell({children:kids}));}children.push(new Table({width:{size:100,type:WidthType.PERCENTAGE},rows:[new TableRow({children:cells})]}));}
+    for(const ticket of tickets){children.push(new Paragraph({pageBreakBefore:true,heading:HeadingLevel.HEADING_2,children:[new TextRun({text:'Delivery Ticket Evidence',bold:true,font:'Arial'})]}),new Paragraph({children:[new TextRun({text:`${ticket.ticket_date?ticketDateText(ticket.ticket_date):''} | Ticket ${ticket.ticket_number||'not entered'} | ${ticket.mix_description||ticket.mix_code||'Mix not entered'} | ${ticket.net_tons==null?'Tons not entered':Number(ticket.net_tons).toFixed(2)+' tons'}`,font:'Arial'})]}));const image=localPhoto(ticket.photo_path);if(image){const rendered=await renderForEmbed(image,'standard','jpeg');if(rendered)children.push(new Paragraph({children:[new ImageRun({type:rendered.ext==='.png'?'png':'jpg',data:rendered.buffer,transformation:await fittedWordImage(rendered.buffer,480,550)})]}));}}
 
     for(const item of extraWork){
       children.push(new Paragraph({heading:HeadingLevel.HEADING_2,children:[new TextRun({text:`Extra Work Record #${item.id}`,bold:true,font:'Arial'})]}),new Paragraph({children:[new TextRun({text:`${ewrReasonLabel(item.reason_category,item.reason_other_text)} | ${ewrStatusLabel(item.status)}`,font:'Arial'})]}),new Paragraph({children:[new TextRun({text:item.description_text||'(no description)',font:'Arial'})]}));
@@ -2781,7 +2842,9 @@ app.get('/api/ewr/:id/export', requireAuth, async (req, res) => {
     pdf.fontSize(11).fillColor('#000').text(`Record No: EWR-${String(id).padStart(4, '0')}`);
     pdf.moveDown(0.5);
     const line = (label, val) => { if (val == null || val === '') return; pdf.fontSize(12).fillColor('#000').text(`${label}: ${val}`); };
-    line('Job', group ? (group.title || '') : '');
+    const linkedJob=e.job_id?(await pool.query(`SELECT name,job_number FROM jobs WHERE id=$1 AND user_id=$2`,[e.job_id,req.user.id])).rows[0]:null;
+    line('Job', linkedJob ? [linkedJob.job_number,linkedJob.name].filter(Boolean).join(' - ') : '');
+    if (group && group.title) line('Document', group.title);
     line('Customer / client', e.customer);
     line('Job address', e.address);
     line('Created', fmtWhen(e.created_at));
@@ -3206,7 +3269,7 @@ function overlayItemText(item, c) {
     case 'address': return c.address || '';
     case 'gps': return (c.latitude != null && c.longitude != null) ? `${Number(c.latitude).toFixed(5)}, ${Number(c.longitude).toFixed(5)}` : '';
     case 'topic': return (c.area_tags || []).length ? `Topic: ${(c.area_tags || []).join(', ')}` : '';
-    case 'dims': return fmtDims(c);
+    case 'dims': return c && c.dim_confirmed === false ? '' : fmtDims(c); // unconfirmed AI sizes are never stamped
     case 'defect': return fmtDefect(c) ? `Defect: ${fmtDefect(c)}` : '';
     case 'copyright': return item.text || `© ${new Date().getFullYear()} Zukor AI. All Rights Reserved.`;
     default: return item.text || '';

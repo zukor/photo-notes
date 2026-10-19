@@ -32,7 +32,7 @@ test('scanner routes retain photos, extract fields, save reviews and report serv
   extracted={ticket_number:'T-0042',net_tons:18.64,truck_number:'007',confidence:'high'};
   const ticket=await scan('/api/asphalt-tickets/scan');assert.equal(ticket.ai_read,true);assert.equal(ticket.ai_error,null);
   assert.equal(ticket.ticket.ticket_number,'T-0042');assert.equal(Number(ticket.ticket.net_tons),18.64);
-  const saved=await fetch(base+'/api/asphalt-tickets/'+ticket.ticket.id,{method:'POST',headers:{Cookie:cookie,'Content-Type':'application/json'},body:JSON.stringify({...ticket.ticket,ticket_number:'T-0042-CHECKED'})});
+  const saved=await fetch(base+'/api/asphalt-tickets/'+ticket.ticket.id,{method:'POST',headers:{Cookie:cookie,'Content-Type':'application/json'},body:JSON.stringify({...ticket.ticket,ticket_number:'T-0042-CHECKED',confirmed:true})});
   assert.equal(saved.status,200);
   assert.equal((await pool.query('SELECT ticket_number FROM asphalt_tickets WHERE id=$1',[ticket.ticket.id])).rows[0].ticket_number,'T-0042-CHECKED');
   for(const [type,data,field] of [

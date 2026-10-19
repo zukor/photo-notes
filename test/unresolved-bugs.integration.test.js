@@ -13,7 +13,7 @@ test('unresolved reports: ordered documents, ticket evidence, duplicate preventi
  const group=await(await req('/api/groups',{title:'Ordered',ids:[ids[2],ids[0],ids[1]]})).json();assert.ok(group.id);
  assert.deepEqual((await(await req('/api/groups/'+group.id)).json()).items.map(c=>c.id),[ids[2],ids[0],ids[1]]);
  const ticketIds=[];for(let i=0;i<2;i++)ticketIds.push((await pool.query("INSERT INTO asphalt_tickets(user_id,photo_path) VALUES($1,'/uploads/fixture.jpg') RETURNING id",[owner.id])).rows[0].id);
- const ticket={ticket_number:'T-44',plant_name:'Plant',ticket_date:'09/01/2026',job_id:job.id,net_tons:12};
+ const ticket={ticket_number:'T-44',plant_name:'Plant',ticket_date:'09/01/2026',job_id:job.id,net_tons:12,confirmed:true};
  const saves=await Promise.all(ticketIds.map(id=>req('/api/asphalt-tickets/'+id,ticket)));assert.deepEqual(saves.map(r=>r.status).sort(),[200,409]);
  const today=await(await req('/api/asphalt-tickets?saved_from='+encodeURIComponent(new Date(Date.now()-60000).toISOString())+'&saved_to='+encodeURIComponent(new Date(Date.now()+60000).toISOString()))).json();assert.equal(today.tickets.length,1);assert.equal(today.total_tons,12);assert.equal(today.tickets[0].job_id,job.id);assert.ok(String(today.tickets[0].ticket_date).startsWith('2026-09-01'));
  const report=await req('/api/paving/jobs/'+job.id+'/report?doc=docx');assert.equal(report.status,200);const zip=new PizZip(Buffer.from(await report.arrayBuffer()));assert.ok(zip.file('word/document.xml').asText().includes('T-44'));assert.equal((zip.file('word/document.xml').asText().match(/<w:drawing>/g)||[]).length,4,'three job photos plus ticket evidence');
