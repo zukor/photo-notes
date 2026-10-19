@@ -148,7 +148,7 @@
         <div id="yieldTons" style="${box('')}">Choose a job to load the day's tickets.</div>
         <label for="yieldArea">Paved Area</label>
         <div class="row compact"><input id="yieldArea" type="number" inputmode="decimal" step="0.1" min="0" style="flex:1"><select id="yieldAreaUnit" aria-label="Area unit"><option value="sqft">sq ft</option><option value="sy">sq yd</option><option value="sqm">m²</option></select></div>
-        <button type="button" class="btn secondary slim" id="yieldUseMeasured" hidden>Use Measured Photo Areas</button>
+        <button type="button" class="btn secondary slim" id="yieldUseMeasured" hidden>Use Measured Photo Areas</button><button type="button" class="btn secondary slim" id="yieldUseTakeoff" hidden>Use Satellite Takeoff Area</button>
         <label for="yieldThickness">Planned Compacted Thickness (in)</label><input id="yieldThickness" type="number" inputmode="decimal" step="0.25" min="0" value="${store.get('pn_paving_yield_thickness_v1') || ''}">
         <details><summary>Mix weight and tolerance</summary>
           <label for="yieldUnitWeight">Mix Weight (lb per sq yd per inch)</label><input id="yieldUnitWeight" type="number" inputmode="decimal" step="1" value="${store.get('pn_paving_yield_uw_v1') || Q.DEFAULT_UNIT_WEIGHT}">
@@ -171,7 +171,7 @@
       return r;
     };
     const load = async () => {
-      inputs = null; $('yieldUseMeasured').hidden = true;
+      inputs = null; $('yieldUseMeasured').hidden = true; $('yieldUseTakeoff').hidden = true;
       if (!$('yieldJob').value) { $('yieldTons').textContent = 'Choose a job to load the day\'s tickets.'; $('yieldHistory').innerHTML = '<p>Choose a job to see its yield checks.</p>'; update(); return; }
       $('yieldTons').textContent = 'Loading tickets...';
       try {
@@ -179,6 +179,7 @@
         if (!r.ok) throw Error(d.error); inputs = d;
         $('yieldTons').setAttribute('style', box(d.missing_tons || !d.ticket_count ? 'low' : ''));
         $('yieldTons').innerHTML = d.ticket_count ? `<strong>${d.tons} tons</strong> on ${d.ticket_count} saved ticket${d.ticket_count === 1 ? '' : 's'} for this job and date.${d.missing_tons ? ` <strong>${d.missing_tons} ticket${d.missing_tons === 1 ? ' has' : 's have'} no tons entered.</strong> Fix ${d.missing_tons === 1 ? 'it' : 'them'} in the Ticket Scanner first.` : ''}` : 'No saved delivery tickets for this job and date. Scan the day\'s tickets with the Ticket Scanner and link them to this job.';
+        try { const tr = await ctx.api('/api/paving/takeoff?job_id=' + encodeURIComponent($('yieldJob').value)), td = tr.ok ? await tr.json() : null; if (td && td.totals && td.totals.area_sqft > 0) { $('yieldUseTakeoff').hidden = false; $('yieldUseTakeoff').textContent = `Use Satellite Takeoff Area (${td.totals.area_sqft.toLocaleString('en-US')} sq ft)`; $('yieldUseTakeoff').onclick = () => { $('yieldArea').value = td.totals.area_sqft; $('yieldAreaUnit').value = 'sqft'; areaSource = 'measured'; update(); }; } } catch {}
         if (d.measured_count) { $('yieldUseMeasured').hidden = false; $('yieldUseMeasured').textContent = `Use Measured Photo Areas (${d.measured_count} photo${d.measured_count === 1 ? '' : 's'}, ${d.measured_area_sqft} sq ft)`; }
       } catch (e) { $('yieldTons').textContent = 'The tickets could not be loaded.'; }
       update(); loadHistory();
