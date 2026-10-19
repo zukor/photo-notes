@@ -317,6 +317,51 @@ CREATE TABLE IF NOT EXISTS camera_readings (
   updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS camera_readings_user_type_idx ON camera_readings (user_id, reading_type, created_at DESC);
+-- Paving Pro temperature log: a thermometer reading with its photo, time, place,
+-- linked ticket, and the minimum it was checked against.
+CREATE TABLE IF NOT EXISTS paving_temperatures (
+  id          SERIAL PRIMARY KEY,
+  user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  job_id      INTEGER REFERENCES jobs(id) ON DELETE SET NULL,
+  ticket_id   INTEGER REFERENCES asphalt_tickets(id) ON DELETE SET NULL,
+  photo_path  TEXT,
+  kind        TEXT NOT NULL DEFAULT 'mat',
+  reading_f   NUMERIC(6,1),
+  ai_reading_f NUMERIC(6,1),
+  binder      TEXT,
+  minimum_f   NUMERIC(6,1),
+  check_status TEXT,
+  location_note TEXT,
+  note        TEXT,
+  latitude    DOUBLE PRECISION,
+  longitude   DOUBLE PRECISION,
+  taken_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  confidence  TEXT,
+  raw_ai      JSONB,
+  status      TEXT NOT NULL DEFAULT 'draft',
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS paving_temperatures_user_idx ON paving_temperatures (user_id, taken_at DESC);
+-- Paving Pro daily yield: delivered tons against paved area and planned thickness.
+CREATE TABLE IF NOT EXISTS paving_yield_checks (
+  id            SERIAL PRIMARY KEY,
+  user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  job_id        INTEGER REFERENCES jobs(id) ON DELETE SET NULL,
+  check_date    DATE NOT NULL,
+  tons          NUMERIC(12,2),
+  ticket_count  INTEGER,
+  area_sy       NUMERIC(12,2),
+  area_source   TEXT,
+  thickness_in  NUMERIC(6,2),
+  unit_weight   NUMERIC(6,1),
+  tolerance_pct NUMERIC(5,1),
+  result        JSONB,
+  note          TEXT,
+  status        TEXT NOT NULL DEFAULT 'saved',
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS paving_yield_user_idx ON paving_yield_checks (user_id, check_date DESC);
 -- Basic-app issue reports. Reports are stored before email is attempted so a
 -- mail-provider outage can never discard a tester's feedback.
 CREATE TABLE IF NOT EXISTS issue_reports (

@@ -697,6 +697,8 @@ const PAVING_PHOTO_REASONS=[
   {id:"extra_work",label:"Extra Work",description:"Photograph work outside the original scope and explain why it was needed. This saves photo evidence; use Extra Work Records for a separate extra-work record."},
   {id:"follow_up",label:"Follow-Up Inspection",description:"Document the pavement condition during a later inspection, including wear, recurring problems, or repairs needing attention."},
   {id:'ticket',label:'Paving Delivery Ticket Scanner',feature:'ticket_scanner',description:'Read asphalt and paving delivery-ticket details and calculate saved daily tonnage.'},
+  {id:'temperature',label:'Mix Temperature Log',feature:'ticket_scanner',description:'Photograph the thermometer display. PhotoNotes reads the temperature, records the time, place and ticket, and checks it against the minimum for the mix.'},
+  {id:'yield',label:'Daily Yield Check',feature:'ticket_scanner',description:'Compare the tons on the day\'s delivery tickets with the paved area and planned thickness, to catch thin or thick paving the same day.'},
   {id:'plan_sketch',label:'Plan or Sketch Scanner',feature:'camera_readers',description:'Read visible project, sheet, revision, scale, dimension, and field-note information without estimating missing details.'},
   {id:'business_card',label:'Business Card Scanner',feature:'camera_readers',description:'Read contact and company details from a photographed business card.'},
   {id:'equipment_plate',label:'Equipment Plate Scanner',feature:'camera_readers',description:'Read manufacturer, model, serial number, year, and equipment specifications.'},
@@ -716,7 +718,7 @@ function pavingPhotoReasonMarkup(){
 }
 function pavingHasUnsavedPhoto(){
   const id=pavingPhotoReason().id;
-  return pavingIsJobPhoto()?!!(state.photoFile||state._note):id==='ticket'?!!(ticketPhotoFile||ticketDraft):id==='alignment'?!!alignmentAfterFile:!!(cameraReaderFile||cameraReaderDraft);
+  return pavingIsJobPhoto()?!!(state.photoFile||state._note):id==='ticket'?!!(ticketPhotoFile||ticketDraft):id==='temperature'?!!window.PhotoNotesPavingQualityUI?.temperatureUnsaved():id==='yield'?false:id==='alignment'?!!alignmentAfterFile:!!(cameraReaderFile||cameraReaderDraft);
 }
 function bindPavingPhotoReason(){
   const select=document.getElementById('pavingPhotoReason')||document.getElementById('pavingScanner'),type=document.getElementById('pavingCaptureType');
@@ -727,12 +729,13 @@ function bindPavingPhotoReason(){
     if(state._previewUrl)URL.revokeObjectURL(state._previewUrl);
     state._previewUrl=null;state._captureShareSave=null;state.photoFile=null;state._note='';state.location=null;state.address=null;state._locationPromise=null;state._qualityPromise=null;state._qualityResult=null;
     void persistCaptureDraft(true).catch(()=>{});
-    cameraReaderFile=null;cameraReaderDraft=null;ticketPhotoFile=null;ticketDraft=null;alignmentAfterFile=null;alignmentBefore=null;
+    cameraReaderFile=null;cameraReaderDraft=null;ticketPhotoFile=null;ticketDraft=null;alignmentAfterFile=null;alignmentBefore=null;window.PhotoNotesPavingQualityUI?.reset();
     state._pavingReason=next;renderCapture();
   };
   if(select){select.onchange=()=>change(select.value);window.ConcretePurposeMenu.mount(select);}
   type.onchange=()=>change(type.value==='photo'?'pavement_problems':type.value==='alignment'?'alignment':pavingScannerChoices()[0].id);
 }
+function pavingQualityContext(){return {api,toast,esc,jobs:state.jobs||[],jobId:state.jobId,location:()=>getLocationOnce(),setBusy:setPavingToolBusy};}
 function pavingToolMount(){return document.getElementById('pavingInlineTool')||document.getElementById('body');}
 function pavingToolEmbedded(){return state.view==='capture'&&isPavingClient()&&!!document.getElementById('pavingInlineTool');}
 function setPavingToolBusy(ids,busy){for(const id of ['pavingCaptureType','pavingPhotoReason','pavingPhotoReasonButton','pavingScanner','pavingScannerButton',...ids]){const el=document.getElementById(id);if(el)el.disabled=busy;}}
@@ -742,6 +745,8 @@ function renderPavingToolCapture(){
   bindPavingPhotoReason();
   if(reason.id==='ticket'){ticketPhotoFile=null;ticketDraft=null;renderTicketScanner();}
   else if(reason.id==='alignment')renderAlignmentTool();
+  else if(reason.id==='temperature')window.PhotoNotesPavingQualityUI.renderTemperature(pavingToolMount(),pavingQualityContext());
+  else if(reason.id==='yield')window.PhotoNotesPavingQualityUI.renderYield(pavingToolMount(),pavingQualityContext());
   else{cameraReaderHistory=false;cameraReaderType=reason.id;renderCameraReader();}
 }
 
