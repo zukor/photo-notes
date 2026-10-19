@@ -434,6 +434,53 @@ CREATE TABLE IF NOT EXISTS concrete_yield_checks (
   created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS concrete_yield_user_idx ON concrete_yield_checks (user_id, check_date DESC);
+-- Concrete Pro estimating: measured areas for a job, the company's price list, and estimates.
+CREATE TABLE IF NOT EXISTS concrete_areas (
+  id            SERIAL PRIMARY KEY,
+  user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  job_id        INTEGER REFERENCES jobs(id) ON DELETE SET NULL,
+  capture_id    INTEGER REFERENCES captures(id) ON DELETE SET NULL,
+  footprint_id  INTEGER,
+  name          TEXT NOT NULL,
+  shape         TEXT NOT NULL DEFAULT 'rect',
+  dims          JSONB NOT NULL DEFAULT '{}'::jsonb,
+  cutouts       JSONB NOT NULL DEFAULT '[]'::jsonb,
+  edge          JSONB NOT NULL DEFAULT '{}'::jsonb,
+  thickness_in  NUMERIC(6,2),
+  method        TEXT NOT NULL DEFAULT 'entered',
+  area_sqft     NUMERIC(12,1),
+  perimeter_ft  NUMERIC(12,1),
+  notes         TEXT,
+  status        TEXT NOT NULL DEFAULT 'saved',
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS concrete_areas_job_idx ON concrete_areas (user_id, job_id);
+CREATE TABLE IF NOT EXISTS concrete_price_books (
+  user_id     INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  prices      JSONB NOT NULL DEFAULT '{}'::jsonb,
+  examples    JSONB NOT NULL DEFAULT '[]'::jsonb,
+  settings    JSONB NOT NULL DEFAULT '{}'::jsonb,
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS concrete_estimates (
+  id             SERIAL PRIMARY KEY,
+  user_id        INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  job_id         INTEGER REFERENCES jobs(id) ON DELETE SET NULL,
+  name           TEXT NOT NULL,
+  kind           TEXT NOT NULL DEFAULT 'detailed',
+  customer       JSONB NOT NULL DEFAULT '{}'::jsonb,
+  spec           JSONB NOT NULL DEFAULT '{}'::jsonb,
+  area_ids       INTEGER[] NOT NULL DEFAULT '{}',
+  checklist      JSONB NOT NULL DEFAULT '{}'::jsonb,
+  options        JSONB NOT NULL DEFAULT '[]'::jsonb,
+  notes          TEXT,
+  result         JSONB,
+  status         TEXT NOT NULL DEFAULT 'draft',
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS concrete_estimates_user_idx ON concrete_estimates (user_id, updated_at DESC);
 -- Basic-app issue reports. Reports are stored before email is attempted so a
 -- mail-provider outage can never discard a tester's feedback.
 CREATE TABLE IF NOT EXISTS issue_reports (

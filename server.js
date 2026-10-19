@@ -1516,6 +1516,7 @@ app.get('/api/paving/jobs/:id/report', requireAuth, async (req, res) => {
 // ---- Paving Pro daily yield check and temperature log ----
 const PavingQuality=require('./paving-quality');
 const ConcreteQuality=require('./concrete-quality');
+require('./concrete-estimates').register(app,{pool,requireAuth,requireConcrete,upload,logEvent,ownedJobId,imageDims,recordCaptureHistory,localPhoto,renderForEmbed,fittedWordImage,PDFDocument,docx:{Document,Packer,Paragraph,TextRun,HeadingLevel,ImageRun}});
 ConcreteQuality.register(app,{pool,requireAuth,requireConcrete,upload,visionJSON,visionFeedback,logEvent,ownedJobId});
 PavingQuality.register(app,{pool,requireAuth,upload,featureAllowed,currentProduct,visionJSON,visionFeedback,logEvent,ownedJobId});
 

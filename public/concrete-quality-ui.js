@@ -238,7 +238,7 @@
         const r = await ctx.api(`/api/concrete/yield/inputs?job_id=${encodeURIComponent($('cyJob').value)}&date=${encodeURIComponent($('cyDate').value)}&tz=${encodeURIComponent(tz())}`), d = await r.json(); if (!r.ok) throw Error(); inputs = d;
         $('cyYards').setAttribute('style', box(d.ticket_count ? '' : 'flagged'));
         $('cyYards').innerHTML = d.ticket_count ? `<strong>${d.yards} cubic yards</strong> on ${d.ticket_count} saved batch ticket${d.ticket_count === 1 ? '' : 's'} for this job and date.` : 'No saved batch tickets for this job and date. Scan the day\'s tickets with the Batch Ticket Scanner and link them to this job.';
-        $('cyAreas').innerHTML = d.areas.length ? '<p><strong>Saved areas for this job.</strong> Tick the ones poured today:</p>' + d.areas.map(a => `<label><input type="checkbox" data-cy-area="${a.area_sqft}"> ${ctx.esc(a.name)}: ${a.area_sqft} sq ft (${a.source === 'field' ? 'field measured' : 'from map'})</label>`).join('') : '';
+        $('cyAreas').innerHTML = d.areas.length ? '<p><strong>Saved areas for this job.</strong> Tick the ones poured today:</p>' + d.areas.map(a => `<label><input type="checkbox" data-cy-area="${a.area_sqft}"> ${ctx.esc(a.name)}: ${a.area_sqft} sq ft (${a.source === 'field' ? 'field measured' : a.source === 'map' ? 'from map' : 'measured'})</label>`).join('') : '';
         mount.querySelectorAll('[data-cy-area]').forEach(b => b.onchange = sumAreas);
       } catch { $('cyYards').textContent = 'The tickets could not be loaded.'; }
       update(); loadHistory();

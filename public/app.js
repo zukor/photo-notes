@@ -334,7 +334,7 @@ function closePhotoTool() {
 }
 function photoToolWorkflowView() {
   const source=state._photoToolReturnView||(IS_HANDHELD?'capture':'organize');
-  if (['capture','camera-tools','ticket','camera-reader','alignment','concrete-ticket','concrete-temperature','concrete-yield','organize','photo-library','hoa-visits','hoa-visit','edit','hoa-assets','hoa-asset','create','hoa-inspections','send','hoa-maintenance'].includes(source)) return source;
+  if (['capture','camera-tools','ticket','camera-reader','alignment','concrete-ticket','concrete-temperature','concrete-yield','concrete-estimates','concrete-estimate','concrete-price-book','organize','photo-library','hoa-visits','hoa-visit','edit','hoa-assets','hoa-asset','create','hoa-inspections','send','hoa-maintenance'].includes(source)) return source;
   if (['groups','group-detail','document-setup','document-preview'].includes(source)) return 'create';
   return 'organize';
 }
@@ -343,7 +343,7 @@ function renderApp() {
   cropReturnContext=null;
   const photoToolOpen=['photo-follow-ups','photo-requests'].includes(state.view);
   const workflowView=photoToolOpen?photoToolWorkflowView():state.view;
-  const photoToolSection=['capture','camera-tools','ticket','camera-reader','alignment','concrete-ticket','concrete-temperature','concrete-yield'].includes(workflowView)?'Capture':['edit','hoa-assets','hoa-asset'].includes(workflowView)?(isHoaClient()?'Assets':'Edit'):['create','hoa-inspections'].includes(workflowView)?(isHoaClient()?'Inspections':'Create'):['send','hoa-maintenance'].includes(workflowView)?(isHoaClient()?'Records':'Send'):'Organize';
+  const photoToolSection=['capture','camera-tools','ticket','camera-reader','alignment','concrete-ticket','concrete-temperature','concrete-yield','concrete-estimates','concrete-estimate','concrete-price-book'].includes(workflowView)?'Capture':['edit','hoa-assets','hoa-asset'].includes(workflowView)?(isHoaClient()?'Assets':'Edit'):['create','hoa-inspections'].includes(workflowView)?(isHoaClient()?'Inspections':'Create'):['send','hoa-maintenance'].includes(workflowView)?(isHoaClient()?'Records':'Send'):'Organize';
   document.body.classList.toggle('admin-testing-page',isTestingManager()&&['my-assignment','my-issues','manage-testing'].includes(state.view));
   window.PhotoNotesMatchCamera?.stop();
   document.getElementById('captureShareDialog')?.remove();
@@ -378,7 +378,7 @@ function renderApp() {
         </div>
       </div>
       ${isRoadIssuesClient()||isBasicClient()?'':`<nav class="tabs workflow-tabs ${isHoaClient()?'hoa-tabs':isConcreteClient()?'concrete-tabs':''}" aria-label="Photo Notes workflow">
-        <button type="button" class="tab ${['capture','camera-tools','ticket','camera-reader','alignment','concrete-ticket','concrete-temperature','concrete-yield'].includes(workflowView)?'on':''}" id="tabCapture" aria-current="${['capture','camera-tools','ticket','camera-reader','alignment','concrete-ticket','concrete-temperature','concrete-yield'].includes(workflowView)?'page':'false'}">Capture</button>
+        <button type="button" class="tab ${['capture','camera-tools','ticket','camera-reader','alignment','concrete-ticket','concrete-temperature','concrete-yield','concrete-estimates','concrete-estimate','concrete-price-book'].includes(workflowView)?'on':''}" id="tabCapture" aria-current="${['capture','camera-tools','ticket','camera-reader','alignment','concrete-ticket','concrete-temperature','concrete-yield','concrete-estimates','concrete-estimate','concrete-price-book'].includes(workflowView)?'page':'false'}">Capture</button>
         <button type="button" class="tab ${['organize','photo-library','edit','hoa-visits','hoa-visit'].includes(workflowView)?'on':''}" id="tabOrganize" aria-current="${['organize','photo-library','edit','hoa-visits','hoa-visit'].includes(workflowView)?'page':'false'}">${isHoaClient()?'Organize':'Library'}</button>
         ${isHoaClient()?`<button type="button" class="tab ${['hoa-assets','hoa-asset'].includes(workflowView)?'on':''}" id="tabEdit" aria-current="${['hoa-assets','hoa-asset'].includes(workflowView)?'page':'false'}">Assets</button>`:''}
         <button type="button" class="tab ${['create','hoa-inspections'].includes(workflowView)?'on':''}" id="tabCreate" aria-current="${['create','hoa-inspections'].includes(workflowView)?'page':'false'}">${isHoaClient()?'Inspections':'Create'}</button>
@@ -478,7 +478,7 @@ function renderApp() {
   else if (state.view === 'capture') renderCapture();
   else if (state.view === 'camera-tools') renderCameraTools();
   else if (state.view === 'ticket') renderTicketScanner();
-  else if (['concrete-ticket','concrete-temperature','concrete-yield'].includes(state.view)) renderConcreteTool(state.view);
+  else if (['concrete-ticket','concrete-temperature','concrete-yield','concrete-estimates','concrete-estimate','concrete-price-book'].includes(state.view)) renderConcreteTool(state.view);
   else if (state.view === 'camera-reader') renderCameraReader();
   else if (state.view === 'alignment') renderAlignmentTool();
   else if (state.view === 'photo-library') { if(isBasicClient()||isRoadIssuesClient())renderDevicePhotoNotesLibrary();else renderList(); }
@@ -938,10 +938,30 @@ function renderCapture() {
 function cameraToolCard(title, description, action, id) {
   return `<article class="camera-tool-card"><div><strong>${title}</strong><span>${description}</span></div><button class="btn secondary slim" data-camera-tool id="${id}">${action}</button></article>`;
 }
+// Concrete Pro estimating: estimate list, one estimate, and the price list.
+function renderConcreteEstimating(view,title){
+  const body=document.getElementById('body'),ui=window.PhotoNotesConcreteEstimateUI;
+  if(!ui){state.view='camera-tools';renderCameraTools();return;}
+  body.className='workflow-concrete-quality';
+  const back=view==='concrete-estimate'?'‹ Back to Estimates':'‹ Back to Camera Tools';
+  body.innerHTML=`<button class="backlink" id="concreteToolBack">${back}</button><div class="workflow-intro"><strong>${title}</strong></div><div id="concreteToolMount"></div>`;
+  document.getElementById('concreteToolBack').onclick=()=>{state.view=view==='concrete-estimate'?'concrete-estimates':'camera-tools';renderApp();};
+  const ctx={api,toast,esc,jobs:state.jobs||[],jobId:state.jobId,photoLocation,downloadBlob,
+    openEstimate:id=>{state.concreteEstimateId=id;state.view='concrete-estimate';renderApp();},
+    openList:()=>{state.view='concrete-estimates';renderApp();},
+    openPriceBook:()=>{state.view='concrete-price-book';renderApp();},
+    precisionMeasure:window.PhotoNotesPrecisionMeasure&&measurementOn()?done=>window.PhotoNotesPrecisionMeasure.open({surface:'concrete',mode:'live',canValidate:false,onDone:r=>done(r.dims||{}),onCancel:()=>{}}):null};
+  const mount=document.getElementById('concreteToolMount');
+  if(view==='concrete-estimate')ui.renderEditor(mount,ctx,state.concreteEstimateId);
+  else if(view==='concrete-price-book')ui.renderPriceBook(mount,ctx);
+  else ui.renderList(mount,ctx,state._concreteQuick?'quick':null);
+  state._concreteQuick=false;
+}
 // Concrete Pro quality tools open from Camera Tools.
 function renderConcreteTool(view){
-  const body=document.getElementById('body'),title={'concrete-ticket':'Batch Ticket Scanner','concrete-temperature':'Concrete Temperature Log','concrete-yield':'Concrete Yield Check'}[view];
+  const body=document.getElementById('body'),title={'concrete-ticket':'Batch Ticket Scanner','concrete-temperature':'Concrete Temperature Log','concrete-yield':'Concrete Yield Check','concrete-estimates':'Estimates','concrete-estimate':'Estimate','concrete-price-book':'Price List'}[view];
   if(!isConcreteClient()||!window.PhotoNotesConcreteQualityUI){state.view='camera-tools';renderCameraTools();return;}
+  if(['concrete-estimates','concrete-estimate','concrete-price-book'].includes(view)){renderConcreteEstimating(view,title);return;}
   body.className='workflow-concrete-quality';
   body.innerHTML=`<button class="backlink" id="concreteToolBack">‹ Back to Camera Tools</button><div class="workflow-intro"><strong>${title}</strong></div><div id="concreteToolMount"></div>`;
   document.getElementById('concreteToolBack').onclick=()=>{if(window.PhotoNotesConcreteQualityUI.unsaved()&&!confirm(uiT('Leave without saving? The unsaved reading will be discarded.')))return;state.view='camera-tools';renderApp();};
@@ -957,6 +977,14 @@ function renderCameraTools() {
   body.innerHTML = `
     <button class="backlink" id="toolsBack">‹ Back to Capture</button>
     <div class="workflow-intro"><strong>Camera Tools</strong><span>Choose what the camera needs to do. Source photos are retained for verification.</span></div>
+    ${isConcreteClient()&&window.PhotoNotesConcreteEstimateUI?`<section class="camera-tool-group">
+      <div class="camera-tool-heading"><strong>Estimating</strong><span>Measure, price and propose jobs of any size, from a backyard patio to a commercial slab.</span></div>
+      <div class="camera-tool-grid">
+        ${cameraToolCard('Quick Estimate','Price a patio, walk or short driveway on site in about 10 minutes.','Start Quick Estimate','toolConcreteQuick')}
+        ${cameraToolCard('Estimates','Measured areas, quantities, good, better and best options, the site-visit checklist and the photo proposal.','Open Estimates','toolConcreteEstimates')}
+        ${cameraToolCard('Price List','Your prices for concrete, rebar, forms, finishes, pumps and more, plus waste and rounding settings.','Open Price List','toolConcretePriceBook')}
+      </div>
+    </section>`:''}
     ${isConcreteClient()&&window.PhotoNotesConcreteQualityUI?`<section class="camera-tool-group">
       <div class="camera-tool-heading"><strong>Concrete Quality</strong><span>Check each load and each pour while the crew is still on site.</span></div>
       <div class="camera-tool-grid">
@@ -998,6 +1026,9 @@ function renderCameraTools() {
   document.querySelectorAll('[data-scanner-history]').forEach(b=>b.onclick=()=>{cameraReaderHistory=true;cameraReaderType=b.dataset.scannerHistory;state.view='camera-reader';renderApp();});
   const wire=(id,fn)=>{const b=document.getElementById(id);if(b)b.onclick=fn;};
   wire('toolTicket',() => { state.view='ticket'; renderApp(); });
+  wire('toolConcreteQuick',() => { state._concreteQuick=true; state.view='concrete-estimates'; renderApp(); });
+  wire('toolConcreteEstimates',() => { state.view='concrete-estimates'; renderApp(); });
+  wire('toolConcretePriceBook',() => { state.view='concrete-price-book'; renderApp(); });
   wire('toolConcreteTicket',() => { state.view='concrete-ticket'; renderApp(); });
   wire('toolConcreteTemperature',() => { state.view='concrete-temperature'; renderApp(); });
   wire('toolConcreteYield',() => { state.view='concrete-yield'; renderApp(); });
@@ -2591,7 +2622,7 @@ async function renderList() {
     <div class="organize-library-heading"><h2>Saved PhotoNotes</h2><div class="row compact"><button class="btn secondary slim" id="librarySelectAll">Select All</button><button class="btn secondary slim" id="libraryClearSelection">Clear Selection</button></div></div>
     <section class="library-specialty-actions" id="librarySpecialtyActions" hidden>
       ${isPavingClient()?'<div id="pavingReadiness" class="evidence-readiness"></div><button class="btn secondary slim" id="pavingJobPdf">Job Evidence PDF</button><button class="btn secondary slim" id="pavingJobWord">Job Evidence Word</button>':''}
-      ${isConcreteClient()?'<button class="btn secondary slim" id="concreteAreas">Patio &amp; Foundation Areas</button><button class="btn secondary slim" id="concreteReportOpen">Concrete Evidence Report</button>':''}
+      ${isConcreteClient()?'<button class="btn secondary slim" id="concreteAreas">Patio &amp; Foundation Areas</button><button class="btn secondary slim" id="concreteReportOpen">Concrete Evidence Report</button><button class="btn secondary slim" id="concreteEstimatesOpen">Estimates</button>':''}
       ${featureOn('measurements')?'<button class="btn secondary slim" id="openmap">Open Job Site Map</button>':''}
       ${isConcreteClient()&&state.me.ramo_intake_access?'<button class="btn secondary slim" id="ramoIntakeSend">Send to Ramo Optimizer</button><button class="btn secondary slim" id="ramoIntakeHistory">Ramo Submission History</button>':''}
     </section>
@@ -2623,6 +2654,7 @@ async function renderList() {
   const pavingWord=document.getElementById('pavingJobWord');if(pavingWord)pavingWord.onclick=()=>exportPavingJobEvidence('docx');
   const concreteAreas=document.getElementById('concreteAreas');if(concreteAreas)concreteAreas.onclick=()=>openConcreteFootprints();
   // The Concrete report (photos, readiness, batch tickets, yield and temperatures) had no way in from the app.
+  const concreteEstimatesOpen=document.getElementById('concreteEstimatesOpen');if(concreteEstimatesOpen)concreteEstimatesOpen.onclick=()=>{state.view='concrete-estimates';renderApp();};
   const concreteReportOpen=document.getElementById('concreteReportOpen');if(concreteReportOpen)concreteReportOpen.onclick=()=>{const job=state.jobId;state.view='concrete-report';renderApp();const pick=document.getElementById('concreteReportJob');if(pick&&job){pick.value=String(job);pick.dispatchEvent(new Event('change'));}};
   const om = document.getElementById('openmap'); if (om) om.onclick = () => { state.view = 'map'; renderApp(); };
   updateLibraryProjectControls();
