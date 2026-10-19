@@ -58,3 +58,10 @@ test('a library photo never takes the phone location', () => {
   assert.match(app, /const loc = await photoLocation\(file, takenNow\)/);
   assert.match(app, /photoLocation\(file,alignmentAfterCamera\)/);
 });
+
+test('the Concrete report can be opened from the Library, and live coaching uses concrete wording', () => {
+  const app = fs.readFileSync('public/app.js', 'utf8');
+  assert.match(app, /id="concreteReportOpen"/);
+  assert.match(app, /concreteReportOpen\.onclick=\(\)=>\{const job=state\.jobId;state\.view='concrete-report'/);
+  assert.match(fs.readFileSync('public/precision-measure.js', 'utf8'), /String\(a\.message\)\.replace\(\/pothole\/g,W\.thing\)/);
+});

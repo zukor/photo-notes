@@ -109,7 +109,7 @@ async function renderCamera(opts){
   // overlay
   const rect=video.getBoundingClientRect();overlay.width=Math.round(rect.width);overlay.height=Math.round(rect.height);const o=overlay.getContext('2d');o.clearRect(0,0,overlay.width,overlay.height);
   if(corners){const sx=overlay.width/aw,sy=overlay.height/ah;o.lineWidth=5;o.strokeStyle=a.ready?'#21c45d':a.capturable?'#ffd400':'#ff3b30';o.beginPath();corners.forEach((p,i)=>i?o.lineTo(p.x*sx,p.y*sy):o.moveTo(p.x*sx,p.y*sy));o.closePath();o.stroke();}
-  if(a.message!==lastMessage){guide.textContent=a.message;lastMessage=a.message;}
+  const said=String(a.message).replace(/pothole/g,W.thing);if(said!==lastMessage){guide.textContent=said;lastMessage=said;}
   guide.className='pm-guide '+(a.ready?'ready':a.capturable?'close':'bad');
   const ang=a.tilt!=null&&corners?a.tilt:phoneTilt;
   body.querySelector('#pmAngle').textContent=ang==null?'Angle: waiting':`Angle: ${Math.round(ang)}° from straight down ${ang<=E.LIMITS.tiltBestDeg?'(good)':ang<=E.LIMITS.tiltMaxDeg?'(acceptable)':'(too steep)'}`;
