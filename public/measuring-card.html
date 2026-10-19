@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>PhotoNotes Measuring Card</title>
+<style>
+  body{font:16px Arial,Helvetica,sans-serif;color:#000;background:#fff;margin:0;text-align:left}
+  main{max-width:820px;margin:auto;padding:20px 16px 60px}
+  h1{font-size:24px;margin:0 0 8px}
+  .controls{margin:12px 0 20px}
+  .controls a{display:inline-block;margin:4px 8px 4px 0;padding:10px 14px;border:2px solid #000;border-radius:8px;color:#000;text-decoration:none;background:#fff}
+  .controls a[aria-current="true"]{background:#ffdf00;font-weight:bold}
+  button{font:inherit;color:#000;background:#ffdf00;border:2px solid #000;border-radius:8px;padding:12px 16px;min-height:48px}
+  ol{padding-left:22px}
+  .sheet{margin:24px auto 0;break-inside:avoid}
+  .card{display:grid;grid-template-columns:repeat(10,1fr);background:#fff;margin:0 auto;outline:1px dashed #000;outline-offset:6px}
+  .card i{display:block;aspect-ratio:1/1;background:#fff}
+  .card i.b{background:#000}
+  .label{text-align:center;margin-top:16px;font-size:14px}
+  @media print{
+    main>*:not(.sheet){display:none!important}
+    main{padding:0;max-width:none}
+    .sheet{margin:0}
+    .card{outline:none}
+    *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  }
+</style></head>
+<body><main>
+<h1>PhotoNotes Measuring Card</h1>
+<p>Lay this card flat on the pavement beside a pothole before using Precision Measure. PhotoNotes finds the card in the camera view, coaches you to the right angle and distance, and measures from it.</p>
+<div class="controls" id="sizes"></div>
+<ol>
+  <li>Print at <strong>100% / Actual Size</strong>. Do not choose "Fit to page" or "Shrink to fit".</li>
+  <li>Measure the black square with a ruler. Each side should be exactly <strong id="sideText"></strong>. If it is not, enter the size you measured in PhotoNotes under Card Settings.</li>
+  <li>Glue it flat onto stiff cardboard or foam board. A curled or bent card lowers accuracy.</li>
+  <li>Keep it clean and dry. Do not cover the white border around the black square.</li>
+</ol>
+<p><button type="button" id="printCard">Print Card</button></p>
+<div class="sheet"><div class="card" id="card" role="img" aria-label="Measuring card pattern"></div><div class="label" id="cardLabel"></div></div>
+</main>
+<script src="/measuring-card.js?v=1"></script>
+</body></html>

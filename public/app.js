@@ -784,6 +784,35 @@ function mountDuplicateContext(){
   }
 }
 
+// ---- Precision Measure (measuring card) ----
+function precisionMeasureOn(){return !!window.PhotoNotesPrecisionMeasure&&isIndustryProClient()&&featureOn('measurements')&&(isPavingClient()||isConcreteClient());}
+function precisionCanValidate(){return !!(state.me&&(state.me.is_tester||state.me.is_testing_manager||state.me.role==='admin'));}
+function precisionDims(d){
+  const r2=v=>v==null?'':String(Math.round(v*100)/100);
+  return {length:r2(d.length_in),lengthUnit:'in',width:r2(d.width_in),widthUnit:'in',depth:d.depth_in==null?'':String(d.depth_in),shape:d.shape,area:r2(d.area_sqft),areaOverridden:true,
+    touched:{length:true,width:true,depth:d.depth_in!=null,shape:true,area:true},suggested:{length:false,width:false,depth:false},source:'card'};
+}
+function precisionSummary(d){
+  const fi=v=>{const n=Number(v);if(!Number.isFinite(n)||n<=0)return '';const ft=Math.floor(n/12),inch=n-ft*12;return ft?`${ft} ft ${inch.toFixed(1)} in`:`${inch.toFixed(1)} in`;};
+  return `Measured with the card: ${fi(d.length)} × ${fi(d.width)}, ${Number(d.area).toFixed(2)} sq ft${d.depth?`, ${d.depth} in deep`:', depth not measured'}.`;
+}
+function precisionMeasureFields(){
+  const rec=state._measureRecord,d=state._dims;
+  if(!rec||!d||d.source!=='card')return null;
+  return {dim_length:d.length,dim_length_unit:'in',dim_width:d.width,dim_width_unit:'in',dim_depth:d.depth,dim_shape:d.shape,dim_area_sqft:d.area,dim_source:'card',dim_confidence:'high',dim_confirmed:'true',dim_ai:JSON.stringify(rec)};
+}
+function startPrecisionMeasure(){
+  window.PhotoNotesPrecisionMeasure.open({mode:'live',canValidate:precisionCanValidate(),validate:sessionStorageGet('pn_pm_validate')==='1',
+    onDone:({file,dims,record})=>{
+      state._precisionFile=file;onPhotoChosen(file);state._dims=precisionDims(dims);state._measureRecord=record;
+      sessionStorageSet('pn_pm_validate',record.validation?'1':'');
+      const st=document.getElementById('precisionMeasureStatus');if(st)st.textContent=precisionSummary(state._dims);
+      void persistCaptureDraft().catch(()=>{});toast('Measured. Add notes, then save the PhotoNote.');
+    }});
+}
+function sessionStorageGet(k){try{return sessionStorage.getItem(k);}catch{return null;}}
+function sessionStorageSet(k,v){try{if(v)sessionStorage.setItem(k,v);else sessionStorage.removeItem(k);}catch{}}
+
 function renderCapture() {
   if(isPavingClient()&&!pavingIsJobPhoto()){renderPavingToolCapture();return;}
   const body = document.getElementById('body');
@@ -795,6 +824,7 @@ function renderCapture() {
     <label>Photo</label>
     <button type="button" class="btn" id="takephoto">Take Photo</button>
     <button type="button" class="btn secondary" id="choosephoto" style="margin-top:8px">Choose from library or files</button>
+    ${precisionMeasureOn()?`<button type="button" class="btn secondary" id="precisionMeasure" style="margin-top:8px">Precision Measure (with Card)</button><div class="status" id="precisionMeasureStatus" aria-live="polite">${state._measureRecord&&state._dims?esc(precisionSummary(state._dims)):''}</div>`:''}
     ${(featureOn('camera_readers') || beforeAfterOn()) && !isPavingClient() ? `<button type="button" class="btn secondary" id="openCameraTools" style="margin-top:8px">Camera Tools</button>` : ''}
     <input type="file" accept="image/*" capture="environment" id="photoCam" style="display:none" />
     <input type="file" accept="image/*" id="photoLib" style="display:none" />
@@ -851,6 +881,7 @@ function renderCapture() {
   if (cameraToolsButton) cameraToolsButton.onclick = () => { state.view = 'camera-tools'; renderApp(); };
 
   document.getElementById('takephoto').onclick = () => { stopCaptureDictation(); const input=document.getElementById('photoCam');input.value='';input.click(); };
+  const pmButton=document.getElementById('precisionMeasure');if(pmButton)pmButton.onclick=()=>{stopCaptureDictation();startPrecisionMeasure();};
   document.getElementById('choosephoto').onclick = () => { stopCaptureDictation(); const input=document.getElementById('photoLib');input.value='';input.click(); };
   document.getElementById('photoCam').onchange = (e) => { if (e.target.files[0]) onPhotoChosen(e.target.files[0]); };
   document.getElementById('photoLib').onchange = (e) => { if (e.target.files[0]) onPhotoChosen(e.target.files[0]); };
@@ -1253,7 +1284,7 @@ function persistCaptureDraft(clear=false){
   if(!email)return Promise.resolve();
   const photo=state.photoFile;
   const draft={photo,note:state._note||'',location:state.location,address:state.address,
-    context:Object.fromEntries(['area','jobId','communityId','urgency','securityIssueType','_concreteCapture','_pavingReason','_duplicateContext','_captureTemplateName','_dims','_measure','_followUp'].map(k=>[k,state[k]]))};
+    context:Object.fromEntries(['area','jobId','communityId','urgency','securityIssueType','_concreteCapture','_pavingReason','_duplicateContext','_captureTemplateName','_dims','_measure','_measureRecord','_followUp'].map(k=>[k,state[k]]))};
   if(!photo&&!clear)return captureDraftWrites;
   const write=captureDraftWrites.then(async()=>{
     const account=await PhotoNotesQueue.accountKey(email);
@@ -1285,6 +1316,7 @@ window.addEventListener('pagehide',()=>{void persistCaptureDraft().catch(()=>{})
 
 function onPhotoChosen(file) {
   state._captureShareSave=null;
+  if(state._measureRecord&&file!==state._precisionFile){state._measureRecord=null;state._dims=null;const st=document.getElementById('precisionMeasureStatus');if(st)st.textContent='';}
   if(captureSavePending){toast('Please wait for the current photo to save.');return;}
   const replacing=!!state.photoFile;stopCaptureDictation();
   captureLocationGeneration++;
@@ -2048,13 +2080,28 @@ function renderSavedDimsEditor(c) {
     <button class="backlink" id="dimsBack">← Back to Edit</button>
     <div class="workflow-intro"><strong>Measure this photo</strong><span>Use AI with a visible reference object, or enter the dimensions yourself.</span></div>
     ${c.photo_path ? `<div class="photo-box"><img src="${capturePhotoSrc(c)}" alt="capture" style="display:block" /></div>` : ''}
+    ${precisionMeasureOn()&&c.photo_path?'<button class="btn secondary" id="measureWithCard" type="button">Measure With Card</button><div class="status">Uses the PhotoNotes Measuring Card if it is lying flat beside the damage in this photo.</div>':''}
     ${dimBlockHtml()}
     <button class="btn" id="saveDims">Save Measurements</button>`;
   wireDims();
+  const withCard=document.getElementById('measureWithCard');if(withCard)withCard.onclick=()=>measureSavedWithCard(c,withCard);
   document.getElementById('dimsBack').onclick = () => { state._editMeasureCapture = null; state._dims = null; state._measure = null; renderEdit(); };
   document.getElementById('saveDims').onclick = saveSavedDims;
 }
 
+async function measureSavedWithCard(c,button){
+  button.disabled=true;
+  try{
+    const r=await fetch(c.photo_path,{credentials:'same-origin'});if(!r.ok)throw Error();const blob=await r.blob();
+    window.PhotoNotesPrecisionMeasure.open({mode:'existing',file:new File([blob],'photo.jpg',{type:blob.type||'image/jpeg'}),canValidate:precisionCanValidate(),
+      onCancel:()=>{button.disabled=false;},
+      onDone:async({dims,record})=>{
+        const d=precisionDims(dims),body={dim_length:d.length,dim_length_unit:'in',dim_width:d.width,dim_width_unit:'in',dim_depth:d.depth,dim_shape:d.shape,dim_area_sqft:d.area,dim_source:'card',dim_confidence:'high',dim_confirmed:true,dim_ai:record};
+        const s=await api(`/api/captures/${c.id}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+        if(s.ok){toast(precisionSummary(d));state._editMeasureCapture=null;state._dims=null;state._measure=null;renderEdit();}else{toast('Measurements could not be saved');button.disabled=false;}
+      }});
+  }catch{toast('The photo could not be opened for measuring.');button.disabled=false;}
+}
 async function saveSavedDims() {
   const c = state._editMeasureCapture;
   if (!c) return;
@@ -2217,7 +2264,7 @@ async function showPendingPhotos(){
   const ticker=setInterval(()=>{if(!dialog.isConnected){clearInterval(ticker);return;}update();},1000);dialog.addEventListener('close',()=>{clearInterval(ticker);dialog.remove();});document.body.append(dialog);dialog.showModal();update();
 
 }
-function payloadFormData(p){const fd=new FormData();if(p.photo)fd.append('photo',p.photo,p.photoName||'offline-photo.jpg');fd.append('note',p.note||'');fd.append('area_tags',p.area_tags||'[]');fd.append('kind',p.kind||'note');if(p.captured_at)fd.append('captured_at',p.captured_at);if(p.custom_fields)fd.append('custom_fields',p.custom_fields);if(p.context_source_id)fd.append('context_source_id',p.context_source_id);if(Object.prototype.hasOwnProperty.call(p,'job_id'))fd.append('job_id',p.job_id||'');if(p.follow_up_occurrence_id)fd.append('follow_up_occurrence_id',p.follow_up_occurrence_id);for(const k of ['dim_length','dim_length_unit','dim_width','dim_width_unit','dim_depth','dim_shape','dim_area_sqft','dim_source','security_issue_type','urgency','paving_photo_reason','concrete_phase','concrete_purpose','concrete_element','concrete_stage','concrete_condition','concrete_severity','concrete_location','concrete_mix','hoa_community_id','hoa_title','hoa_item_type','hoa_priority','hoa_area','hoa_directed_to','hoa_budget_source','hoa_photo_stage','hoa_target_date','property_area_id','incident_id','incident_view'])if(p[k])fd.append(k,p[k]);if(p.latitude!=null)fd.append('latitude',p.latitude);if(p.longitude!=null)fd.append('longitude',p.longitude);if(p.address)fd.append('address',p.address);return fd;}
+function payloadFormData(p){const fd=new FormData();if(p.photo)fd.append('photo',p.photo,p.photoName||'offline-photo.jpg');fd.append('note',p.note||'');fd.append('area_tags',p.area_tags||'[]');fd.append('kind',p.kind||'note');if(p.captured_at)fd.append('captured_at',p.captured_at);if(p.custom_fields)fd.append('custom_fields',p.custom_fields);if(p.context_source_id)fd.append('context_source_id',p.context_source_id);if(Object.prototype.hasOwnProperty.call(p,'job_id'))fd.append('job_id',p.job_id||'');if(p.follow_up_occurrence_id)fd.append('follow_up_occurrence_id',p.follow_up_occurrence_id);for(const k of ['dim_length','dim_length_unit','dim_width','dim_width_unit','dim_depth','dim_shape','dim_area_sqft','dim_source','dim_confidence','dim_confirmed','dim_ai','security_issue_type','urgency','paving_photo_reason','concrete_phase','concrete_purpose','concrete_element','concrete_stage','concrete_condition','concrete_severity','concrete_location','concrete_mix','hoa_community_id','hoa_title','hoa_item_type','hoa_priority','hoa_area','hoa_directed_to','hoa_budget_source','hoa_photo_stage','hoa_target_date','property_area_id','incident_id','incident_view'])if(p[k])fd.append(k,p[k]);if(p.latitude!=null)fd.append('latitude',p.latitude);if(p.longitude!=null)fd.append('longitude',p.longitude);if(p.address)fd.append('address',p.address);return fd;}
 
 function bgIndicator() {
   document.getElementById('bgstatus')?.remove();
@@ -2337,8 +2384,9 @@ async function saveCaptureDurably(options = {}) {
   try{globalThis.PhotoNotesFollowUps?.payload(payload);}catch(e){toast(e.message);return false;}
   if(Object.prototype.hasOwnProperty.call(options,'jobId'))payload.job_id=options.jobId||'';
   // Sizes spoken during Record Notes ("three by two feet, four inches deep") are saved with the photo.
-  const spoken=state._dims;
-  if(typeof isIndustryProClient==='function'&&isIndustryProClient()&&featureOn('measurements')&&spoken&&(spoken.length||spoken.width||spoken.depth))Object.assign(payload,{dim_length:spoken.length,dim_length_unit:spoken.lengthUnit,dim_width:spoken.width,dim_width_unit:spoken.widthUnit,dim_depth:spoken.depth,dim_shape:spoken.shape,dim_area_sqft:spoken.areaOverridden?spoken.area:'',dim_source:'voice'});
+  const spoken=state._dims,cardFields=typeof precisionMeasureFields==='function'?precisionMeasureFields():null;
+  if(cardFields)Object.assign(payload,cardFields);
+  else if(typeof isIndustryProClient==='function'&&isIndustryProClient()&&featureOn('measurements')&&spoken&&(spoken.length||spoken.width||spoken.depth))Object.assign(payload,{dim_length:spoken.length,dim_length_unit:spoken.lengthUnit,dim_width:spoken.width,dim_width_unit:spoken.widthUnit,dim_depth:spoken.depth,dim_shape:spoken.shape,dim_area_sqft:spoken.areaOverridden?spoken.area:'',dim_source:'voice'});
   const hadCoords = !!state.location;
   if (state.location) { payload.latitude=state.location.lat;payload.longitude=state.location.lng; }
   if (state.address) payload.address=state.address;
@@ -2369,7 +2417,7 @@ function clearCompletedCapture() {
   globalThis.PhotoNotesIncidents?.advance();
   globalThis.PhotoNotesCustomFields?.clear();
   state._captureTemplateName=''; state.securityIssueType='Security Issue'; state.urgency='standard'; state.photoFile = null; state._note = ''; state.location = null; state.address = null; state._locationPromise = null;
-  state._dims = freshDims(); state._measure = null;
+  state._dims = freshDims(); state._measure = null; state._measureRecord = null; state._precisionFile = null;
   if(isConcreteClient()){const d=concreteCaptureDraft();state._concreteCapture={phase:d.phase,purpose:d.purpose,element:d.element,jobId:d.jobId};}
   renderCapture();
 }

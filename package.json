@@ -31,16 +31,17 @@
     "docx-preview": "0.4.1",
     "express": "^4.19.2",
     "html2canvas": "^1.4.1",
+    "js-aruco2": "2.0.0",
     "jsonwebtoken": "^9.0.2",
     "leaflet": "^1.9.4",
     "multer": "^1.4.5-lts.1",
     "pdfkit": "^0.15.0",
     "pg": "^8.12.0",
     "pizzip": "^3.2.0",
+    "qrcode": "^1.5.4",
     "sharp": "^0.35.3",
     "stripe": "^22.4.0",
-    "web-push": "^3.6.7",
-    "qrcode": "^1.5.4"
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "fake-indexeddb": "^6.2.5",
