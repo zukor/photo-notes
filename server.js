@@ -1383,7 +1383,8 @@ app.get('/api/asphalt-tickets', requireAuth, async (req, res) => {
     if (!(await featureAllowed(req.user.id, 'ticket_scanner'))) return res.json({ tickets: [], total_tons: 0, ticket_count: 0, missing_tons: 0 });
     const tz=validTimeZone(String(req.query.tz||''))||'America/Chicago';
     const params = [req.user.id,tz];
-    let where = `user_id=$1 AND status='saved'`;
+    // $2 (the time zone) is always referenced so every query below accepts the same parameters.
+    let where = `user_id=$1 AND status='saved' AND $2::text IS NOT NULL`;
     const day=`COALESCE(ticket_date,(created_at AT TIME ZONE $2)::date)`;
     const date = ticketDate(req.query.date), from=ticketDate(req.query.from), to=ticketDate(req.query.to);
     if (date) { params.push(date); where += ` AND ${day}=$${params.length}::date`; }
