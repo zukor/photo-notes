@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Work Order</title>
+<link rel="stylesheet" href="/vendor/leaflet/leaflet.css?v=1.9.4"><link rel="stylesheet" href="/help.css?v=376">
+<script src="/help-catalog.js?v=493" defer></script><script src="/help.js?v=470" defer></script>
+<script src="/vendor/leaflet/leaflet.js?v=1.9.4" defer></script><script src="/photo-location.js?v=1" defer></script><script src="/work-spot.js?v=1" defer></script>
+<style>
+body{font:17px/1.45 Arial,Helvetica,sans-serif;color:#000;background:#fff;margin:0;text-align:left}
+main{max-width:760px;margin:auto;padding:16px 16px 60px}
+h1{font-size:24px;margin:4px 0 8px}h2{font-size:20px;margin:22px 0 8px}
+*{color:#000}
+[hidden]{display:none !important}
+.ws-box{border:2px solid #000;border-radius:10px;padding:12px 14px;margin:12px 0;background:#fff}
+.ws-meta{margin:2px 0}
+.ws-photo{width:100%;max-height:520px;object-fit:contain;border:2px solid #000;border-radius:10px;background:#fff;display:block}
+.ws-thumbs{display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:8px;margin-top:8px}
+.ws-thumbs button{padding:0;border:2px solid #000;border-radius:8px;background:#fff;min-height:44px;overflow:hidden;cursor:pointer}
+.ws-thumbs img{width:100%;height:84px;object-fit:cover;display:block}
+#wsMap{height:340px;border:2px solid #000;border-radius:10px;margin:8px 0}
+.ws-row{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0}
+.ws-btn{flex:1 1 180px;min-height:48px;padding:12px 14px;font:bold 17px Arial,Helvetica,sans-serif;color:#000;background:#ffd400;border:2px solid #000;border-radius:10px;cursor:pointer;text-align:center;text-decoration:none;display:inline-flex;align-items:center;justify-content:center}
+.ws-btn.secondary{background:#fff}
+.ws-btn[disabled]{opacity:.6}
+#wsGuide{display:flex;gap:14px;align-items:center}
+#wsArrow{width:84px;height:84px;flex:0 0 84px;transition:transform .25s}
+#wsDistance{font-size:26px;font-weight:bold;margin:0}
+label{display:block;font-weight:bold;margin:12px 0 4px}
+input[type=text],textarea{width:100%;box-sizing:border-box;padding:12px;font:17px Arial,Helvetica,sans-serif;border:2px solid #000;border-radius:10px;background:#fff}
+#wsFiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px}
+#wsFiles figure{margin:0;border:2px solid #000;border-radius:8px;overflow:hidden}
+#wsFiles img{width:100%;height:90px;object-fit:cover;display:block}
+#wsFiles figcaption{font-size:13px;padding:2px 4px}
+#wsFiles button{width:100%;min-height:36px;border:0;border-top:2px solid #000;background:#fff;font:bold 14px Arial;cursor:pointer}
+#wsMatch{position:fixed;inset:0;background:#000;z-index:5000;display:none}
+#wsMatch.open{display:block}
+#wsMatch video,#wsMatch img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
+#wsMatch img{pointer-events:none}
+#wsMatchBar{position:absolute;left:0;right:0;bottom:0;background:#fff;padding:10px 12px;border-top:2px solid #000}
+#wsMatchBar label{margin:0 0 4px}
+#wsMatchFade{width:100%;min-height:36px}
+.ws-you{width:18px;height:18px;border-radius:50%;background:#1565ff;border:3px solid #fff;box-shadow:0 0 0 2px #000;box-sizing:border-box;margin:-9px 0 0 -9px}
+</style></head>
+<body><main id="wsPage">
+<h1 id="wsTitle">Work Order</h1>
+<p role="status" id="wsStatus">Loading the work order...</p>
+<div id="wsContent" hidden>
+  <div class="ws-box" id="wsDetails"></div>
+  <h2>The Problem</h2>
+  <img class="ws-photo" id="wsMainPhoto" alt="Photo of the problem">
+  <div class="ws-thumbs" id="wsThumbs"></div>
+  <h2>Where It Is</h2>
+  <p id="wsWhere"></p>
+  <div id="wsMap" role="region" aria-label="Map with a pin where the photo was taken"></div>
+  <div class="ws-row"><button type="button" class="ws-btn secondary" id="wsLayer">Show Street Map</button></div>
+  <div class="ws-row"><a class="ws-btn" id="wsDirections" target="_blank" rel="noopener">Get Directions</a><button type="button" class="ws-btn" id="wsFind">Find the Spot</button></div>
+  <div class="ws-box" id="wsGuideBox" hidden aria-live="polite">
+    <div id="wsGuide"><svg id="wsArrow" viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="46" fill="#fff" stroke="#000" stroke-width="4"/><path d="M50 10 L74 66 L50 54 L26 66 Z" fill="#ffd400" stroke="#000" stroke-width="4" stroke-linejoin="round"/></svg>
+    <div><p id="wsDistance"></p><p id="wsDirectionText" class="ws-meta"></p></div></div>
+    <p id="wsGuideNote" class="ws-meta"></p>
+    <div class="ws-row"><button type="button" class="ws-btn secondary" id="wsCompass">Turn On Compass Arrow</button><button type="button" class="ws-btn secondary" id="wsStop">Stop</button></div>
+  </div>
+  <div class="ws-row"><button type="button" class="ws-btn secondary" id="wsMatchOpen">Match the Photo</button></div>
+  <p class="ws-meta">Match the Photo shows the original photo over your camera. Move until the two line up, and you are standing where it was taken.</p>
+  <h2>Send Completion Photos</h2>
+  <div class="ws-box">
+    <label for="wsName">Your Name</label><input type="text" id="wsName" autocomplete="name">
+    <label for="wsPhotos">Photos of the Finished Work</label><input type="file" id="wsPhotos" accept="image/*" multiple>
+    <div id="wsFiles"></div>
+    <label for="wsNote">Note</label><textarea id="wsNote" rows="3" placeholder="What was done, parts used, anything the manager should know"></textarea>
+    <div class="ws-row"><button type="button" class="ws-btn" id="wsSubmit">Send Photos</button></div>
+    <p role="status" id="wsSubmitStatus"></p>
+  </div>
+</div>
+</main>
+<div id="wsMatch" role="dialog" aria-modal="true" aria-label="Match the Photo">
+  <video id="wsMatchVideo" playsinline muted autoplay></video><img id="wsMatchGhost" alt="">
+  <div id="wsMatchBar"><label for="wsMatchFade">Original Photo Visibility</label><input type="range" id="wsMatchFade" min="0" max="100" value="45">
+    <div class="ws-row"><button type="button" class="ws-btn" id="wsMatchShoot">Take Completion Photo</button><button type="button" class="ws-btn secondary" id="wsMatchClose">Close</button></div></div>
+</div>
+</body></html>

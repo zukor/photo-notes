@@ -27,6 +27,7 @@ function data(url){const p=url.pathname;
  if(p==='/api/concrete/dashboard')return {summary:{},captures:[photo],jobs:[job],readiness:[]};
  if(p.includes('concrete/report'))return {summary:{},counts:{total:1},photos:[photo],captures:[photo],readiness:[],jobs:[job]};
  if(p==='/api/ramo-intake')return {submissions:[]};
+ if(p==='/api/public/work-spot/help-fixture')return {property:{name:'Test property',address:'5 Oak Ln',area:'Lobby'},item:{title:'Repair gate',description:'Review returned evidence',category:'Doors, Locks and Access Control',priority:'high',target_date:'2026-10-30'},recipient_name:'Vendor',instructions:'Key at desk',expires_at:'2026-11-30T00:00:00Z',target:{lat:29.42,lng:-98.49,accuracy_m:6,source:'photo'},camera_direction:45,photos:[{url:'/logo.svg',stage:'initial',note:'Gate'},{url:'/logo.svg',stage:'inspection',note:'Close up'}]};
  if(p==='/api/document-links')return [{id:1,path:'/shared-document/test',filename:'Report.pdf',expires_at:'2026-10-30T10:00:00Z'}];
  if(p==='/api/jobs/1/timeline')return {job,captures:[photo],events:[]};
  if(p==='/api/issues/mine')return [{id:1,description:'Test app issue',management_status:'retest_requested',issue_type:'bug_problem',created_at:photo.created_at,history:[]}];
@@ -46,7 +47,7 @@ function data(url){const p=url.pathname;
  app.use('/vendor/leaflet',express.static(path.dirname(require.resolve('leaflet/dist/leaflet.js'))));app.use(express.static(path.join(root,'public')));
  const serverSource=fs.readFileSync(path.join(root,'server.js'),'utf8');
  function publicForm(prefix,locals){const line=serverSource.split('\n').find(s=>s.includes("app.get('"+prefix)&&s.includes("res.send(`"));const a=line.indexOf('res.send(`')+9,b=line.lastIndexOf('`);');return vm.runInNewContext('('+line.slice(a,b+1)+')',{escXml:s=>String(s??'').replace(/[&<>"']/g,' '),...locals});}
- app.get('/completion-photos/help-fixture',(req,res)=>res.send(publicForm('/completion-photos/:token',{row:{community_name:'Test property',title:'Repair gate',description:'Review returned evidence',original_photo:'',recipient_name:'',token:'help-fixture'}})));
+ app.get('/completion-photos/help-fixture',(req,res)=>res.sendFile(path.join(root,'public','work-spot.html')));
  app.get('/review/help-fixture',(req,res)=>res.send(publicForm('/review/:token',{p:{title:'Photo review',message:'Review every photograph',status:'pending',token:'help-fixture'},cards:'<article><img src="/logo.svg" alt="Project photo"><p>Observed condition</p></article>'})));
  const server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));const base=process.env.PN_HELP_BASE_URL||`http://127.0.0.1:${server.address().port}`;
  const missing=new Map(),errors=[],seen=new Set();let cases=0;

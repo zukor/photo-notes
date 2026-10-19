@@ -84,6 +84,7 @@ const databaseSuites = [
  ['saved-views-app','SAVED_VIEWS_APP_TEST_DATABASE_URL','pn_saved_views_app_test'],
  ['concrete-estimate-browser','CONCRETE_ESTIMATE_TEST_DATABASE_URL','pn_concrete_estimate_browser'],
  ['satellite-measure-browser','SATELLITE_BROWSER_TEST_DATABASE_URL','pn_satellite_browser'],
+ ['work-spot-browser','WORK_SPOT_TEST_DATABASE_URL','pn_work_spot_browser'],
  ['bulk-metadata-db','BULK_TEST_DATABASE_URL','pn_bulk_test'],
  ['photo-comments-integration','PN_ISOLATED_DATABASE_URL','pn_comments_test'],
  ['property-incidents-db','PN_ISOLATED_DATABASE_URL','pn_incidents_test'],
