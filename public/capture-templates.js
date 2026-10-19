@@ -21,7 +21,7 @@ async function sync(){
  }catch{}finally{syncing=false;}
 }
 function fields(){
- const ids=ctx.edition==='concrete'?['concretePhase','concretePurpose','concreteElement']:['hoa','property'].includes(ctx.edition)?['hoaType','hoaPriority','hoaArea']:ctx.edition==='paving'?['pavingPhotoReason']:[];
+ const ids=ctx.edition==='concrete'?['concretePhase','concretePurpose','concreteElement','concreteLocation','concreteMix']:['hoa','property'].includes(ctx.edition)?['hoaType','hoaPriority','hoaArea']:ctx.edition==='paving'?['pavingPhotoReason']:[];
  return ids.map(id=>document.getElementById(id)).filter(Boolean);
 }
 function current(){const d={};if(ctx.topic())d.topic=ctx.topic();const urgency=document.getElementById('captureUrgency');if(urgency)d.urgency=urgency.value;for(const el of fields())if(el.value)d[el.id]=el.value;return d;}
@@ -31,7 +31,7 @@ function apply(row){
  if(d.topic){if(ctx.topics().includes(d.topic))ctx.setTopic(d.topic);else skipped.push('Topic no longer available');}
  for(const id of ['captureUrgency',...fields().map(el=>el.id)]){
   const value=id==='captureUrgency'?d.urgency:d[id];if(!value)continue;
-  const el=document.getElementById(id);if(!el||![...el.options].some(o=>o.value===value)){skipped.push(id);continue;}
+  const el=document.getElementById(id);if(!el||(el.tagName==='SELECT'&&![...el.options].some(o=>o.value===value))){skipped.push(id);continue;}
   el.value=value;el.dispatchEvent(new Event('change',{bubbles:true}));el.dispatchEvent(new Event('input',{bubbles:true}));
  }
  last=row.id;ctx.active(row.name);persist();mountBar();ctx.toast(skipped.length?'Saved settings applied. Review unavailable choices: '+skipped.join(', '):'Saved settings applied. Review before saving.');
@@ -49,7 +49,8 @@ function dialog(mode,row){
   const editor=box.querySelector('#ctEditor');editor.hidden=false;const d=entry?.defaults||defaults;
   editor.innerHTML=`<label for="ctName">Settings Name (required)</label><input id="ctName" maxlength="100" value="${escape(entry?(copy?entry.name+' Copy':entry.name):'')}"><label for="ctDescription">Description (optional)</label><textarea id="ctDescription" maxlength="500">${escape(entry?.description||'')}</textarea><label for="ctTopic">Topic (optional)</label><select id="ctTopic"><option value="">Leave unchanged</option>${ctx.topics().map(t=>`<option ${d.topic===t?'selected':''} value="${escape(t)}">${escape(t)}</option>`).join('')}</select><label for="ctUrgency">Urgency (optional)</label><select id="ctUrgency"><option value="">Leave unchanged</option><option value="standard" ${d.urgency==='standard'?'selected':''}>Standard</option><option value="urgent" ${d.urgency==='urgent'?'selected':''}>Urgent</option></select><div id="ctSpecialty"></div><button id="ctSave" class="btn">Save Settings</button>`;
   for(const source of fields()){
-   const label=document.createElement('label');label.htmlFor='ct-'+source.id;label.textContent=source.id==='hoaArea'?'Maintenance Category':source.id==='hoaType'?'Record Type':source.id==='hoaPriority'?'Priority':source.id==='concretePhase'?'Project phase':source.id==='concretePurpose'?'Photo purpose':source.id==='concreteElement'?'Project type':'Photo Reason';
+   const label=document.createElement('label');label.htmlFor='ct-'+source.id;label.textContent=source.id==='hoaArea'?'Maintenance Category':source.id==='hoaType'?'Record Type':source.id==='hoaPriority'?'Priority':source.id==='concretePhase'?'Project phase':source.id==='concretePurpose'?'Photo purpose':source.id==='concreteElement'?'Project type':source.id==='concreteLocation'?'Where on the property (optional, leave blank to leave unchanged)':source.id==='concreteMix'?'Mix or specification (optional, leave blank to leave unchanged)':'Photo Reason';
+   if(source.tagName!=='SELECT'){const input=document.createElement('input');input.id='ct-'+source.id;input.dataset.source=source.id;input.maxLength=source.id==='concreteMix'?100:300;input.value=d[source.id]||'';editor.querySelector('#ctSpecialty').append(label,input);continue;}
    const select=document.createElement('select');select.id='ct-'+source.id;select.dataset.source=source.id;
    select.innerHTML='<option value="">Leave unchanged</option>'+[...source.options].filter(o=>o.value&&(source.id!=='pavingPhotoReason'||['pavement_problems','existing_conditions','proposal','work_progress','completed_work','extra_work','follow_up'].includes(o.value))).map(o=>`<option value="${escape(o.value)}">${escape(o.textContent)}</option>`).join('');select.value=d[source.id]||'';
    editor.querySelector('#ctSpecialty').append(label,select);

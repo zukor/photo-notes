@@ -54,24 +54,51 @@
     }, () => { $('ctkStatus').textContent = 'Take or choose a ticket photo first. The photo is kept as evidence.'; });
     $('ctkDay').onchange = () => loadTickets(mount, ctx); $('ctkJobFilter').onchange = () => loadTickets(mount, ctx);
     loadTickets(mount, ctx);
+    if (ctx.ticketDraftId) openDraft(mount, ctx, ctx.ticketDraftId);
+  }
+  // A ticket photo attached to a placement photo was read into a draft. Show it for review here.
+  async function openDraft(mount, ctx, id) {
+    const $ = x => mount.querySelector('#' + x);
+    $('ctkStatus').textContent = 'Loading the batch ticket read from your placement photo...';
+    try {
+      const r = await ctx.api('/api/concrete/tickets/' + encodeURIComponent(id)), d = await r.json().catch(() => ({}));
+      if (!r.ok || !d.ticket) throw Error(d.error || 'The batch ticket could not be loaded.');
+      ticketDraft = d.ticket;
+      if (d.ticket.photo_path) { $('ctkPreview').src = d.ticket.photo_path; $('ctkPreviewBox').style.display = 'block'; }
+      $('ctkStatus').textContent = d.ticket.status === 'saved' ? 'This ticket is already saved. You can correct it and save again.' : 'Check every value against the ticket photo, correct anything needed, then save.';
+      ticketReview(mount, ctx);
+    } catch (e) { $('ctkStatus').textContent = e.message; }
+  }
+  async function placementOptions(ctx, jobId, selected) {
+    const none = '<option value="">Not linked to a placement photo</option>';
+    if (!jobId) return none;
+    try {
+      const r = await ctx.api('/api/concrete/placement-photos?job_id=' + encodeURIComponent(jobId)), d = r.ok ? await r.json() : { photos: [] };
+      const label = p => [p.photo_title || (window.ConcreteCapture && window.ConcreteCapture.summary(p)) || String(p.concrete_stage || 'Photo').replaceAll('_', ' '), p.concrete_location, new Date(p.created_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })].filter(Boolean).join(', ');
+      return none + d.photos.map(p => `<option value="${p.id}" ${String(p.id) === String(selected || '') ? 'selected' : ''}>${ctx.esc(label(p))}</option>`).join('');
+    } catch { return none; }
   }
   function ticketReview(mount, ctx) {
     const t = ticketDraft, $ = id => mount.querySelector('#' + id), Q = R();
     $('ctkReview').innerHTML = `<section class="ticket-review-panel"><div class="formhead">Check and Save the Ticket</div><div class="status">AI confidence: <strong>${ctx.esc(t.confidence || 'low')}</strong>.</div>
       ${TICKET_FIELDS.map(([k, label, type]) => `<label for="ctk_${k}">${label}</label><input id="ctk_${k}" type="${type || 'text'}" ${type === 'number' ? 'inputmode="decimal" step="any"' : ''} value="${ctx.esc(t[k] == null ? '' : t[k])}">`).join('')}
       <label for="ctkJob">Job</label><select id="ctkJob">${jobOptions(ctx, t.job_id || ctx.jobId, 'No job selected')}</select>
+      <label for="ctkPlacement">Placement Photo (optional)</label><select id="ctkPlacement"><option value="">Not linked to a placement photo</option></select>
+      <p>Link the ticket to the photo of the pour it was used for. Only photos from the selected job are listed.</p>
       <div id="ctkChecks" aria-live="polite"></div>
       ${(t.confidence || 'low') === 'low' ? '<label class="feature-item"><input type="checkbox" id="ctkConfirm"> This ticket was hard to read. I checked every value against the photo.</label>' : ''}
       <button type="button" class="btn" id="ctkSave">Save Ticket</button></section>`;
     const values = () => Object.fromEntries(TICKET_FIELDS.map(([k]) => [k, $('ctk_' + k).value.trim()]));
     const update = () => { $('ctkChecks').innerHTML = checksHtml(ctx, Q.ticketChecks(values())); };
     TICKET_FIELDS.forEach(([k]) => $('ctk_' + k).oninput = update); update();
+    const loadPlacement = async () => { $('ctkPlacement').innerHTML = await placementOptions(ctx, $('ctkJob').value, t.placement_capture_id); };
+    $('ctkJob').onchange = loadPlacement; loadPlacement();
     $('ctkSave').onclick = async () => {
       const btn = $('ctkSave'); if (btn.disabled) return;
       if ($('ctkConfirm') && !$('ctkConfirm').checked) { ctx.toast('Check every value against the ticket photo, then tick the confirmation box.'); return; }
       btn.disabled = true; btn.textContent = 'Saving...';
       try {
-        const r = await ctx.api('/api/concrete/tickets/' + t.id, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...values(), job_id: $('ctkJob').value, confirmed: !!$('ctkConfirm')?.checked }) }), d = await r.json().catch(() => ({}));
+        const r = await ctx.api('/api/concrete/tickets/' + t.id, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...values(), job_id: $('ctkJob').value, placement_capture_id: $('ctkPlacement').value, confirmed: !!$('ctkConfirm')?.checked }) }), d = await r.json().catch(() => ({}));
         if (!r.ok) throw Error(d.error || 'The ticket could not be saved.');
         ctx.toast(d.checks && d.checks.flags.length ? 'Saved. This load is flagged.' : 'Ticket saved');
         ticketDraft = null; $('ctkReview').innerHTML = ''; $('ctkPreviewBox').style.display = 'none'; $('ctkStatus').textContent = ''; loadTickets(mount, ctx);
@@ -92,6 +119,13 @@
   }
 
   // ---------- Temperature log ----------
+  const limitsKey = jobId => 'pn_concrete_temp_limits_v2:' + (jobId ? String(jobId) : 'no-job');
+  function jobLimits(jobId) {
+    let v = null; try { v = JSON.parse(store.get(limitsKey(jobId)) || 'null'); } catch {}
+    v = v && typeof v === 'object' ? v : {};
+    return { section: String(v.section || ''), minimum: String(v.minimum || ''), maximum: String(v.maximum || '') };
+  }
+  function saveJobLimits(jobId, v) { store.set(limitsKey(jobId), JSON.stringify(v)); }
   let tempDraft = null;
   function renderTemperature(mount, ctx) {
     ensureStyle(); tempDraft = null; mount.classList.add('concrete-quality');
@@ -122,14 +156,15 @@
   }
   function tempReview(mount, ctx) {
     const t = tempDraft || {}, Q = R(), $ = id => mount.querySelector('#' + id);
-    const section = t.section || store.get('pn_concrete_section_v1') || '', kind = t.kind || 'delivery';
+    const startJob = t.job_id || ctx.jobId || '', saved = jobLimits(startJob);
+    const section = t.section || saved.section, kind = t.kind || 'delivery';
     $('ctpReview').innerHTML = `<section class="ticket-review-panel"><div class="formhead">Check and Save the Reading</div>
       <label for="ctpReading">Temperature (°F)</label><input id="ctpReading" type="number" inputmode="decimal" step="0.1" value="${t.reading_f ?? ''}">
       <label for="ctpKind">What Was Measured</label><select id="ctpKind">${Q.KINDS.map(k => `<option value="${k.id}" ${k.id === kind ? 'selected' : ''}>${k.label}</option>`).join('')}</select>
       <label for="ctpSection">Section Thickness</label><select id="ctpSection"><option value="">Choose the thickness</option>${Q.SECTIONS.map(s => `<option value="${s.id}" ${s.id === section ? 'selected' : ''}>${s.label}, ${s.minimum_f}°F minimum</option>`).join('')}</select>
-      <label for="ctpMinimum">Project Minimum (°F, optional; leave blank to use the suggested minimum)</label><input id="ctpMinimum" type="number" inputmode="decimal" value="${store.get('pn_concrete_temp_min_v1') || ''}">
-      <label for="ctpMaximum">Project Maximum (°F, optional; leave blank to use ${Q.MAX_TEMP_F}°F)</label><input id="ctpMaximum" type="number" inputmode="decimal" value="${store.get('pn_concrete_temp_max_v1') || ''}">
-      <label for="ctpJob">Job</label><select id="ctpJob">${jobOptions(ctx, t.job_id || ctx.jobId, 'No job selected')}</select>
+      <label for="ctpMinimum">Project Minimum (°F, optional; leave blank to use the suggested minimum)</label><input id="ctpMinimum" type="number" inputmode="decimal" value="${ctx.esc(saved.minimum)}">
+      <label for="ctpMaximum">Project Maximum (°F, optional; leave blank to use ${Q.MAX_TEMP_F}°F)</label><input id="ctpMaximum" type="number" inputmode="decimal" value="${ctx.esc(saved.maximum)}">
+      <label for="ctpJob">Job</label><select id="ctpJob">${jobOptions(ctx, startJob, 'No job selected')}</select>
       <label for="ctpTicket">Batch Ticket</label><select id="ctpTicket"><option value="">No ticket</option></select>
       <label for="ctpWhere">Where (pour, grid line or area)</label><input id="ctpWhere" type="text" maxlength="200" value="${ctx.esc(t.location_note || '')}">
       <label for="ctpNote">Note</label><textarea id="ctpNote" maxlength="1000">${ctx.esc(t.note || '')}</textarea>
@@ -140,7 +175,10 @@
     const loadT = async () => { $('ctpTicket').innerHTML = await ticketOptions(ctx, $('ctpJob').value, t.ticket_id); };
     for (const id of ['ctpReading', 'ctpMinimum', 'ctpMaximum']) $(id).oninput = update;
     for (const id of ['ctpKind', 'ctpSection']) $(id).onchange = update;
-    $('ctpJob').onchange = loadT; loadT(); update();
+    // Section thickness and project limits are remembered for each job.
+    // Values the user already changed in this reading are kept when the job changes.
+    let limitsTouched = false; for (const id of ['ctpSection', 'ctpMinimum', 'ctpMaximum']) $(id).addEventListener(id === 'ctpSection' ? 'change' : 'input', () => { limitsTouched = true; });
+    $('ctpJob').onchange = () => { if (!limitsTouched) { const v = jobLimits($('ctpJob').value); $('ctpSection').value = v.section; $('ctpMinimum').value = v.minimum; $('ctpMaximum').value = v.maximum; update(); } loadT(); }; loadT(); update();
     $('ctpCancel').onclick = () => { tempDraft = null; $('ctpReview').innerHTML = ''; $('ctpPreviewBox').style.display = 'none'; $('ctpStatus').textContent = ''; };
     $('ctpSave').onclick = async () => {
       const btn = $('ctpSave'); if (btn.disabled) return;
@@ -151,7 +189,7 @@
       try {
         const r = await ctx.api(t.id ? '/api/concrete/temperatures/' + t.id : '/api/concrete/temperatures', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }), d = await r.json().catch(() => ({}));
         if (!r.ok) throw Error(d.error || 'The reading could not be saved.');
-        store.set('pn_concrete_section_v1', body.section || ''); store.set('pn_concrete_temp_min_v1', body.minimum_f || ''); store.set('pn_concrete_temp_max_v1', body.maximum_f || '');
+        saveJobLimits(body.job_id, { section: body.section || '', minimum: body.minimum_f || '', maximum: body.maximum_f || '' });
         ctx.toast(['low', 'high'].includes(d.check && d.check.status) ? 'Saved. This reading is outside the limits.' : 'Temperature saved');
         tempDraft = null; $('ctpReview').innerHTML = ''; $('ctpPreviewBox').style.display = 'none'; $('ctpStatus').textContent = ''; loadTemps(mount, ctx);
       } catch (e) { ctx.toast(e.message); btn.disabled = false; btn.textContent = 'Save Reading'; }
@@ -231,5 +269,5 @@
     };
     load();
   }
-  window.PhotoNotesConcreteQualityUI = { renderTicket, renderTemperature, renderYield, unsaved: () => !!(ticketDraft || tempDraft) };
+  window.PhotoNotesConcreteQualityUI = { renderTicket, renderTemperature, renderYield, jobLimits, limitsKey, unsaved: () => !!(ticketDraft || tempDraft) };
 })();

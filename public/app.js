@@ -945,7 +945,8 @@ function renderConcreteTool(view){
   body.className='workflow-concrete-quality';
   body.innerHTML=`<button class="backlink" id="concreteToolBack">‹ Back to Camera Tools</button><div class="workflow-intro"><strong>${title}</strong></div><div id="concreteToolMount"></div>`;
   document.getElementById('concreteToolBack').onclick=()=>{if(window.PhotoNotesConcreteQualityUI.unsaved()&&!confirm(uiT('Leave without saving? The unsaved reading will be discarded.')))return;state.view='camera-tools';renderApp();};
-  const ctx={api,toast,esc,jobs:state.jobs||[],jobId:state.jobId,location:()=>getLocationOnce(),photoLocation,setBusy:(ids,busy)=>{for(const id of ids){const el=document.getElementById(id);if(el)el.disabled=busy;}}};
+  const ticketDraftId=view==='concrete-ticket'?state._concreteTicketDraftId:null;state._concreteTicketDraftId=null;
+  const ctx={api,toast,esc,jobs:state.jobs||[],jobId:state.jobId,ticketDraftId,location:()=>getLocationOnce(),photoLocation,setBusy:(ids,busy)=>{for(const id of ids){const el=document.getElementById(id);if(el)el.disabled=busy;}}};
   const mount=document.getElementById('concreteToolMount'),ui=window.PhotoNotesConcreteQualityUI;
   if(view==='concrete-ticket')ui.renderTicket(mount,ctx);else if(view==='concrete-temperature')ui.renderTemperature(mount,ctx);else ui.renderYield(mount,ctx);
 }
@@ -1929,7 +1930,7 @@ async function runMeasure(ref) {
       return;
     }
     if (d.no_reference || (d.length_in == null && d.width_in == null)) {
-      resEl.innerHTML = `<div class="status"><strong>No reference object found.</strong> ${esc(d.warning || 'Re-shoot with the ruler in frame.')}</div>`;
+      resEl.innerHTML = `<div class="status"><strong>${d.no_reference ? 'No reference object found.' : 'The measurement could not be used.'}</strong> ${esc(d.warning || 'Re-shoot with the ruler in frame.')}</div>`;
       if (panel) panel.innerHTML = '';
       return;
     }
@@ -3146,7 +3147,7 @@ function captureCardHtml(c) {
     : '';
   const measureRow = measurementOn() && state.view === 'edit' && c.photo_path
     ? `<button class="btn secondary slim editdims" data-id="${c.id}">Measurements</button>` : '';
-  const supporting=(c.supporting_photos||[]).map(p=>`<div class="meta"><strong>${p.reference_type==='specification'?'Specification':'Batch ticket'}:</strong> linked photo</div>`).join(''),concreteRow=isConcreteClient()&&(c.concrete_element||c.concrete_phase)?`<div class="concrete-evidence"><strong>${esc(c.concrete_element?ConcreteCapture.elements[c.concrete_element]||c.concrete_element:'Concrete project')}</strong> · ${esc(ConcreteCapture.summary(c,uiT)||String(c.concrete_stage||'photo').replaceAll('_',' '))}${c.concrete_condition&&c.concrete_condition!=='not_assessed'?` · ${esc(String(c.concrete_condition).replaceAll('_',' '))}`:''}${c.concrete_severity&&c.concrete_severity!=='none'?` · ${esc(c.concrete_severity)} severity`:''}${c.concrete_location?`<div>${esc(c.concrete_location)}</div>`:''}${c.concrete_mix?`<div>Mix/spec: ${esc(c.concrete_mix)}</div>`:''}${supporting}</div>${c.concrete_stage!=='batch_ticket'&&(!c.concrete_phase||c.concrete_phase==='work')?`<label class="btn secondary slim concrete-ticket-label">Attach Batch Ticket / Spec Photo<input class="concrete-ticket-file" data-id="${c.id}" type="file" accept="image/*" capture="environment" hidden></label>`:''}`:'';
+  const supporting=(c.supporting_photos||[]).map(p=>`<div class="meta"><strong>${p.reference_type==='specification'?'Specification':'Batch ticket'}:</strong> linked photo</div>`).join(''),concreteRow=isConcreteClient()&&(c.concrete_element||c.concrete_phase)?`<div class="concrete-evidence"><strong>${esc(c.concrete_element?ConcreteCapture.elements[c.concrete_element]||c.concrete_element:'Concrete project')}</strong> · ${esc(ConcreteCapture.summary(c,uiT)||String(c.concrete_stage||'photo').replaceAll('_',' '))}${c.concrete_condition&&c.concrete_condition!=='not_assessed'?` · ${esc(String(c.concrete_condition).replaceAll('_',' '))}`:''}${c.concrete_severity&&c.concrete_severity!=='none'?` · ${esc(c.concrete_severity)} severity`:''}${c.concrete_location?`<div>${esc(c.concrete_location)}</div>`:''}${c.concrete_mix?`<div>Mix/spec: ${esc(c.concrete_mix)}</div>`:''}${supporting}</div>${c.concrete_stage!=='batch_ticket'&&(!c.concrete_phase||c.concrete_phase==='work')?`<div class="concrete-ticket-attach"><label for="concreteRefType${c.id}">Reference photo type</label><select id="concreteRefType${c.id}" class="concrete-ref-type" data-id="${c.id}"><option value="batch_ticket">Batch ticket (PhotoNotes reads it for you to check)</option><option value="specification">Specification (kept as a photo only)</option></select><label class="btn secondary slim concrete-ticket-label">Attach Batch Ticket / Spec Photo<input class="concrete-ticket-file" data-id="${c.id}" type="file" accept="image/*" capture="environment" hidden></label></div>`:''}`:'';
   const titleAction=state.view==='edit'?(c.photo_title?'Change Photo Title':'Add Photo Title'):(state.view==='organize'&&!c.photo_title?'Add Photo Title':'');
   const topicAction=(['organize','edit'].includes(state.view)||state.view==='photo-library')?`<button class="editlink edittopics" data-id="${c.id}" type="button">Change Topics</button>`:'';
   return `<div class="card">
@@ -3169,11 +3170,13 @@ function captureCardHtml(c) {
     <div class="topicwrap" data-id="${c.id}"><div class="meta">${kind}${tags||'<span class="badge">No Topic</span>'}</div>${topicAction}</div>
     ${c.paving_photo_reason?`<div class="paving-photo-reason-label">${esc(PAVING_PHOTO_REASONS.find(r=>r.id===c.paving_photo_reason)?.label||c.paving_photo_reason)}</div>`:''}
     ${concreteRow}
+    ${isConcreteClient()&&c.concrete_stage!=='batch_ticket'?`<button type="button" class="btn secondary slim editconcrete" data-id="${c.id}">Edit Concrete Details</button>`:''}
     ${isConcreteClient()&&c.photo_path?`<button class="btn secondary slim concrete-area-button" data-id="${c.id}">${(c.footprints||[]).length?'View / Edit Saved Areas ('+c.footprints.length+')':'Measure Patio / Foundation Area'}</button>`:''}
     ${photoEvidencePreview(c)}
     ${state.view === 'organize' && measurementOn() && c.defect_type ? `<div class="meta saved-classification"><strong>Classification:</strong> ${esc(defectLabelClient(c.defect_type))}${c.defect_type !== 'none' && c.defect_severity ? ' - ' + esc(c.defect_severity) : ''}</div>` : ''}
     ${isConcreteClient()&&c.photo_path?`<button class="btn secondary slim" data-visual-analysis="${c.id}">Analyze Photo</button>`:''}
     ${c.concrete_reviewed_observation&&isConcreteClient()?`<p><strong>User Reviewed visual observation:</strong> ${esc(c.concrete_reviewed_observation)}</p>`:''}
+    ${isConcreteClient()&&Array.isArray(c.concrete_reviewed_findings)&&c.concrete_reviewed_findings.length?`<p><strong>User Reviewed findings:</strong> ${c.concrete_reviewed_findings.map(f=>esc(String(f.type||'').replaceAll('_',' '))+(f.observation?': '+esc(f.observation):'')).join('; ')}</p>`:''}
     ${classifyRow}
     ${dims ? `<div class="meta"><strong>Dimensions:</strong> ${esc(dims)}</div>` : ''}
     ${measureRow}
@@ -3190,9 +3193,11 @@ function captureCardHtml(c) {
   </div>`;
 }
 
+// Times in the Concrete report use this device's time zone.
+function concreteReportZone(){try{return Intl.DateTimeFormat().resolvedOptions().timeZone||'America/Chicago';}catch{return 'America/Chicago';}}
 async function renderConcreteReport(){const body=document.getElementById('body');body.className='workflow-organize';body.innerHTML=`<button class="backlink" id="concreteReportBack">‹ Back to Library</button><div class="workflow-intro"><strong>Concrete Photo Evidence Report</strong><span>Review photographed conditions, defects, repairs, verification, and batch tickets linked to placement photos.</span></div><label>Project</label><select id="concreteReportJob"><option value="">All Projects</option>${state.jobs.map(j=>`<option value="${j.id}">${esc(j.job_number?j.job_number+' — '+j.name:j.name)}</option>`).join('')}</select><div id="concreteReportStats" class="statrow"></div><div id="concreteReadiness" class="evidence-readiness"></div><div class="row"><button class="btn secondary" id="concreteReportPdf">Photo Evidence PDF</button><button class="btn secondary" id="concreteReportWord">Photo Evidence Word</button><button class="btn secondary" id="concretePrint">Print Photo Report</button></div><div id="concreteReportPhotos"><p class="status">Loading photo evidence...</p></div>`;document.getElementById('concreteReportJob').onchange=loadConcreteReport;document.getElementById('concreteReportBack').onclick=()=>{state.view='organize';renderApp();};document.getElementById('concreteReportPdf').onclick=()=>exportConcreteReport('pdf');document.getElementById('concreteReportWord').onclick=()=>exportConcreteReport('docx');document.getElementById('concretePrint').onclick=()=>window.print();loadConcreteReport();}
-async function loadConcreteReport(){const job=(document.getElementById('concreteReportJob')||{}).value||'',r=await api('/api/concrete/report'+(job?'?job_id='+encodeURIComponent(job):'')),box=document.getElementById('concreteReportPhotos');if(!r.ok){box.innerHTML='<p class="status">Concrete photo report could not be loaded.</p>';return;}const d=await r.json();document.getElementById('concreteReportStats').innerHTML=[['total','Photos'],['defects','Defect Photos'],['repair_needed','Needs Repair'],['verification','Verification Photos'],['critical','Critical']].map(([k,l])=>`<div class="stat"><strong>${d.counts[k]||0}</strong><span>${l}</span></div>`).join('');const c=d.completeness||{checks:[],complete:0,total:0};document.getElementById('concreteReadiness').innerHTML=`<strong>Photo evidence readiness: ${c.complete}/${c.total}</strong>${c.checks.map(x=>`<div class="${x.complete?'evidence-ok':'evidence-missing'}">${x.complete?'✓':'○'} ${esc(x.label)}</div>`).join('')}`;box.innerHTML=d.photos.length?d.photos.map(c=>captureCardHtml(c)).join(''):'<p class="empty">No concrete photo evidence has been captured yet.</p>';wireCards(box,d.photos);}
-async function exportConcreteReport(format){const p=new URLSearchParams({doc:format}),job=(document.getElementById('concreteReportJob')||{}).value;if(job)p.set('job_id',job);const button=document.getElementById(format==='docx'?'concreteReportWord':'concreteReportPdf');button.disabled=true;button.textContent='Preparing...';try{const r=await api('/api/concrete/report?'+p);if(!r.ok)throw new Error();const blob=await r.blob(),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`concrete-photo-evidence-report.${format}`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);toast('Concrete photo evidence report ready');}catch(e){toast('Concrete report could not be created');}finally{button.disabled=false;button.textContent=format==='docx'?'Photo Evidence Word':'Photo Evidence PDF';}}
+async function loadConcreteReport(){const job=(document.getElementById('concreteReportJob')||{}).value||'',r=await api('/api/concrete/report?'+new URLSearchParams({...(job?{job_id:job}:{}),tz:concreteReportZone()})),box=document.getElementById('concreteReportPhotos');if(!r.ok){box.innerHTML='<p class="status">Concrete photo report could not be loaded.</p>';return;}const d=await r.json();document.getElementById('concreteReportStats').innerHTML=[['total','Photos'],['defects','Defect Photos'],['repair_needed','Needs Repair'],['verification','Verification Photos'],['critical','Critical']].map(([k,l])=>`<div class="stat"><strong>${d.counts[k]||0}</strong><span>${l}</span></div>`).join('');const c=d.completeness||{checks:[],complete:0,total:0};document.getElementById('concreteReadiness').innerHTML=`<strong>Photo evidence readiness: ${c.complete}/${c.total}</strong>${c.checks.map(x=>`<div class="${x.complete?'evidence-ok':'evidence-missing'}">${x.complete?'✓':'○'} ${esc(x.label)}</div>`).join('')}`;box.innerHTML=d.photos.length?d.photos.map(c=>captureCardHtml(c)).join(''):'<p class="empty">No concrete photo evidence has been captured yet.</p>';wireCards(box,d.photos);}
+async function exportConcreteReport(format){const p=new URLSearchParams({doc:format,tz:concreteReportZone()}),job=(document.getElementById('concreteReportJob')||{}).value;if(job)p.set('job_id',job);const button=document.getElementById(format==='docx'?'concreteReportWord':'concreteReportPdf');button.disabled=true;button.textContent='Preparing...';try{const r=await api('/api/concrete/report?'+p);if(!r.ok)throw new Error();const blob=await r.blob(),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`concrete-photo-evidence-report.${format}`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);toast('Concrete photo evidence report ready');}catch(e){toast('Concrete report could not be created');}finally{button.disabled=false;button.textContent=format==='docx'?'Photo Evidence Word':'Photo Evidence PDF';}}
 
 async function showEvidence(id){
   try{
@@ -3313,6 +3318,7 @@ function wireCards(cards, rows) {
   cards.querySelectorAll('.restorebtn').forEach(b => b.onclick = () => restoreOriginal(parseInt(b.getAttribute('data-id'), 10)));
   cards.querySelectorAll('[data-delete-organize]').forEach(button => button.onclick = () => deleteOrganizePhotoNote(button.dataset.deleteOrganize, button));
   cards.querySelectorAll('.concrete-ticket-file').forEach(input=>input.onchange=()=>attachConcreteTicket(Number(input.dataset.id),input));
+  cards.querySelectorAll('.editconcrete').forEach(b=>b.onclick=()=>{const c=rows.find(r=>r.id===Number(b.dataset.id));if(c)openConcreteDetailsEditor(c);});
 }
 
 async function deleteOrganizePhotoNote(id, button) {
@@ -3335,7 +3341,52 @@ async function deleteOrganizePhotoNote(id, button) {
   }
 }
 
-async function attachConcreteTicket(id,input){const file=input.files&&input.files[0];if(!file)return;const label=input.closest('label'),old=label.firstChild.textContent;label.firstChild.textContent='Uploading...';input.disabled=true;try{const fd=new FormData();fd.append('photo',file);const r=await api(`/api/concrete/captures/${id}/ticket`,{method:'POST',body:fd});if(!r.ok)throw new Error();toast('Batch ticket photo linked');if(state.view==='concrete-report')loadConcreteReport();else loadCards((document.getElementById('filter')||{}).value||'');}catch(e){toast('Batch ticket photo could not be linked');input.disabled=false;label.firstChild.textContent=old;}}
+async function attachConcreteTicket(id,input){const file=input.files&&input.files[0];if(!file)return;const label=input.closest('label'),old=label.firstChild.textContent,typeSelect=document.getElementById('concreteRefType'+id),referenceType=typeSelect&&typeSelect.value==='specification'?'specification':'batch_ticket';label.firstChild.textContent='Uploading...';input.disabled=true;try{const fd=new FormData();fd.append('photo',file);fd.append('reference_type',referenceType);const r=await api(`/api/concrete/captures/${id}/ticket`,{method:'POST',body:fd});if(!r.ok)throw new Error();const d=await r.json().catch(()=>({}));toast(referenceType==='specification'?'Specification photo linked':'Batch ticket photo linked');if(state.view==='concrete-report')loadConcreteReport();else loadCards((document.getElementById('filter')||{}).value||'');if(d.ticket_draft_id)showConcreteTicketDraftNotice(d.ticket_draft_id,d.ticket_draft);}catch(e){toast(referenceType==='specification'?'Specification photo could not be linked':'Batch ticket photo could not be linked');input.disabled=false;label.firstChild.textContent=old;}}
+// The attached batch ticket was read into a draft. It still needs the user's review in the Batch Ticket Scanner.
+function showConcreteTicketDraftNotice(draftId,draft){
+  document.getElementById('concreteTicketDraftNotice')?.remove();
+  const box=document.createElement('dialog');box.id='concreteTicketDraftNotice';box.style.cssText='color:#000;background:#fff;text-align:left;font-family:Arial,sans-serif;width:min(460px,90vw)';
+  box.innerHTML=`<h2>Review the Batch Ticket</h2><p>${draft&&draft.ai_read?'PhotoNotes read the ticket photo.':'PhotoNotes could not read the ticket photo automatically.'} Review it in the Batch Ticket Scanner, correct anything needed, and save it. Saved tickets count toward the daily yield and the Concrete report.</p><div class="row"><button type="button" class="btn" id="ctdReview">Review in Batch Ticket Scanner</button><button type="button" class="btn secondary" id="ctdLater">Later</button></div>`;
+  document.body.appendChild(box);box.showModal();
+  box.querySelector('#ctdLater').onclick=()=>box.remove();box.addEventListener('cancel',()=>box.remove());
+  box.querySelector('#ctdReview').onclick=()=>{box.remove();state._concreteTicketDraftId=draftId;state.view='concrete-ticket';renderApp();};
+}
+// Concrete details stay editable after saving: phase and purpose, project type, condition, severity, mix and location.
+function openConcreteDetailsEditor(c){
+  document.getElementById('concreteDetailsEditor')?.remove();
+  const box=document.createElement('dialog');box.id='concreteDetailsEditor';box.style.cssText='color:#000;background:#fff;text-align:left;font-family:Arial,sans-serif;width:min(560px,92vw);max-height:88vh;overflow:auto';
+  const opt=(list,value)=>list.map(([v,l])=>`<option value="${esc(v)}" ${String(value||'')===v?'selected':''}>${esc(uiT(l))}</option>`).join('');
+  const conditions=[['not_assessed','Not assessed'],['acceptable','Acceptable'],['monitor','Monitor'],['repair_needed','Repair needed'],['unsafe','Unsafe']],severities=[['none','Not rated'],['minor','Minor'],['moderate','Moderate'],['severe','Severe'],['critical','Critical']];
+  box.innerHTML=`<h2>Edit Concrete Details</h2><p>Correct the details saved with this photo. The photo itself does not change. Each change is recorded in Photo Details &amp; History.</p>
+    <label for="cdePhase">Project phase</label><select id="cdePhase"><option value="">No phase chosen</option>${opt(ConcreteCapture.phases.map(p=>[p.id,p.label]),c.concrete_phase)}</select>
+    <label for="cdePurpose">Photo purpose</label><select id="cdePurpose"></select>
+    <label for="cdeElement">Project type</label><select id="cdeElement"><option value="">No project type chosen</option>${opt(Object.entries(ConcreteCapture.elements),c.concrete_element)}</select>
+    <label for="cdeCondition">Observed condition</label><select id="cdeCondition">${opt(conditions,c.concrete_condition||'not_assessed')}</select>
+    <label for="cdeSeverity">Severity</label><select id="cdeSeverity">${opt(severities,c.concrete_severity||'none')}</select>
+    <label for="cdeMix">Mix or specification (record only a confirmed mix)</label><input id="cdeMix" maxlength="100" value="${esc(c.concrete_mix||'')}">
+    <label for="cdeLocation">Where on the property?</label><input id="cdeLocation" maxlength="300" value="${esc(c.concrete_location||'')}">
+    <p id="cdeStatus" role="status" aria-live="polite"></p>
+    <div class="row"><button type="button" class="btn" id="cdeSave">Save Concrete Details</button><button type="button" class="btn secondary" id="cdeCancel">Cancel</button></div>`;
+  document.body.appendChild(box);box.querySelectorAll('label,input,select,p,h2').forEach(e=>{e.style.color='#000';});box.querySelectorAll('label,input,select').forEach(e=>{e.style.display='block';e.style.maxWidth='100%';});box.showModal();
+  const $=id=>box.querySelector('#'+id);
+  const purposes=keep=>{const phase=ConcreteCapture.phase($('cdePhase').value),current=keep?c.concrete_purpose:'';$('cdePurpose').innerHTML=`<option value="">${phase?'No purpose chosen':'Choose a phase first'}</option>`+(phase?phase.purposes.map(p=>`<option value="${esc(p[0])}" ${p[0]===current?'selected':''}>${esc(uiT(p[1]))}</option>`).join(''):'');$('cdePurpose').disabled=!phase;};
+  purposes(true);$('cdePhase').onchange=()=>purposes(false);
+  $('cdeCancel').onclick=()=>box.remove();box.addEventListener('cancel',()=>box.remove());
+  $('cdeSave').onclick=async()=>{
+    const btn=$('cdeSave');if(btn.disabled)return;
+    const body={concrete_phase:$('cdePhase').value,concrete_purpose:$('cdePurpose').value,concrete_element:$('cdeElement').value,concrete_condition:$('cdeCondition').value,concrete_severity:$('cdeSeverity').value,concrete_mix:$('cdeMix').value.trim(),concrete_location:$('cdeLocation').value.trim()};
+    // A photo saved before phases existed keeps its stage until a phase is chosen.
+    if(!body.concrete_phase&&!c.concrete_phase&&c.concrete_stage)body.concrete_stage=c.concrete_stage;
+    // Send only what changed. Phase and purpose always go together.
+    const was={concrete_condition:c.concrete_condition||'not_assessed',concrete_severity:c.concrete_severity||'none'};
+    for(const k of ['concrete_element','concrete_condition','concrete_severity','concrete_mix','concrete_location'])if(String(was[k]??c[k]??'')===body[k])delete body[k];
+    if(String(c.concrete_phase||'')===body.concrete_phase&&String(c.concrete_purpose||'')===body.concrete_purpose){delete body.concrete_phase;delete body.concrete_purpose;delete body.concrete_stage;}
+    if(!Object.keys(body).length){box.remove();toast('No changes to save');return;}
+    btn.disabled=true;btn.textContent='Saving...';
+    try{const r=await api('/api/captures/'+c.id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||'The concrete details could not be saved.');Object.assign(c,d);box.remove();toast('Concrete details saved');if(state.view==='concrete-report')loadConcreteReport();else loadCards((document.getElementById('filter')||{}).value||'');}
+    catch(e){$('cdeStatus').textContent=e.message;btn.disabled=false;btn.textContent='Save Concrete Details';}
+  };
+}
 
 // ================= Photo overlays / stamps editor =================
 let editorCapture = null, editorOverlays = [], editorSel = -1;

@@ -66,5 +66,55 @@ test('concrete batch tickets, temperature log and yield: read, check, save and r
     assert.equal(lines.tickets.length, 2); assert.match(lines.tickets.join('\n'), /FLAGGED: .*over the 90-minute limit/);
     assert.equal(lines.yield.length, 1); assert.match(lines.temperatures.join('\n'), /BELOW MINIMUM 55°F, ticket R-101/);
     for (const doc of ['pdf', 'docx']) assert.equal((await fetch(base + `/api/concrete/report?job_id=${job}&doc=${doc}`, { headers: { Cookie: cookie(user) } })).status, 200);
+
+    // Concrete details stay editable after saving, for Concrete Pro only, with history.
+    const placed = (await pool.query("INSERT INTO captures(user_id,job_id,photo_path,concrete_phase,concrete_purpose,concrete_stage,concrete_element) VALUES($1,$2,'/uploads/placed.jpg','work','placement','placement','slab') RETURNING id", [user, job])).rows[0].id;
+    fs.writeFileSync(path.join(process.env.UPLOAD_DIR, 'placed.jpg'), image);
+    const edited = await (await json('/api/captures/' + placed, { concrete_phase: 'follow_up', concrete_purpose: 'repair', concrete_element: 'driveway', concrete_condition: 'repair_needed', concrete_severity: 'moderate', concrete_mix: '4000 psi', concrete_location: 'North edge' })).json();
+    assert.equal(edited.concrete_stage, 'repair'); assert.equal(edited.concrete_element, 'driveway'); assert.equal(edited.concrete_location, 'North edge');
+    assert.equal((await json('/api/captures/' + placed, { concrete_element: 'roof' })).status, 400, 'same rules as capture creation');
+    const pavingCap = (await pool.query("INSERT INTO captures(user_id,photo_path) VALUES($1,'/uploads/p2.jpg') RETURNING id", [paving])).rows[0].id;
+    assert.equal((await json('/api/captures/' + pavingCap, { concrete_element: 'slab' }, paving)).status, 403);
+    const hist = (await pool.query("SELECT detail FROM capture_history WHERE capture_id=$1 AND action='details_updated' ORDER BY id DESC LIMIT 1", [placed])).rows[0].detail;
+    assert.equal(hist.concrete.before.concrete_element, 'slab'); assert.equal(hist.concrete.after.concrete_element, 'driveway');
+    await json('/api/captures/' + placed, { concrete_phase: 'work', concrete_purpose: 'placement' });
+
+    // A ticket attached to the placement photo is read into a linked draft; a specification is not read.
+    extracted = { ticket_number: 'R-201', ticket_date: day, load_quantity: 8, load_unit: 'yd3', batch_time: '10:00', discharge_end: '10:40', confidence: 'high' };
+    const attach = async type => { const f = new FormData(); f.append('photo', new Blob([image], { type: 'image/jpeg' }), 't.jpg'); f.append('reference_type', type); return (await fetch(base + `/api/concrete/captures/${placed}/ticket`, { method: 'POST', headers: { Cookie: cookie(user) }, body: f })).json(); };
+    const spec = await attach('specification'); assert.equal(spec.ticket_draft_id, null);
+    const linked = await attach('batch_ticket'); assert.ok(linked.ticket_draft_id);
+    const draft = await get('/api/concrete/tickets/' + linked.ticket_draft_id);
+    assert.equal(draft.ticket.status, 'draft'); assert.equal(draft.ticket.placement_capture_id, placed); assert.equal(draft.ticket.job_id, job); assert.equal(Number(draft.ticket.load_yd3), 8);
+    const other = (await pool.query("INSERT INTO jobs(user_id,name) VALUES($1,'Other') RETURNING id", [user])).rows[0].id;
+    assert.equal((await json('/api/concrete/tickets/' + linked.ticket_draft_id, { ...draft.ticket, job_id: other, placement_capture_id: placed })).status, 400, 'placement photo must be from the same job');
+    assert.equal((await json('/api/concrete/tickets/' + linked.ticket_draft_id, { ...draft.ticket, placement_capture_id: pavingCap })).status, 400, 'placement photo must belong to the user');
+    const savedDraft = await (await json('/api/concrete/tickets/' + linked.ticket_draft_id, { ...draft.ticket, job_id: job, placement_capture_id: placed })).json();
+    assert.equal(savedDraft.ticket.placement_capture_id, placed);
+    const photos = await get('/api/concrete/placement-photos?job_id=' + job); assert.ok(photos.photos.some(p => p.id === placed));
+
+    // Readiness: a saved scanned ticket for the job counts as a linked batch ticket, even with no ticket photo link.
+    const job2 = (await pool.query("INSERT INTO jobs(user_id,name) VALUES($1,'Scanned only') RETURNING id", [user])).rows[0].id;
+    await pool.query("INSERT INTO captures(user_id,job_id,photo_path,concrete_stage) VALUES($1,$2,'/uploads/q.jpg','placement')", [user, job2]);
+    const ticketCheck = async () => (await get('/api/concrete/report?job_id=' + job2)).completeness.checks.find(c => c.key === 'ticket').complete;
+    assert.equal(await ticketCheck(), false);
+    await pool.query("UPDATE concrete_tickets SET job_id=$1 WHERE id=$2", [job2, t1.ticket.id]);
+    assert.equal(await ticketCheck(), true);
+    await pool.query("UPDATE concrete_tickets SET job_id=$1 WHERE id=$2", [job, t1.ticket.id]);
+
+    // Report lines use the client time zone and include size and reviewed findings.
+    await pool.query("UPDATE captures SET dim_length_in=120,dim_width_in=48,dim_length_unit='ft',dim_width_unit='ft',dim_confirmed=true,concrete_reviewed_findings=$2 WHERE id=$1", [placed, JSON.stringify([{ type: 'cracking', observation: 'Hairline crack near the joint.', confidence: 'high' }])]);
+    const docx = await fetch(base + `/api/concrete/report?job_id=${job}&doc=docx&tz=America/Los_Angeles`, { headers: { Cookie: cookie(user) } });
+    assert.equal(docx.status, 200);
+    const xml = await (await require('jszip').loadAsync(Buffer.from(await docx.arrayBuffer()))).file('word/document.xml').async('string');
+    assert.match(xml, /Size: 10(\.0)? ft x 4(\.0)? ft/); assert.match(xml, /User Reviewed findings: cracking: Hairline crack near the joint\./);
+    assert.equal((await fetch(base + `/api/concrete/report?job_id=${job}&doc=pdf&tz=America/Los_Angeles`, { headers: { Cookie: cookie(user) } })).status, 200);
+
+    // Measure From Photo: a reference length is required and impossible values are rejected.
+    const measure = async fields => { const f = new FormData(); f.append('capture_id', String(placed)); for (const [k, v] of Object.entries(fields)) f.append(k, v); const r = await fetch(base + '/api/measure', { method: 'POST', headers: { Cookie: cookie(user) }, body: f }); return { status: r.status, body: await r.json() }; };
+    const noRef = await measure({ reference_type: 'custom' }); assert.equal(noRef.status, 400); assert.equal(noRef.body.error, 'reference length required');
+    extracted = { length_in: 5000, width_in: 6, depth_in: -1, shape: 'irregular', confidence: 'high', warning: null };
+    const m = (await measure({ reference_type: 'ruler_12in' })).body;
+    assert.equal(m.length_in, null); assert.equal(m.width_in, 6); assert.equal(m.depth_in, null); assert.equal(m.confidence, 'low'); assert.match(m.warning, /not possible/);
   } finally { global.fetch = nativeFetch; server.close(); await pool.end(); }
 });

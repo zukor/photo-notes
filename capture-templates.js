@@ -10,6 +10,8 @@ function sanitize(edition, input={}) {
  const choices={hoaType:['maintenance','information','inspection'],hoaPriority:['routine','high','emergency','monitor'],concretePhase:concrete.phases.map(p=>p.id),concreteElement:Object.keys(concrete.elements),concretePurpose:(concrete.phase(input.concretePhase)?.purposes||[]).map(p=>p[0]),pavingPhotoReason:['pavement_problems','existing_conditions','proposal','work_progress','completed_work','extra_work','follow_up']};
  for(const key of fields)if(typeof input[key]==='string'&&input[key]&&(!choices[key]||choices[key].includes(input[key])))out[key]=input[key].slice(0,100);
 
+ // Concrete free-text defaults: where on the property and a confirmed mix or specification.
+ if(edition==='concrete')for(const [key,max] of [['concreteLocation',300],['concreteMix',100]])if(typeof input[key]==='string'&&input[key].trim())out[key]=input[key].trim().slice(0,max);
  return out;
 }
 function register(app,{pool,requireAuth}) {

@@ -8,7 +8,8 @@ const SCHEMA=`CREATE TABLE IF NOT EXISTS visual_analysis_runs (
  review_status TEXT NOT NULL DEFAULT 'suggested' CHECK(review_status IN ('suggested','reviewed','corrected','rejected')),
  reviewed_result JSONB, reviewed_at TIMESTAMPTZ);
  CREATE INDEX IF NOT EXISTS visual_analysis_capture ON visual_analysis_runs(user_id,capture_id,created_at DESC);
- ALTER TABLE captures ADD COLUMN IF NOT EXISTS concrete_reviewed_observation TEXT;`;
+ ALTER TABLE captures ADD COLUMN IF NOT EXISTS concrete_reviewed_observation TEXT;
+ ALTER TABLE captures ADD COLUMN IF NOT EXISTS concrete_reviewed_findings JSONB;`;
 function registerVisualAnalysis(app,dependencies){
  const {pool,requireAuth,requireConcrete,localPhoto,visionJSON}=dependencies;
  const domains=dependencies.domains||[{analyzer:concrete,authorize:requireConcrete}];
