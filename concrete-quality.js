@@ -196,6 +196,10 @@ function register(app, { pool, requireAuth, requireConcrete, upload, visionJSON,
   async function yieldInputs(userId, jobId, date, tz) {
     const t = (await pool.query(`SELECT COALESCE(sum(load_yd3),0)::float AS yards, count(*)::int AS n FROM concrete_tickets WHERE user_id=$1 AND job_id=$2 AND status='saved' AND COALESCE(ticket_date,(created_at AT TIME ZONE $3)::date)=$4::date`, [userId, jobId, tz, date])).rows[0];
     const areas = (await pool.query(`SELECT f.id, f.name, COALESCE(f.field_area_sqft, f.map_area_sqft)::float AS area_sqft, CASE WHEN f.field_area_sqft IS NOT NULL THEN 'field' ELSE 'map' END AS source FROM concrete_footprints f JOIN captures c ON c.id=f.capture_id AND c.user_id=f.user_id WHERE f.user_id=$1 AND c.job_id=$2 AND COALESCE(f.field_area_sqft, f.map_area_sqft)>0 ORDER BY f.name`, [userId, jobId])).rows;
+    // Measured areas from estimating count too; a saved outline already turned into a measured area is listed once.
+    const measured = (await pool.query(`SELECT id, name, area_sqft::float AS area_sqft, method, footprint_id FROM concrete_areas WHERE user_id=$1 AND job_id=$2 AND status='saved' ORDER BY name`, [userId, jobId])).rows;
+    const used = new Set(measured.map(m => m.footprint_id).filter(Boolean));
+    areas.splice(0, areas.length, ...areas.filter(a => !used.has(a.id)), ...measured.map(m => ({ id: 'm' + m.id, name: m.name, area_sqft: m.area_sqft, source: ['laser', 'tape'].includes(m.method) ? 'field' : m.method === 'map' ? 'map' : m.method })));
     return { yards: Math.round(t.yards * 100) / 100, ticket_count: t.n, areas: areas.map(a => ({ ...a, area_sqft: Math.round(a.area_sqft * 10) / 10 })) };
   }
   app.get('/api/concrete/yield/inputs', ...guard, async (req, res) => {
