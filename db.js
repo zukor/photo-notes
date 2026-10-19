@@ -362,6 +362,78 @@ CREATE TABLE IF NOT EXISTS paving_yield_checks (
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS paving_yield_user_idx ON paving_yield_checks (user_id, check_date DESC);
+-- Concrete Pro ready-mix batch tickets. A scan starts as a draft for review.
+CREATE TABLE IF NOT EXISTS concrete_tickets (
+  id                SERIAL PRIMARY KEY,
+  user_id           INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  job_id            INTEGER REFERENCES jobs(id) ON DELETE SET NULL,
+  photo_path        TEXT,
+  ticket_number     TEXT,
+  ticket_date       DATE,
+  plant_name        TEXT,
+  mix_code          TEXT,
+  mix_description   TEXT,
+  strength_psi      NUMERIC(8,0),
+  load_yd3          NUMERIC(8,2),
+  slump_in          NUMERIC(5,2),
+  water_allowed_gal NUMERIC(8,1),
+  water_added_gal   NUMERIC(8,1),
+  truck_number      TEXT,
+  batch_time        TEXT,
+  arrival_time      TEXT,
+  discharge_start   TEXT,
+  discharge_end     TEXT,
+  concrete_temp_f   NUMERIC(6,1),
+  confidence        TEXT,
+  raw_ai            JSONB,
+  user_confirmed    BOOLEAN NOT NULL DEFAULT false,
+  status            TEXT NOT NULL DEFAULT 'draft',
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS concrete_tickets_user_idx ON concrete_tickets (user_id, ticket_date DESC, created_at DESC);
+CREATE TABLE IF NOT EXISTS concrete_temperatures (
+  id           SERIAL PRIMARY KEY,
+  user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  job_id       INTEGER REFERENCES jobs(id) ON DELETE SET NULL,
+  ticket_id    INTEGER REFERENCES concrete_tickets(id) ON DELETE SET NULL,
+  photo_path   TEXT,
+  kind         TEXT NOT NULL DEFAULT 'delivery',
+  reading_f    NUMERIC(6,1),
+  ai_reading_f NUMERIC(6,1),
+  section      TEXT,
+  minimum_f    NUMERIC(6,1),
+  maximum_f    NUMERIC(6,1),
+  check_status TEXT,
+  location_note TEXT,
+  note         TEXT,
+  latitude     DOUBLE PRECISION,
+  longitude    DOUBLE PRECISION,
+  taken_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  confidence   TEXT,
+  raw_ai       JSONB,
+  status       TEXT NOT NULL DEFAULT 'draft',
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS concrete_temperatures_user_idx ON concrete_temperatures (user_id, taken_at DESC);
+CREATE TABLE IF NOT EXISTS concrete_yield_checks (
+  id           SERIAL PRIMARY KEY,
+  user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  job_id       INTEGER REFERENCES jobs(id) ON DELETE SET NULL,
+  check_date   DATE NOT NULL,
+  yards        NUMERIC(10,2),
+  ticket_count INTEGER,
+  area_sqft    NUMERIC(12,1),
+  area_source  TEXT,
+  thickness_in NUMERIC(6,2),
+  waste_pct    NUMERIC(5,1),
+  result       JSONB,
+  note         TEXT,
+  status       TEXT NOT NULL DEFAULT 'saved',
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS concrete_yield_user_idx ON concrete_yield_checks (user_id, check_date DESC);
 -- Basic-app issue reports. Reports are stored before email is attempted so a
 -- mail-provider outage can never discard a tester's feedback.
 CREATE TABLE IF NOT EXISTS issue_reports (

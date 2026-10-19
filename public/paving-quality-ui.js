@@ -57,7 +57,7 @@
       try {
         const fd = new FormData(); fd.append('photo', file); fd.append('taken_at', new Date(e.target.id === 'tempCam' ? Date.now() : (file.lastModified || Date.now())).toISOString());
         // GPS is recorded only for a photo taken now; a saved photo may come from somewhere else.
-        const loc = e.target.id === 'tempCam' ? await ctx.location().catch(() => null) : null; if (loc) { fd.append('latitude', loc.lat); fd.append('longitude', loc.lng); }
+        const loc = await ctx.photoLocation(file, e.target.id === 'tempCam').catch(() => null); if (loc) { fd.append('latitude', loc.lat); fd.append('longitude', loc.lng); }
         const r = await ctx.api('/api/paving/temperatures/scan', { method: 'POST', body: fd }), d = await r.json().catch(() => ({}));
         if (!r.ok || !d.reading) throw Error(d.error || 'The photo could not be read.');
         tempDraft = d.reading;

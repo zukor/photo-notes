@@ -334,7 +334,7 @@ function closePhotoTool() {
 }
 function photoToolWorkflowView() {
   const source=state._photoToolReturnView||(IS_HANDHELD?'capture':'organize');
-  if (['capture','camera-tools','ticket','camera-reader','alignment','organize','photo-library','hoa-visits','hoa-visit','edit','hoa-assets','hoa-asset','create','hoa-inspections','send','hoa-maintenance'].includes(source)) return source;
+  if (['capture','camera-tools','ticket','camera-reader','alignment','concrete-ticket','concrete-temperature','concrete-yield','organize','photo-library','hoa-visits','hoa-visit','edit','hoa-assets','hoa-asset','create','hoa-inspections','send','hoa-maintenance'].includes(source)) return source;
   if (['groups','group-detail','document-setup','document-preview'].includes(source)) return 'create';
   return 'organize';
 }
@@ -343,7 +343,7 @@ function renderApp() {
   cropReturnContext=null;
   const photoToolOpen=['photo-follow-ups','photo-requests'].includes(state.view);
   const workflowView=photoToolOpen?photoToolWorkflowView():state.view;
-  const photoToolSection=['capture','camera-tools','ticket','camera-reader','alignment'].includes(workflowView)?'Capture':['edit','hoa-assets','hoa-asset'].includes(workflowView)?(isHoaClient()?'Assets':'Edit'):['create','hoa-inspections'].includes(workflowView)?(isHoaClient()?'Inspections':'Create'):['send','hoa-maintenance'].includes(workflowView)?(isHoaClient()?'Records':'Send'):'Organize';
+  const photoToolSection=['capture','camera-tools','ticket','camera-reader','alignment','concrete-ticket','concrete-temperature','concrete-yield'].includes(workflowView)?'Capture':['edit','hoa-assets','hoa-asset'].includes(workflowView)?(isHoaClient()?'Assets':'Edit'):['create','hoa-inspections'].includes(workflowView)?(isHoaClient()?'Inspections':'Create'):['send','hoa-maintenance'].includes(workflowView)?(isHoaClient()?'Records':'Send'):'Organize';
   document.body.classList.toggle('admin-testing-page',isTestingManager()&&['my-assignment','my-issues','manage-testing'].includes(state.view));
   window.PhotoNotesMatchCamera?.stop();
   document.getElementById('captureShareDialog')?.remove();
@@ -378,7 +378,7 @@ function renderApp() {
         </div>
       </div>
       ${isRoadIssuesClient()||isBasicClient()?'':`<nav class="tabs workflow-tabs ${isHoaClient()?'hoa-tabs':isConcreteClient()?'concrete-tabs':''}" aria-label="Photo Notes workflow">
-        <button type="button" class="tab ${['capture','camera-tools','ticket','camera-reader','alignment'].includes(workflowView)?'on':''}" id="tabCapture" aria-current="${['capture','camera-tools','ticket','camera-reader','alignment'].includes(workflowView)?'page':'false'}">Capture</button>
+        <button type="button" class="tab ${['capture','camera-tools','ticket','camera-reader','alignment','concrete-ticket','concrete-temperature','concrete-yield'].includes(workflowView)?'on':''}" id="tabCapture" aria-current="${['capture','camera-tools','ticket','camera-reader','alignment','concrete-ticket','concrete-temperature','concrete-yield'].includes(workflowView)?'page':'false'}">Capture</button>
         <button type="button" class="tab ${['organize','photo-library','edit','hoa-visits','hoa-visit'].includes(workflowView)?'on':''}" id="tabOrganize" aria-current="${['organize','photo-library','edit','hoa-visits','hoa-visit'].includes(workflowView)?'page':'false'}">${isHoaClient()?'Organize':'Library'}</button>
         ${isHoaClient()?`<button type="button" class="tab ${['hoa-assets','hoa-asset'].includes(workflowView)?'on':''}" id="tabEdit" aria-current="${['hoa-assets','hoa-asset'].includes(workflowView)?'page':'false'}">Assets</button>`:''}
         <button type="button" class="tab ${['create','hoa-inspections'].includes(workflowView)?'on':''}" id="tabCreate" aria-current="${['create','hoa-inspections'].includes(workflowView)?'page':'false'}">${isHoaClient()?'Inspections':'Create'}</button>
@@ -478,6 +478,7 @@ function renderApp() {
   else if (state.view === 'capture') renderCapture();
   else if (state.view === 'camera-tools') renderCameraTools();
   else if (state.view === 'ticket') renderTicketScanner();
+  else if (['concrete-ticket','concrete-temperature','concrete-yield'].includes(state.view)) renderConcreteTool(state.view);
   else if (state.view === 'camera-reader') renderCameraReader();
   else if (state.view === 'alignment') renderAlignmentTool();
   else if (state.view === 'photo-library') { if(isBasicClient()||isRoadIssuesClient())renderDevicePhotoNotesLibrary();else renderList(); }
@@ -735,7 +736,9 @@ function bindPavingPhotoReason(){
   if(select){select.onchange=()=>change(select.value);window.ConcretePurposeMenu.mount(select);}
   type.onchange=()=>change(type.value==='photo'?'pavement_problems':type.value==='alignment'?'alignment':pavingScannerChoices()[0].id);
 }
-function pavingQualityContext(){return {api,toast,esc,jobs:state.jobs||[],jobId:state.jobId,location:()=>getLocationOnce(),setBusy:setPavingToolBusy};}
+// A photo taken now gets the phone's location; a library photo only the location saved inside it.
+function photoLocation(file,camera){return camera?getLocationOnce():(window.PhotoNotesPhotoLocation?PhotoNotesPhotoLocation.read(file):Promise.resolve(null));}
+function pavingQualityContext(){return {api,toast,esc,jobs:state.jobs||[],jobId:state.jobId,location:()=>getLocationOnce(),photoLocation,setBusy:setPavingToolBusy};}
 function pavingToolMount(){return document.getElementById('pavingInlineTool')||document.getElementById('body');}
 function pavingToolEmbedded(){return state.view==='capture'&&isPavingClient()&&!!document.getElementById('pavingInlineTool');}
 function setPavingToolBusy(ids,busy){for(const id of ['pavingCaptureType','pavingPhotoReason','pavingPhotoReasonButton','pavingScanner','pavingScannerButton',...ids]){const el=document.getElementById(id);if(el)el.disabled=busy;}}
@@ -889,7 +892,7 @@ function renderCapture() {
   const pmButton=document.getElementById('precisionMeasure');if(pmButton)pmButton.onclick=()=>{stopCaptureDictation();startPrecisionMeasure();};
   document.getElementById('choosephoto').onclick = () => { stopCaptureDictation(); const input=document.getElementById('photoLib');input.value='';input.click(); };
   document.getElementById('photoCam').onchange = (e) => { if (e.target.files[0]) onPhotoChosen(e.target.files[0]); };
-  document.getElementById('photoLib').onchange = (e) => { if (e.target.files[0]) onPhotoChosen(e.target.files[0]); };
+  document.getElementById('photoLib').onchange = (e) => { if (e.target.files[0]) onPhotoChosen(e.target.files[0],'library'); };
   document.getElementById('retakePhoto').onclick = retakeCapturePhoto;
   document.getElementById('cancelPhoto').onclick = cancelCapturePhoto;
   const saveToJob=document.getElementById('captureSaveToJob');if(saveToJob)saveToJob.onclick=chooseCaptureJob;
@@ -935,6 +938,17 @@ function renderCapture() {
 function cameraToolCard(title, description, action, id) {
   return `<article class="camera-tool-card"><div><strong>${title}</strong><span>${description}</span></div><button class="btn secondary slim" data-camera-tool id="${id}">${action}</button></article>`;
 }
+// Concrete Pro quality tools open from Camera Tools.
+function renderConcreteTool(view){
+  const body=document.getElementById('body'),title={'concrete-ticket':'Batch Ticket Scanner','concrete-temperature':'Concrete Temperature Log','concrete-yield':'Concrete Yield Check'}[view];
+  if(!isConcreteClient()||!window.PhotoNotesConcreteQualityUI){state.view='camera-tools';renderCameraTools();return;}
+  body.className='workflow-concrete-quality';
+  body.innerHTML=`<button class="backlink" id="concreteToolBack">‹ Back to Camera Tools</button><div class="workflow-intro"><strong>${title}</strong></div><div id="concreteToolMount"></div>`;
+  document.getElementById('concreteToolBack').onclick=()=>{if(window.PhotoNotesConcreteQualityUI.unsaved()&&!confirm(uiT('Leave without saving? The unsaved reading will be discarded.')))return;state.view='camera-tools';renderApp();};
+  const ctx={api,toast,esc,jobs:state.jobs||[],jobId:state.jobId,location:()=>getLocationOnce(),photoLocation,setBusy:(ids,busy)=>{for(const id of ids){const el=document.getElementById(id);if(el)el.disabled=busy;}}};
+  const mount=document.getElementById('concreteToolMount'),ui=window.PhotoNotesConcreteQualityUI;
+  if(view==='concrete-ticket')ui.renderTicket(mount,ctx);else if(view==='concrete-temperature')ui.renderTemperature(mount,ctx);else ui.renderYield(mount,ctx);
+}
 function renderCameraTools() {
   cameraReaderHistory=false;
   const body = document.getElementById('body');
@@ -942,6 +956,14 @@ function renderCameraTools() {
   body.innerHTML = `
     <button class="backlink" id="toolsBack">‹ Back to Capture</button>
     <div class="workflow-intro"><strong>Camera Tools</strong><span>Choose what the camera needs to do. Source photos are retained for verification.</span></div>
+    ${isConcreteClient()&&window.PhotoNotesConcreteQualityUI?`<section class="camera-tool-group">
+      <div class="camera-tool-heading"><strong>Concrete Quality</strong><span>Check each load and each pour while the crew is still on site.</span></div>
+      <div class="camera-tool-grid">
+        ${cameraToolCard('Batch Ticket Scanner','Read ready-mix tickets, total the yards, and flag loads over 90 minutes or with more water than allowed.','Open Batch Ticket Scanner','toolConcreteTicket')}
+        ${cameraToolCard('Concrete Temperature Log','Photograph the thermometer. PhotoNotes records the reading and checks it against the limits for the section.','Open Temperature Log','toolConcreteTemperature')}
+        ${cameraToolCard('Concrete Yield Check','Compare the yards delivered with the placed area times the planned thickness, to catch thin slabs the same day.','Open Yield Check','toolConcreteYield')}
+      </div>
+    </section>`:''}
     <section class="camera-tool-group">
       <div class="camera-tool-heading"><strong>Document Scanners</strong><span>Turn photographed documents into searchable, reviewable information.</span></div>
       <div class="camera-tool-grid">
@@ -975,6 +997,9 @@ function renderCameraTools() {
   document.querySelectorAll('[data-scanner-history]').forEach(b=>b.onclick=()=>{cameraReaderHistory=true;cameraReaderType=b.dataset.scannerHistory;state.view='camera-reader';renderApp();});
   const wire=(id,fn)=>{const b=document.getElementById(id);if(b)b.onclick=fn;};
   wire('toolTicket',() => { state.view='ticket'; renderApp(); });
+  wire('toolConcreteTicket',() => { state.view='concrete-ticket'; renderApp(); });
+  wire('toolConcreteTemperature',() => { state.view='concrete-temperature'; renderApp(); });
+  wire('toolConcreteYield',() => { state.view='concrete-yield'; renderApp(); });
   wire('toolEquipment',() => { cameraReaderType='equipment_plate'; state.view='camera-reader'; renderApp(); });
   wire('toolGauge',() => { cameraReaderType='gauge'; state.view='camera-reader'; renderApp(); });
   wire('toolPlan',() => { cameraReaderType='plan_sketch'; state.view='camera-reader'; renderApp(); });
@@ -1085,6 +1110,7 @@ async function deliverScannerReport(id,action,button,kind='reader'){
 let alignmentDirectReference=null, alignmentSavedAfter=null, alignmentUploadId=null, alignmentUploadForm=null, alignmentPreviewUrl=null;
 function matchingPhotoAction(c){return beforeAfterOn()&&c.photo_path?`<button type="button" class="btn secondary slim" data-match-photo="${c.id}">Take Matching Photo</button>`:'';}
 function startMatchingPhoto(c){if(!beforeAfterOn()||!c?.photo_path)return;alignmentDirectReference=c;state.view='alignment';renderApp();}
+let alignmentAfterCamera=true;
 let alignmentBefore=null, alignmentAfterFile=null, alignmentCaptures=[], alignmentPairedIds=new Set();
 async function renderAlignmentTool() {
   if(!beforeAfterOn()){state.view='capture';renderApp();return;}
@@ -1096,7 +1122,7 @@ async function renderAlignmentTool() {
   const list=document.getElementById('alignBeforeList');try{const [r,p]=await Promise.all([api('/api/captures'),api('/api/pairs')]);const captures=r.ok?await r.json():[];const pairs=p.ok?await p.json():[];if(document.getElementById('alignBeforeList')!==list)return;alignmentCaptures=captures;alignmentPairedIds=new Set();pairs.forEach(x=>{alignmentPairedIds.add(Number(x.before_id));alignmentPairedIds.add(Number(x.after_id));});renderAlignmentChoices();if(direct){if(alignmentPairedIds.has(Number(direct.id))){toast('This photo already belongs to a pair. Unpair it before creating another pair.');}else{if(!alignmentCaptures.some(c=>c.id===direct.id))alignmentCaptures.push(direct);chooseAlignmentBefore(direct.id);}}}catch(e){if(document.getElementById('alignBeforeList')!==list)return;list.innerHTML='<p class="status">Photos could not be loaded.</p>';}
 }
 function renderAlignmentChoices(){const box=document.getElementById('alignBeforeList');if(!box)return;const photos=alignmentCaptures.filter(c=>c.photo_path&&!alignmentPairedIds.has(Number(c.id))).slice(0,30);box.innerHTML=photos.length?`<div class="alignment-choice-grid">${photos.map(c=>`<button class="alignment-choice" data-id="${c.id}"><span class="photo-title">${esc(c.photo_title||'Untitled photo')}</span><img loading="lazy" decoding="async" src="${captureThumbSrc(c)}" alt=""><span><strong>GPS</strong><br>${esc(formatGpsClient(c))}<br><strong>Address</strong><br>${esc(c.address||'No address')}</span></button>`).join('')}</div>`:'<p class="empty">There are no unpaired project photos available. Save a new project photo first, then return here.</p>';box.querySelectorAll('.alignment-choice').forEach(b=>b.onclick=()=>chooseAlignmentBefore(Number(b.dataset.id)));}
-function chooseAlignmentBefore(id){if(alignmentSavedAfter)return toast('Retry pairing the saved photo, or return to the library.');alignmentBefore=alignmentCaptures.find(c=>c.id===id);if(!alignmentBefore)return;alignmentAfterFile=null;document.getElementById('alignCompareStep').hidden=true;if(isConcreteClient()){const phase=document.getElementById('alignPhase'),purpose=document.getElementById('alignPurpose');phase.value=alignmentBefore.concrete_phase||'';const paint=()=>{purpose.innerHTML='<option value="">Choose purpose</option>'+(ConcreteCapture.phase(phase.value)?.purposes||[]).map(p=>`<option value="${p[0]}">${esc(p[1])}</option>`).join('');};paint();purpose.value=alignmentBefore.concrete_purpose||'';phase.onchange=paint;}document.querySelectorAll('.alignment-choice').forEach(b=>b.classList.toggle('selected',Number(b.dataset.id)===id));document.getElementById('alignReference').src=photoSrc(alignmentBefore.photo_path);document.getElementById('alignTakeStep').hidden=false;document.getElementById('alignTake').onclick=()=>document.getElementById('alignCam').click();const live=document.getElementById('alignMatchCamera');if(live)live.onclick=()=>window.PhotoNotesMatchCamera.open(capturePhotoSrc(alignmentBefore),f=>{alignmentAfterFile=f;alignmentUploadForm=null;alignmentUploadId=crypto.randomUUID();showAlignmentComparison();},native=>{if(!document.getElementById('alignTake'))return;if(native)document.getElementById('alignCam').click();else{toast('Live preview unavailable. Use Take After Photo, then compare and retake.');document.getElementById('alignTake').focus();}});document.getElementById('alignChoose').onclick=()=>document.getElementById('alignLib').click();const pick=e=>{const f=e.target.files&&e.target.files[0];if(!f)return;alignmentAfterFile=f;alignmentSavedAfter=null;alignmentUploadForm=null;alignmentUploadId=crypto.randomUUID();showAlignmentComparison();e.target.value='';};document.getElementById('alignCam').onchange=pick;document.getElementById('alignLib').onchange=pick;document.getElementById('alignTakeStep').scrollIntoView({behavior:'smooth'});}
+function chooseAlignmentBefore(id){if(alignmentSavedAfter)return toast('Retry pairing the saved photo, or return to the library.');alignmentBefore=alignmentCaptures.find(c=>c.id===id);if(!alignmentBefore)return;alignmentAfterFile=null;document.getElementById('alignCompareStep').hidden=true;if(isConcreteClient()){const phase=document.getElementById('alignPhase'),purpose=document.getElementById('alignPurpose');phase.value=alignmentBefore.concrete_phase||'';const paint=()=>{purpose.innerHTML='<option value="">Choose purpose</option>'+(ConcreteCapture.phase(phase.value)?.purposes||[]).map(p=>`<option value="${p[0]}">${esc(p[1])}</option>`).join('');};paint();purpose.value=alignmentBefore.concrete_purpose||'';phase.onchange=paint;}document.querySelectorAll('.alignment-choice').forEach(b=>b.classList.toggle('selected',Number(b.dataset.id)===id));document.getElementById('alignReference').src=photoSrc(alignmentBefore.photo_path);document.getElementById('alignTakeStep').hidden=false;document.getElementById('alignTake').onclick=()=>document.getElementById('alignCam').click();const live=document.getElementById('alignMatchCamera');if(live)live.onclick=()=>window.PhotoNotesMatchCamera.open(capturePhotoSrc(alignmentBefore),f=>{alignmentAfterFile=f;alignmentAfterCamera=true;alignmentUploadForm=null;alignmentUploadId=crypto.randomUUID();showAlignmentComparison();},native=>{if(!document.getElementById('alignTake'))return;if(native)document.getElementById('alignCam').click();else{toast('Live preview unavailable. Use Take After Photo, then compare and retake.');document.getElementById('alignTake').focus();}});document.getElementById('alignChoose').onclick=()=>document.getElementById('alignLib').click();const pick=e=>{const f=e.target.files&&e.target.files[0];if(!f)return;alignmentAfterFile=f;alignmentAfterCamera=e.target.id!=='alignLib';alignmentSavedAfter=null;alignmentUploadForm=null;alignmentUploadId=crypto.randomUUID();showAlignmentComparison();e.target.value='';};document.getElementById('alignCam').onchange=pick;document.getElementById('alignLib').onchange=pick;document.getElementById('alignTakeStep').scrollIntoView({behavior:'smooth'});}
 function showAlignmentComparison(){document.getElementById('alignBeforeImage').src=photoSrc(alignmentBefore.photo_path);if(alignmentPreviewUrl)URL.revokeObjectURL(alignmentPreviewUrl);alignmentPreviewUrl=URL.createObjectURL(alignmentAfterFile);document.getElementById('alignAfterImage').src=alignmentPreviewUrl;document.getElementById('alignCompareStep').hidden=false;const range=document.getElementById('alignOpacity'),after=document.getElementById('alignAfterImage');range.oninput=()=>after.style.opacity=String(Number(range.value)/100);after.style.opacity=String(Number(range.value)/100);document.getElementById('alignRetake').onclick=()=>document.getElementById('alignCam').click();document.getElementById('alignSave').onclick=saveAlignedPair;document.getElementById('alignCompareStep').scrollIntoView({behavior:'smooth'});}
 async function saveAlignedPair(){
   if(!alignmentBefore||!alignmentAfterFile)return;
@@ -1112,7 +1138,7 @@ async function saveAlignedPair(){
         for(const key of ['concrete_element','concrete_location'])if(before[key])fd.append(key,before[key]);
         fd.append('concrete_condition','not_assessed');fd.append('concrete_severity','none');
       }
-      const loc=await getLocationOnce();if(loc){fd.append('latitude',loc.lat);fd.append('longitude',loc.lng);}
+      const loc=await photoLocation(file,alignmentAfterCamera);if(loc){fd.append('latitude',loc.lat);fd.append('longitude',loc.lng);}
       if(document.getElementById('alignSave')===btn)alignmentUploadForm=fd;}
       const headers=PhotoNotesQueue.headers({requestId,edition,account:await PhotoNotesQueue.accountKey(email)});
       const cr=await api('/api/captures',{method:'POST',headers,body:fd});if(!cr.ok)throw Error('Photo could not be saved. Try again.');savedAfter=await cr.json();if(document.getElementById('alignSave')===btn)alignmentSavedAfter=savedAfter;
@@ -1289,7 +1315,7 @@ function persistCaptureDraft(clear=false){
   if(!email)return Promise.resolve();
   const photo=state.photoFile;
   const draft={photo,note:state._note||'',location:state.location,address:state.address,
-    context:Object.fromEntries(['area','jobId','communityId','urgency','securityIssueType','_concreteCapture','_pavingReason','_duplicateContext','_captureTemplateName','_dims','_measure','_measureRecord','_followUp'].map(k=>[k,state[k]]))};
+    context:Object.fromEntries(['area','jobId','communityId','urgency','securityIssueType','_concreteCapture','_pavingReason','_duplicateContext','_captureTemplateName','_dims','_measure','_measureRecord','_followUp','_photoSource'].map(k=>[k,state[k]]))};
   if(!photo&&!clear)return captureDraftWrites;
   const write=captureDraftWrites.then(async()=>{
     const account=await PhotoNotesQueue.accountKey(email);
@@ -1319,14 +1345,15 @@ document.addEventListener('visibilitychange',()=>{if(document.hidden)flushCaptur
 window.addEventListener('pagehide',flushCaptureDraft);
 window.addEventListener('pagehide',()=>{void persistCaptureDraft().catch(()=>{});});
 
-function onPhotoChosen(file) {
+// source is 'camera' for a photo taken now, 'library' for one chosen from the device.
+function onPhotoChosen(file, source='camera') {
   state._captureShareSave=null;
   if(state._measureRecord&&file!==state._precisionFile){state._measureRecord=null;state._dims=null;const st=document.getElementById('precisionMeasureStatus');if(st)st.textContent='';}
   if(captureSavePending){toast('Please wait for the current photo to save.');return;}
   const replacing=!!state.photoFile;stopCaptureDictation();
   captureLocationGeneration++;
   if(replacing){state._note='';const note=document.getElementById('note');if(note)note.value='';}
-  state.photoFile = file;
+  state.photoFile = file;state._photoSource=source==='library'?'library':'camera';
   state.location=null;state.address=null;
   void persistCaptureDraft().catch(()=>{});
   state._qualityResult = null;
@@ -1420,7 +1447,10 @@ function acquireLocation(force=false) {
   if (gps) gps.textContent = 'Getting location...';
   if (addr) addr.textContent = 'Waiting for GPS coordinates...';
   if (retry) retry.disabled = true;
-  if (!navigator.geolocation) {
+  // A library photo may have been taken anywhere: use the location stored in the photo, never the phone's current one.
+  const fromLibrary = state._photoSource === 'library';
+  if (fromLibrary && gps) gps.textContent = 'Reading the location saved in the photo...';
+  if (!fromLibrary && !navigator.geolocation) {
     if (gps) gps.textContent = 'Location not available on this device.';
     if (addr) addr.textContent = 'You can still save the photo without an address.';
     if (retry) retry.disabled = false;
@@ -1429,7 +1459,17 @@ function acquireLocation(force=false) {
   }
   state._locationPromise = (async () => {
     let pos;
-    try {
+    if (fromLibrary) {
+      const stored = await (window.PhotoNotesPhotoLocation ? PhotoNotesPhotoLocation.read(photoForLocation) : Promise.resolve(null));
+      if (!isCurrent()) return;
+      if (!stored) {
+        if (gps) gps.textContent = 'This photo has no saved location.';
+        if (addr) addr.textContent = 'Enter the address if needed. The phone\'s current location is not used for a photo from the library.';
+        if (retry) retry.disabled = false;
+        return;
+      }
+      pos = { coords: { latitude: stored.lat, longitude: stored.lng } };
+    } else try {
       pos = await browserPosition({ enableHighAccuracy:true, timeout:12000, maximumAge:0 });
     } catch (firstError) {
       if (firstError && firstError.code === 1) throw firstError;
@@ -2550,7 +2590,7 @@ async function renderList() {
     <div class="organize-library-heading"><h2>Saved PhotoNotes</h2><div class="row compact"><button class="btn secondary slim" id="librarySelectAll">Select All</button><button class="btn secondary slim" id="libraryClearSelection">Clear Selection</button></div></div>
     <section class="library-specialty-actions" id="librarySpecialtyActions" hidden>
       ${isPavingClient()?'<div id="pavingReadiness" class="evidence-readiness"></div><button class="btn secondary slim" id="pavingJobPdf">Job Evidence PDF</button><button class="btn secondary slim" id="pavingJobWord">Job Evidence Word</button>':''}
-      ${isConcreteClient()?'<button class="btn secondary slim" id="concreteAreas">Patio &amp; Foundation Areas</button>':''}
+      ${isConcreteClient()?'<button class="btn secondary slim" id="concreteAreas">Patio &amp; Foundation Areas</button><button class="btn secondary slim" id="concreteReportOpen">Concrete Evidence Report</button>':''}
       ${featureOn('measurements')?'<button class="btn secondary slim" id="openmap">Open Job Site Map</button>':''}
       ${isConcreteClient()&&state.me.ramo_intake_access?'<button class="btn secondary slim" id="ramoIntakeSend">Send to Ramo Optimizer</button><button class="btn secondary slim" id="ramoIntakeHistory">Ramo Submission History</button>':''}
     </section>
@@ -2581,6 +2621,8 @@ async function renderList() {
   const pavingPdf=document.getElementById('pavingJobPdf');if(pavingPdf)pavingPdf.onclick=()=>exportPavingJobEvidence('pdf');
   const pavingWord=document.getElementById('pavingJobWord');if(pavingWord)pavingWord.onclick=()=>exportPavingJobEvidence('docx');
   const concreteAreas=document.getElementById('concreteAreas');if(concreteAreas)concreteAreas.onclick=()=>openConcreteFootprints();
+  // The Concrete report (photos, readiness, batch tickets, yield and temperatures) had no way in from the app.
+  const concreteReportOpen=document.getElementById('concreteReportOpen');if(concreteReportOpen)concreteReportOpen.onclick=()=>{const job=state.jobId;state.view='concrete-report';renderApp();const pick=document.getElementById('concreteReportJob');if(pick&&job){pick.value=String(job);pick.dispatchEvent(new Event('change'));}};
   const om = document.getElementById('openmap'); if (om) om.onclick = () => { state.view = 'map'; renderApp(); };
   updateLibraryProjectControls();
   if(!await PhotoNotesSavedViews.mount('organize',document.getElementById('photoSearchStatus'),runSmartSearch))loadCards('');
@@ -3148,7 +3190,7 @@ function captureCardHtml(c) {
   </div>`;
 }
 
-async function renderConcreteReport(){const body=document.getElementById('body');body.className='workflow-organize';body.innerHTML=`<div class="workflow-intro"><strong>Concrete Photo Evidence Report</strong><span>Review photographed conditions, defects, repairs, verification, and batch tickets linked to placement photos.</span></div><label>Project</label><select id="concreteReportJob"><option value="">All Projects</option>${state.jobs.map(j=>`<option value="${j.id}">${esc(j.job_number?j.job_number+' — '+j.name:j.name)}</option>`).join('')}</select><div id="concreteReportStats" class="statrow"></div><div id="concreteReadiness" class="evidence-readiness"></div><div class="row"><button class="btn secondary" id="concreteReportPdf">Photo Evidence PDF</button><button class="btn secondary" id="concreteReportWord">Photo Evidence Word</button><button class="btn secondary" id="concretePrint">Print Photo Report</button></div><div id="concreteReportPhotos"><p class="status">Loading photo evidence...</p></div>`;document.getElementById('concreteReportJob').onchange=loadConcreteReport;document.getElementById('concreteReportPdf').onclick=()=>exportConcreteReport('pdf');document.getElementById('concreteReportWord').onclick=()=>exportConcreteReport('docx');document.getElementById('concretePrint').onclick=()=>window.print();loadConcreteReport();}
+async function renderConcreteReport(){const body=document.getElementById('body');body.className='workflow-organize';body.innerHTML=`<button class="backlink" id="concreteReportBack">‹ Back to Library</button><div class="workflow-intro"><strong>Concrete Photo Evidence Report</strong><span>Review photographed conditions, defects, repairs, verification, and batch tickets linked to placement photos.</span></div><label>Project</label><select id="concreteReportJob"><option value="">All Projects</option>${state.jobs.map(j=>`<option value="${j.id}">${esc(j.job_number?j.job_number+' — '+j.name:j.name)}</option>`).join('')}</select><div id="concreteReportStats" class="statrow"></div><div id="concreteReadiness" class="evidence-readiness"></div><div class="row"><button class="btn secondary" id="concreteReportPdf">Photo Evidence PDF</button><button class="btn secondary" id="concreteReportWord">Photo Evidence Word</button><button class="btn secondary" id="concretePrint">Print Photo Report</button></div><div id="concreteReportPhotos"><p class="status">Loading photo evidence...</p></div>`;document.getElementById('concreteReportJob').onchange=loadConcreteReport;document.getElementById('concreteReportBack').onclick=()=>{state.view='organize';renderApp();};document.getElementById('concreteReportPdf').onclick=()=>exportConcreteReport('pdf');document.getElementById('concreteReportWord').onclick=()=>exportConcreteReport('docx');document.getElementById('concretePrint').onclick=()=>window.print();loadConcreteReport();}
 async function loadConcreteReport(){const job=(document.getElementById('concreteReportJob')||{}).value||'',r=await api('/api/concrete/report'+(job?'?job_id='+encodeURIComponent(job):'')),box=document.getElementById('concreteReportPhotos');if(!r.ok){box.innerHTML='<p class="status">Concrete photo report could not be loaded.</p>';return;}const d=await r.json();document.getElementById('concreteReportStats').innerHTML=[['total','Photos'],['defects','Defect Photos'],['repair_needed','Needs Repair'],['verification','Verification Photos'],['critical','Critical']].map(([k,l])=>`<div class="stat"><strong>${d.counts[k]||0}</strong><span>${l}</span></div>`).join('');const c=d.completeness||{checks:[],complete:0,total:0};document.getElementById('concreteReadiness').innerHTML=`<strong>Photo evidence readiness: ${c.complete}/${c.total}</strong>${c.checks.map(x=>`<div class="${x.complete?'evidence-ok':'evidence-missing'}">${x.complete?'✓':'○'} ${esc(x.label)}</div>`).join('')}`;box.innerHTML=d.photos.length?d.photos.map(c=>captureCardHtml(c)).join(''):'<p class="empty">No concrete photo evidence has been captured yet.</p>';wireCards(box,d.photos);}
 async function exportConcreteReport(format){const p=new URLSearchParams({doc:format}),job=(document.getElementById('concreteReportJob')||{}).value;if(job)p.set('job_id',job);const button=document.getElementById(format==='docx'?'concreteReportWord':'concreteReportPdf');button.disabled=true;button.textContent='Preparing...';try{const r=await api('/api/concrete/report?'+p);if(!r.ok)throw new Error();const blob=await r.blob(),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`concrete-photo-evidence-report.${format}`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);toast('Concrete photo evidence report ready');}catch(e){toast('Concrete report could not be created');}finally{button.disabled=false;button.textContent=format==='docx'?'Photo Evidence Word':'Photo Evidence PDF';}}
 
@@ -4811,7 +4853,7 @@ function renderEwrView(body, data) {
   };
   const addPhoto = async (file, takenNow) => {
     const fd = new FormData(); fd.append('photo', file);
-    if (takenNow) { const loc = await getLocationOnce(); if (loc) { fd.append('latitude', loc.lat); fd.append('longitude', loc.lng); } }
+    const loc = await photoLocation(file, takenNow); if (loc) { fd.append('latitude', loc.lat); fd.append('longitude', loc.lng); }
     const r = await api(`/api/ewr/${e.id}/photo`, { method: 'POST', body: fd });
     if (r.ok) { toast('Photo added'); renderEwrDetail(); } else toast('Upload failed');
   };
