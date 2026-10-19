@@ -13,6 +13,7 @@ const assert=require('node:assert/strict'),express=require('express'),{Client}=r
  assert.equal((await post('/api/property/areas',{community_id:1,name:'north parking lot'})).status,409);
  assert.equal((await post('/api/property/areas',{community_id:2,name:'North Parking Lot'})).status,200);
  assert.equal((await post('/api/property/areas',{community_id:3,name:'Unauthorized'})).status,404);
+ for(const bad of ['abc','1.5','-2']){const r=await fetch(base+'/api/property/areas?community_id='+bad);assert.equal(r.status,400,bad);}{const r=await fetch(base+'/api/property/areas?community_id=1');assert.equal(r.status,200);assert((await r.json()).every(x=>x.community_id===1));}
  assert.equal((await post('/api/property/associations/asset/1',{property_area_id:id})).status,200);
  await assert.rejects(validate(db,1,2,id),{status:400});
  assert.equal((await post('/api/property/areas/'+id,{name:'North Parking Lot',description:'Updated',active:false})).status,200);
