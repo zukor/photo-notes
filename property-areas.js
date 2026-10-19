@@ -19,7 +19,7 @@ function register(app,{pool,requireAuth,requireHoa,currentProduct}){
  const gate=async(req,res,next)=>{if(await currentProduct(req.user.id)!=='property')return res.status(403).json({error:'Property Manager Pro required'});next();};
  const run=fn=>async(req,res)=>{try{await fn(req,res);}catch(e){res.status(e.status||500).json({error:e.status?e.message:'Area operation failed'});}};
  app.get('/api/property/areas',requireAuth,requireHoa,gate,run(async(req,res)=>{
- const vals=[req.hoaCompany.id],where=['c.company_id=$1'];if(req.query.community_id){vals.push(Number(req.query.community_id));where.push('a.community_id=$2');}
+ const vals=[req.hoaCompany.id],where=['c.company_id=$1'];if(req.query.community_id!=null&&req.query.community_id!==''){const community=Number(req.query.community_id);if(!Number.isSafeInteger(community)||community<=0)return res.status(400).json({error:'Invalid Property'});vals.push(community);where.push('a.community_id=$2');}
  res.json((await pool.query(`SELECT a.*,c.name community_name FROM property_areas a JOIN hoa_communities c ON c.id=a.community_id WHERE ${where.join(' AND ')} ORDER BY c.name,a.name`,vals)).rows);
  }));
  app.post('/api/property/areas',requireAuth,requireHoa,gate,run(async(req,res)=>{

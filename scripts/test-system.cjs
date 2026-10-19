@@ -44,7 +44,7 @@ const browserSuites = [
  'property-incident-report','property-terminology','photo-markers','send-shortcuts','send-photo-selection','send-photo-filters','review-share-organize','capture-job-library',
  'visual-analysis-browser','photo-requests-browser','qr-codes-browser','related-photos-browser',
  'photo-comments-browser','photo-comments-app','bulk-metadata-browser','custom-fields-browser',
- 'saved-views-browser','saved-views-help','property-global-parity','shared-before-after-browser'
+ 'saved-views-browser','saved-views-help','property-global-parity','shared-before-after-browser','property-manager-screens'
 ];
 const legacySuites = [
  ['batch-annotations.integration','PN_LEGACY_TEST_DATABASE_URL','pn_annotations_test','PN_ANNOTATION_TEST'],
@@ -92,6 +92,7 @@ const databaseSuites = [
  ['property-incident-deletion','PN_ISOLATED_DATABASE_URL','pn_incident_deletion_test'],
  ['property-area-capture-integration','DATABASE_URL','pn_property_area_capture_test'],
  ['property-incident-capture-integration','DATABASE_URL','pn_property_incident_capture_test'],
+ ['property-manager-review-integration','DATABASE_URL','pn_property_manager_review_test'],
  ['photo-follow-ups-integration','DATABASE_URL','pn_followup_integration'],
  ['export-presets','DATABASE_URL','pn_export_presets_test'],
  ['export-presets-private-comments','DATABASE_URL','pn_export_presets_output_test'],

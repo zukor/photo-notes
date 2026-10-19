@@ -870,6 +870,9 @@ async function init() {
   await pool.query(`UPDATE users SET pro_type = 'paving' WHERE pro_type = 'asphalt'`);
   await pool.query(`ALTER TABLE users ALTER COLUMN pro_type SET DEFAULT 'paving'`);
   await pool.query(`ALTER TABLE hoa_communities ADD COLUMN IF NOT EXISTS assignment_rules JSONB NOT NULL DEFAULT '{}'::jsonb`);
+  // Primary Assignee may be a company team member; free text remains for outside vendors.
+  await pool.query(`ALTER TABLE hoa_maintenance_items ADD COLUMN IF NOT EXISTS primary_assignee_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS hoa_items_assignee_user_idx ON hoa_maintenance_items(company_id,primary_assignee_user_id) WHERE primary_assignee_user_id IS NOT NULL`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS feature_access JSONB NOT NULL DEFAULT '{}'::jsonb`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS document_branding JSONB NOT NULL DEFAULT '{}'::jsonb`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS document_logo_path TEXT`);
