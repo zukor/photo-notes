@@ -111,13 +111,13 @@ test('scanner routes retain photos, extract fields, save reviews and report serv
   const gauge=(await pool.query("INSERT INTO camera_readings(user_id,reading_type,title,fields,photo_path,status) VALUES($1,'gauge','Thermometer',$2,$3,'saved') RETURNING id",[user.id,JSON.stringify(fields),ticket.ticket.photo_path])).rows[0];
   const linked=await(await request('/api/camera-readings/'+gauge.id+'/library',{})).json();assert(linked.capture_id);
   let listed=await(await request('/api/captures')).json();assert.equal(listed.find(c=>c.id===capture.id).footprints.length,1);assert.equal(listed.find(c=>c.id===linked.capture_id).gauge_record.fields.reading,'83');
-  const edited=await request('/api/camera-readings/'+gauge.id,{title:'Thermometer',fields:{...fields,reading:'84'}});assert.equal(edited.status,200);
+  const edited=await request('/api/camera-readings/'+gauge.id,{confirmed:true,title:'Thermometer',fields:{...fields,reading:'84'}});assert.equal(edited.status,200);
   assert.match((await pool.query('SELECT note FROM captures WHERE id=$1',[linked.capture_id])).rows[0].note,/Reading: 84/);
   const group=await(await request('/api/groups',{title:'LINKED SOURCE REPORT',ids:[capture.id,linked.capture_id]})).json();
   const document=await(await request('/api/groups/'+group.id)).json();assert.equal(document.items.find(c=>c.id===capture.id).footprints[0].name,'SOURCE AREA');
   for(const format of ['pdf','docx']){const r=await request('/api/export/'+format+'?group='+group.id);assert.equal(r.status,200);const bytes=Buffer.from(await r.arrayBuffer());let text;if(format==='docx')text=new(require('pizzip'))(bytes).file('word/document.xml').asText();else{const file=path.join(os.tmpdir(),'pn-linked-source.pdf');fs.writeFileSync(file,bytes);text=require('node:child_process').execFileSync('pdftotext',[file,'-'],{encoding:'utf8'});}for(const value of ['SOURCE AREA','1,200','AREA SOURCE NOTE','GAUGE SOURCE','84','LONG SOURCE NOTE'])assert(text.includes(value),format+': '+value);}
   // User-authored notes survive scanner corrections.
-  await pool.query("UPDATE captures SET note='USER AUTHORED NOTE' WHERE id=$1",[linked.capture_id]);await request('/api/camera-readings/'+gauge.id,{title:'Thermometer',fields:{...fields,reading:'85'}});assert.equal((await pool.query('SELECT note FROM captures WHERE id=$1',[linked.capture_id])).rows[0].note,'USER AUTHORED NOTE');
+  await pool.query("UPDATE captures SET note='USER AUTHORED NOTE' WHERE id=$1",[linked.capture_id]);await request('/api/camera-readings/'+gauge.id,{confirmed:true,title:'Thermometer',fields:{...fields,reading:'85'}});assert.equal((await pool.query('SELECT note FROM captures WHERE id=$1',[linked.capture_id])).rows[0].note,'USER AUTHORED NOTE');
   await pool.query("UPDATE users SET pro_type='general' WHERE id=$1",[user.id]);listed=await(await request('/api/captures')).json();assert(!listed.find(c=>c.id===capture.id).footprints);assert(!listed.find(c=>c.id===linked.capture_id).gauge_record);
   const job=await(await request('/api/jobs',{name:'MISTAKEN JOB'})).json();await pool.query('UPDATE captures SET job_id=$1 WHERE id=$2',[job.id,capture.id]);await pool.query('UPDATE asphalt_tickets SET job_id=$1 WHERE id=$2',[job.id,ticket.ticket.id]);
   const foreign=(await pool.query("INSERT INTO users(email,password_hash,plan,pro_type) VALUES($1,'none','pro','general') RETURNING id",['job-foreign-'+Date.now()+'@example.invalid'])).rows[0],foreignCookie='pn_token='+require('jsonwebtoken').sign({id:foreign.id},process.env.SESSION_SECRET);
@@ -129,15 +129,15 @@ test('scanner routes retain photos, extract fields, save reviews and report serv
   const listJob=async job=>(await(await request('/api/camera-readings?type=gauge&job_id='+job)).json());
   assert((await listJob(jobA.id)).some(r=>r.id===gauge.id),'legacy linked photo job is visible');
   assert(!(await listJob('unassigned')).some(r=>r.id===gauge.id));
-  assert.equal((await request('/api/camera-readings/'+gauge.id,{title:'Thermometer',fields:{...fields,reading:'85'},job_id:jobB.id})).status,200);
+  assert.equal((await request('/api/camera-readings/'+gauge.id,{confirmed:true,title:'Thermometer',fields:{...fields,reading:'85'},job_id:jobB.id})).status,200);
   assert(!(await listJob(jobA.id)).some(r=>r.id===gauge.id));assert((await listJob(jobB.id)).some(r=>r.id===gauge.id));
   assert.equal((await pool.query('SELECT job_id,note FROM captures WHERE id=$1',[linked.capture_id])).rows[0].job_id,jobA.id,'scanner reassignment does not move the Photo Note');
-  assert.equal((await request('/api/camera-readings/'+gauge.id,{title:'Thermometer',fields,job_id:null})).status,200);assert((await listJob('unassigned')).some(r=>r.id===gauge.id));
+  assert.equal((await request('/api/camera-readings/'+gauge.id,{confirmed:true,title:'Thermometer',fields,job_id:null})).status,200);assert((await listJob('unassigned')).some(r=>r.id===gauge.id));
   const newReading=(await pool.query("INSERT INTO camera_readings(user_id,reading_type,title,fields,photo_path,status,job_id,job_assignment_set) VALUES($1,'plan_sketch','Job Plan','{}',$2,'saved',$3,true) RETURNING id",[user.id,ticket.ticket.photo_path,jobB.id])).rows[0];
   const newPhoto=await(await request('/api/camera-readings/'+newReading.id+'/library',{})).json();assert.equal((await pool.query('SELECT job_id FROM captures WHERE id=$1',[newPhoto.capture_id])).rows[0].job_id,jobB.id,'new linked photo inherits selected scanner job');
   const foreignOwner=(await pool.query("INSERT INTO users(email,password_hash,plan,pro_type) VALUES($1,'none','pro','general') RETURNING id",['scanner-job-foreign-'+Date.now()+'@example.invalid'])).rows[0];
   const foreignJob=(await pool.query("INSERT INTO jobs(user_id,name) VALUES($1,'Private Job') RETURNING id",[foreignOwner.id])).rows[0];
-  assert.equal((await request('/api/camera-readings/'+gauge.id,{title:'Thermometer',fields,job_id:foreignJob.id})).status,400);
+  assert.equal((await request('/api/camera-readings/'+gauge.id,{confirmed:true,title:'Thermometer',fields,job_id:foreignJob.id})).status,400);
   assert.equal((await listJob(foreignJob.id)).length,0);assert.equal((await request('/api/camera-readings?job_id=invalid')).status,400);
   await pool.query('DELETE FROM users WHERE id=$1',[foreignOwner.id]);
   const legacy=await(await fetch(base+'/api/camera-readings?type=business_card',{headers:{Cookie:cookie}})).json();assert(legacy.length>0);

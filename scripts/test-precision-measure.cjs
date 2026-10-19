@@ -27,7 +27,7 @@ function scene({ heightMm, tilt, seed }) {
   return { poly, rgba: T.render(W, H, cam.H, S, poly, rand) };
 }
 
-async function run(video, mode) {
+async function run(video, mode, edition = 'paving') {
   const app = express();
   app.get('/vendor/aruco/:file', (req, res) => res.sendFile(path.join(path.dirname(require.resolve('js-aruco2/src/aruco.js')), path.basename(req.params.file))));
   app.use(express.static(path.join(__dirname, '../public')));
@@ -39,12 +39,19 @@ async function run(video, mode) {
     const errors = []; page.on('pageerror', e => errors.push(e.message));
     await page.route('**/api/**', route => {
       const p = new URL(route.request().url()).pathname;
-      return route.fulfill({ json: p === '/api/me' ? { id: 1, email: 'tester@example.test', name: 'Tester', role: 'user', plan: 'pro', pro_type: 'paving', is_tester: true, feature_access: { measurements: true, ticket_scanner: true, camera_readers: true, before_after: true } } : [] });
+      return route.fulfill({ json: p === '/api/me' ? { id: 1, email: 'tester@example.test', name: 'Tester', role: 'user', plan: 'pro', pro_type: edition, is_tester: true, feature_access: { measurements: true, ticket_scanner: true, camera_readers: true, before_after: true } } : [] });
     });
     await page.addInitScript(() => { localStorage.setItem('pn_install_prompt_dismissed_v1', 'dismissed'); localStorage.setItem('pn_first_use_v1:tester%40example.test', 'done'); });
     await page.goto(`http://127.0.0.1:${server.address().port}`);
     await page.locator('#tabCapture').click();
     await page.locator('#precisionMeasure').click();
+    if (mode === 'concrete') {
+      // Concrete Pro gets the same tool with concrete wording.
+      assert.match(await page.locator('#pmBody').innerText(), /beside the damaged area/);
+      assert.equal(/pothole/i.test(await page.locator('#pmBody').innerText()), false);
+      assert.deepEqual(errors, []);
+      return { concrete: true };
+    }
     // Card setup on first use: the 6-inch card measured at exactly 6 inches.
     await page.locator('#pmCardSize').selectOption(String(S));
     await page.locator('#pmCardMeasured').fill('6');
@@ -61,7 +68,7 @@ async function run(video, mode) {
     const session = await page.evaluate(() => { const s = window.PhotoNotesPrecisionMeasure._session; return { tilt: s.tilt, refined: s.refined, w: s.plan.width, h: s.plan.height }; });
     return { page, session, errors };
   } catch (e) { await browser.close(); server.close(); throw e; }
-  finally { if (mode === 'far') { await browser.close(); server.close(); } }
+  finally { if (mode === 'far' || mode === 'concrete') { await browser.close(); server.close(); } }
 }
 
 (async () => {
@@ -70,6 +77,7 @@ async function run(video, mode) {
   const far = scene({ heightMm: 2100, tilt: 3, seed: 5 }); y4m(path.join(dir, 'far.y4m'), far.rgba);
   const farResult = await run(path.join(dir, 'far.y4m'), 'far');
   assert.equal(farResult.coaching, 'too_far');
+  assert.equal((await run(path.join(dir, 'far.y4m'), 'concrete', 'concrete')).concrete, true);
   // 2. Good position: automatic photo, outline the true edge, check the measurement.
   const good = scene({ heightMm: 900, tilt: 6, seed: 9 }); y4m(path.join(dir, 'good.y4m'), good.rgba);
   const truth = E.measureOutline(good.poly);

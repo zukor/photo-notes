@@ -52,13 +52,13 @@ function shell(title){
 function renderCardSetup(opts,next){
  const body=shell('Measuring Card'),cur=cardSettings();
  const curPreset=cur?CARDS.find(c=>Math.abs(c.nominal-cur.nominal_mm)<0.1):CARDS[0];
- body.innerHTML=`<p>Precision Measure needs the PhotoNotes Measuring Card lying flat beside the pothole. Print one, glue it to stiff board, and tell PhotoNotes its size.</p>
+ body.innerHTML=`<p>Precision Measure needs the PhotoNotes Measuring Card lying flat beside the ${W.thing}. Print one, glue it to stiff board, and tell PhotoNotes its size.</p>
  <p><a class="btn secondary" id="pmPrintCard" href="/measuring-card.html?size=${(curPreset||CARDS[0]).print}" target="_blank" rel="noopener">Print a Measuring Card</a></p>
  <label for="pmCardSize">Card</label><select id="pmCardSize">${CARDS.map(c=>`<option value="${c.nominal}" ${curPreset&&curPreset.nominal===c.nominal?'selected':''}>${c.label}</option>`).join('')}</select>
  <label for="pmCardMeasured">Measured side of the black square</label>
  <div class="row"><input id="pmCardMeasured" inputmode="decimal" value="${cur?(cur.unit==='mm'?cur.side_mm.toFixed(1):inches(cur.side_mm).toFixed(3)):(CARDS[0].nominal/E.MM_PER_IN).toFixed(3)}" aria-describedby="pmCardHelp"><select id="pmCardUnit" aria-label="Unit"><option value="in" ${cur&&cur.unit==='mm'?'':'selected'}>inches</option><option value="mm" ${cur&&cur.unit==='mm'?'selected':''}>mm</option></select></div>
  <p id="pmCardHelp">Measure one side of the black square with a ruler, to 1/32 inch or 1 mm if you can. Printers can shrink a page slightly; entering the measured size keeps measurements accurate.</p>
- ${opts.canValidate?`<label><input type="checkbox" id="pmValidate" ${opts.validate?'checked':''}> Field test: I will also measure each pothole with a tape and enter it</label>`:''}
+ ${opts.canValidate?`<label><input type="checkbox" id="pmValidate" ${opts.validate?'checked':''}> Field test: I will also measure each ${W.thing} with a tape and enter it</label>`:''}
  <div class="row"><button class="btn" id="pmCardSave" type="button">Save and Continue</button><button class="btn secondary" id="pmCardCancel" type="button">Cancel</button></div>`;
  const size=body.querySelector('#pmCardSize'),measured=body.querySelector('#pmCardMeasured'),unit=body.querySelector('#pmCardUnit');
  size.onchange=()=>{const c=CARDS.find(c=>String(c.nominal)===size.value);measured.value=unit.value==='mm'?c.nominal.toFixed(1):(c.nominal/E.MM_PER_IN).toFixed(3);body.querySelector('#pmPrintCard').href='/measuring-card.html?size='+c.print;};
@@ -81,7 +81,7 @@ async function renderCamera(opts){
  <div class="pm-readouts"><span id="pmAngle">Angle: waiting</span><span id="pmDistance">Distance: waiting</span></div>
  <label><input type="checkbox" id="pmAuto" checked> Take the photo automatically when everything is right</label>
  <div class="row"><button class="btn" id="pmShoot" type="button" disabled>Take Photo</button><button class="btn secondary" id="pmCardSettings" type="button">Card Settings</button><button class="btn secondary" id="pmCancel" type="button">Cancel</button></div>
- <p>Lay the card flat on the pavement right beside the pothole. Hold the phone level, straight down, about waist to chest height, with the pothole and card in the middle of the picture. Use the normal camera, not the wide-angle lens.</p>`;
+ <p>Lay the card flat on the ${W.surface} right beside the ${W.thing}. Hold the phone level, straight down, about waist to chest height, with the ${W.thing} and card in the middle of the picture. Use the normal camera, not the wide-angle lens.</p>`;
  body.querySelector('#pmCancel').onclick=()=>{close();opts.onCancel?.();};
  body.querySelector('#pmCardSettings').onclick=()=>{stopCamera();renderCardSetup(opts,()=>renderCamera(opts));};
  const video=body.querySelector('#pmVideo'),overlay=body.querySelector('#pmOverlay'),guide=body.querySelector('#pmGuide'),shoot=body.querySelector('#pmShoot');
@@ -222,7 +222,7 @@ function renderOutline(opts,s){
 // ---------- 5. depth ----------
 function renderDepth(opts,s){
  const body=shell('Depth');
- body.innerHTML=`<p>A photo cannot measure depth. Lay a straightedge across the pothole, stand a tape at the deepest point, and read the tape where it meets the straightedge.</p>
+ body.innerHTML=`<p>A photo cannot measure depth. Lay a straightedge across the ${W.thing}, stand a tape at the deepest point, and read the tape where it meets the straightedge.</p>
  <label for="pmDepth">Deepest point, in inches</label><input id="pmDepth" type="number" step="0.125" min="0" max="24" inputmode="decimal" value="${s.depthIn??''}">
  <div class="row"><button class="btn" id="pmDepthDone" type="button">Use This Depth</button><button class="btn secondary" id="pmDepthSkip" type="button">Depth Not Measured</button><button class="btn secondary" id="pmBack" type="button">Back to Outline</button></div>`;
  body.querySelector('#pmBack').onclick=()=>renderOutline(opts,s);
@@ -235,7 +235,7 @@ function afterDepth(opts,s){if(opts.validate)renderValidation(opts,s);else finis
 function renderValidation(opts,s){
  const body=shell('Field Test');
  const m=s.result;
- body.innerHTML=`<p>Measure the same pothole with a tape the way you would mark a saw-cut patch: the longest side, then the width across it. Enter what the tape shows. PhotoNotes records both so the real accuracy can be reported.</p>
+ body.innerHTML=`<p>Measure the same ${W.thing} with a tape the way you would mark a saw-cut repair: the longest side, then the width across it. Enter what the tape shows. PhotoNotes records both so the real accuracy can be reported.</p>
  <p class="pm-note">PhotoNotes measured: length ${(inches(m.lengthMm)).toFixed(2)} in, width ${(inches(m.widthMm)).toFixed(2)} in. Measure with the tape before looking at these numbers if you can.</p>
  <label for="pmTapeL">Tape length, inches</label><input id="pmTapeL" type="number" step="0.0625" inputmode="decimal">
  <label for="pmTapeW">Tape width, inches</label><input id="pmTapeW" type="number" step="0.0625" inputmode="decimal">
@@ -266,7 +266,11 @@ function finish(opts,s){
 
 // ---------- entry points ----------
 // open({mode:'live'|'existing', file, canValidate, onDone({file,dims,record}), onCancel})
+// Paving says pothole and pavement; Concrete says damage and slab.
+const WORDING={paving:{thing:'pothole',surface:'pavement'},concrete:{thing:'damaged area',surface:'slab'}};
+let W=WORDING.paving;
 function open(opts={}){
+ W=WORDING[opts.surface]||WORDING.paving;
  // iPhone asks once for motion access; the request must happen on the tap that opened Precision Measure.
  try{if(opts.mode!=='existing'&&typeof DeviceOrientationEvent!=='undefined'&&typeof DeviceOrientationEvent.requestPermission==='function')DeviceOrientationEvent.requestPermission().catch(()=>{});}catch{}
  if(!window.AR||!E){const body=shell('Precision Measure');body.innerHTML='<p class="pm-note" role="alert">Precision Measure could not load. Reload PhotoNotes and try again.</p><button class="btn" id="pmClose" type="button">Close</button>';body.querySelector('#pmClose').onclick=()=>{close();opts.onCancel?.();};return;}
