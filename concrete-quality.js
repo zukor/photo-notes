@@ -34,6 +34,17 @@ function scanConfidence(ai, fields) {
 }
 const FIELD_KEYS = Object.keys(ticketFields({}));
 
+// Reads a ticket photo into a draft for review. Used by the scanner and by a ticket attached to a placement photo.
+async function readTicketDraft({ pool, visionJSON, userId, filePath, photoPath, jobId = null, placementCaptureId = null }) {
+  const vision = await visionJSON(filePath, TICKET_PROMPT, { maxTokens: 900 });
+  const ai = vision && vision.data || null, fields = ai ? ticketFields(ai, true) : ticketFields({});
+  const confidence = ai ? scanConfidence(ai, fields) : 'low';
+  const cols = FIELD_KEYS, vals = cols.map(k => fields[k]);
+  const row = (await pool.query(`INSERT INTO concrete_tickets (user_id, photo_path, confidence, raw_ai, job_id, placement_capture_id, ${cols.join(',')}) VALUES ($1,$2,$3,$4,$5,$6,${cols.map((_, i) => '$' + (i + 7)).join(',')}) RETURNING *`,
+    [userId, photoPath, confidence, ai ? JSON.stringify(ai) : null, jobId, placementCaptureId, ...vals])).rows[0];
+  return { row, ai, vision, confidence };
+}
+
 function register(app, { pool, requireAuth, requireConcrete, upload, visionJSON, visionFeedback, logEvent, ownedJobId }) {
   const unlink = file => { if (file && file.path) { try { fs.unlinkSync(file.path); } catch (e) {} } };
   const guard = [requireAuth, requireConcrete];
@@ -48,12 +59,7 @@ function register(app, { pool, requireAuth, requireConcrete, upload, visionJSON,
   app.post('/api/concrete/tickets/scan', ...guard, upload.single('photo'), async (req, res) => {
     try {
       if (!req.file) return res.status(400).json({ error: 'photo required' });
-      const vision = await visionJSON(req.file.path, TICKET_PROMPT, { maxTokens: 900 });
-      const ai = vision.data || null, fields = ai ? ticketFields(ai, true) : ticketFields({});
-      const confidence = ai ? scanConfidence(ai, fields) : 'low';
-      const cols = FIELD_KEYS, vals = cols.map(k => fields[k]);
-      const row = (await pool.query(`INSERT INTO concrete_tickets (user_id, photo_path, confidence, raw_ai, ${cols.join(',')}) VALUES ($1,$2,$3,$4,${cols.map((_, i) => '$' + (i + 5)).join(',')}) RETURNING *`,
-        [req.user.id, '/uploads/' + path.basename(req.file.path), confidence, ai ? JSON.stringify(ai) : null, ...vals])).rows[0];
+      const { row, ai, vision, confidence } = await readTicketDraft({ pool, visionJSON, userId: req.user.id, filePath: req.file.path, photoPath: '/uploads/' + path.basename(req.file.path) });
       logEvent(req.user.id, 'concrete_ticket_scan', { ai: !!ai, confidence });
       res.json({ ok: true, ai_read: !!ai, ...visionFeedback(vision), ticket: { ...row, ticket_date: dateText(row.ticket_date) }, checks: Rules.ticketChecks(row) });
     } catch (e) { unlink(req.file); fail(res, e, 'concrete.ticket.scan', 'The ticket could not be read. Enter the details by hand.'); }
@@ -67,14 +73,25 @@ function register(app, { pool, requireAuth, requireConcrete, upload, visionJSON,
       if (f.load_yd3 == null || f.load_yd3 <= 0) return res.status(400).json({ error: 'Enter the cubic yards on this load.' });
       if (f.load_yd3 > MAX_YD3_PER_LOAD) return res.status(400).json({ error: `${f.load_yd3} cubic yards is more than one truck carries. Enter this load only, not the order total.` });
       if (old.confidence === 'low' && b.confirmed !== true) return res.status(400).json({ error: 'This ticket was hard to read. Check every value against the photo and confirm before saving.' });
-      const job = await jobFrom(req.user.id, b, old.job_id);
+      let job = await jobFrom(req.user.id, b, old.job_id);
+      let placement = old.placement_capture_id ?? null;
+      if (Object.prototype.hasOwnProperty.call(b, 'placement_capture_id')) {
+        placement = null;
+        if (b.placement_capture_id != null && b.placement_capture_id !== '') {
+          const cap = (await pool.query(`SELECT id, job_id FROM captures WHERE id=$1 AND user_id=$2 AND photo_path IS NOT NULL AND COALESCE(concrete_stage,'')<>'batch_ticket'`, [Number(b.placement_capture_id), req.user.id])).rows[0];
+          if (!cap) return res.status(400).json({ error: 'Selected placement photo is unavailable.' });
+          if (job && cap.job_id !== job) return res.status(400).json({ error: 'Choose a placement photo from the same job as the ticket.' });
+          if (!job) job = cap.job_id ?? null;
+          placement = cap.id;
+        }
+      }
       if (f.ticket_number) {
         const dup = (await pool.query(`SELECT id FROM concrete_tickets WHERE user_id=$1 AND status='saved' AND id<>$2 AND lower(ticket_number)=lower($3) AND COALESCE(ticket_date,'1900-01-01')=COALESCE($4::date,'1900-01-01')`, [req.user.id, id, f.ticket_number, f.ticket_date])).rows[0];
         if (dup) return res.status(409).json({ error: 'This ticket number is already saved for that date.' });
       }
       const cols = FIELD_KEYS;
-      const row = (await pool.query(`UPDATE concrete_tickets SET ${cols.map((k, i) => `${k}=$${i + 3}`).join(',')}, job_id=$${cols.length + 3}, user_confirmed=$${cols.length + 4}, status='saved', updated_at=now() WHERE id=$1 AND user_id=$2 RETURNING *`,
-        [id, req.user.id, ...cols.map(k => f[k]), job, b.confirmed === true])).rows[0];
+      const row = (await pool.query(`UPDATE concrete_tickets SET ${cols.map((k, i) => `${k}=$${i + 3}`).join(',')}, job_id=$${cols.length + 3}, user_confirmed=$${cols.length + 4}, placement_capture_id=$${cols.length + 5}, status='saved', updated_at=now() WHERE id=$1 AND user_id=$2 RETURNING *`,
+        [id, req.user.id, ...cols.map(k => f[k]), job, b.confirmed === true, placement])).rows[0];
       const checks = Rules.ticketChecks(row);
       logEvent(req.user.id, 'concrete_ticket_save', { confidence: old.confidence, flags: checks.flags.map(x => x.key) });
       res.json({ ok: true, ticket: { ...row, ticket_date: dateText(row.ticket_date) }, checks });
@@ -91,6 +108,23 @@ function register(app, { pool, requireAuth, requireConcrete, upload, visionJSON,
       const yards = rows.reduce((s, r) => s + (Number(r.load_yd3) || 0), 0);
       res.json({ tickets: rows, total_yd3: Math.round(yards * 100) / 100, ticket_count: rows.length, flagged: rows.filter(r => r.checks.flags.length).length });
     } catch (e) { fail(res, e, 'concrete.ticket.list', 'ticket list failed'); }
+  });
+  // One ticket, for example a draft read from a ticket photo attached to a placement photo.
+  app.get('/api/concrete/tickets/:id', ...guard, async (req, res) => {
+    try {
+      const id = Number(req.params.id); if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: 'bad id' });
+      const row = (await pool.query(`SELECT * FROM concrete_tickets WHERE id=$1 AND user_id=$2 AND status<>'deleted'`, [id, req.user.id])).rows[0];
+      if (!row) return res.status(404).json({ error: 'not found' });
+      res.json({ ticket: { ...row, ticket_date: dateText(row.ticket_date) }, checks: Rules.ticketChecks(row) });
+    } catch (e) { fail(res, e, 'concrete.ticket.get', 'The ticket could not be loaded.'); }
+  });
+  // Photos of a job that a batch ticket can be linked to.
+  app.get('/api/concrete/placement-photos', ...guard, async (req, res) => {
+    try {
+      const job = await ownedJobId(req.user.id, req.query.job_id); if (!job) return res.status(400).json({ error: 'Choose a job.' });
+      const rows = (await pool.query(`SELECT id, photo_title, concrete_phase, concrete_purpose, concrete_stage, concrete_element, concrete_location, created_at FROM captures WHERE user_id=$1 AND job_id=$2 AND photo_path IS NOT NULL AND COALESCE(concrete_stage,'')<>'batch_ticket' ORDER BY (concrete_stage='placement') DESC NULLS LAST, created_at DESC LIMIT 200`, [req.user.id, job])).rows;
+      res.json({ photos: rows });
+    } catch (e) { fail(res, e, 'concrete.placement.list', 'Photos could not be loaded.'); }
   });
   app.delete('/api/concrete/tickets/:id', ...guard, async (req, res) => {
     try {
@@ -202,21 +236,22 @@ function register(app, { pool, requireAuth, requireConcrete, upload, visionJSON,
 }
 
 // Lines for the Concrete report: tickets with their checks, the latest yield check per day, and temperatures.
-async function reportLines(pool, userId, jobId) {
+async function reportLines(pool, userId, jobId, tz) {
+  const timeZone = zone(String(tz || ''));
   const out = { tickets: [], yield: [], temperatures: [] };
   if (!jobId) return out;
   try {
     const tickets = (await pool.query(`SELECT * FROM concrete_tickets WHERE user_id=$1 AND job_id=$2 AND status='saved' ORDER BY COALESCE(ticket_date,created_at::date), batch_time NULLS LAST, id`, [userId, jobId])).rows;
     for (const t of tickets) {
       const c = Rules.ticketChecks(t);
-      out.tickets.push(`${dateText(t.ticket_date) || ''} Ticket ${t.ticket_number || t.id}${t.truck_number ? ', truck ' + t.truck_number : ''}: ${Number(t.load_yd3)} yd³ ${t.mix_code || t.mix_description || ''}${t.slump_in != null ? ', slump ' + Number(t.slump_in) + ' in' : ''}${c.minutes != null ? ', ' + c.minutes + ' min to ' + c.measured_to : ''}${c.flags.length ? '. FLAGGED: ' + c.flags.map(f => f.message).join(' ') : ''}`.trim());
+      out.tickets.push(`${dateText(t.ticket_date) || ''} Ticket ${t.ticket_number || t.id}${t.truck_number ? ', truck ' + t.truck_number : ''}: ${Number(t.load_yd3)} yd³ ${t.mix_code || t.mix_description || ''}${t.slump_in != null ? ', slump ' + Number(t.slump_in) + ' in' : ''}${c.minutes != null ? ', ' + c.minutes + ' min to ' + c.measured_to : ''}${t.placement_capture_id ? ', linked to a placement photo' : ''}${c.flags.length ? '. FLAGGED: ' + c.flags.map(f => f.message).join(' ') : ''}`.trim());
     }
     const checks = (await pool.query(`SELECT DISTINCT ON (check_date) to_char(check_date,'YYYY-MM-DD') AS day, result FROM concrete_yield_checks WHERE user_id=$1 AND job_id=$2 AND status='saved' ORDER BY check_date, id DESC`, [userId, jobId])).rows;
     for (const c of checks) { const r = c.result || {}; out.yield.push(`${c.day}: ${r.yards} yd³ delivered for ${r.area_sqft} sq ft at ${r.thickness_in} in planned (${r.design_yards} yd³). ${r.message || ''}`.trim()); }
     const temps = (await pool.query(`SELECT t.*, c.ticket_number FROM concrete_temperatures t LEFT JOIN concrete_tickets c ON c.id=t.ticket_id WHERE t.user_id=$1 AND t.job_id=$2 AND t.status='saved' ORDER BY t.taken_at`, [userId, jobId])).rows;
     for (const t of temps) {
       const kind = (Rules.KINDS.find(k => k.id === t.kind) || {}).label || t.kind;
-      const when = new Date(t.taken_at).toLocaleString('en-US', { timeZone: 'America/Chicago', dateStyle: 'medium', timeStyle: 'short' });
+      const when = new Date(t.taken_at).toLocaleString('en-US', { timeZone, dateStyle: 'medium', timeStyle: 'short' });
       const status = t.check_status === 'low' ? `BELOW MINIMUM ${Number(t.minimum_f)}°F` : t.check_status === 'high' ? `ABOVE MAXIMUM ${Number(t.maximum_f)}°F` : t.check_status === 'ok' ? 'within limits' : 'recorded';
       out.temperatures.push(`${when}: ${kind} ${Number(t.reading_f)}°F, ${status}${t.ticket_number ? ', ticket ' + t.ticket_number : ''}${t.location_note ? ', ' + t.location_note : ''}${t.photo_path ? ' (photo on file)' : ''}`);
     }
@@ -224,4 +259,4 @@ async function reportLines(pool, userId, jobId) {
   return out;
 }
 
-module.exports = { register, reportLines, ticketFields, scanConfidence, TICKET_PROMPT, MAX_YD3_PER_LOAD };
+module.exports = { register, reportLines, readTicketDraft, ticketFields, scanConfidence, zone, TICKET_PROMPT, MAX_YD3_PER_LOAD };

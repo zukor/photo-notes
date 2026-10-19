@@ -6,7 +6,7 @@ for(const edition of editions)test(`${edition}: context allowlist excludes evide
  const d=context(source,edition);
  assert.equal(d.note,'');assert.equal(d.jobId,'4');assert.equal(d.sourceId,12);
  assert.deepEqual(Object.keys(d).sort(),['sourceId','topics','jobId','note',...(edition==='concrete'?['concrete']:[]),...(['hoa','property'].includes(edition)?['property']:[])].sort());
- if(edition==='concrete')assert.deepEqual(d.concrete,{phase:'work',purpose:'work_progress',element:'patio',jobId:'4',detailsOpen:true});
+ if(edition==='concrete')assert.deepEqual(d.concrete,{phase:'work',purpose:'work_progress',element:'patio',location:'',mix:'old',jobId:'4',detailsOpen:true});
  if(d.property)assert.deepEqual(d.property,{communityId:'3',areaId:edition==='property'?'8':'',category:'Lighting',recordType:'inspection'});
  d.topics.push('new');assert.deepEqual(source.area_tags,['Pavement','West']);
 });

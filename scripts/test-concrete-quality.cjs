@@ -20,6 +20,8 @@ const express = require('express'), { chromium } = require('playwright');
       if (p === '/api/jobs') return route.fulfill({ json: [{ id: 5, name: 'Patio Pour' }] });
       if (p === '/api/concrete/tickets/scan') return route.fulfill({ json: { ok: true, ai_read: true, ticket: { id: 11, confidence: 'low', ticket_number: 'R-102', load_yd3: 9, batch_time: '7:30 AM', discharge_end: '9:15 AM', water_allowed_gal: 8, water_added_gal: 12 } } });
       if (p === '/api/concrete/tickets' && m === 'GET') return route.fulfill({ json: { tickets: [{ id: 11, ticket_number: 'R-102', load_yd3: 9, checks: { flags: [], minutes: 60, measured_to: 'arrival' } }], total_yd3: 9, ticket_count: 1, flagged: 0 } });
+      if (p === '/api/concrete/placement-photos') return route.fulfill({ json: { photos: [{ id: 40, photo_title: 'Pour photo', created_at: new Date().toISOString() }] } });
+      if (p === '/api/concrete/tickets/12' && m === 'GET') return route.fulfill({ json: { ticket: { id: 12, status: 'draft', confidence: 'high', ticket_number: 'R-201', load_yd3: 8, job_id: 5, placement_capture_id: 40, photo_path: '/icon-192.png' }, checks: { flags: [] } } });
       if (p.startsWith('/api/concrete/tickets/')) return route.fulfill({ json: { ok: true, checks: { flags: [{ key: 'time' }] } } });
       if (p === '/api/concrete/temperatures' && m === 'GET') return route.fulfill({ json: { readings: [], summary: { total: 0, out_of_range: 0 } } });
       if (p === '/api/concrete/temperatures') return route.fulfill({ json: { ok: true, reading: { id: 1 }, check: { status: 'low' } } });
@@ -61,12 +63,30 @@ const express = require('express'), { chromium } = require('playwright');
     let checks = await page.locator('#ctkChecks').innerText();
     assert.match(checks, /105 minutes from batching to end of discharge, over the 90-minute limit/); assert.match(checks, /12 gal of water added, more than the 8 gal allowed/);
     await page.locator('#ctkJob').selectOption('5');
+    await page.waitForSelector('#ctkPlacement option[value="40"]', { state: 'attached' }); await page.locator('#ctkPlacement').selectOption('40');
     await page.locator('#ctkSave').click();
     assert.equal(posts.filter(x => x.p === '/api/concrete/tickets/11').length, 0, 'a hard-to-read ticket needs the confirmation tick');
     await page.locator('#ctkConfirm').check(); await page.locator('#ctkSave').click();
     await page.waitForFunction(() => !document.getElementById('ctkSave'));
     const savedTicket = posts.find(x => x.p === '/api/concrete/tickets/11').body;
     assert.equal(savedTicket.confirmed, true); assert.equal(savedTicket.job_id, '5'); assert.equal(savedTicket.load_yd3, '9');
+    assert.equal(savedTicket.placement_capture_id, '40', 'the ticket is linked to the placement photo');
+
+    // Concrete details stay editable after saving; only changed fields are sent.
+    await page.evaluate(() => openConcreteDetailsEditor({ id: 40, concrete_phase: 'work', concrete_purpose: 'placement', concrete_stage: 'placement', concrete_element: 'slab', concrete_location: 'Back patio' }));
+    assert.equal(await page.locator('#cdePurpose').inputValue(), 'placement');
+    await page.locator('#cdeElement').selectOption('driveway'); await page.locator('#cdeLocation').fill('Front drive');
+    await page.locator('#cdeSave').click(); await page.waitForFunction(() => !document.getElementById('concreteDetailsEditor'));
+    assert.deepEqual(posts.find(x => x.p === '/api/captures/40').body, { concrete_element: 'driveway', concrete_location: 'Front drive' });
+    // After a batch ticket is attached to a placement photo, the user is sent to review its draft.
+    await page.evaluate(() => showConcreteTicketDraftNotice(12, { ai_read: true }));
+    assert.match(await page.locator('#concreteTicketDraftNotice').innerText(), /Review it in the Batch Ticket Scanner/);
+    await page.locator('#ctdReview').click();
+    await page.waitForSelector('#ctkSave');
+    assert.equal(await page.locator('#ctk_ticket_number').inputValue(), 'R-201');
+    await page.waitForFunction(() => document.getElementById('ctkPlacement').value === '40');
+    await page.locator('#ctkSave').click(); await page.waitForFunction(() => !document.getElementById('ctkSave'));
+    assert.equal(posts.filter(x => x.p === '/api/concrete/tickets/12').at(-1).body.placement_capture_id, '40');
 
     await page.locator('#concreteToolBack').click();
     await page.locator('#toolConcreteTemperature').click();
@@ -78,6 +98,13 @@ const express = require('express'), { chromium } = require('playwright');
     await page.locator('#ctpReading').fill('70'); await page.locator('#ctpJob').selectOption('5');
     await page.locator('#ctpSave').click(); await page.waitForFunction(() => !document.getElementById('ctpSave'));
     assert.equal(posts.find(x => x.p === '/api/concrete/temperatures').body.section, 'thin');
+    // Thickness is remembered for that job only.
+    await page.locator('#ctpManual').click();
+    await page.locator('#ctpJob').selectOption('5');
+    assert.equal(await page.locator('#ctpSection').inputValue(), 'thin');
+    await page.locator('#ctpJob').selectOption('');
+    assert.equal(await page.locator('#ctpSection').inputValue(), '', 'another job does not reuse the thickness');
+    await page.locator('#ctpCancel').click();
 
     await page.locator('#concreteToolBack').click();
     await page.locator('#toolConcreteYield').click();

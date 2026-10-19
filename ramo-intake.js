@@ -41,6 +41,28 @@ async function snapshot(capture,uploadDir) {
   const [mimeType,ext]=mime(bytes);
   return {bytes,attachment:{id:crypto.randomUUID(),filename:`photo-${capture.id}${ext}`,mimeType,sizeBytes:bytes.length,sha256}};
 }
+const ConcreteCapture=require('./public/concrete-capture');
+const CAPTION_MAX=20000;
+const words=v=>String(v).replaceAll('_',' ');
+// Concrete details added to the caption text only. The manifest keys stay the same.
+function concreteDetails(c,formatDims=()=>''){
+  const lines=[],element=c.concrete_element&&(ConcreteCapture.elements[c.concrete_element]||words(c.concrete_element)),purpose=ConcreteCapture.purpose(c.concrete_phase,c.concrete_purpose);
+  if(element)lines.push(`Concrete element: ${element}`);
+  if(purpose)lines.push(`Photo purpose: ${purpose[1]}`);else if(c.concrete_stage&&c.concrete_stage!=='batch_ticket')lines.push(`Stage: ${words(c.concrete_stage)}`);
+  if(c.concrete_condition&&c.concrete_condition!=='not_assessed')lines.push(`Condition: ${words(c.concrete_condition)}`);
+  if(c.concrete_severity&&c.concrete_severity!=='none')lines.push(`Severity: ${words(c.concrete_severity)}`);
+  if(c.concrete_mix)lines.push(`Mix or specification: ${c.concrete_mix}`);
+  if(c.concrete_location)lines.push(`Location on site: ${c.concrete_location}`);
+  let size='';try{size=formatDims(c)||'';}catch{}
+  if(size)lines.push(`Confirmed size: ${size}`);
+  const lat=Number(c.latitude),lng=Number(c.longitude);
+  if(c.latitude!=null&&c.longitude!=null&&Number.isFinite(lat)&&Number.isFinite(lng))lines.push(`GPS: ${lat.toFixed(6)}, ${lng.toFixed(6)}`);
+  return lines;
+}
+function previewCaption(c,formatDims){
+  const caption=[c.photo_title,c.note,...(Array.isArray(c.overlays)?c.overlays.filter(o=>o.text).map(o=>`Annotation: ${o.text}`):[]),...concreteDetails(c,formatDims)].filter(Boolean).join('\n');
+  return caption.length>CAPTION_MAX?caption.slice(0,CAPTION_MAX):caption;
+}
 function view(row) {return {id:row.id,title:row.manifest.title,description:row.manifest.description,status:row.status,createdAt:row.created_at,receivedAt:row.receipt?.receivedAt||null,attachmentCount:row.manifest.attachments.length,error:row.last_error||null};}
 async function deliver(manifest,files,request) {
   const state=await request('/submissions','POST',manifest);
@@ -57,7 +79,7 @@ async function deliver(manifest,files,request) {
   if(receipt.status!=='received'||receipt.intakeId!==state.intakeId||receipt.submissionId!==manifest.submissionId||receipt.attachmentCount!==manifest.attachments.length||!Number.isFinite(Date.parse(receipt.receivedAt)))fail('invalid_ramo_receipt',502);
   return receipt;
 }
-function registerRamoIntake(app,{pool,requireAuth,requireConcrete,uploadDir}) {
+function registerRamoIntake(app,{pool,requireAuth,requireConcrete,uploadDir,formatDims}) {
   const access=(req,res,next)=>allowed(req.user)?next():res.status(403).json({error:'ramo_access_required'});
   const safeOrigin=(req,res,next)=>{const origin=req.get('origin');if(origin){try{if(new URL(origin).host!==req.get('host'))return res.status(403).json({error:'invalid_origin'});}catch{return res.status(403).json({error:'invalid_origin'});}}next();};
   const guards=[requireAuth,requireConcrete,access];
@@ -75,7 +97,7 @@ function registerRamoIntake(app,{pool,requireAuth,requireConcrete,uploadDir}) {
     const ids=req.body.captureIds;
     if(!Array.isArray(ids)||!ids.length||ids.length>20||ids.some(id=>!Number.isSafeInteger(id)||id<1)||new Set(ids).size!==ids.length)fail('select_1_to_20_photos');
     const rows=await captures(req.user.id,ids);
-    res.json({photos:rows.map(c=>({captureId:c.id,photoPath:c.photo_original_path||c.photo_path,caption:[c.photo_title,c.note,...(Array.isArray(c.overlays)?c.overlays.filter(o=>o.text).map(o=>`Annotation: ${o.text}`):[])].filter(Boolean).join('\n'),capturedAt:c.captured_at||c.created_at,location:c.address||''}))});
+    res.json({photos:rows.map(c=>({captureId:c.id,photoPath:c.photo_original_path||c.photo_path,caption:previewCaption(c,formatDims),capturedAt:c.captured_at||c.created_at,location:c.address||''}))});
   });
   route('post','/api/ramo-intake/submissions',async(req,res)=>{
     if(!process.env.RAMO_INTAKE_TOKEN)fail('ramo_not_configured',503);
@@ -127,4 +149,4 @@ function registerRamoIntake(app,{pool,requireAuth,requireConcrete,uploadDir}) {
   }
   return {start(){void tick();const timer=setInterval(()=>void tick(),10000);timer.unref();return timer;},tick};
 }
-module.exports={registerRamoIntake,normalize,mime,snapshot,deliver,allowed};
+module.exports={registerRamoIntake,normalize,mime,snapshot,deliver,allowed,concreteDetails,previewCaption};

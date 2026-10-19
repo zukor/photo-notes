@@ -860,6 +860,8 @@ async function init() {
   await pool.query(`ALTER TABLE camera_readings ADD COLUMN IF NOT EXISTS job_assignment_set BOOLEAN NOT NULL DEFAULT false`);
   await pool.query(`CREATE TABLE IF NOT EXISTS concrete_ticket_links (id SERIAL PRIMARY KEY,user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,placement_capture_id INTEGER NOT NULL REFERENCES captures(id) ON DELETE CASCADE,ticket_capture_id INTEGER NOT NULL REFERENCES captures(id) ON DELETE CASCADE,reference_type TEXT NOT NULL DEFAULT 'batch_ticket',created_at TIMESTAMPTZ NOT NULL DEFAULT now(),UNIQUE(placement_capture_id,ticket_capture_id))`);
   await pool.query(`CREATE INDEX IF NOT EXISTS concrete_ticket_links_user_idx ON concrete_ticket_links (user_id,placement_capture_id)`);
+  // A scanned batch ticket can point at the placement photo it belongs to.
+  await pool.query(`ALTER TABLE concrete_tickets ADD COLUMN IF NOT EXISTS placement_capture_id INTEGER REFERENCES captures(id) ON DELETE SET NULL`);
   await pool.query(`ALTER TABLE groups ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id)`);
   await pool.query(`ALTER TABLE groups ADD COLUMN IF NOT EXISTS word_template_path TEXT`);
   await pool.query(`ALTER TABLE groups ADD COLUMN IF NOT EXISTS word_template_name TEXT`);
