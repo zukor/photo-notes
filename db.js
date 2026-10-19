@@ -794,6 +794,10 @@ CREATE TABLE IF NOT EXISTS hoa_completion_photo_requests (
   created_by INTEGER NOT NULL REFERENCES users(id),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- Phone GPS accuracy (meters) when the photo was taken, and work links that guide a worker back to the photo spot.
+ALTER TABLE captures ADD COLUMN IF NOT EXISTS location_accuracy_m NUMERIC(8,1);
+ALTER TABLE hoa_completion_photo_requests ADD COLUMN IF NOT EXISTS opened_at TIMESTAMPTZ;
+ALTER TABLE hoa_completion_photo_requests ADD COLUMN IF NOT EXISTS instructions TEXT;
 `;
 
 async function init() {
