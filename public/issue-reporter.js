@@ -7,7 +7,7 @@ let issueScreenshotURL = null, issueMarkupEditor=null;
 let issueResultFile=null,issueResultURL=null,issueResultPending=false,issueResultSelection=0;
 let issueGeneration = 0, issueMicPending = false;
 let issueDictationActive = false, issueDictationBase = '', issueDictationRestartTimer = null, issueDictationWatchdog = null;
-const issuePageLabels = { capture:'Capture', organize:'Organize', edit:'Edit', create:'Create', send:'Send', map:'Job Site Map' };
+const issuePageLabels = { capture:'Capture', organize:'Organize', edit:'Library Photo', create:'Create', send:'Send', map:'Job Site Map' };
 // Hidden panels and closed details contribute no visible pixels, but cloning them
 // can load hundreds of images and block Safari while it waits for those images.
 function ignoreIssueCaptureElement(element){

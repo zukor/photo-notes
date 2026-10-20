@@ -22,7 +22,7 @@ window.PhotoNotesQR={
   resolving=true;
   try{const r=await api('/api/qr/resolve/'+encodeURIComponent(t));if(!r.ok)throw new Error('Photo Notes context unavailable. Sign in with an authorized account, or ask the label owner for a current QR code.');const d=await r.json();
    const url=new URL(location.href);url.searchParams.delete('qr');history.replaceState(null,'',url);
-   if(d.type==='asset'){state.hoaAssetId=d.id;state.view='hoa-asset';}else{state.view='edit';state.editTopic='';state._focusCapture=d.id;state.selectedIds=new Set([String(d.id)]);}
+   if(d.type==='asset'){state.hoaAssetId=d.id;state.view='hoa-asset';}else{state.view='edit';state._libraryOpenId=Number(d.id);state._focusCapture=null;state.selectedIds=new Set([String(d.id)]);}
    renderApp();
   }catch(e){toast(e.message);}finally{resolving=false;}
  },
