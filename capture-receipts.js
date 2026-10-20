@@ -3,13 +3,14 @@ const fs = require('node:fs/promises');
 const {currentEdition,editionAccess}=require('./editions');
 const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
 class CaptureReceiptError extends Error {constructor(status,message){super(message);this.status=status;}}
-async function beginCaptureReceipt(req,pool){
+async function beginCaptureReceipt(req,pool,options={}){
  const key=req.get('X-Photo-Notes-Capture-Id');
  if(!key)return {db:pool,commit:async()=>{},rollback:async()=>{},release:()=>{}};
  const edition=req.get('X-Photo-Notes-Edition');
  if(!UUID.test(key)||typeof edition!=='string')throw new CaptureReceiptError(400,'Invalid capture identity');
  const fields=Object.fromEntries(Object.entries(req.body||{}).sort(([a],[b])=>a.localeCompare(b)));
- const photo=req.file?crypto.createHash('sha256').update(await fs.readFile(req.file.path)).digest('hex'):null;
+ // The caller may pass the photo fingerprint it already computed, so the file is read only once.
+ const photo=req.file?options.photoSha256||crypto.createHash('sha256').update(await fs.readFile(req.file.path)).digest('hex'):null;
  const fingerprint=crypto.createHash('sha256').update(JSON.stringify({edition,fields,photo})).digest('hex');
  const client=await pool.connect();let open=false;
  try{
@@ -24,7 +25,7 @@ async function beginCaptureReceipt(req,pool){
    return {db:pool,replay:receipt.response,commit:async()=>{},rollback:async()=>{},release:()=>{}};
   }
   if(currentEdition(user)!==edition)throw new CaptureReceiptError(409,'Select the original Photo Notes version before retrying this photo');
-  return {db:client,async commit(response){await client.query('INSERT INTO capture_upload_receipts(user_id,request_id,request_hash,response) VALUES($1,$2,$3,$4)',[req.user.id,key,fingerprint,JSON.stringify(response)]);await client.query('COMMIT');open=false;},async rollback(){if(open){await client.query('ROLLBACK').catch(()=>{});open=false;}},release(){client.release();}};
+  return {db:client,user,async commit(response){await client.query('INSERT INTO capture_upload_receipts(user_id,request_id,request_hash,response) VALUES($1,$2,$3,$4)',[req.user.id,key,fingerprint,JSON.stringify(response)]);await client.query('COMMIT');open=false;},async rollback(){if(open){await client.query('ROLLBACK').catch(()=>{});open=false;}},release(){client.release();}};
  }catch(error){
   // A failed rollback means the connection is unusable: destroy it instead of returning it to the pool.
   let broken=false;if(open)await client.query('ROLLBACK').catch(()=>{broken=true;});client.release(broken);throw error;
@@ -36,4 +37,7 @@ function validateCaptureAccount(req,res,next){
  if(req.get('X-Photo-Notes-Account')!==expected)return res.status(403).json({error:'Account changed. Sign in to the original account before uploading this photo'});
  next();
 }
-module.exports={beginCaptureReceipt,CaptureReceiptError,validateCaptureAccount};
+// Receipts only need to outlive a phone's offline retry window. Older ones are removed so the table stays small.
+const RECEIPT_RETENTION_DAYS=90;
+async function pruneCaptureReceipts(pool,days=RECEIPT_RETENTION_DAYS){return (await pool.query(`DELETE FROM capture_upload_receipts WHERE created_at < now() - make_interval(days => $1)`,[days])).rowCount;}
+module.exports={beginCaptureReceipt,CaptureReceiptError,validateCaptureAccount,pruneCaptureReceipts,RECEIPT_RETENTION_DAYS};

@@ -38,7 +38,7 @@ async function run(feature, args, overrides = {}, timeout = 180000) {
 }
 const browserSuites = [
  'send-document-layout',
- 'automation-edition-browser','capture-recovery','capture-result','capture-share-metadata','pending-retry','proposal-exhibit','capture-draft-recovery','issue-report-display',
+ 'automation-edition-browser','capture-recovery','capture-result','capture-share-metadata','pending-retry','offline-boot','proposal-exhibit','capture-draft-recovery','issue-report-display',
  'complete-help','admin-help','all-edition-help','shared-workflow-parity','location-intelligence',
  'investigation-repairs','linked-photo-records','shared-camera-readers','specialist-scanner-reports','capture-voice','capture-speech-continuation','live-record-notes','precision-measure','paving-quality','concrete-quality','first-use','customer-feedback','issue-completion-browser','issue-result-screenshot','sticky-workflow-menu','batch-annotations-browser','custom-annotation-templates','document-title','create-photo-filters','create-send-dark','document-photo-source','crop-context-browser','testing-dashboard','record-notes-check','speech-session-check','capture-templates','property-incidents',
  'property-incident-report','property-terminology','photo-markers','send-shortcuts','send-photo-selection','send-photo-filters','review-share-organize','capture-job-library','core-workflow-fixes',

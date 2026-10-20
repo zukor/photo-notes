@@ -20,7 +20,7 @@ test('pending photos survive reopening and keep account, version, bytes, and ret
 });
 test('legacy captures without owner metadata are retained but never eligible to upload',async()=>{
  global.indexedDB=new IDBFactory();await queue.all();
- await new Promise((resolve,reject)=>{const r=global.indexedDB.open('photo-notes-offline',2);r.onsuccess=()=>{const db=r.result,tx=db.transaction('captures','readwrite');tx.objectStore('captures').add({payload:{note:'legacy'}});tx.oncomplete=()=>{db.close();resolve();};tx.onerror=()=>reject(tx.error);};});
+ await new Promise((resolve,reject)=>{const r=global.indexedDB.open('photo-notes-offline');r.onsuccess=()=>{const db=r.result,tx=db.transaction('captures','readwrite');tx.objectStore('captures').add({payload:{note:'legacy'}});tx.oncomplete=()=>{db.close();resolve();};tx.onerror=()=>reject(tx.error);};});
  const rows=await queue.all();assert.equal(rows.length,1);assert(!queue.eligible(rows[0],await queue.accountKey('one@example.invalid'),'basic'));
 });
 test('storage unavailable cannot report a local save',async()=>{global.indexedDB=undefined;await assert.rejects(queue.create({note:'retain'},false,'a'.repeat(64),'basic'),/storage unavailable/);});

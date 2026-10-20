@@ -26,6 +26,7 @@
   "dependencies": {
     "archiver": "^7.0.1",
     "bcryptjs": "^2.4.3",
+    "compression": "^1.8.2",
     "cookie-parser": "^1.4.6",
     "docx": "^8.5.0",
     "docx-preview": "0.4.1",

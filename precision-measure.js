@@ -40,7 +40,7 @@ function summarize(rows) {
 
 function register(app, { pool, requireAuth }) {
   // The marker library, served from the installed package so the phone never loads code from elsewhere.
-  for (const file of ['cv.js', 'aruco.js']) app.get('/vendor/aruco/' + file, (req, res) => { res.set('Cache-Control', 'public, max-age=86400'); res.sendFile(path.join(path.dirname(require.resolve('js-aruco2/src/aruco.js')), file)); });
+  for (const file of ['cv.js', 'aruco.js']) app.get('/vendor/aruco/' + file, (req, res) => { res.set('Cache-Control', req.query.v !== undefined ? 'public, max-age=31536000, immutable' : 'public, max-age=86400'); res.sendFile(path.join(path.dirname(require.resolve('js-aruco2/src/aruco.js')), file)); });
   const canReview = u => u && (u.role === 'admin' || u.is_testing_manager === true);
   app.post('/api/precision-measure/validation', requireAuth, async (req, res) => {
     try {

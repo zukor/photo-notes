@@ -48,7 +48,7 @@ function register(app, { uploadDir, sharp, maxConcurrent = 3, logger = console }
     if (!stat || !stat.isFile()) return res.status(404).end();
     try {
       const file = await ensure(name, source, stat);
-      res.set({ 'Cache-Control': 'no-cache', 'X-Content-Type-Options': 'nosniff' });
+      res.set({ 'Cache-Control': req.query && req.query.v !== undefined ? 'private, max-age=86400' : 'private, no-cache', 'X-Content-Type-Options': 'nosniff' });
       res.type('image/jpeg').sendFile(file, { dotfiles: 'allow' });
     } catch (error) {
       logger.warn('[thumbs]', name, error && error.message);

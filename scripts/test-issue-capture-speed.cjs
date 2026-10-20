@@ -17,6 +17,7 @@ const express=require('express');
  if(role==='super'){await page.locator('[data-admin-tool="issues"] > summary').click();await page.locator('.issue-admin-card').first().waitFor();}
  // Hidden content must not delay the visible page screenshot, even if its image never loads.
  await page.route('**/slow-shot.png',()=>{});
+ await page.evaluate(()=>loadIssueScreenshotLibrary());
  await page.evaluate(()=>{
    const panel=document.createElement('div');panel.hidden=true;
    panel.innerHTML='<img src="/slow-shot.png">'+('<div>Hidden content</div>'.repeat(2000));document.body.append(panel);

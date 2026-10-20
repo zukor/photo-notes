@@ -10,6 +10,8 @@ const pool = new Pool({
   // stop a forgotten transaction from holding locks indefinitely.
   connectionTimeoutMillis: Number(process.env.PG_CONNECT_TIMEOUT_MS) || 15000,
   idle_in_transaction_session_timeout: 60000,
+  // An explicit ceiling, so a burst of uploads and Library loads cannot open more connections than the database allows.
+  max: Number(process.env.PG_POOL_MAX) || 20,
 });
 // An idle connection dropped by a database restart or failover emits 'error'
 // on the pool. Without this listener Node exits the whole server.
@@ -800,6 +802,9 @@ ALTER TABLE hoa_completion_photo_requests ADD COLUMN IF NOT EXISTS opened_at TIM
 ALTER TABLE hoa_completion_photo_requests ADD COLUMN IF NOT EXISTS instructions TEXT;
 `;
 
+// Columns that store uploaded file paths in tables created here. Clean-up after a failed
+// upload or a delete checks each of them, so each one is indexed.
+const UPLOAD_PATH_INDEXES = [['captures','photo_path'],['captures','photo_original_path'],['camera_readings','photo_path'],['ewr_photos','photo_path'],['asphalt_tickets','photo_path'],['concrete_tickets','photo_path'],['concrete_temperatures','photo_path'],['paving_temperatures','photo_path'],['road_issue_reports','photo_path'],['issue_reports','screenshot_path'],['issue_reports','result_screenshot_path'],['issue_reports','voice_path'],['groups','word_template_path'],['users','document_logo_path'],['users','word_template_path']];
 async function init() {
   await pool.query(SCHEMA);
   await pool.query(require('fs').readFileSync(require('path').join(__dirname,'photo-requests-schema.sql'),'utf8'));
@@ -1084,6 +1089,10 @@ async function init() {
   // Library lookups by photo. These columns exist only after the migrations above.
   await pool.query(`CREATE INDEX IF NOT EXISTS hoa_items_capture_idx ON hoa_maintenance_items (capture_id)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS camera_readings_capture_idx ON camera_readings (user_id, capture_id)`);
+  // Document photo counts and file clean-up look rows up by photo and by stored file path.
+  await pool.query(`CREATE INDEX IF NOT EXISTS group_items_capture_idx ON group_items (capture_id)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS groups_user_idx ON groups (user_id)`);
+  for (const [table, column] of UPLOAD_PATH_INDEXES) await pool.query(`CREATE INDEX IF NOT EXISTS ${table}_${column}_idx ON ${table} (${column})`);
   console.log('[db] schema ready');
 }
 
