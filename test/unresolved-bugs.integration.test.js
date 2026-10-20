@@ -38,7 +38,8 @@ test('unresolved reports: ordered documents, ticket evidence, duplicate preventi
 
  await page.evaluate(()=>{state.plan='pro';state.proType='paving';});
  await page.evaluate(()=>{state.view='organize';renderList();});const addResponse=await req('/api/groups/'+group.id+'/add',{ids:[added.capture_id]});assert.equal(addResponse.status,200);assert.ok((await(await req('/api/groups/'+group.id)).json()).items.some(c=>c.id===added.capture_id));
- await page.evaluate(()=>{state.areas=['Retest'];state.editTopic='Retest';state.view='edit';renderEdit();});assert.equal(await page.inputValue('#filter'),'Retest');
+ // The old Edit page is retired; the Library topic filter offers saved topics.
+ await page.evaluate(()=>{state.areas=['Retest'];state._libraryOpenId=null;state.view='organize';renderList();});await page.locator('#filter option[value="Retest"]').waitFor({state:'attached'});assert.equal(await page.locator('#filter option[value="Retest"]').count(),1);
  await page.evaluate(()=>{state.view='map';renderMap();});await page.locator('#drawArea').waitFor();await page.click('#drawArea');await page.locator('#mapdiv').click({position:{x:160,y:150}});assert.equal(await page.evaluate(()=>window._draw.points.length),1);
  const {Document,Paragraph,Packer}=require('docx'),template=await Packer.toBuffer(new Document({sections:[{children:[new Paragraph('UNIQUE TEMPLATE HEADING'),new Paragraph('{{TITLE}}'),new Paragraph('{{PHOTO_NOTES_CONTENT}}')]}]}));const form=new FormData();form.append('group',String(group.id));form.append('template',new Blob([template]),'test.docx');assert.equal((await fetch(base+'/api/document-settings/template',{method:'POST',headers:{Cookie:cookie},body:form})).status,200);
  await page.evaluate(id=>{document.getElementById('body').innerHTML='<div id="previewTest"></div>';PhotoNotesWordPreview.render(document.getElementById('previewTest'),id);},group.id);

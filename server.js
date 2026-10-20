@@ -1226,7 +1226,7 @@ function photoGps(b={}){const lat=Number(b.latitude),lng=Number(b.longitude),acc
 // Work link: a private page for the person doing the work. Shows the issue, the photo, a map pin and directions
 // back to the spot the photo was taken, live distance and direction on site, and accepts completion photos.
 async function workLinkRow(token){return (await pool.query(`SELECT q.*,i.title,i.description,i.priority,i.target_date,i.area,i.capture_id,i.company_id,i.community_id,i.property_area_id,(SELECT name FROM property_areas WHERE id=i.property_area_id) property_area_name,c.name community_name,c.address community_address FROM hoa_completion_photo_requests q JOIN hoa_maintenance_items i ON i.id=q.item_id JOIN hoa_communities c ON c.id=i.community_id JOIN users u ON u.id=q.created_by AND u.active=true WHERE q.token=$1`,[String(token||'').slice(0,100)])).rows[0];}
-function workLinkMessage(res,status,title,text){res.status(status).send(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>${escXml(title)}</title><link rel="stylesheet" href="/help.css?v=376"><script src="/help-catalog.js?v=496" defer></script><script src="/help.js?v=470" defer></script><style>body{font:17px Arial,Helvetica,sans-serif;color:#000;text-align:left;padding:30px 20px;max-width:640px;margin:auto}</style></head><body><h1>${escXml(title)}</h1><p>${escXml(text)}</p></body></html>`);}
+function workLinkMessage(res,status,title,text){res.status(status).send(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>${escXml(title)}</title><link rel="stylesheet" href="/help.css?v=376"><script src="/help-catalog.js?v=497" defer></script><script src="/help.js?v=470" defer></script><style>body{font:17px Arial,Helvetica,sans-serif;color:#000;text-align:left;padding:30px 20px;max-width:640px;margin:auto}</style></head><body><h1>${escXml(title)}</h1><p>${escXml(text)}</p></body></html>`);}
 app.get('/completion-photos/:token',async(req,res)=>{try{const row=await workLinkRow(req.params.token);if(!row)return workLinkMessage(res,404,'Work Link Not Found','Check that the whole link was copied, or ask the property manager to send it again.');if(row.status!=='open'||new Date(row.expires_at)<new Date())return workLinkMessage(res,410,'Work Link Closed',row.status==='submitted'?'Completion photos were already sent with this link. Thank you.':'This work link is no longer open. Ask the property manager for a new link.');res.set('Cache-Control','no-store');res.sendFile(path.join(__dirname,'public','work-spot.html'));}catch(e){res.status(500).send('The work link could not load.');}});
 app.get('/api/public/work-spot/:token',async(req,res)=>{try{const row=await workLinkRow(req.params.token);if(!row)return res.status(404).json({error:'Work link not found.'});if(row.status!=='open'||new Date(row.expires_at)<new Date())return res.status(410).json({error:'This work link is no longer open. Ask the property manager for a new link.'});
  const photos=(await pool.query(`SELECT c.id,c.photo_path,c.note,c.photo_title,c.created_at,c.latitude,c.longitude,c.location_accuracy_m,c.indoor_building,c.indoor_floor,c.indoor_suite,c.indoor_room,c.floor_plan_id,c.floor_plan_x,c.floor_plan_y,c.subject_latitude,c.subject_longitude,c.location_description,c.camera_direction,c.address,COALESCE(p.photo_stage,'initial') photo_stage FROM captures c LEFT JOIN hoa_item_photos p ON p.capture_id=c.id AND p.item_id=$1 WHERE c.photo_path IS NOT NULL AND (c.id=$2 OR (p.item_id=$1 AND p.photo_stage IN ('initial','inspection','follow_up'))) ORDER BY (c.id=$2) DESC,c.created_at LIMIT 6`,[row.item_id,row.capture_id||0])).rows;
@@ -1256,7 +1256,7 @@ app.post('/completion-photos/:token',(req,res,next)=>require('./external-photo-s
   await hoaNotifyCompany(q.company_id,q.item_id,'Completion photos submitted',0,db);
   await db.query('COMMIT');committed=true;
   if(/json/.test(req.get('accept')||''))return res.json({ok:true,photo_count:req.files.length});
-  res.send('<!doctype html><meta name="viewport" content="width=device-width"><link rel="stylesheet" href="/help.css?v=376"><script src="/help-catalog.js?v=496" defer></script><script src="/help.js?v=470" defer></script><style>body{font-family:Arial;color:#000;text-align:left;padding:30px 20px}</style><h1>Photos received</h1><p>Thank you. The completion photos were added to the maintenance record.</p>');
+  res.send('<!doctype html><meta name="viewport" content="width=device-width"><link rel="stylesheet" href="/help.css?v=376"><script src="/help-catalog.js?v=497" defer></script><script src="/help.js?v=470" defer></script><style>body{font-family:Arial;color:#000;text-align:left;padding:30px 20px}</style><h1>Photos received</h1><p>Thank you. The completion photos were added to the maintenance record.</p>');
  }catch(e){if(db&&!committed)await db.query('ROLLBACK').catch(()=>{});await removeUploads(req.files);res.status(400).send('Photos could not be submitted. Use supported photographs and try again.');}
  finally{if(db)db.release();}
 });
@@ -1286,7 +1286,7 @@ app.get('/review/:token/photos/:id',async(req,res)=>{
     res.setHeader('Cache-Control','private, no-store');res.type('jpeg').send(rendered.buffer);
   }catch(e){res.sendStatus(500);}
 });
-app.get('/review/:token',async(req,res)=>{try{const p=(await pool.query(`SELECT p.* FROM approval_packages p JOIN users u ON u.id=p.user_id AND u.active=true WHERE p.token=$1`,[req.params.token])).rows[0];if(!p)return res.status(404).send('Review link not found.');if(new Date(p.expires_at)<new Date())return res.status(410).send('This review link has expired.');const photos=(await pool.query(`SELECT id,photo_path,note,address,created_at FROM captures WHERE user_id=$1 AND id=ANY($2) ORDER BY created_at`,[p.user_id,p.capture_ids])).rows;const cards=photos.map(c=>`<article><img src="/review/${encodeURIComponent(p.token)}/photos/${c.id}" alt="Project photo"><p><b>${escXml(c.address||'')}</b></p><p>${escXml(c.note||'')}</p><small>${new Date(c.created_at).toLocaleString()}</small></article>`).join('');res.send(`<!doctype html><html><head><meta name="viewport" content="width=device-width"><link rel="stylesheet" href="/help.css?v=376"><script src="/help-catalog.js?v=496" defer></script><script src="/help.js?v=470" defer></script><title>${escXml(p.title)}</title><style>body{font-family:Arial;margin:auto;max-width:850px;padding:20px;color:#111}article{border:1px solid #ccc;border-radius:10px;padding:12px;margin:18px 0}img{width:100%;max-height:650px;object-fit:contain}textarea,input,button{box-sizing:border-box;width:100%;padding:12px;margin:6px 0;font-size:16px}button{background:#2455d9;color:white;border:0;border-radius:8px;font-weight:bold}.changes{background:#555}.status{padding:12px;background:#eef3ff}</style></head><body><h1>${escXml(p.title)}</h1>${p.message?`<p>${escXml(p.message)}</p>`:''}<div class="status">Status: ${escXml(p.status)}</div>${cards}${p.status==='pending'?`<form method="post" action="/review/${p.token}"><input name="customer_name" placeholder="Your name" required><textarea name="comment" placeholder="Comment (optional)"></textarea><button name="decision" value="approved">Approve Photos</button><button class="changes" name="decision" value="changes_requested">Request Changes</button></form>`:`<p><b>Response received. Thank you.</b></p>`}</body></html>`);}catch(e){res.status(500).send('Review unavailable.');}});
+app.get('/review/:token',async(req,res)=>{try{const p=(await pool.query(`SELECT p.* FROM approval_packages p JOIN users u ON u.id=p.user_id AND u.active=true WHERE p.token=$1`,[req.params.token])).rows[0];if(!p)return res.status(404).send('Review link not found.');if(new Date(p.expires_at)<new Date())return res.status(410).send('This review link has expired.');const photos=(await pool.query(`SELECT id,photo_path,note,address,created_at FROM captures WHERE user_id=$1 AND id=ANY($2) ORDER BY created_at`,[p.user_id,p.capture_ids])).rows;const cards=photos.map(c=>`<article><img src="/review/${encodeURIComponent(p.token)}/photos/${c.id}" alt="Project photo"><p><b>${escXml(c.address||'')}</b></p><p>${escXml(c.note||'')}</p><small>${new Date(c.created_at).toLocaleString()}</small></article>`).join('');res.send(`<!doctype html><html><head><meta name="viewport" content="width=device-width"><link rel="stylesheet" href="/help.css?v=376"><script src="/help-catalog.js?v=497" defer></script><script src="/help.js?v=470" defer></script><title>${escXml(p.title)}</title><style>body{font-family:Arial;margin:auto;max-width:850px;padding:20px;color:#111}article{border:1px solid #ccc;border-radius:10px;padding:12px;margin:18px 0}img{width:100%;max-height:650px;object-fit:contain}textarea,input,button{box-sizing:border-box;width:100%;padding:12px;margin:6px 0;font-size:16px}button{background:#2455d9;color:white;border:0;border-radius:8px;font-weight:bold}.changes{background:#555}.status{padding:12px;background:#eef3ff}</style></head><body><h1>${escXml(p.title)}</h1>${p.message?`<p>${escXml(p.message)}</p>`:''}<div class="status">Status: ${escXml(p.status)}</div>${cards}${p.status==='pending'?`<form method="post" action="/review/${p.token}"><input name="customer_name" placeholder="Your name" required><textarea name="comment" placeholder="Comment (optional)"></textarea><button name="decision" value="approved">Approve Photos</button><button class="changes" name="decision" value="changes_requested">Request Changes</button></form>`:`<p><b>Response received. Thank you.</b></p>`}</body></html>`);}catch(e){res.status(500).send('Review unavailable.');}});
 app.post('/review/:token',express.urlencoded({extended:false}),async(req,res)=>{try{const decision=req.body.decision==='approved'?'approved':'changes_requested';const row=(await pool.query(`UPDATE approval_packages SET status=$1,customer_name=$2,customer_comment=$3,responded_at=now() WHERE token=$4 AND status='pending' AND expires_at>now() AND EXISTS(SELECT 1 FROM users u WHERE u.id=approval_packages.user_id AND u.active=true) RETURNING token`,[decision,ticketText(req.body.customer_name,200),ticketText(req.body.comment,1000),req.params.token])).rows[0];if(!row)return res.status(400).send('This review can no longer be changed.');res.redirect(`/review/${row.token}`);}catch(e){res.status(500).send('Response could not be saved.');}});
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
@@ -2486,16 +2486,37 @@ function documentBranding(account,layout){
   return out;
 }
 function unlinkOwnedAsset(assetPath) { const local=localPhoto(assetPath); if(local)try{fs.unlinkSync(local);}catch(e){} }
+// Account document defaults hold layout options only. Company name, header and footer live in the account branding.
+function accountDocumentLayout(value){return {...cleanDocumentLayout(value),header_text:'',footer_text:'',company_name:''};}
+// A new document starts with its own copy of the account default Word template, so replacing or removing the
+// default later never changes documents that already exist.
+async function copyDefaultTemplate(userId,groupId){
+  const u=(await pool.query('SELECT default_template_path,default_template_name FROM users WHERE id=$1',[userId])).rows[0];
+  const source=u&&localPhoto(u.default_template_path);if(!source)return false;
+  const name=`${new Date().toISOString().replace(/[:.]/g,'-')}_${crypto.randomBytes(12).toString('hex')}.docx`;
+  fs.copyFileSync(source,path.join(UPLOAD_DIR,name));
+  const updated=await pool.query('UPDATE groups SET word_template_path=$1,word_template_name=$2 WHERE id=$3 AND user_id=$4 AND word_template_path IS NULL RETURNING id',[`/uploads/${name}`,u.default_template_name||'Word template.docx',groupId,userId]);
+  if(!updated.rowCount)unlinkOwnedAsset(`/uploads/${name}`);
+  return !!updated.rowCount;
+}
 
 app.get('/api/document-settings', requireAuth, async (req,res) => {
   try {
-    const u=(await pool.query(`SELECT document_branding,document_logo_path,document_logo_name FROM users WHERE id=$1`,[req.user.id])).rows[0]||{};
+    const u=(await pool.query(`SELECT document_branding,document_logo_path,document_logo_name,document_layout,default_template_path,default_template_name FROM users WHERE id=$1`,[req.user.id])).rows[0]||{};
     const g=(await pool.query('SELECT word_template_path,word_template_name FROM groups WHERE id=$1 AND user_id=$2',[Number(req.query.group)||0,req.user.id])).rows[0]||{};
-    res.json({ branding:cleanDocumentBranding(u.document_branding), logo_path:u.document_logo_path||null, logo_name:u.document_logo_name||null, template_name:g.word_template_name||null, template_ready:!!g.word_template_path });
+    res.json({ branding:cleanDocumentBranding(u.document_branding), logo_path:u.document_logo_path||null, logo_name:u.document_logo_name||null, template_name:g.word_template_name||null, template_ready:!!g.word_template_path, layout:accountDocumentLayout(u.document_layout), layout_saved:u.document_layout!=null, default_template_name:u.default_template_path?u.default_template_name||'Word template.docx':null, default_template_ready:!!u.default_template_path });
   } catch(e){console.error('[document.settings.get]',e);res.status(500).json({error:'settings failed'});}
 });
 app.post('/api/document-settings', requireAuth, async (req,res) => {
-  try { const branding=cleanDocumentBranding(req.body); await pool.query(`UPDATE users SET document_branding=$1 WHERE id=$2`,[JSON.stringify(branding),req.user.id]); res.json({branding}); }
+  try {
+    // Account defaults: branding text when any branding field is sent, layout options when a layout is sent.
+    const b=req.body&&typeof req.body==='object'?req.body:{},sets=[],vals=[];
+    if(['company_name','header_text','footer_text'].some(k=>Object.hasOwn(b,k))){vals.push(JSON.stringify(cleanDocumentBranding(b)));sets.push(`document_branding=$${vals.length}`);}
+    if(b.layout&&typeof b.layout==='object'&&!Array.isArray(b.layout)){const {header_text,footer_text,company_name,...layout}=accountDocumentLayout(b.layout);vals.push(JSON.stringify(layout));sets.push(`document_layout=$${vals.length}`);}
+    if(!sets.length)return res.status(400).json({error:'Nothing to save.'});
+    vals.push(req.user.id);const row=(await pool.query(`UPDATE users SET ${sets.join(',')} WHERE id=$${vals.length} RETURNING document_branding,document_layout`,vals)).rows[0]||{};
+    res.json({branding:cleanDocumentBranding(row.document_branding),layout:accountDocumentLayout(row.document_layout),layout_saved:row.document_layout!=null});
+  }
   catch(e){console.error('[document.settings.save]',e);res.status(500).json({error:'settings failed'});}
 });
 app.post('/api/document-settings/logo', requireAuth, upload.single('logo'), async (req,res) => {
@@ -2511,21 +2532,29 @@ app.post('/api/document-settings/logo', requireAuth, upload.single('logo'), asyn
 });
 app.post('/api/document-settings/template', requireAuth, upload.single('template'), async (req,res) => {
   try {
-    const groupId=Number(req.body.group);
-    if(!groupId||!await ownsGroup(groupId,req.user.id)){if(req.file)unlinkOwnedAsset(`/uploads/${req.file.filename}`);return res.status(400).json({error:'Choose a document before importing a template'});}
+    const groupId=Number(req.body.group),account=req.body.scope==='account';
+    if(!account&&(!groupId||!await ownsGroup(groupId,req.user.id))){if(req.file)unlinkOwnedAsset(`/uploads/${req.file.filename}`);return res.status(400).json({error:'Choose a document before importing a template'});}
     if(!req.file)return res.status(400).json({error:'Word template required'});
     if(path.extname(req.file.originalname).toLowerCase()!=='.docx'){try{fs.unlinkSync(req.file.path)}catch(e){};return res.status(400).json({error:'use a .docx Word file'});}
     let xml='';try{const zip=new PizZip(fs.readFileSync(req.file.path));xml=normalizePlaceholders(zip.file('word/document.xml').asText());}catch(e){try{fs.unlinkSync(req.file.path)}catch(x){};return res.status(400).json({error:'invalid Word file'});}
     if(!xml.includes('{{PHOTO_NOTES_CONTENT}}')){try{fs.unlinkSync(req.file.path)}catch(e){};return res.status(400).json({error:'template must contain {{PHOTO_NOTES_CONTENT}}'});}
-    const old=(await pool.query(`SELECT word_template_path FROM groups WHERE id=$1 AND user_id=$2`,[groupId,req.user.id])).rows[0];
-    const templatePath=`/uploads/${req.file.filename}`;await pool.query(`UPDATE groups SET word_template_path=$1,word_template_name=$2 WHERE id=$3 AND user_id=$4`,[templatePath,ticketText(req.file.originalname,255),groupId,req.user.id]);
-    if(old&&old.word_template_path&&old.word_template_path!==templatePath)unlinkOwnedAsset(old.word_template_path);
+    const templatePath=`/uploads/${req.file.filename}`;
+    if(account){
+      // The account default template is copied into each new document when it is created.
+      const old=(await pool.query(`SELECT default_template_path FROM users WHERE id=$1`,[req.user.id])).rows[0];
+      await pool.query(`UPDATE users SET default_template_path=$1,default_template_name=$2 WHERE id=$3`,[templatePath,ticketText(req.file.originalname,255),req.user.id]);
+      if(old&&old.default_template_path&&old.default_template_path!==templatePath)unlinkOwnedAsset(old.default_template_path);
+    }else{
+      const old=(await pool.query(`SELECT word_template_path FROM groups WHERE id=$1 AND user_id=$2`,[groupId,req.user.id])).rows[0];
+      await pool.query(`UPDATE groups SET word_template_path=$1,word_template_name=$2 WHERE id=$3 AND user_id=$4`,[templatePath,ticketText(req.file.originalname,255),groupId,req.user.id]);
+      if(old&&old.word_template_path&&old.word_template_path!==templatePath)unlinkOwnedAsset(old.word_template_path);
+    }
     res.json({template_name:req.file.originalname,placeholders:['{{PHOTO_NOTES_CONTENT}}','{{TITLE}}','{{DESCRIPTION}}','{{COMPANY_NAME}}']});
   }catch(e){console.error('[document.template]',e);if(req.file)try{fs.unlinkSync(req.file.path)}catch(x){};res.status(500).json({error:'template upload failed'});}
 });
 app.get('/api/document-settings/template-starter',requireAuth,async(req,res)=>{try{const doc=new Document({sections:[{children:[new Paragraph({alignment:AlignmentType.CENTER,children:[new TextRun({text:'{{COMPANY_NAME}}',bold:true,font:'Arial'})]}),new Paragraph({heading:HeadingLevel.HEADING_1,alignment:AlignmentType.CENTER,children:[new TextRun({text:'{{TITLE}}',font:'Arial'})]}),new Paragraph({alignment:AlignmentType.CENTER,children:[new TextRun({text:'{{DESCRIPTION}}',font:'Arial'})]}),new Paragraph({children:[new PageBreak()]}),new Paragraph({children:[new TextRun({text:'{{PHOTO_NOTES_CONTENT}}',font:'Arial'})]})]}]});const buffer=await Packer.toBuffer(doc);res.setHeader('Content-Type','application/vnd.openxmlformats-officedocument.wordprocessingml.document');res.setHeader('Content-Disposition','attachment; filename="photo-notes-word-template.docx"');res.send(buffer);}catch(e){res.status(500).json({error:'starter template failed'});}});
 app.post('/api/document-settings/remove-asset', requireAuth, async(req,res)=>{
-  try{const kind=req.body&&req.body.kind;if(!['logo','template'].includes(kind))return res.status(400).json({error:'invalid asset'});if(kind==='template'){const row=(await pool.query('UPDATE groups SET word_template_path=NULL,word_template_name=NULL WHERE id=$1 AND user_id=$2 RETURNING id',[Number(req.body.group)||0,req.user.id])).rows[0];return row?res.json({ok:true}):res.status(404).json({error:'Document not found'});}const cols=kind==='logo'?['document_logo_path','document_logo_name']:['word_template_path','word_template_name'];const row=(await pool.query(`SELECT ${cols[0]} asset_path FROM users WHERE id=$1`,[req.user.id])).rows[0];await pool.query(`UPDATE users SET ${cols[0]}=NULL,${cols[1]}=NULL WHERE id=$1`,[req.user.id]);if(row&&row.asset_path)unlinkOwnedAsset(row.asset_path);res.json({ok:true});}catch(e){res.status(500).json({error:'remove failed'});}
+  try{const kind=req.body&&req.body.kind;if(!['logo','template'].includes(kind))return res.status(400).json({error:'invalid asset'});if(kind==='template'&&req.body.scope==='account'){const old=(await pool.query('SELECT default_template_path FROM users WHERE id=$1',[req.user.id])).rows[0];await pool.query('UPDATE users SET default_template_path=NULL,default_template_name=NULL WHERE id=$1',[req.user.id]);if(old&&old.default_template_path)unlinkOwnedAsset(old.default_template_path);return res.json({ok:true});}if(kind==='template'){const row=(await pool.query('UPDATE groups SET word_template_path=NULL,word_template_name=NULL WHERE id=$1 AND user_id=$2 RETURNING id',[Number(req.body.group)||0,req.user.id])).rows[0];return row?res.json({ok:true}):res.status(404).json({error:'Document not found'});}const cols=kind==='logo'?['document_logo_path','document_logo_name']:['word_template_path','word_template_name'];const row=(await pool.query(`SELECT ${cols[0]} asset_path FROM users WHERE id=$1`,[req.user.id])).rows[0];await pool.query(`UPDATE users SET ${cols[0]}=NULL,${cols[1]}=NULL WHERE id=$1`,[req.user.id]);if(row&&row.asset_path)unlinkOwnedAsset(row.asset_path);res.json({ok:true});}catch(e){res.status(500).json({error:'remove failed'});}
 });
 
 async function ownsGroup(groupId, userId) {
@@ -2578,8 +2607,11 @@ app.post('/api/groups', requireAuth, async (req, res) => {
     const group = rows[0];
     let added = 0;
     if (ids.length) added = await addToGroup(group.id, req.user.id, ids);
+    // Start with the account default Word template unless the client is about to upload its own.
+    let default_template=false;
+    if(b.use_default_template!==false)try{default_template=await copyDefaultTemplate(req.user.id,group.id);}catch(e){console.error('[groups.create.template]',e);}
     logEvent(req.user.id, 'group_create', { with_photos: added });
-    res.json(group);
+    res.json({...group,default_template});
   } catch (err) { console.error('[groups.create]', err); res.status(500).json({ error: 'failed to create group' }); }
 });
 
@@ -2590,7 +2622,7 @@ app.get('/api/groups/:id', requireAuth, async (req, res) => {
     const g = (await pool.query(`SELECT * FROM groups WHERE id = $1 AND user_id = $2`, [id, req.user.id])).rows[0];
     if (!g) return res.status(404).json({ error: 'not found' });
     const items = (await pool.query(`
-      SELECT c.*, gi.position FROM group_items gi JOIN captures c ON c.id = gi.capture_id
+      SELECT c.*, gi.position, gi.caption AS document_caption FROM group_items gi JOIN captures c ON c.id = gi.capture_id
       WHERE gi.group_id = $1 AND c.user_id = $2 ORDER BY gi.position ASC, c.created_at ASC`, [id, req.user.id])).rows;
     await LinkedPhotoEvidence.attach(pool,req.user.id,await currentProduct(req.user.id),items);
     const score = scoreCaptures(items);
@@ -2673,6 +2705,20 @@ app.post('/api/groups/:id/reorder', requireAuth, async (req, res) => {
     logEvent(req.user.id, 'group_reorder', {});
     res.json({ ok: true });
   } catch (err) { console.error('[groups.reorder]', err); res.status(500).json({ error: 'reorder failed' }); }
+});
+
+// A caption written for this document only. An empty caption returns the document to the photo's own note.
+app.post('/api/groups/:id/caption', requireAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10), captureId = parseInt(req.body && req.body.capture_id, 10);
+    if (!Number.isInteger(id) || !Number.isInteger(captureId)) return res.status(400).json({ error: 'Choose a photo in this document.' });
+    const raw = req.body.caption, caption = typeof raw === 'string' && raw.trim() ? raw.slice(0, 10000) : null;
+    if (raw != null && typeof raw !== 'string') return res.status(400).json({ error: 'Enter the caption as text.' });
+    const { rows } = await pool.query(`UPDATE group_items gi SET caption = $1 FROM groups g WHERE g.id = gi.group_id AND g.id = $2 AND g.user_id = $3 AND gi.capture_id = $4 RETURNING gi.caption`, [caption, id, req.user.id, captureId]);
+    if (!rows.length) return res.status(404).json({ error: 'This photo is not in the document.' });
+    await pool.query('UPDATE groups SET updated_at=now() WHERE id=$1 AND user_id=$2',[id,req.user.id]);
+    res.json({ ok: true, caption: rows[0].caption });
+  } catch (err) { console.error('[groups.caption]', err); res.status(500).json({ error: 'Caption could not be saved' }); }
 });
 
 // ---- before/after pairing (Pro) ----
@@ -3284,7 +3330,7 @@ app.get('/api/admin/activity', requireAdmin, async (req,res)=>{
 async function getCaptures({ userId, area, ids, group }) {
   if (group) {
     return (await pool.query(`
-      SELECT c.*,(SELECT name FROM property_areas WHERE id=c.property_area_id) property_area_name FROM group_items gi JOIN captures c ON c.id = gi.capture_id
+      SELECT c.*,(SELECT name FROM property_areas WHERE id=c.property_area_id) property_area_name,gi.caption AS document_caption FROM group_items gi JOIN captures c ON c.id = gi.capture_id
       WHERE gi.group_id = $1 AND c.user_id = $2 ORDER BY gi.position ASC, c.created_at ASC`, [group, userId])).rows;
   }
   if (ids && ids.length) {
@@ -3373,6 +3419,8 @@ async function userPairs(userId) {
   catch (e) { return []; }
 }
 
+// A document caption replaces the photo's note in that document's exports; a blank one keeps the note.
+function applyDocumentCaptions(rows){for(const row of rows){if(typeof row.document_caption==='string'&&row.document_caption.trim())row.note=row.document_caption;delete row.document_caption;}return rows;}
 async function resolveExport(req) {
   const userId = req.user.id;
   const area = req.query.area || '';
@@ -3398,6 +3446,7 @@ async function resolveExport(req) {
     }
   }
   const sourceRows = await getCaptures({ userId, area, ids, group: groupId });
+  applyDocumentCaptions(sourceRows);
   await LinkedPhotoEvidence.attach(pool,userId,await currentProduct(userId),sourceRows);
   const rows=sourceRows.map(LinkedPhotoEvidence.exportPhoto);
   if(await currentProduct(userId)!=='property')for(const capture of rows)delete capture.property_area_name;
@@ -3786,8 +3835,9 @@ app.get('/api/export/proposal', requireAuth, async (req, res) => {
     const g = (await pool.query(`SELECT * FROM groups WHERE id = $1 AND user_id = $2`, [groupId, req.user.id])).rows[0];
     if (!g) return res.status(404).json({ error: 'not found' });
     const items = (await pool.query(`
-      SELECT c.* FROM group_items gi JOIN captures c ON c.id = gi.capture_id
+      SELECT c.*, gi.caption AS document_caption FROM group_items gi JOIN captures c ON c.id = gi.capture_id
       WHERE gi.group_id = $1 AND c.user_id = $2 ORDER BY gi.position ASC, c.created_at ASC`, [groupId, req.user.id])).rows;
+    applyDocumentCaptions(items);
     const score = scoreCaptures(items);
     const proposalPairs = await userPairs(req.user.id);
     const proposalUnits = buildRenderUnits(items, proposalPairs);

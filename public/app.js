@@ -442,9 +442,11 @@ function renderApp() {
   ensureEditionTools();
   window.PhotoNotesUsage?.screen(state.view,selectedEdition(),state.me);
   cropReturnContext=null;
+  // The old Edit page is retired. The 'edit' view key only shows one PhotoNote in the Library photo detail view.
+  if(state.view==='edit'&&!state._libraryOpenId)state.view=isHoaClient()?'photo-library':'organize';
   const photoToolOpen=['photo-follow-ups','photo-requests'].includes(state.view);
   const workflowView=photoToolOpen?photoToolWorkflowView():state.view;
-  const photoToolSection=['capture','camera-tools','ticket','camera-reader','alignment','concrete-ticket','concrete-temperature','concrete-yield','concrete-estimates','concrete-estimate','concrete-price-book','paving-takeoff'].includes(workflowView)?'Capture':['edit','hoa-assets','hoa-asset'].includes(workflowView)?(isHoaClient()?'Assets':'Edit'):['create','hoa-inspections'].includes(workflowView)?(isHoaClient()?'Inspections':'Create'):['send','hoa-maintenance','hoa-communities','hoa-dashboard','hoa-reports'].includes(workflowView)?(isHoaClient()?'Records':'Send'):'Organize';
+  const photoToolSection=['capture','camera-tools','ticket','camera-reader','alignment','concrete-ticket','concrete-temperature','concrete-yield','concrete-estimates','concrete-estimate','concrete-price-book','paving-takeoff'].includes(workflowView)?'Capture':['hoa-assets','hoa-asset'].includes(workflowView)?'Assets':['create','hoa-inspections'].includes(workflowView)?(isHoaClient()?'Inspections':'Create'):['send','hoa-maintenance','hoa-communities','hoa-dashboard','hoa-reports'].includes(workflowView)?(isHoaClient()?'Records':'Send'):'Organize';
   document.body.classList.toggle('admin-testing-page',isTestingManager()&&['my-assignment','my-issues','manage-testing'].includes(state.view));
   window.PhotoNotesMatchCamera?.stop();
   document.getElementById('captureShareDialog')?.remove();
@@ -468,6 +470,7 @@ function renderApp() {
               <button type="button" id="myAssignment" ${state.me?.is_tester||state.me?.is_testing_manager||state.me?.role==='admin'?'':'hidden'}>${uiT(isTestingManager()?'My Testing Dashboard':'Testing Dashboard')}</button>
               ${isHoaClient()?`<button type="button" id="menuHoaCommunities">${hoaManagementLabel('communities')}</button><button type="button" id="menuHoaDashboard">${hoaManagementLabel('dashboard')}</button><button type="button" id="menuHoaReports">${hoaManagementLabel('reports')}</button>`:''}
               <button type="button" id="installHelp">Install Photo Notes</button>
+              ${paymentsAvailable()?'<button type="button" id="menuPayments" hidden>Payments</button>':''}
               ${selectedEdition()==='basic'?'':'<button type="button" id="pendingPhotos">Pending Photos</button>'}
               <button type="button" id="setupPermissions">Set Up Permissions</button>
               <button type="button" id="recordNotesSelfTest">Record Notes Self-Test</button>
@@ -509,6 +512,7 @@ function renderApp() {
   };
   document.getElementById('signout').onclick = async () => { if(captureSavePending){toast('Please wait for this photo to finish saving locally.');return;}try{await persistCaptureDraft();const r=await api('/api/logout',{method:'POST'});if(!r.ok)throw Error();forgetSession();queueAccount=null;bgQueue=[];clearTimeout(queueRetryTimer);stopCaptureDictation();location.reload();}catch(error){toast('Could not sign out. Check your connection and try again.');} };
   document.getElementById('installHelp').onclick=showInstallHelp;
+  const menuPayments=document.getElementById('menuPayments');if(menuPayments){menuPayments.onclick=()=>{profileMenu.hidden=true;profileButton.setAttribute('aria-expanded','false');showPayments();};void revealPaymentsMenu();}
   for(const [id,view] of [['menuHoaCommunities','hoa-communities'],['menuHoaDashboard','hoa-dashboard'],['menuHoaReports','hoa-reports']]){const button=document.getElementById(id);if(button)button.onclick=()=>{profileMenu.hidden=true;profileButton.setAttribute('aria-expanded','false');openHoaManagementView(view);};}
   const pendingPhotos=document.getElementById('pendingPhotos');if(pendingPhotos)pendingPhotos.onclick=showPendingPhotos; // Basic shares without saving, so it has no pending uploads.
   const myIssues=document.getElementById('myIssues');if(myIssues)myIssues.onclick=()=>enterTesting('my-issues');
@@ -566,7 +570,7 @@ function renderApp() {
   const issueFab = document.getElementById('issueFab'); if (issueFab) issueFab.onclick = openIssueReporter;
   const tabCapture=document.getElementById('tabCapture');if(tabCapture)tabCapture.onclick = () => { state._libraryOpenId=null;state.view='capture'; renderApp(); };
   const tabOrganize=document.getElementById('tabOrganize');if(tabOrganize)tabOrganize.onclick = () => { state._libraryOpenId=null;state.view=isHoaClient()?'hoa-visits':'organize'; renderApp(); };
-  const tabEdit=document.getElementById('tabEdit');if(tabEdit)tabEdit.onclick = () => { state.view=isHoaClient()?'hoa-assets':'edit'; renderApp(); };
+  const tabEdit=document.getElementById('tabEdit');if(tabEdit)tabEdit.onclick = () => { state.view='hoa-assets'; renderApp(); };
   const tabCreate=document.getElementById('tabCreate');if(tabCreate)tabCreate.onclick = () => { state.view=isHoaClient()?'hoa-inspections':'create'; state.groupId=null; renderApp(); };
   const tabSend=document.getElementById('tabSend');if(tabSend)tabSend.onclick = () => { state.view=isHoaClient()?'hoa-maintenance':'send'; renderApp(); };
   if(photoToolOpen)window.scrollTo(0,0);
@@ -587,11 +591,11 @@ function renderApp() {
   else if (state.view === 'alignment') renderAlignmentTool();
   else if (state.view === 'photo-library') { if(isBasicClient()||isRoadIssuesClient())renderDevicePhotoNotesLibrary();else renderList(); }
   else if (state.view === 'organize') isHoaClient()?renderHoaVisits():renderList();
-  else if (state.view === 'edit') renderEdit();
+  else if (state.view === 'edit') renderLibraryPhoto();
   else if (state.view === 'create') renderGroups();
   else if (state.view === 'send') renderSend();
   else if (state.view === 'hoa-maintenance') renderHoaMaintenance();
-  else if (state.view === 'photo-requests') window.PhotoNotesRequests.render({api,esc,toast,followUp:state._photoRequestFollowUp,focusRequestId:state._photoRequestFocus,clearFollowUp:()=>{state._photoRequestFollowUp=null;state._photoRequestFocus=null;},edition:state.proType,openPhoto:id=>{state.view='edit';state.editTopic='';state._focusCapture=id;state.selectedIds=new Set([String(id)]);renderApp();}});
+  else if (state.view === 'photo-requests') window.PhotoNotesRequests.render({api,esc,toast,followUp:state._photoRequestFollowUp,focusRequestId:state._photoRequestFocus,clearFollowUp:()=>{state._photoRequestFollowUp=null;state._photoRequestFocus=null;},edition:state.proType,openPhoto:id=>openLibraryPhoto(id)});
   else if (state.view === 'hoa-visits') renderHoaVisits();
   else if (state.view === 'hoa-visit') renderHoaVisit(state.hoaVisitId);
   else if (state.view === 'hoa-assets') renderHoaAssets();
@@ -1041,7 +1045,7 @@ function renderCapture() {
       acquireLocation();
     }
   }
-  window.PhotoNotesIncidents?.mount({state,body,api,esc,toast,renderCapture,photoSrc,downloadBlob,toggleDictation,finishCaptureDictation,stopCaptureDictation,addZoom:installPhotoViewerButtons,openPhoto:id=>{state.view='edit';state.editTopic='';state._focusCapture=id;state.selectedIds=new Set([String(id)]);renderApp();}});
+  window.PhotoNotesIncidents?.mount({state,body,api,esc,toast,renderCapture,photoSrc,downloadBlob,toggleDictation,finishCaptureDictation,stopCaptureDictation,addZoom:installPhotoViewerButtons,openPhoto:id=>openLibraryPhoto(id)});
   mountDuplicateContext();
 }
 
@@ -2272,7 +2276,7 @@ function renderSavedDimsEditor(c) {
   const body = document.getElementById('body');
   body.className = 'workflow-edit';
   body.innerHTML = `
-    <button class="backlink" id="dimsBack">← Back to Edit</button>
+    <button class="backlink" id="dimsBack">‹ Back to PhotoNote</button>
     <div class="workflow-intro"><strong>Measure this photo</strong><span>Use AI with a visible reference object, or enter the dimensions yourself.</span></div>
     ${c.photo_path ? `<div class="photo-box"><img src="${capturePhotoSrc(c)}" alt="capture" style="display:block" /></div>` : ''}
     ${precisionMeasureOn()&&c.photo_path?'<button class="btn secondary" id="measureWithCard" type="button">Measure With Card</button><div class="status">Uses the PhotoNotes Measuring Card if it is lying flat beside the damage in this photo.</div>':''}
@@ -2280,7 +2284,7 @@ function renderSavedDimsEditor(c) {
     <button class="btn" id="saveDims">Save Measurements</button>`;
   wireDims();
   const withCard=document.getElementById('measureWithCard');if(withCard)withCard.onclick=()=>measureSavedWithCard(c,withCard);
-  document.getElementById('dimsBack').onclick = () => { state._editMeasureCapture = null; state._dims = null; state._measure = null; renderEdit(); };
+  document.getElementById('dimsBack').onclick = () => { state._editMeasureCapture = null; state._dims = null; state._measure = null; renderApp(); };
   document.getElementById('saveDims').onclick = saveSavedDims;
 }
 
@@ -2293,7 +2297,7 @@ async function measureSavedWithCard(c,button){
       onDone:async({dims,record})=>{
         const d=precisionDims(dims),body={dim_length:d.length,dim_length_unit:'in',dim_width:d.width,dim_width_unit:'in',dim_depth:d.depth,dim_shape:d.shape,dim_area_sqft:d.area,dim_source:'card',dim_confidence:'high',dim_confirmed:true,dim_ai:record};
         const s=await api(`/api/captures/${c.id}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-        if(s.ok){toast(precisionSummary(d));state._editMeasureCapture=null;state._dims=null;state._measure=null;renderEdit();}else{toast('Measurements could not be saved');button.disabled=false;}
+        if(s.ok){toast(precisionSummary(d));state._editMeasureCapture=null;state._dims=null;state._measure=null;renderApp();}else{toast('Measurements could not be saved');button.disabled=false;}
       }});
   }catch{toast('The photo could not be opened for measuring.');button.disabled=false;}
 }
@@ -2320,7 +2324,7 @@ async function saveSavedDims() {
   if (r.ok) {
     toast('Measurements saved');
     state._editMeasureCapture = null; state._dims = null; state._measure = null;
-    renderEdit();
+    renderApp();
   } else {
     btn.disabled = false; btn.textContent = 'Save Measurements'; toast('Measurements could not be saved');
   }
@@ -2983,7 +2987,7 @@ const ANNOTATION_TEMPLATES=window.PhotoNotesAnnotationTemplates;
 let savedAnnotationTemplates=[],savedAnnotationLoad=0;
 function annotationTemplateItems(key){return key.startsWith('saved:')?savedAnnotationTemplates.find(t=>String(t.id)===key.slice(6))?.overlays:ANNOTATION_TEMPLATES[key];}
 async function loadSavedAnnotationTemplates(){
- const generation=++savedAnnotationLoad,owner=state.me?.id,targets=['batchTemplate','singleTemplate'].map(id=>document.getElementById(id)).filter(Boolean);
+ const generation=++savedAnnotationLoad,owner=state.me?.id,targets=['singleTemplate'].map(id=>document.getElementById(id)).filter(Boolean);
  try{const r=await api('/api/annotation-templates');if(!r.ok)throw Error();const rows=await r.json();if(state.me?.id!==owner||generation!==savedAnnotationLoad)return;savedAnnotationTemplates=rows;
  for(const select of targets){if(!select.isConnected)continue;const selected=select.value;select.querySelector('[data-saved-annotation-templates]')?.remove();if(rows.length){const group=document.createElement('optgroup');group.label=uiT('My Annotation Templates');group.dataset.savedAnnotationTemplates='true';for(const template of rows){const option=document.createElement('option');option.value='saved:'+template.id;option.textContent=template.name;group.append(option);}select.append(group);}if([...select.options].some(o=>o.value===selected))select.value=selected;}
  updateSavedAnnotationDelete();
@@ -3054,36 +3058,8 @@ async function replaceTopicsOnSelected() {
   loadCards((document.getElementById('filter')||{}).value||'');
 }
 
-async function renderEdit() {
-  if(state._libraryOpenId)return renderLibraryPhoto();
-  const body = document.getElementById('body');
-  body.className = 'workflow-edit';
-  body.innerHTML = `
-    <label for="filter">Filter</label>
-    <select id="filter"><option value="">All Topics</option>${filterTopics().map(a => `<option value="${esc(a)}">${esc(a)}</option>`).join('')}</select>
-    <div class="row" style="margin-top:10px"><button class="btn secondary" id="selall">Select All</button><button class="btn secondary" id="selnone">Clear Selected</button></div>
-    <div class="row" style="margin-top:8px"><button class="btn" id="delbtn" style="background:var(--pn-bg-b3261e,#b3261e)">Delete Selected</button><button class="btn" id="delall" style="background:var(--pn-bg-b3261e,#b3261e)">Delete All</button></div>
-    <section class="batch-annotation-panel">
-      <h2>Apply Annotation Template</h2>
-      <p>Select photos below, then add a preset of markings to every selected photo. Original thumbnails stay unchanged. Use Preview / Adjust Photo to see the saved markings.</p>
-      <label for="batchTemplate">Annotation Template</label><select id="batchTemplate"><option value="date_address">Date + Address</option><option value="evidence">Evidence Details</option><option value="copyright">Copyright Only</option></select>
-      <label for="batchAnnotationMode">Existing Markings</label><select id="batchAnnotationMode"><option value="add">Add template, keep existing markings</option><option value="replace">Replace existing markings</option></select>
-      <p id="batchAnnotationEffect">Existing markings will be kept. New template items may overlap them; review each photo.</p>
-      <label id="batchAnnotationConfirmLabel" hidden><input type="checkbox" id="batchAnnotationConfirm"> I understand that replacing removes all existing markings from the selected photos.</label>
-      <p id="batchAnnotationSelected" role="status"></p><button class="btn secondary" id="applyBatchAnnotations">Apply to Selected Photos</button>
-      <p id="batchAnnotationStatus" role="status" aria-live="polite"></p>
-      <div id="batchAnnotationReview" hidden><label for="batchAnnotationPhoto">Review Applied Markings</label><select id="batchAnnotationPhoto"></select><button class="btn secondary" id="previewBatchAnnotations">Preview / Adjust Photo</button></div>
-    </section>
-    <div id="cards" style="margin-top:16px"></div>`;
-  document.getElementById('filter').onchange = e => {state.editTopic=e.target.value;loadCards(e.target.value);};
-  document.getElementById('selall').onclick = () => {document.querySelectorAll('.capchk').forEach(c => { c.checked = true; state.selectedIds.add(String(c.value)); });updateAnnotationSelection();};
-  document.getElementById('selnone').onclick = () => { state.selectedIds.clear(); document.querySelectorAll('.capchk').forEach(c => c.checked = false);updateAnnotationSelection(); };
-  document.getElementById('delbtn').onclick = () => doDeleteSelected();
-  document.getElementById('delall').onclick = () => doDeleteSelected(true);
-  wireBatchAnnotations();
-  document.getElementById('filter').value=state.editTopic||'';
-  loadCards(state.editTopic||'');
-}
+// Opens one saved PhotoNote in the Library photo detail view (view key 'edit').
+function openLibraryPhoto(id){state._libraryOpenId=Number(id);state._focusCapture=null;state.selectedIds=new Set([String(id)]);state.view='edit';renderApp();}
 
 // True while the Library photo detail is the screen on display (not a crop or mark-up editor opened from it).
 function libraryPhotoOpen(){
@@ -3115,25 +3091,7 @@ async function renderLibraryPhoto(refresh=false){
   wireCards(body.querySelector('#cards'),shown);retryPhotoImages(body.querySelector('#cards'));
 }
 
-function updateAnnotationSelection(){const count=selectedCaptureIds().length,p=document.getElementById('batchAnnotationSelected'),panel=document.getElementById('organizeWorkSection'),label=document.getElementById('librarySelectionCount');if(p)p.textContent=`${count} photos selected, including selections retained across filters.`;if(panel)panel.hidden=!count;if(label)label.textContent=`${count} PhotoNote${count===1?'':'s'} Selected`;}
-function wireBatchAnnotations(){
- void loadSavedAnnotationTemplates();
- updateAnnotationSelection();
- const mode=document.getElementById('batchAnnotationMode');mode.onchange=()=>{const replace=mode.value==='replace';document.getElementById('batchAnnotationConfirmLabel').hidden=!replace;document.getElementById('batchAnnotationConfirm').checked=false;document.getElementById('batchAnnotationEffect').textContent=replace?'All existing markings on the selected photos will be removed and replaced by this template.':'Existing markings will be kept. New template items may overlap them; review each photo.';};
- document.getElementById('applyBatchAnnotations').onclick=applyBatchAnnotations;
- document.getElementById('previewBatchAnnotations').onclick=async()=>{const id=Number(document.getElementById('batchAnnotationPhoto').value),r=await api(`/api/captures/${id}/annotation-preview`);if(!r.ok)return toast('Photo could not be opened');renderStampEditor(await r.json());};
-}
-async function applyBatchAnnotations(){
- const ids=selectedCaptureIds(),button=document.getElementById('applyBatchAnnotations'),status=document.getElementById('batchAnnotationStatus'),mode=document.getElementById('batchAnnotationMode').value;
- if(!ids.length){status.textContent='Select at least one photo.';return;}
- const confirmed=document.getElementById('batchAnnotationConfirm').checked;if(mode==='replace'&&!confirmed){status.textContent='Confirm replacement of existing markings before applying.';return;}
- button.disabled=true;status.textContent='Applying template...';
- try{const r=await api('/api/captures/annotations',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids,template:document.getElementById('batchTemplate').value,mode,confirm_replace:confirmed})}),d=await r.json();if(!r.ok)throw Error(d.error||'Templates could not be applied');
- state.imgv++;status.textContent=`Template applied to ${d.updated} photo${d.updated===1?'':'s'}. ${mode==='add'?'Existing markings kept.':'Existing markings replaced.'} Preview each photo to check placement.`;
- document.getElementById('batchAnnotationConfirm').checked=false;const review=document.getElementById('batchAnnotationReview');review.hidden=false;document.getElementById('batchAnnotationPhoto').innerHTML=d.ids.map((id,i)=>`<option value="${id}">Photo ${i+1} - ${esc((window._lastCards||[]).find(c=>c.id===id)?.photo_title||String(id))}</option>`).join('');await loadCards(state.editTopic||'');
- }catch(e){status.textContent=e.message;}finally{button.disabled=false;}
-}
-
+function updateAnnotationSelection(){const count=selectedCaptureIds().length,panel=document.getElementById('organizeWorkSection'),label=document.getElementById('librarySelectionCount');if(panel)panel.hidden=!count;if(label)label.textContent=`${count} PhotoNote${count===1?'':'s'} Selected`;}
 async function pairSelected() {
   const ids=selectedCaptureIds(),rows=window._lastCards||[];
   if(ids.length!==2)return toast('Select exactly two Photo Notes');
@@ -3299,41 +3257,6 @@ async function doExportSelected() {
   toast('Exported');
 }
 
-async function doDeleteSelected(all = false) {
-  const buttons = ['delbtn','delall'].map(id=>document.getElementById(id)).filter(Boolean);
-  if(buttons.some(btn=>btn.disabled))return;
-  const btn = document.getElementById(all?'delall':'delbtn');
-  const filter = document.getElementById('filter');
-  const label = all?'Delete All':'Delete Selected';
-  buttons.forEach(b=>b.disabled=true);
-  try {
-    let ids = Array.from(document.querySelectorAll('.capchk:checked')).map(x => x.value);
-    if(all){
-      btn.textContent=uiT('Loading...');
-      const response=await api('/api/captures');
-      if(!response.ok)throw new Error('load');
-      const rows=await response.json();
-      ids=rows.map(row=>String(row.id));
-      if(!btn.isConnected)return;
-    }
-    if(!ids.length){toast(all?'No captures to delete':'Select at least one capture');return;}
-    const warning=all
-      ? uiT('Delete ALL saved captures in your account, across all topics, including captures hidden by the current filter? This permanently deletes their photos and notes and cannot be undone.')+'\n\n'+uiT('Captures to delete:')+' '+ids.length
-      : uiT(`Delete ${ids.length} capture${ids.length > 1 ? 's' : ''}? This can't be undone.`);
-    if(!confirm(warning))return;
-    btn.textContent = uiT('Deleting...');
-    const r = await api('/api/captures/delete', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ids }),
-    });
-    if (!r.ok) throw new Error('delete');
-    ids.forEach(id=>state.selectedIds.delete(String(id)));
-    toast('Deleted');
-    if(filter.isConnected)await loadCards(filter.value || '');
-  } catch (e) { toast('Delete failed'); }
-  finally { buttons.forEach(b=>b.disabled=false);btn.textContent=uiT(label); }
-}
-
 async function doFixAddresses() {
   const checked = Array.from(document.querySelectorAll('.capchk:checked')).map(x => x.value);
   const btn = document.getElementById('fixaddr');
@@ -3428,6 +3351,17 @@ function gaugePhotoHtml(c,full=false){if(!c.gauge_record||!['contractor','paving
 function photoEvidencePreview(c,full=false){return gaugePhotoHtml(c,full)+(isConcreteClient()?(c.footprints||[]).map(f=>`<section class="concrete-evidence"><strong>Saved Area: ${esc(f.name)}</strong><p>${esc(concreteAreaText(f))}</p>${f.notes?`<p>${esc(f.notes)}</p>`:''}</section>`).join(''):'');}
 // Urgency chosen at capture is shown only when it is Urgent; Standard needs no label.
 function urgencyBadge(c){return c&&c.urgency==='urgent'?'<span class="badge urgent">Urgent</span>':'';}
+// Street and city from a saved address, such as "123 Main St, San Antonio" from "123 Main St, San Antonio, TX 78201, USA".
+function shortAddress(address){
+  const parts=String(address||'').split(',').map(part=>part.trim()).filter(Boolean);
+  if(parts.length>2&&/^\d+[A-Za-z]?$/.test(parts[0]))parts.splice(0,2,parts[0]+' '+parts[1]);
+  return parts.slice(0,2).join(', ');
+}
+function libraryCardMetaHtml(c){
+  const time=new Date(c.captured_at||c.created_at),date=Number.isFinite(time.getTime())?time.toLocaleDateString(uiLocale(),{year:'numeric',month:'short',day:'numeric'}):'';
+  const place=shortAddress(c.address),text=[date,place].filter(Boolean).join(' · ');
+  return text?`<div class="library-card-meta" title="${esc([date,c.address||''].filter(Boolean).join(' · '))}">${esc(text)}</div>`:'';
+}
 function libraryCardHtml(c){
   const memberships=c.project_memberships||[];
   const projects=memberships.length?memberships.map(project=>esc(project.job_number?project.job_number+' - '+project.name:project.name)).join(', '):(c.job_name?esc(c.job_number?c.job_number+' - '+c.job_name:c.job_name):'None');
@@ -3436,6 +3370,7 @@ function libraryCardHtml(c){
     <label class="library-photo-select"><input type="checkbox" class="capchk" value="${c.id}" aria-label="Select ${esc(c.photo_title||'Untitled PhotoNote')}"></label>
     ${c.photo_path?`<img data-capture-photo="${c.id}" loading="lazy" decoding="async" src="${captureThumbSrc(c)}" data-full-src="${capturePhotoSrc(c)}" alt="${esc(c.photo_title||'PhotoNote')}">`:''}
     <div class="photo-title">${esc(c.photo_title||'Untitled PhotoNote')}</div>
+    ${libraryCardMetaHtml(c)}
     ${c.urgency==='urgent'?`<div class="meta">${urgencyBadge(c)}</div>`:''}
     <div class="library-details"><div class="library-note"><strong>Notes:</strong> ${esc(c.note||'None')}</div>
     <div class="library-membership"><strong>Project(s):</strong> ${projects}</div>
@@ -3644,7 +3579,7 @@ async function deleteOrganizePhotoNote(id, button) {
     if (!r.ok) throw new Error('delete failed');
     state.selectedIds.delete(String(id));
     toast('Photo Note deleted');
-    if(state._libraryOpenId){state._libraryOpenId=null;state.view='organize';renderApp();}else runSmartSearch();
+    if(state._libraryOpenId){state._libraryOpenId=null;state.view=isHoaClient()?'photo-library':'organize';renderApp();}else runSmartSearch();
   } catch (e) {
     button.disabled = false;
     button.textContent = 'Delete PhotoNote';
@@ -3765,9 +3700,11 @@ function renderStampEditor(c) {
     </div>
     <div class="status" style="margin-top:8px"><strong>Save Changes</strong> keeps the markings with this photo in Photo Notes. <strong>Download Marked Photo</strong> saves a separate JPEG with the markings permanently visible.</div>
     <button class="backlink" id="stampBackBottom" style="margin-top:18px">‹ Back</button>`;
-  const backToEdit = () => { state.view = 'edit'; renderEdit(); };
-  document.getElementById('stampBack').onclick = backToEdit;
-  document.getElementById('stampBackBottom').onclick = backToEdit;
+  // Back returns to the screen that opened Mark Up: Library, the Library photo detail view, or a specialist record.
+  const returnView = state.view;
+  const backFromMarkUp = () => { state.view = returnView; renderApp(); };
+  document.getElementById('stampBack').onclick = backFromMarkUp;
+  document.getElementById('stampBackBottom').onclick = backFromMarkUp;
   document.getElementById('stampAdd').onclick = (e) => { const p = e.target.closest('[data-add]'); if (p) addOverlayItem(p.getAttribute('data-add')); };
   document.getElementById('applySingleTemplate').onclick=()=>{const mode=document.getElementById('singleTemplateMode').value;if(mode==='replace'&&editorOverlays.length&&!confirm('Replace all existing markings on this photo?'))return;const source=annotationTemplateItems(document.getElementById('singleTemplate').value);if(!source)return toast('Saved template is unavailable. Reload and choose another template.');const missing=source.filter(it=>missingLocationMarking(it.t,editorCapture));const items=JSON.parse(JSON.stringify(source.filter(it=>!missingLocationMarking(it.t,editorCapture))));if(missing.length){const status=document.getElementById('stampLocationStatus');if(status)status.textContent='Template skipped missing photo details. '+[...new Set(missing.map(it=>it.t))].map(locationMarkingMessage).join(' ');}const next=mode==='add'?[...editorOverlays,...items]:items;if(next.length>20)return toast('A photo can have up to 20 markings. Remove some or choose Replace existing markings.');editorOverlays=next;editorSel=editorOverlays.length?0:-1;drawOverlayItems();renderStampCtl();toast(missing.length?'Template applied without missing location details. Review placement, then Save Changes.':'Template applied. Review placement, then Save Changes.');};
   document.getElementById('saveAnnotationTemplate').onclick=saveAnnotationTemplate;
@@ -4535,7 +4472,7 @@ async function renderSend() {
     </section>
     </div><div id="sendDocumentWorkflow"${sendSource==='documents'?'':' hidden'}><label for="sendDocumentSearch">Search Documents</label><input id="sendDocumentSearch" type="search" placeholder="Search document titles" value="${esc(sendDocumentSearch)}"><section class="available-documents"><div class="available-documents-heading"><h2>Available Documents</h2><label for="sendDocumentSort">Sort<select id="sendDocumentSort"><option value="alpha"${sendDocumentSort==='alpha'?' selected':''}>A to Z</option><option value="reverse-alpha"${sendDocumentSort==='reverse-alpha'?' selected':''}>Z to A</option><option value="newest"${sendDocumentSort==='newest'?' selected':''}>Newest First</option><option value="oldest"${sendDocumentSort==='oldest'?' selected':''}>Oldest First</option></select></label></div><div id="sendDocs"><p class="status">Loading documents...</p></div></section>
     <details id="sharedDocumentLinks"><summary>Shared document links</summary><div id="sharedDocumentLinksList"></div></details>
-    </div><div id="billingOffers"></div>`;
+    </div>`;
   document.getElementById('sendSource').onchange=e=>{sendSource=e.target.value;renderSend();};
   document.getElementById('sendDocumentSearch').oninput=e=>{sendDocumentSearch=e.target.value;renderSendDocuments(window._sendGroups||[]);};
   document.getElementById('sendDocumentSort').onchange=e=>{sendDocumentSort=e.target.value;renderSendDocuments(window._sendGroups||[]);};
@@ -4554,10 +4491,21 @@ async function renderSend() {
   window.PhotoNotesExportPresets?.mount(document.getElementById('exportPresetSend'));
   loadSendCenter();
   loadApprovalPackages();
-  loadBillingOffers();
 }
 
-async function loadBillingOffers(){const box=document.getElementById('billingOffers');if(!box)return;try{const r=await api('/api/billing/config');if(!r.ok)return;const d=await r.json(),offers=Object.entries(d.offers||{});if(!d.checkout_enabled||!offers.length){box.innerHTML='';return;}box.innerHTML=`<section class="send-feature-panel" aria-labelledby="paymentsHeading"><div class="send-feature-heading" id="paymentsHeading">Payments</div><p class="status">Pay securely on Stripe’s hosted checkout page.</p>${offers.map(([slug,o])=>`<div class="card delivery-card"><div><strong>${esc(o.label)}</strong><div class="meta">Provided by ${esc(o.dba)}</div></div><button class="btn slim billing-checkout" data-offer="${esc(slug)}">Pay with Stripe</button></div>`).join('')}</section>`;box.querySelectorAll('.billing-checkout').forEach(button=>button.onclick=()=>startStripeCheckout(button));}catch(e){box.innerHTML='';}}
+// Payments lives in the account menu. It appears only where Send is available and Stripe checkout has offers.
+let billingConfigLoad=null;
+function billingConfig(){const user=state.me?.id;if(!billingConfigLoad||billingConfigLoad.user!==user){const load=api('/api/billing/config').then(r=>r.ok?r.json():null).catch(()=>null);billingConfigLoad={user,load};load.then(d=>{if(!d&&billingConfigLoad?.load===load)billingConfigLoad=null;});}return billingConfigLoad.load;}
+function paymentsAvailable(){return !!state.me&&!isBasicClient()&&!isRoadIssuesClient();}
+async function revealPaymentsMenu(){const item=document.getElementById('menuPayments');if(!item||!paymentsAvailable())return;const user=state.me.id,d=await billingConfig();if(!item.isConnected||state.me?.id!==user)return;item.hidden=!(d&&d.checkout_enabled&&Object.keys(d.offers||{}).length);window.PhotoNotesAccountMenu.sort();}
+function showPayments(){
+  document.getElementById('paymentsDialog')?.remove();
+  const dialog=document.createElement('dialog');dialog.id='paymentsDialog';dialog.className='web-help-dialog payments-dialog';dialog.setAttribute('aria-labelledby','paymentsHeading');
+  dialog.innerHTML='<div id="billingOffers"><p class="status">Loading payments...</p></div><button class="btn secondary" id="closePayments" type="button">Close</button>';
+  document.body.append(dialog);dialog.querySelector('#closePayments').onclick=()=>dialog.close();dialog.addEventListener('close',()=>dialog.remove());dialog.showModal();
+  return loadBillingOffers();
+}
+async function loadBillingOffers(){const box=document.getElementById('billingOffers');if(!box)return;try{const d=await billingConfig();if(!box.isConnected)return;if(!d){box.innerHTML='<p class="status">Payments could not be loaded. Try again later.</p>';return;}const offers=Object.entries(d.offers||{});if(!d.checkout_enabled||!offers.length){box.innerHTML='<p class="status">No payments are available for this account.</p>';return;}box.innerHTML=`<section class="send-feature-panel" aria-labelledby="paymentsHeading"><div class="send-feature-heading" id="paymentsHeading">Payments</div><p class="status">Pay securely on Stripe’s hosted checkout page.</p>${offers.map(([slug,o])=>`<div class="card delivery-card"><div><strong>${esc(o.label)}</strong><div class="meta">Provided by ${esc(o.dba)}</div></div><button class="btn slim billing-checkout" data-offer="${esc(slug)}">Pay with Stripe</button></div>`).join('')}</section>`;box.querySelectorAll('.billing-checkout').forEach(button=>button.onclick=()=>startStripeCheckout(button));}catch(e){if(box.isConnected)box.innerHTML='<p class="status">Payments could not be loaded. Try again later.</p>';}}
 async function startStripeCheckout(button){button.disabled=true;button.textContent='Opening Stripe...';try{const r=await api('/api/billing/checkout',{method:'POST',headers:{'Content-Type':'application/json','Idempotency-Key':`checkout-${Date.now()}-${crypto.randomUUID()}`},body:JSON.stringify({offer:button.dataset.offer,quantity:1})}),d=await r.json();if(!r.ok||!d.url)throw new Error();location.assign(d.url);}catch(e){toast('Stripe checkout could not be opened');button.disabled=false;button.textContent='Pay with Stripe';}}
 
 async function shareReviewLink(url,title){
@@ -4590,10 +4538,8 @@ function renderSendPhotoLibrary(){
       <input type="checkbox" class="sendchk" value="${c.id}" aria-label="Select ${esc(c.photo_title || 'Photo Note')}" ${state.selectedIds.has(String(c.id)) ? 'checked' : ''}>
       ${c.photo_path ? `<img loading="lazy" decoding="async" src="${captureThumbSrc(c)}" alt="${esc(c.photo_title || 'Photo Note')}">` : '<span class="send-no-photo">Note</span>'}
       <span class="send-capture-details"><strong>${esc(c.photo_title || 'Untitled Photo')}</strong><small>${esc((c.area_tags || []).join(', ') || 'Unfiled')}</small><small>${esc(c.note || 'No notes')}</small></span>
-      <button class="send-delete-capture" type="button" data-delete-capture="${c.id}">Delete Photo Note</button>
     </article>`).join('') : `<p class="empty">${uiT((window._sendCaptures||[]).length?'No Photo Notes match these filters.':'Nothing has been captured yet.')}</p>`;
   capBox.querySelectorAll('.sendchk').forEach(c => c.onchange = () => { if (c.checked) state.selectedIds.add(String(c.value)); else state.selectedIds.delete(String(c.value)); updateSendCount(); });
-  capBox.querySelectorAll('[data-delete-capture]').forEach(button => button.onclick = () => deleteSendCapture(button.dataset.deleteCapture, button));
   updateSendCount();
 }
 
@@ -4611,26 +4557,6 @@ async function loadSendCenter() {
 }
 
 function renderSendDocuments(groups){const docs=document.getElementById('sendDocs');if(!docs)return;const rows=[...groups].filter(g=>String(g.title||'').trim()&&Number(g.item_count)>0&&String(g.title).toLowerCase().includes(sendDocumentSearch.toLowerCase())).sort((a,b)=>sendDocumentSort==='alpha'?a.title.localeCompare(b.title):sendDocumentSort==='reverse-alpha'?b.title.localeCompare(a.title):sendDocumentSort==='newest'?(Date.parse(b.updated_at||b.created_at)||0)-(Date.parse(a.updated_at||a.created_at)||0):(Date.parse(a.updated_at||a.created_at)||0)-(Date.parse(b.updated_at||b.created_at)||0));if(!rows.length){docs.innerHTML='<p class="empty">No matching documents are ready to send.</p>';return;}docs.innerHTML=`<ul class="compact-document-list send-document-list">${rows.map(g=>`<li><div><strong>${esc(g.title)}</strong><span>${g.item_count} PhotoNote${g.item_count===1?'':'s'} · Last Modified: ${esc(documentModifiedLabel(g))}</span></div><div class="compact-document-actions"><button class="btn slim" data-use-document="${g.id}">Use This Document</button><button class="btn secondary slim" data-edit-document="${g.id}">Edit Draft</button></div><div class="document-send-options" data-send-options="${g.id}" hidden><label>File Format<select class="document-delivery-format"><option value="pdf">PDF</option><option value="docx">Word</option><option value="bundle">Markdown + Photos (.zip)</option></select></label><div class="compact-document-actions"><button class="btn slim" data-document-action="share">Share</button><button class="btn secondary slim" data-document-action="download">Download</button><button class="btn secondary slim" data-document-action="print">Print</button></div></div></li>`).join('')}</ul>`;docs.querySelectorAll('[data-use-document]').forEach(button=>button.onclick=()=>{docs.querySelectorAll('[data-send-options]').forEach(x=>x.hidden=x.dataset.sendOptions!==button.dataset.useDocument);});docs.querySelectorAll('[data-edit-document]').forEach(button=>button.onclick=()=>{state.groupId=Number(button.dataset.editDocument);state.view='create';renderApp();});docs.querySelectorAll('[data-send-options]').forEach(control=>{const format=control.querySelector('select');control.querySelectorAll('[data-document-action]').forEach(button=>button.onclick=()=>deliverExport(format.value,control.dataset.sendOptions,button.dataset.documentAction));});}
-
-async function deleteSendCapture(id, button) {
-  if (!id || !confirm(uiT(`Delete this Photo Note? This can't be undone.`))) return;
-  button.disabled = true;
-  button.textContent = 'Deleting...';
-  try {
-    const r = await api('/api/captures/delete', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ids: [id] }),
-    });
-    if (!r.ok) throw new Error('delete failed');
-    state.selectedIds.delete(String(id));
-    toast('Photo Note deleted');
-    await loadSendCenter();
-  } catch (e) {
-    button.disabled = false;
-    button.textContent = 'Delete Photo Note';
-    toast('Delete failed');
-  }
-}
 
 function updateSendCount() {
   const n = state.selectedIds.size;
@@ -4873,12 +4799,24 @@ let preparedPhotoShare = { signature: '', files: [], text: '' };
 let documentCreationPending=false;
 let documentAddTargetId=null;
 let documentCreateStep='list',documentListSort='alpha',documentListQuery='',newDocumentPhotos=[],newDocumentPhotoIds=new Set(),newDocumentSetup=null,newDocumentPhotoTopic='',newDocumentPhotoJob='';
-const builtInDocumentSetup=()=>({title:'',description:'',layout:{document_type:'standard',orientation:'portrait',photo_layout:'four_per_page',font:'Arial',accent:'#1d4ed8',header:false,header_text:'',footer:false,footer_text:'',page_numbers:true,page_number_position:'bottom_right',cover_page:false,company_name:''}});
-const documentSettingsStorageKey=kind=>`pn-document-${kind}-${state.me?.id||'local'}`;
-function readDocumentSetting(kind,fallback){try{return JSON.parse(localStorage.getItem(documentSettingsStorageKey(kind)))||fallback}catch{return fallback}}
-function writeDocumentSetting(kind,value){localStorage.setItem(documentSettingsStorageKey(kind),JSON.stringify(value))}
-function documentSetupDefault(){return structuredClone(readDocumentSetting('default',builtInDocumentSetup()));}
-function documentPresets(){return readDocumentSetting('presets',[])}
+// New Document setup starts from the account defaults (layout, branding and Word template saved on the
+// account) or from a saved Export Preset. Nothing here is kept in browser storage.
+const builtInDocumentLayout=()=>({document_type:'standard',orientation:'portrait',photo_layout:'four_per_page',font:'Arial',accent:'#1d4ed8',header:false,header_text:'',footer:false,footer_text:'',page_numbers:true,page_number_position:'bottom_right',cover_page:false,company_name:''});
+let documentSetupSources=null;
+async function loadDocumentSetupSources(){
+  const presets=window.PhotoNotesExportPresets;let rows=[],presetsAvailable=false;
+  if(presets?.supported()){try{await presets.migrateLocal();}catch(e){}try{rows=await presets.list();presetsAvailable=true;}catch(e){rows=[];}}
+  let settings={branding:{},layout:{},layout_saved:false,default_template_name:null,default_template_ready:false};
+  try{const r=await api('/api/document-settings');if(r.ok)settings={...settings,...await r.json()};}catch(e){}
+  return {settings,presets:Array.isArray(rows)?rows:[],presetsAvailable};
+}
+function documentSetupFrom(presetId){
+  const sources=documentSetupSources,b=sources.settings.branding||{},preset=sources.presets.find(p=>String(p.id)===String(presetId));
+  const layout={...builtInDocumentLayout(),...(sources.settings.layout||{}),...(preset?.config?.layout||{})};
+  // Blank preset branding falls back to the account branding, as blank document branding does.
+  for(const k of DOCUMENT_BRANDING_KEYS)layout[k]=String(preset?.config?.branding?.[k]||'').trim()?preset.config.branding[k]:String(b[k]||'');
+  return {title:'',description:'',source:preset?String(preset.id):'',layout};
+}
 function documentModifiedLabel(group){const value=group.updated_at||group.created_at;if(!value)return 'Not Recorded';const date=new Date(value);return Number.isNaN(+date)?'Not Recorded':date.toLocaleDateString(uiLocale(),{year:'numeric',month:'short',day:'numeric'});}
 function sortedDocuments(groups){return [...groups].filter(g=>String(g.title||'').trim()&&String(g.title).toLowerCase().includes(documentListQuery.toLowerCase())).sort((a,b)=>documentListSort==='alpha'?a.title.localeCompare(b.title):documentListSort==='reverse-alpha'?b.title.localeCompare(a.title):documentListSort==='newest'?(Date.parse(b.updated_at||b.created_at)||0)-(Date.parse(a.updated_at||a.created_at)||0):(Date.parse(a.updated_at||a.created_at)||0)-(Date.parse(b.updated_at||b.created_at)||0));}
 async function renderGroups() {
@@ -4889,22 +4827,29 @@ async function renderGroups() {
   if(documentCreateStep==='photos')return renderNewDocumentPhotos();
   const body=document.getElementById('body');body.className='workflow-create';
   body.innerHTML=`<div class="create-heading"><h1>Create</h1><button class="btn" id="newDocument">New Document</button></div><label for="documentSearch">Search Document Title</label><input id="documentSearch" type="search" placeholder="Search document titles" value="${esc(documentListQuery)}"><section class="available-documents"><div class="available-documents-heading"><h2>Available Documents</h2><label for="createDocumentSort">Sort<select id="createDocumentSort"><option value="alpha"${documentListSort==='alpha'?' selected':''}>A to Z</option><option value="reverse-alpha"${documentListSort==='reverse-alpha'?' selected':''}>Z to A</option><option value="newest"${documentListSort==='newest'?' selected':''}>Newest First</option><option value="oldest"${documentListSort==='oldest'?' selected':''}>Oldest First</option></select></label></div><div id="glist"><p class="status">Loading documents...</p></div></section>`;
-  document.getElementById('newDocument').onclick=()=>{newDocumentPhotoIds.clear();newDocumentSetup=documentSetupDefault();newDocumentSetup.title='';newDocumentSetup.description='';newDocumentPhotoTopic='';newDocumentPhotoJob='';documentCreateStep='setup';renderGroups();};
+  document.getElementById('newDocument').onclick=()=>{newDocumentPhotoIds.clear();newDocumentSetup=null;documentSetupSources=null;newDocumentPhotoTopic='';newDocumentPhotoJob='';documentCreateStep='setup';renderGroups();};
   document.getElementById('documentSearch').oninput=e=>{documentListQuery=e.target.value;renderGroupCards(document.getElementById('glist'),state.groups||[]);};
   document.getElementById('createDocumentSort').onchange=e=>{documentListSort=e.target.value;renderGroupCards(document.getElementById('glist'),state.groups||[]);};
   loadGroups();
 }
-function documentSetupFields(){const l=newDocumentSetup.layout,presets=documentPresets();return `<label class="document-title-field" for="gtitle">Document Title<input id="gtitle" required placeholder="Document title" value="${esc(newDocumentSetup.title)}"></label><label for="gdesc">Document Description (Optional)<textarea id="gdesc" placeholder="Document description">${esc(newDocumentSetup.description)}</textarea></label><div class="document-preset-row"><label for="documentSetupPreset">Document Settings Presets<select id="documentSetupPreset"><option value="">No Preset</option>${presets.map(p=>`<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select></label><p>The default settings are shown below. If a preset is selected, the settings below will show that preset instead.</p></div><section class="new-document-settings"><div class="document-settings-title"><h2>Document Settings</h2><strong>Changes are automatically saved.</strong></div><details><summary>Layout &amp; Style</summary><div class="document-layout-grid"><label>Document Type<select id="newDocumentType"><option value="standard"${l.document_type==='standard'?' selected':''}>Standard Document</option><option value="exhibit"${l.document_type==='exhibit'?' selected':''}>Proposal Exhibit</option></select></label><label>Page Orientation<select id="newDocumentOrientation"><option value="portrait"${l.orientation==='portrait'?' selected':''}>Portrait</option><option value="landscape"${l.orientation==='landscape'?' selected':''}>Landscape</option></select></label><label>Photos per Page<select id="newDocumentPhotoLayout">${[['one_per_page','1'],['two_vertical','2 Vertical'],['two_horizontal','2 Horizontal'],['three_vertical','3 Vertical'],['three_horizontal','3 Horizontal'],['four_per_page','4'],['five_per_page','5'],['six_per_page','6']].map(([v,t])=>`<option value="${v}"${l.photo_layout===v?' selected':''}>${t}</option>`).join('')}</select></label><label>Font<select id="newDocumentFont" class="document-font-select">${['Arial','Helvetica','Aptos','Calibri','Georgia','Times New Roman'].map(f=>`<option style="font-family:${f}"${l.font===f?' selected':''}>${f}</option>`).join('')}</select></label><label>Accent Color <span class="setting-explanation">Used for document headings, lines, and highlights.</span><input id="newDocumentAccent" type="color" value="${esc(l.accent)}"></label><label class="document-layout-check"><input id="newDocumentHeader" type="checkbox"${l.header?' checked':''}> Header</label><label>Header Text<input id="newDocumentHeaderText" value="${esc(l.header_text||'')}"></label><label class="document-layout-check"><input id="newDocumentFooter" type="checkbox"${l.footer?' checked':''}> Footer</label><label>Footer Text<input id="newDocumentFooterText" value="${esc(l.footer_text||'')}"></label><label class="document-layout-check"><input id="newDocumentNumbers" type="checkbox"${l.page_numbers?' checked':''}> Page Numbers (Not Shown on One-Page Documents)</label><label>Page Number Position<select id="newDocumentPagePosition"><option value="bottom_left"${l.page_number_position==='bottom_left'?' selected':''}>Bottom Left</option><option value="bottom_center"${l.page_number_position==='bottom_center'?' selected':''}>Bottom Center</option><option value="bottom_right"${l.page_number_position==='bottom_right'?' selected':''}>Bottom Right</option></select></label></div></details><details><summary>Cover Page (Title Page)</summary><label class="document-layout-check"><input id="newDocumentCover" type="checkbox"${l.cover_page?' checked':''}> Use Cover Page</label><p>Adds a separate title page before the photos.</p><div class="cover-page-options"><h3>Company and Branding</h3><p>The company name and logo appear on the Cover Page.</p><label>Company Name<input id="newDocumentCompany" value="${esc(l.company_name||'')}"></label></div></details><details><summary>Word Template (Optional)</summary><p>Use a Word template when downloaded Word documents should follow an existing company design.</p><ol><li>Download the Word Starter Template.</li><li>Open it in Word and add the company design without removing the PhotoNotes content area.</li><li>Save it and upload the completed template below.</li></ol><a class="btn secondary slim" id="newDocumentStarterTemplate" href="/api/document-settings/template-starter">Download Word Starter Template</a><label>Upload Completed Word Template<input id="newDocumentTemplate" type="file" accept=".docx"></label></details><div class="document-setting-actions"><button class="btn" id="useDocumentSettings">Use for This Document</button><button class="btn secondary" id="saveDefaultSettings">Save as Default and Use for This Document</button><button class="btn secondary" id="savePresetSettings">Save as Preset and Use for This Document</button><button class="btn secondary" id="cancelNewDocument">Cancel</button></div></section><p class="new-document-save-note"><strong>After choosing photos, save the new document.</strong></p>`;}
-function renderNewDocumentSetup(){const body=document.getElementById('body');body.className='workflow-create';body.innerHTML=`<div class="create-heading"><h1>Create Document</h1></div><section class="new-document-setup">${documentSetupFields()}</section>`;wireNewDocumentSetup();}
+function documentSetupFields(){const l=newDocumentSetup.layout,{settings,presets,presetsAvailable}=documentSetupSources;return `<label class="document-title-field" for="gtitle">Document Title<input id="gtitle" required placeholder="Document title" value="${esc(newDocumentSetup.title)}"></label><label for="gdesc">Document Description (Optional)<textarea id="gdesc" placeholder="Document description">${esc(newDocumentSetup.description)}</textarea></label><div class="document-preset-row"><label for="documentSetupPreset">Document Settings Presets<select id="documentSetupPreset"><option value="">Account Defaults</option>${presets.map(p=>`<option value="${esc(p.id)}"${String(p.id)===newDocumentSetup.source?' selected':''}>${esc(p.name)}</option>`).join('')}</select></label><p>${presetsAvailable?'Account Defaults are shown first. Choosing a preset shows its settings below instead. These are the same Export Presets offered in Send and on each document page.':'Your account defaults are shown below.'}</p></div><section class="new-document-settings"><div class="document-settings-title"><h2>Document Settings</h2><span class="document-settings-save-note">These settings are used for this new document when you save it. Save as Default or Save as Preset keeps them for later documents.</span></div><details><summary>Layout &amp; Style</summary><div class="document-layout-grid"><label>Document Type<select id="newDocumentType"><option value="standard"${l.document_type==='standard'?' selected':''}>Standard Document</option><option value="exhibit"${l.document_type==='exhibit'?' selected':''}>Proposal Exhibit</option></select></label><label>Page Orientation<select id="newDocumentOrientation"><option value="portrait"${l.orientation==='portrait'?' selected':''}>Portrait</option><option value="landscape"${l.orientation==='landscape'?' selected':''}>Landscape</option></select></label><label>Photos per Page<select id="newDocumentPhotoLayout">${[['one_per_page','1'],['two_vertical','2 Vertical'],['two_horizontal','2 Horizontal'],['three_vertical','3 Vertical'],['three_horizontal','3 Horizontal'],['four_per_page','4'],['five_per_page','5'],['six_per_page','6']].map(([v,t])=>`<option value="${v}"${l.photo_layout===v?' selected':''}>${t}</option>`).join('')}</select></label><label>Font<select id="newDocumentFont" class="document-font-select">${['Arial','Helvetica','Aptos','Calibri','Georgia','Times New Roman'].map(f=>`<option style="font-family:${f}"${l.font===f?' selected':''}>${f}</option>`).join('')}</select></label><label>Accent Color <span class="setting-explanation">Used for document headings, lines, and highlights.</span><input id="newDocumentAccent" type="color" value="${esc(l.accent)}"></label><label class="document-layout-check"><input id="newDocumentHeader" type="checkbox"${l.header?' checked':''}> Header</label><label>Header Text<input id="newDocumentHeaderText" value="${esc(l.header_text||'')}"></label><label class="document-layout-check"><input id="newDocumentFooter" type="checkbox"${l.footer?' checked':''}> Footer</label><label>Footer Text<input id="newDocumentFooterText" value="${esc(l.footer_text||'')}"></label><label class="document-layout-check"><input id="newDocumentNumbers" type="checkbox"${l.page_numbers?' checked':''}> Page Numbers (Not Shown on One-Page Documents)</label><label>Page Number Position<select id="newDocumentPagePosition"><option value="bottom_left"${l.page_number_position==='bottom_left'?' selected':''}>Bottom Left</option><option value="bottom_center"${l.page_number_position==='bottom_center'?' selected':''}>Bottom Center</option><option value="bottom_right"${l.page_number_position==='bottom_right'?' selected':''}>Bottom Right</option></select></label></div></details><details><summary>Cover Page (Title Page)</summary><label class="document-layout-check"><input id="newDocumentCover" type="checkbox"${l.cover_page?' checked':''}> Use Cover Page</label><p>Adds a separate title page before the photos.</p><div class="cover-page-options"><h3>Company and Branding</h3><p>The company name and logo appear on the Cover Page.</p><label>Company Name<input id="newDocumentCompany" value="${esc(l.company_name||'')}"></label></div></details><details><summary>Word Template (Optional)</summary><p>Use a Word template when downloaded Word documents should follow an existing company design.</p><ol><li>Download the Word Starter Template.</li><li>Open it in Word and add the company design without removing the PhotoNotes content area.</li><li>Save it and upload the completed template below.</li></ol><a class="btn secondary slim" id="newDocumentStarterTemplate" href="/api/document-settings/template-starter">Download Word Starter Template</a><div class="document-default-template" id="newDocumentDefaultTemplate">${settings.default_template_ready?`<p>Account default template: <strong>${esc(settings.default_template_name||'Word template')}</strong>. New documents start with a copy of it unless you upload a different template below.</p><button class="btn secondary slim" id="removeDefaultTemplate" type="button">Remove Default Template</button>`:'<p>No account default template. Save as Default with a template chosen below to start every new document with it.</p>'}</div><label>Upload Completed Word Template<input id="newDocumentTemplate" type="file" accept=".docx"></label></details><div class="document-setting-actions"><button class="btn" id="useDocumentSettings">Use for This Document</button><button class="btn secondary" id="saveDefaultSettings">Save as Default and Use for This Document</button>${presetsAvailable?'<button class="btn secondary" id="savePresetSettings">Save as Preset and Use for This Document</button>':''}<button class="btn secondary" id="cancelNewDocument">Cancel</button></div>${presetsAvailable?'<div class="document-preset-name" id="newDocumentPresetNameRow" hidden><label for="newDocumentPresetName">Preset Name<input id="newDocumentPresetName" maxlength="80" placeholder="Preset name"></label><button class="btn" id="confirmNewDocumentPreset" type="button">Save Preset and Continue</button><button class="btn secondary" id="cancelNewDocumentPreset" type="button">Cancel Preset</button></div>':''}</section><p class="new-document-save-note"><strong>After choosing photos, save the new document.</strong></p>`;}
+async function renderNewDocumentSetup(){const body=document.getElementById('body');body.className='workflow-create';if(!documentSetupSources||!newDocumentSetup){body.innerHTML='<div class="create-heading"><h1>Create Document</h1></div><p class="status">Loading document settings...</p>';const sources=documentSetupSources||await loadDocumentSetupSources();if(documentCreateStep!=='setup'||state.groupId)return;documentSetupSources=sources;if(!newDocumentSetup)newDocumentSetup=documentSetupFrom(sources.presets.find(p=>p.is_default)?.id||'');}body.innerHTML=`<div class="create-heading"><h1>Create Document</h1></div><section class="new-document-setup">${documentSetupFields()}</section>`;wireNewDocumentSetup();}
 function readNewDocumentSetup(){const l=newDocumentSetup.layout;newDocumentSetup.title=document.getElementById('gtitle').value;newDocumentSetup.description=document.getElementById('gdesc').value;l.document_type=document.getElementById('newDocumentType').value;l.orientation=document.getElementById('newDocumentOrientation').value;l.photo_layout=document.getElementById('newDocumentPhotoLayout').value;l.font=document.getElementById('newDocumentFont').value;l.accent=document.getElementById('newDocumentAccent').value;l.header=document.getElementById('newDocumentHeader').checked;l.header_text=document.getElementById('newDocumentHeaderText').value;l.footer=document.getElementById('newDocumentFooter').checked;l.footer_text=document.getElementById('newDocumentFooterText').value;l.page_numbers=document.getElementById('newDocumentNumbers').checked;l.page_number_position=document.getElementById('newDocumentPagePosition').value;l.cover_page=document.getElementById('newDocumentCover').checked;l.company_name=document.getElementById('newDocumentCompany').value;}
 function validateNewDocumentTitle(){readNewDocumentSetup();if(!newDocumentSetup.title.trim()){toast('Enter a document title.');document.getElementById('gtitle').focus();return false;}return true;}
-function wireNewDocumentSetup(){const sections=[...document.querySelectorAll('.new-document-settings details')];sections.forEach(section=>section.ontoggle=()=>{if(section.open)sections.forEach(other=>{if(other!==section)other.open=false;});});document.querySelectorAll('.new-document-setup input,.new-document-setup textarea,.new-document-setup select').forEach(el=>{if(el.id!=='documentSetupPreset'&&el.id!=='newDocumentTemplate')el.oninput=readNewDocumentSetup;});document.getElementById('documentSetupPreset').onchange=e=>{const p=documentPresets().find(p=>p.id===e.target.value);if(p){const title=newDocumentSetup.title,description=newDocumentSetup.description;newDocumentSetup={title,description,layout:structuredClone(p.layout)};renderGroups();}};document.getElementById('newDocumentTemplate').onchange=e=>newDocumentSetup.template=e.target.files[0]||null;const next=()=>{if(!validateNewDocumentTitle())return;documentCreateStep='photos';renderGroups();};document.getElementById('useDocumentSettings').onclick=next;document.getElementById('saveDefaultSettings').onclick=()=>{if(!validateNewDocumentTitle())return;writeDocumentSetting('default',{title:'',description:'',layout:structuredClone(newDocumentSetup.layout)});toast('Default document settings saved.');next();};document.getElementById('savePresetSettings').onclick=()=>{if(!validateNewDocumentTitle())return;const name=prompt(uiT('Preset name:'));if(!name?.trim())return;const rows=documentPresets();rows.push({id:crypto.randomUUID(),name:name.trim(),layout:structuredClone(newDocumentSetup.layout)});writeDocumentSetting('presets',rows);toast('Document settings preset saved.');next();};document.getElementById('cancelNewDocument').onclick=()=>{newDocumentPhotoIds.clear();newDocumentSetup=null;documentCreateStep='list';renderGroups();};}
+// Layout options without company name, header and footer text, which belong to the account branding.
+function documentLayoutOptions(layout){const out={...layout};for(const k of DOCUMENT_BRANDING_KEYS)delete out[k];return out;}
+async function saveNewDocumentDefaults(button){if(!validateNewDocumentTitle())return;button.disabled=true;try{const l=newDocumentSetup.layout,payload={layout:documentLayoutOptions(l)};for(const k of DOCUMENT_BRANDING_KEYS)payload[k]=String(l[k]||'').trim();const r=await api('/api/document-settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});if(!r.ok)throw Error();const d=await r.json();documentSetupSources.settings={...documentSetupSources.settings,...d};state._copyrightName=String(d.branding?.company_name||'').trim();let templateFailed=false;if(newDocumentSetup.template){const fd=new FormData();fd.append('template',newDocumentSetup.template);fd.append('scope','account');const t=await api('/api/document-settings/template',{method:'POST',body:fd}).catch(()=>null);templateFailed=!t||!t.ok;if(!templateFailed){const td=await t.json().catch(()=>({}));documentSetupSources.settings.default_template_ready=true;documentSetupSources.settings.default_template_name=td.template_name||newDocumentSetup.template.name;newDocumentSetup.template=null;}}toast(templateFailed?'Default document settings saved, but the Word template could not be uploaded. It will still be used for this document.':'Default document settings saved.');documentCreateStep='photos';renderGroups();}catch(e){toast('Default document settings could not be saved. Nothing was changed.');button.disabled=false;}}
+async function saveNewDocumentPreset(button){if(!validateNewDocumentTitle())return;const input=document.getElementById('newDocumentPresetName'),name=input.value.trim();if(!name){toast('Enter a preset name.');input.focus();return;}button.disabled=true;try{const saved=await window.PhotoNotesExportPresets.create({name,description:'',config:window.PhotoNotesExportPresets.configFromLayout(newDocumentSetup.layout),is_default:false});documentSetupSources.presets.push(saved);newDocumentSetup.source=String(saved.id);toast('Document settings preset saved.');documentCreateStep='photos';renderGroups();}catch(e){toast(e.message||'Preset could not be saved');button.disabled=false;}}
+async function removeDefaultDocumentTemplate(button){button.disabled=true;const r=await api('/api/document-settings/remove-asset',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({kind:'template',scope:'account'})}).catch(()=>null);if(!r||!r.ok){toast('Default template could not be removed');button.disabled=false;return;}readNewDocumentSetup();documentSetupSources.settings.default_template_ready=false;documentSetupSources.settings.default_template_name=null;toast('Default template removed. Existing documents keep their own copy.');renderGroups();}
+function wireNewDocumentSetup(){const sections=[...document.querySelectorAll('.new-document-settings details')];sections.forEach(section=>section.ontoggle=()=>{if(section.open)sections.forEach(other=>{if(other!==section)other.open=false;});});document.querySelectorAll('.new-document-setup input,.new-document-setup textarea,.new-document-setup select').forEach(el=>{if(!['documentSetupPreset','newDocumentTemplate','newDocumentPresetName'].includes(el.id))el.oninput=readNewDocumentSetup;});document.getElementById('documentSetupPreset').onchange=e=>{readNewDocumentSetup();const {title,description,template}=newDocumentSetup;newDocumentSetup={...documentSetupFrom(e.target.value),title,description,template};renderGroups();};document.getElementById('newDocumentTemplate').onchange=e=>newDocumentSetup.template=e.target.files[0]||null;const next=()=>{if(!validateNewDocumentTitle())return;documentCreateStep='photos';renderGroups();};document.getElementById('useDocumentSettings').onclick=next;document.getElementById('saveDefaultSettings').onclick=e=>saveNewDocumentDefaults(e.currentTarget);const removeDefault=document.getElementById('removeDefaultTemplate');if(removeDefault)removeDefault.onclick=e=>removeDefaultDocumentTemplate(e.currentTarget);const presetRow=document.getElementById('newDocumentPresetNameRow');if(presetRow){document.getElementById('savePresetSettings').onclick=()=>{if(!validateNewDocumentTitle())return;presetRow.hidden=false;document.getElementById('newDocumentPresetName').focus();};document.getElementById('confirmNewDocumentPreset').onclick=e=>saveNewDocumentPreset(e.currentTarget);document.getElementById('cancelNewDocumentPreset').onclick=()=>{presetRow.hidden=true;document.getElementById('newDocumentPresetName').value='';};}document.getElementById('cancelNewDocument').onclick=()=>{newDocumentPhotoIds.clear();newDocumentSetup=null;documentSetupSources=null;documentCreateStep='list';renderGroups();};}
 async function renderNewDocumentPhotos(){const adding=documentAddTargetId!=null&&documentAddTargetId===state.groupId,existing=new Set(adding?currentGroupItems.map(c=>String(c.id)):[]);const body=document.getElementById('body');body.className='workflow-create';body.innerHTML=`<div class="create-heading"><h1>${adding?'Add Photos to Document':'Choose Photos'}</h1></div><div class="document-photo-toolbar"><input id="newDocumentPhotoSearch" type="search" placeholder="Search PhotoNotes and details"><button class="btn secondary slim" id="selectAllDocumentPhotos">Select All</button><button class="btn secondary slim" id="clearDocumentPhotos">Clear All</button></div><div class="row"><div><label for="newDocumentTopic">Filter by Topic</label><select id="newDocumentTopic" disabled><option value="">All Topics</option></select></div><div><label for="newDocumentJob">Filter by Project</label><select id="newDocumentJob" disabled><option value="">All Projects</option></select></div></div><div id="newDocumentPhotoList" class="document-source-photos"><p class="status">Loading PhotoNotes...</p></div><div class="new-document-final-actions">${adding?'<button class="btn secondary" id="backToDocument">Back to Document</button><button class="btn" id="addDocumentPhotosSave" disabled>Add Selected Photos</button>':'<button class="btn secondary" id="backDocumentSetup">Back to Document Setup</button><button class="btn" id="gcreate" disabled>Save New Document</button>'}</div>`;if(adding){document.getElementById('backToDocument').onclick=()=>{documentAddTargetId=null;newDocumentPhotoIds.clear();renderGroups();};document.getElementById('addDocumentPhotosSave').onclick=addPhotosToDocument;}else{document.getElementById('backDocumentSetup').onclick=()=>{documentCreateStep='setup';renderGroups();};document.getElementById('gcreate').onclick=createGroup;}try{const r=await api('/api/captures');if(!r.ok)throw Error();newDocumentPhotos=(await r.json()).filter(p=>p.photo_path&&!existing.has(String(p.id)));const topics=[...new Set(newDocumentPhotos.flatMap(p=>p.area_tags||[]))].sort((a,b)=>a.localeCompare(b));const jobs=[...new Map(newDocumentPhotos.flatMap(p=>[...captureProjects(p)])).entries()].sort((a,b)=>a[1].localeCompare(b[1]));const topic=document.getElementById('newDocumentTopic'),job=document.getElementById('newDocumentJob');topic.innerHTML='<option value="">All Topics</option>'+topics.map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join('');job.innerHTML='<option value="">All Projects</option>'+jobs.map(([id,name])=>`<option value="${esc(id)}">${esc(name)}</option>`).join('');topic.value=newDocumentPhotoTopic;job.value=newDocumentPhotoJob;if(!topic.value)newDocumentPhotoTopic='';if(!job.value)newDocumentPhotoJob='';topic.disabled=false;job.disabled=false;topic.onchange=()=>{newDocumentPhotoTopic=topic.value;renderNewDocumentPhotoList();};job.onchange=()=>{newDocumentPhotoJob=job.value;renderNewDocumentPhotoList();};if(!adding&&!newDocumentPhotoIds.size)for(const id of state.selectedIds)newDocumentPhotoIds.add(String(id));renderNewDocumentPhotoList();document.getElementById('newDocumentPhotoSearch').oninput=renderNewDocumentPhotoList;document.getElementById('selectAllDocumentPhotos').onclick=()=>{for(const p of visibleNewDocumentPhotos())newDocumentPhotoIds.add(String(p.id));renderNewDocumentPhotoList();};document.getElementById('clearDocumentPhotos').onclick=()=>{newDocumentPhotoIds.clear();renderNewDocumentPhotoList();};}catch{document.getElementById('newDocumentPhotoList').innerHTML='<p class="status">PhotoNotes could not be loaded. Return and try again.</p>';}}
 function visibleNewDocumentPhotos(){const q=document.getElementById('newDocumentPhotoSearch')?.value.toLowerCase()||'';return newDocumentPhotos.filter(p=>(!newDocumentPhotoTopic||(p.area_tags||[]).includes(newDocumentPhotoTopic))&&(!newDocumentPhotoJob||captureProjects(p).has(newDocumentPhotoJob))&&`${p.photo_title||''} ${p.note||''} ${p.address||''}`.toLowerCase().includes(q));}
 function renderNewDocumentPhotoList(){const box=document.getElementById('newDocumentPhotoList');if(!box)return;const photos=visibleNewDocumentPhotos();box.innerHTML=photos.length?photos.map(p=>`<label class="document-source-photo"><input type="checkbox" data-document-source-photo="${p.id}"${newDocumentPhotoIds.has(String(p.id))?' checked':''}><img loading="lazy" decoding="async" src="${captureThumbSrc(p)}" alt="${esc(p.photo_title||'PhotoNote')}"><span><strong>${esc(p.photo_title||'PhotoNote')}</strong><br>${esc(p.note||'')}</span></label>`).join(''):'<p class="empty">No PhotoNotes match this search.</p>';box.querySelectorAll('[data-document-source-photo]').forEach(input=>input.onchange=()=>{if(input.checked)newDocumentPhotoIds.add(input.dataset.documentSourcePhoto);else newDocumentPhotoIds.delete(input.dataset.documentSourcePhoto);updateNewDocumentSave();});updateNewDocumentSave();}
 function updateNewDocumentSave(){const button=document.getElementById('gcreate')||document.getElementById('addDocumentPhotosSave');if(button)button.disabled=documentCreationPending||!newDocumentPhotoIds.size;}
 async function addPhotosToDocument(){const id=documentAddTargetId,ids=[...newDocumentPhotoIds].map(Number).filter(Number.isInteger),btn=document.getElementById('addDocumentPhotosSave');if(documentCreationPending||id==null||!ids.length)return;documentCreationPending=true;btn.disabled=true;try{const r=await api(`/api/groups/${id}/add`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids})});const d=await r.json().catch(()=>({}));if(!r.ok)throw Error();const added=Number(d.added??ids.length);newDocumentPhotoIds.clear();documentAddTargetId=null;toast(`Added ${added} PhotoNote${added===1?'':'s'} to the document.`);renderGroups();}catch{toast('Photos could not be added to the document');}finally{documentCreationPending=false;if(btn.isConnected)updateNewDocumentSave();}}
-async function createGroup(){if(documentCreationPending||!newDocumentSetup?.title.trim()||!newDocumentPhotoIds.size)return;const btn=document.getElementById('gcreate');documentCreationPending=true;btn.disabled=true;try{const r=await api('/api/groups',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:newDocumentSetup.title.trim(),description:newDocumentSetup.description.trim(),ids:[...newDocumentPhotoIds],layout:newDocumentSetup.layout})});const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.error||'Could not save document');let templateFailed=false;if(newDocumentSetup.template){const fd=new FormData();fd.append('template',newDocumentSetup.template);fd.append('group',String(d.id));const t=await api('/api/document-settings/template',{method:'POST',body:fd}).catch(()=>null);templateFailed=!t||!t.ok;}state.selectedIds.clear();newDocumentPhotoIds.clear();state.groups=null;state.groupId=d.id;documentCreateStep='list';toast(templateFailed?'New document saved, but the Word template could not be uploaded. Import it again in Company Branding & Word Template.':'New document saved.');renderGroups();}catch(e){toast(e.message||'Could not save document');}finally{documentCreationPending=false;if(btn.isConnected)updateNewDocumentSave();}}
+// Company name, header and footer that match the account branding are left blank, so the document keeps following the account branding.
+function newDocumentOwnLayout(){const layout={...newDocumentSetup.layout},account=documentSetupSources?.settings?.branding||{};for(const k of DOCUMENT_BRANDING_KEYS){const v=String(layout[k]||'').trim();layout[k]=v===String(account[k]||'').trim()?'':v;}return layout;}
+async function createGroup(){if(documentCreationPending||!newDocumentSetup?.title.trim()||!newDocumentPhotoIds.size)return;const btn=document.getElementById('gcreate');documentCreationPending=true;btn.disabled=true;try{const r=await api('/api/groups',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:newDocumentSetup.title.trim(),description:newDocumentSetup.description.trim(),ids:[...newDocumentPhotoIds],layout:newDocumentOwnLayout(),use_default_template:!newDocumentSetup.template})});const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.error||'Could not save document');let templateFailed=false;if(newDocumentSetup.template){const fd=new FormData();fd.append('template',newDocumentSetup.template);fd.append('group',String(d.id));const t=await api('/api/document-settings/template',{method:'POST',body:fd}).catch(()=>null);templateFailed=!t||!t.ok;}state.selectedIds.clear();newDocumentPhotoIds.clear();state.groups=null;state.groupId=d.id;documentCreateStep='list';newDocumentSetup=null;documentSetupSources=null;toast(templateFailed?'New document saved, but the Word template could not be uploaded. Import it again in Company Branding & Word Template.':'New document saved.');renderGroups();}catch(e){toast(e.message||'Could not save document');}finally{documentCreationPending=false;if(btn.isConnected)updateNewDocumentSave();}}
 async function loadGroups(){const list=document.getElementById('glist');if(!list)return;const r=await api('/api/groups');if(!r.ok){list.innerHTML='<p class="status">Could not load documents.</p>';return;}state.groups=await r.json();if(list.isConnected)renderGroupCards(list,state.groups);}
 function renderGroupCards(list,groups){const rows=sortedDocuments(groups);if(!rows.length){list.innerHTML='<p class="empty">No matching documents.</p>';return;}list.innerHTML=`<ul class="compact-document-list">${rows.map(g=>`<li><div><strong>${esc(g.title)}</strong><span>${g.item_count} PhotoNote${g.item_count===1?'':'s'} · Last Modified: ${esc(documentModifiedLabel(g))}</span></div><button class="btn secondary slim gopen" data-id="${g.id}">Open Document</button></li>`).join('')}</ul>`;list.querySelectorAll('.gopen').forEach(b=>b.onclick=()=>{state.groupId=Number(b.dataset.id);renderGroups();});}
 // Delete Document asks for a second tap instead of a browser dialog. The photos themselves are kept.
@@ -5324,7 +5269,8 @@ function renderDocumentSetup(){
       <label>Header Text<input id="documentHeaderText" value="${esc(b.header_text||'')}" placeholder="Optional header"></label>
       <label class="document-brand-wide">Footer Text<input id="documentFooterText" value="${esc(b.footer_text||'')}" placeholder="Optional footer or contact information"></label>
     </div>
-    <button class="btn slim document-compact-action" id="saveDocumentBranding">Save Branding Text</button>
+    <div class="document-caption-actions"><button class="btn slim document-compact-action" id="saveDocumentBranding">Save for This Document</button><button class="btn secondary slim document-compact-action" id="saveAccountBranding">Save as Account Default</button></div>
+    <p class="status">Save for This Document changes only this document. Save as Account Default changes the company name, header and footer for every document that has not set its own.</p>
     <div class="document-asset-row">
       <div><strong>Company Logo</strong><div class="meta">${currentDocumentSettings.logo_name?esc(currentDocumentSettings.logo_name):'No logo uploaded'}</div>${currentDocumentSettings.logo_path?`<img class="document-logo-preview" src="${esc(currentDocumentSettings.logo_path)}" alt="Uploaded company logo">`:''}</div>
       <div><label class="file-action">Upload Logo<input type="file" id="documentLogoFile" accept="image/png,image/jpeg,image/webp"></label>${currentDocumentSettings.logo_path?'<button class="btn secondary slim document-remove-asset" data-remove-document-asset="logo">Remove</button>':''}</div>
@@ -5334,14 +5280,18 @@ function renderDocumentSetup(){
       <div><a class="btn secondary slim document-compact-action" href="/api/document-settings/template-starter">Download Starter Template</a><label class="file-action">Import Word Template<input type="file" id="documentTemplateFile" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"></label>${currentDocumentSettings.template_ready?'<button class="btn secondary slim document-remove-asset" data-remove-document-asset="template">Remove</button>':''}</div>
     </div>`;
   document.getElementById('saveDocumentBranding').onclick=saveDocumentBranding;
+  document.getElementById('saveAccountBranding').onclick=saveAccountBranding;
   document.getElementById('documentLogoFile').onchange=e=>uploadDocumentAsset('logo',e.target.files[0]);
   document.getElementById('documentTemplateFile').onchange=e=>uploadDocumentAsset('template',e.target.files[0]);
   box.querySelectorAll('[data-remove-document-asset]').forEach(button=>button.onclick=()=>removeDocumentAsset(button.dataset.removeDocumentAsset));
 }
-async function saveDocumentBranding(){const payload={company_name:document.getElementById('documentCompanyName').value,header_text:document.getElementById('documentHeaderText').value,footer_text:document.getElementById('documentFooterText').value};const r=await api('/api/document-settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});if(!r.ok){toast('Branding could not be saved');return;}const d=await r.json();currentDocumentSettings.branding=d.branding;state._copyrightName=String(d.branding?.company_name||'').trim();
-  // A document with its own branding text keeps what was just entered, so the download matches these fields.
-  if(currentGroup&&documentHasOwnBranding()){const layout={...normalizedDocumentLayout()};for(const k of DOCUMENT_BRANDING_KEYS)layout[k]=String(payload[k]||'').trim();const g=await api(`/api/groups/${currentGroup.id}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({layout})});if(!g.ok){toast('Branding saved for the account, but this document could not be updated');renderDocumentPreview();return;}currentGroup.layout=layout;}
-  toast('Branding saved');renderDocumentPreview();}
+function documentBrandingFields(){return{company_name:document.getElementById('documentCompanyName').value.trim(),header_text:document.getElementById('documentHeaderText').value.trim(),footer_text:document.getElementById('documentFooterText').value.trim()};}
+// This document's own company name, header and footer. A value matching the account branding is stored blank, so it keeps following the account.
+async function saveDocumentBranding(){const payload=documentBrandingFields(),account=currentDocumentSettings.branding||{},layout={...normalizedDocumentLayout()};for(const k of DOCUMENT_BRANDING_KEYS)layout[k]=payload[k]===String(account[k]||'').trim()?'':payload[k];const g=await api(`/api/groups/${currentGroup.id}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({layout})});if(!g.ok){toast('Branding could not be saved');return;}currentGroup.layout=layout;toast('Branding saved for this document');renderDocumentPreview();}
+// The account default branding. This document then follows it too, so the download matches these fields.
+async function saveAccountBranding(){const payload=documentBrandingFields();const r=await api('/api/document-settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});if(!r.ok){toast('Branding could not be saved');return;}const d=await r.json();currentDocumentSettings.branding=d.branding;state._copyrightName=String(d.branding?.company_name||'').trim();
+  if(currentGroup&&documentHasOwnBranding()){const layout={...normalizedDocumentLayout()};for(const k of DOCUMENT_BRANDING_KEYS)layout[k]='';const g=await api(`/api/groups/${currentGroup.id}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({layout})});if(!g.ok){toast('Branding saved for the account, but this document could not be updated');renderDocumentPreview();return;}currentGroup.layout=layout;}
+  toast('Branding saved as the account default');renderDocumentPreview();}
 async function uploadDocumentAsset(kind,file){if(!file)return;const fd=new FormData();fd.append(kind,file);fd.append('group',String(currentGroup.id));const r=await api(`/api/document-settings/${kind}`,{method:'POST',body:fd});const d=await r.json().catch(()=>({}));if(!r.ok){toast(d.error||'Upload failed');return;}if(kind==='logo'){currentDocumentSettings.logo_path=d.logo_path;currentDocumentSettings.logo_name=d.logo_name;}else{currentDocumentSettings.template_name=d.template_name;currentDocumentSettings.template_ready=true;}toast(kind==='logo'?'Logo uploaded':'Word template imported');renderDocumentSetup();renderDocumentPreview();}
 async function removeDocumentAsset(kind){const r=await api('/api/document-settings/remove-asset',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({kind,group:currentGroup.id})});if(!r.ok){toast('Remove failed');return;}if(kind==='logo'){currentDocumentSettings.logo_path=null;currentDocumentSettings.logo_name=null;}else{currentDocumentSettings.template_name=null;currentDocumentSettings.template_ready=false;}renderDocumentSetup();renderDocumentPreview();toast(kind==='logo'?'Logo removed':'Template removed');}
 function renderDocumentLayoutControls(){const box=document.getElementById('documentLayoutControls');if(!box)return;const l=normalizedDocumentLayout();box.innerHTML=`<div class="document-layout-grid">
@@ -5360,7 +5310,7 @@ function layoutFromControls(){const prior=normalizedDocumentLayout();return{...p
 function renderDocumentPreviewFromControls(){renderDocumentPreview(layoutFromControls());}
 async function saveDocumentLayout(){const layout=layoutFromControls(),r=await api(`/api/groups/${currentGroup.id}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({layout})});if(r.ok){currentGroup.layout=layout;toast('Layout saved');renderDocumentPreview(layout);}else toast('Layout could not be saved');}
 function documentPreviewItems(){return currentGroupItems;}
-function renderDocumentPreview(layoutOverride){const box=document.getElementById('documentPreview');if(!box)return;if(currentDocumentSettings.template_ready&&window.PhotoNotesWordPreview){const target=document.createElement('div');box.replaceChildren(target);window.PhotoNotesWordPreview.render(target,currentGroup.id);return;}const l=layoutOverride||normalizedDocumentLayout(),b=effectiveDocumentBranding(window.PhotoNotesExportPresets?.previewBranding()||currentDocumentSettings.branding||{},l),perPage=documentPhotosPerPage(l),pages=[],previewItems=documentPreviewItems();const used=new Set(),byId=new Map(previewItems.map(c=>[Number(c.id),c]));let pending=[];const flush=()=>{if(pending.length){pages.push(pending);pending=[];}};for(const c of previewItems){if(used.has(Number(c.id)))continue;const pair=currentGroupPairs.find(p=>(Number(p.before_id)===Number(c.id)||Number(p.after_id)===Number(c.id))&&byId.has(Number(p.before_id))&&byId.has(Number(p.after_id)));if(pair){flush();const page=[byId.get(Number(pair.before_id)),byId.get(Number(pair.after_id))];page.isPair=true;pages.push(page);page.forEach(c=>used.add(Number(c.id)));}else{pending.push(c);used.add(Number(c.id));if(pending.length===perPage)flush();}}flush();const totalPreviewPages=pages.length+(l.cover_page?1:0)||1;let pageNo=0;const chrome=(content)=>{pageNo++;return `<article class="document-preview-page ${l.orientation==='landscape'?'landscape':''}" style="font-family:${esc(l.font)}"><div class="document-preview-header">${l.header?esc(b.header_text||b.company_name||''):''}</div><div class="document-preview-content">${content}</div><div class="document-preview-footer">${l.footer?esc(b.footer_text||''):''}${l.page_numbers&&totalPreviewPages>1?`${l.footer&&b.footer_text?' · ':''}Page ${pageNo}`:''}</div></article>`;};let html='';if(l.cover_page)html+=chrome(`<div class="document-preview-cover">${currentDocumentSettings.logo_path&&window.PhotoNotesExportPresets?.includeLogo()!==false?`<img src="${esc(currentDocumentSettings.logo_path)}" alt="Company logo">`:''}<div class="document-preview-company" style="color:${esc(l.accent)}">${esc(b.company_name||'')}</div><h2>${esc(currentGroup.title||'Untitled Document')}</h2><p>${esc(currentGroup.description||'')}</p></div>`);if(!pages.length)html+=chrome(`<div class="document-preview-empty">Use Add Photos in Document Contents to preview the document.</div>`);for(const page of pages)html+=chrome(`<div class="document-preview-photos photos-${page.isPair?2:perPage} ${page.isPair?'two-up':''}">${page.map((c,index)=>`<section>${page.isPair?`<strong>${index===0?'BEFORE':'AFTER'}</strong>`:''}<h3>${esc(String(c.photo_title||'').trim()?c.photo_title:'Photo '+(previewItems.indexOf(c)+1))}</h3>${c.photo_path?`<img src="${capturePhotoSrc(c)}" alt="${esc(c.photo_title||'Photo')}">`:''}${photoLocationHtml(c)}<div>${esc(new Date(c.created_at).toLocaleString(uiLocale()))}</div><div>${esc((c.area_tags||[]).join(', '))}</div>${c.urgency==='urgent'?'<div>Urgency: Urgent</div>':''}${c.gauge_record?.generated_note?'':`<p>${esc(c.note||'No notes')}</p>`}${photoEvidencePreview(c,true)}${window.PhotoNotesCustomFields?.html(c)||''}</section>`).join('')}</div>`);box.innerHTML=html;}
+function renderDocumentPreview(layoutOverride){const box=document.getElementById('documentPreview');if(!box)return;if(currentDocumentSettings.template_ready&&window.PhotoNotesWordPreview){const target=document.createElement('div');box.replaceChildren(target);window.PhotoNotesWordPreview.render(target,currentGroup.id);return;}const l=layoutOverride||normalizedDocumentLayout(),b=effectiveDocumentBranding(window.PhotoNotesExportPresets?.previewBranding()||currentDocumentSettings.branding||{},l),perPage=documentPhotosPerPage(l),pages=[],previewItems=documentPreviewItems();const used=new Set(),byId=new Map(previewItems.map(c=>[Number(c.id),c]));let pending=[];const flush=()=>{if(pending.length){pages.push(pending);pending=[];}};for(const c of previewItems){if(used.has(Number(c.id)))continue;const pair=currentGroupPairs.find(p=>(Number(p.before_id)===Number(c.id)||Number(p.after_id)===Number(c.id))&&byId.has(Number(p.before_id))&&byId.has(Number(p.after_id)));if(pair){flush();const page=[byId.get(Number(pair.before_id)),byId.get(Number(pair.after_id))];page.isPair=true;pages.push(page);page.forEach(c=>used.add(Number(c.id)));}else{pending.push(c);used.add(Number(c.id));if(pending.length===perPage)flush();}}flush();const totalPreviewPages=pages.length+(l.cover_page?1:0)||1;let pageNo=0;const chrome=(content)=>{pageNo++;return `<article class="document-preview-page ${l.orientation==='landscape'?'landscape':''}" style="font-family:${esc(l.font)}"><div class="document-preview-header">${l.header?esc(b.header_text||b.company_name||''):''}</div><div class="document-preview-content">${content}</div><div class="document-preview-footer">${l.footer?esc(b.footer_text||''):''}${l.page_numbers&&totalPreviewPages>1?`${l.footer&&b.footer_text?' · ':''}Page ${pageNo}`:''}</div></article>`;};let html='';if(l.cover_page)html+=chrome(`<div class="document-preview-cover">${currentDocumentSettings.logo_path&&window.PhotoNotesExportPresets?.includeLogo()!==false?`<img src="${esc(currentDocumentSettings.logo_path)}" alt="Company logo">`:''}<div class="document-preview-company" style="color:${esc(l.accent)}">${esc(b.company_name||'')}</div><h2>${esc(currentGroup.title||'Untitled Document')}</h2><p>${esc(currentGroup.description||'')}</p></div>`);if(!pages.length)html+=chrome(`<div class="document-preview-empty">Use Add Photos in Document Contents to preview the document.</div>`);for(const page of pages)html+=chrome(`<div class="document-preview-photos photos-${page.isPair?2:perPage} ${page.isPair?'two-up':''}">${page.map((c,index)=>`<section>${page.isPair?`<strong>${index===0?'BEFORE':'AFTER'}</strong>`:''}<h3>${esc(String(c.photo_title||'').trim()?c.photo_title:'Photo '+(previewItems.indexOf(c)+1))}</h3>${c.photo_path?`<img src="${capturePhotoSrc(c)}" alt="${esc(c.photo_title||'Photo')}">`:''}${photoLocationHtml(c)}<div>${esc(new Date(c.created_at).toLocaleString(uiLocale()))}</div><div>${esc((c.area_tags||[]).join(', '))}</div>${c.urgency==='urgent'?'<div>Urgency: Urgent</div>':''}${c.gauge_record?.generated_note&&!hasDocumentCaption(c)?'':`<p>${esc(documentCaption(c)||'No notes')}</p>`}${photoEvidencePreview(c,true)}${window.PhotoNotesCustomFields?.html(c)||''}</section>`).join('')}</div>`);box.innerHTML=html;}
 
 function renderTitleView() {
   const box = document.getElementById('titleview');
@@ -5413,6 +5363,10 @@ async function saveDesc() {
   if (r.ok) { currentGroup.description = v; toast('Saved'); renderDescView(); renderDocumentPreview(); } else toast('Save failed');
 }
 
+// Document captions: a caption saved for this document, or the photo's own note when none is saved.
+function hasDocumentCaption(c){return typeof c?.document_caption==='string'&&!!c.document_caption.trim();}
+function documentCaption(c){return hasDocumentCaption(c)?c.document_caption:(c?.note||'');}
+function documentCaptionSourceText(c){return hasDocumentCaption(c)?'Caption for this document only. The photo note in Library is unchanged.':'Using the photo note. Saving a different caption changes this document only.';}
 function renderGroupItems() {
   const box = document.getElementById('gitems');
   if (!box) return;
@@ -5427,8 +5381,9 @@ function renderGroupItems() {
       ${photoLocationHtml(c,'No location')}
       ${isIndustryProClient() && fmtDimsClient(c) ? `<div class="meta"><strong>Dimensions:</strong> ${esc(fmtDimsClient(c))}</div>` : ''}
       <label style="margin-top:8px">Photo Caption</label>
-      <textarea class="gcaption" data-i="${i}" style="min-height:70px">${esc(c.note || '')}</textarea>
-      <button class="btn secondary slim gsavecaption" data-i="${i}" style="margin-top:6px">Save Caption</button>
+      <div class="meta document-caption-source" data-caption-source="${i}">${documentCaptionSourceText(c)}</div>
+      <textarea class="gcaption" data-i="${i}" style="min-height:70px">${esc(documentCaption(c))}</textarea>
+      <div class="document-caption-actions"><button class="btn secondary slim gsavecaption" data-i="${i}">Save Caption</button><button class="btn secondary slim gusenote" data-i="${i}" type="button"${hasDocumentCaption(c)?'':' disabled'}>Use Photo Note</button></div>
       <div class="row" style="margin-top:8px">
         <button class="btn secondary gup" data-i="${i}">↑ Up</button>
         <button class="btn secondary gdown" data-i="${i}">↓ Down</button>
@@ -5436,17 +5391,26 @@ function renderGroupItems() {
       </div>
     </div>`).join('');
   wireRotate(box);
-  box.querySelectorAll('.gsavecaption').forEach(b => b.onclick = async () => {
-    const i = parseInt(b.getAttribute('data-i'), 10);
-    const item = currentGroupItems[i];
-    const field = box.querySelector(`.gcaption[data-i="${i}"]`);
+  // A caption saved here belongs to this document only. The photo's own note in Library is never changed.
+  const saveCaption = async (i, value, button, label) => {
+    const item = currentGroupItems[i], field = box.querySelector(`.gcaption[data-i="${i}"]`);
     if (!item || !field) return;
-    b.disabled = true; b.textContent = 'Saving...';
-    const r = await api(`/api/captures/${item.id}`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ note:field.value }) });
-    if (r.ok) { item.note = field.value; toast('Caption saved'); renderDocumentPreview(); }
-    else toast('Caption could not be saved');
-    b.disabled = false; b.textContent = 'Save Caption';
-  });
+    const caption = value != null && value.trim() && value.trim() !== String(item.note || '').trim() ? value : null;
+    button.disabled = true; button.textContent = 'Saving...';
+    const r = await api(`/api/groups/${currentGroup.id}/caption`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ capture_id:item.id, caption }) }).catch(() => null);
+    const d = r && r.ok ? await r.json().catch(() => ({})) : null;
+    button.textContent = label;
+    if (!d) { button.disabled = false; toast('Caption could not be saved'); return; }
+    item.document_caption = d.caption ?? null;
+    if (!hasDocumentCaption(item)) field.value = item.note || '';
+    box.querySelector(`[data-caption-source="${i}"]`).textContent = uiT(documentCaptionSourceText(item));
+    box.querySelector(`.gsavecaption[data-i="${i}"]`).disabled = false;
+    box.querySelector(`.gusenote[data-i="${i}"]`).disabled = !hasDocumentCaption(item);
+    toast(hasDocumentCaption(item) ? 'Caption saved' : 'This document now uses the photo note');
+    renderDocumentPreview(); renderGroupPairPreview();
+  };
+  box.querySelectorAll('.gsavecaption').forEach(b => b.onclick = () => { const i = parseInt(b.getAttribute('data-i'), 10); saveCaption(i, box.querySelector(`.gcaption[data-i="${i}"]`)?.value ?? '', b, 'Save Caption'); });
+  box.querySelectorAll('.gusenote').forEach(b => b.onclick = () => saveCaption(parseInt(b.getAttribute('data-i'), 10), null, b, 'Use Photo Note'));
   box.querySelectorAll('.gup').forEach(b => b.onclick = () => moveItem(parseInt(b.getAttribute('data-i'), 10), -1));
   box.querySelectorAll('.gdown').forEach(b => b.onclick = () => moveItem(parseInt(b.getAttribute('data-i'), 10), 1));
   box.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => removeItem(parseInt(b.getAttribute('data-i'), 10)));
@@ -5464,8 +5428,8 @@ function renderGroupPairPreview() {
     ${missing.map(p=>`<div class="card"><p>This document is missing the ${esc(p.missing_role)} photo from a saved Before/After pair. That pair cannot appear together in exports until both photos are included.</p><button class="btn secondary" type="button" data-pair-complete="${p.missing_capture_id}">Add Missing ${esc(p.missing_role)} Photo</button></div>`).join('')}
     ${pairs.map(({ pair,before, after }) => `<article class="card before-after-preview">
 
-      <div class="before-after-column"><strong>BEFORE</strong><div class="photo-title">${esc(before.photo_title||'Untitled photo')}</div><img src="${capturePhotoSrc(before)}" alt="Before photo">${photoLocationHtml(before)}<div>${esc(before.note || '(no caption)')}</div><div class="meta">${new Date(before.created_at).toLocaleDateString(uiLocale())}</div></div>
-      <div class="before-after-column"><strong>AFTER</strong><div class="photo-title">${esc(after.photo_title||'Untitled photo')}</div><img src="${capturePhotoSrc(after)}" alt="After photo">${photoLocationHtml(after)}<div>${esc(after.note || '(no caption)')}</div><div class="meta">${new Date(after.created_at).toLocaleDateString(uiLocale())}</div></div>
+      <div class="before-after-column"><strong>BEFORE</strong><div class="photo-title">${esc(before.photo_title||'Untitled photo')}</div><img src="${capturePhotoSrc(before)}" alt="Before photo">${photoLocationHtml(before)}<div>${esc(documentCaption(before) || '(no caption)')}</div><div class="meta">${new Date(before.created_at).toLocaleDateString(uiLocale())}</div></div>
+      <div class="before-after-column"><strong>AFTER</strong><div class="photo-title">${esc(after.photo_title||'Untitled photo')}</div><img src="${capturePhotoSrc(after)}" alt="After photo">${photoLocationHtml(after)}<div>${esc(documentCaption(after) || '(no caption)')}</div><div class="meta">${new Date(after.created_at).toLocaleDateString(uiLocale())}</div></div>
     </article>`).join('')}`;
   box.querySelectorAll('[data-pair-complete]').forEach(button=>button.onclick=async()=>{
     button.disabled=true;

@@ -20,8 +20,8 @@ const {chromium,webkit}=require('playwright');
    for(const section of ['organize','edit','create','send']){
     let reference;
     for(const edition of ['general','contractor','paving','concrete','roofer']){
-     await page.evaluate(({edition,section})=>{state.plan='pro';state.proType=edition;state.view=section;state.groupId=null;state.ewrId=null;state.me.ramo_intake_access=true;if(section==='send')sendSource='documents';renderApp();},{edition,section});
-     await page.locator(section==='organize'?'#photoSearch':section==='edit'?'#delbtn':section==='create'?'#newDocument':'#sendDocumentSearch').waitFor();
+     await page.evaluate(({edition,section})=>{state.plan='pro';state.proType=edition;state.view=section;state._libraryOpenId=section==='edit'?1:null;state.groupId=null;state.ewrId=null;state.me.ramo_intake_access=true;if(section==='send')sendSource='documents';renderApp();},{edition,section});
+     await page.locator(section==='organize'?'#photoSearch':section==='edit'?'#libraryBack':section==='create'?'#newDocument':'#sendDocumentSearch').waitFor();
      if(section==='send')await page.locator('#epChoose').waitFor({state:'attached'});
      const controls=await page.locator('#body button[id],#body input[id],#body select[id],#body textarea[id]').evaluateAll(nodes=>nodes.map(n=>{const s=getComputedStyle(n);return {id:n.id,label:n.tagName==='BUTTON'?n.textContent.trim():n.getAttribute('placeholder'),font:s.fontFamily,size:s.fontSize,color:s.color,background:s.backgroundColor,radius:s.borderRadius};}));
      if(!reference)reference=controls;
