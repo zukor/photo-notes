@@ -190,36 +190,136 @@ function toast(msg, duration=2200) {
 }
 
 const EXPORT_BUSY = 'Several documents are being made right now. Please try again in a minute.';
+// Scripts for screens few accounts open load the first time the screen opens, not with every start.
+const lazyScripts = {}, lazyScriptsLoaded = new Set();
+// ordered: run in the order requested, as the page's own script tags do, while still downloading together.
+function loadScriptOnce(src, ordered = false) {
+  if (!lazyScripts[src]) lazyScripts[src] = new Promise((resolve, reject) => {
+    const script = document.createElement('script'); script.src = src; script.async = !ordered;
+    script.onload = () => { lazyScriptsLoaded.add(src); resolve(); };
+    script.onerror = () => { delete lazyScripts[src]; script.remove(); reject(Error('Could not load ' + src)); };
+    document.head.append(script);
+  });
+  return lazyScripts[src];
+}
+// Measuring, quality and estimating tools used only by Concrete Pro and Paving Pro. They load with
+// those versions (before the first screen is drawn) instead of with every start of every version.
+const EDITION_TOOL_SCRIPTS = {
+  concrete: ['/vendor/aruco/cv.js?v=2.0.0', '/vendor/aruco/aruco.js?v=2.0.0', '/precision-measure-engine.js?v=1', '/precision-measure.js?v=4', '/concrete-quality-rules.js?v=1', '/concrete-quality-ui.js?v=3', '/geo-measure.js?v=3', '/concrete-estimate-rules.js?v=5', '/concrete-estimate-ui.js?v=5', '/repair-outline.js?v=1', '/satellite-measure-ui.js?v=1'],
+  paving: ['/vendor/aruco/cv.js?v=2.0.0', '/vendor/aruco/aruco.js?v=2.0.0', '/precision-measure-engine.js?v=1', '/precision-measure.js?v=4', '/paving-quality-rules.js?v=1', '/paving-quality-ui.js?v=4', '/geo-measure.js?v=3', '/satellite-measure-ui.js?v=1', '/paving-takeoff-ui.js?v=1']
+};
+function editionToolScripts() { return isProClient() ? EDITION_TOOL_SCRIPTS[state.proType === 'asphalt' ? 'paving' : state.proType] || [] : []; }
+function editionToolsReady() { return editionToolScripts().every(src => lazyScriptsLoaded.has(src)); }
+function loadEditionTools() { return Promise.all(editionToolScripts().map(src => loadScriptOnce(src, true))); }
+// A screen drawn before its version's tools finished loading is drawn again once they arrive,
+// unless the person has started a photo or note in the meantime.
+function ensureEditionTools() {
+  if (editionToolsReady()) return;
+  const edition = selectedEdition(), view = state.view;
+  loadEditionTools().then(() => {
+    if (selectedEdition() !== edition || state.view !== view || captureSavePending || state.photoFile || document.getElementById('note')?.value.trim()) return;
+    renderApp();
+  }, () => {});
+}
+// Concrete Pro's Send to Ramo Optimizer screen. Loading its script replaces this function with the real one.
+if (typeof window !== 'undefined' && typeof window.openRamoIntake !== 'function') window.openRamoIntake = async function (...args) {
+  const placeholder = window.openRamoIntake;
+  try { await loadScriptOnce('/ramo-intake.js?v=286'); } catch (e) { toast('Send to Ramo Optimizer could not load. Check the connection and try again.'); return; }
+  if (window.openRamoIntake === placeholder) return;
+  return window.openRamoIntake(...args);
+};
+// Reads give up after 20 seconds instead of waiting forever on a dead connection. Pass
+// { timeout: ms } to change it, or 0 for none. Saves, uploads, AI tools and exports have no default limit.
+const API_TIMEOUT_MS = 20000;
+const LONG_API_REQUEST = /\/(export|report|stamped|share-photo)(\/|\?|$)|[?&]doc=/;
 async function api(path, opts = {}) {
-  const r = await fetch(path, { credentials: 'same-origin', ...opts });
-  return r;
+  const { timeout, ...options } = opts;
+  const method = String(options.method || 'GET').toUpperCase();
+  const limit = timeout !== undefined ? Number(timeout) || 0 : (method === 'GET' && !LONG_API_REQUEST.test(String(path)) ? API_TIMEOUT_MS : 0);
+  if (!limit) return fetch(path, { credentials: 'same-origin', ...options });
+  const controller = new AbortController(), timer = setTimeout(() => controller.abort(), limit);
+  const outer = options.signal;
+  if (outer) { if (outer.aborted) controller.abort(); else outer.addEventListener('abort', () => controller.abort(), { once: true }); }
+  try { return await fetch(path, { credentials: 'same-origin', ...options, signal: controller.signal }); }
+  finally { clearTimeout(timer); }
 }
 
 async function loadStartupSession(){
+ const offline=typeof navigator!=='undefined'&&navigator.onLine===false;
  for(let attempt=0;attempt<2;attempt++){
   const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),15000);
-  try{const r=await api('/api/me',{signal:controller.signal});if(r.status===401)return null;if(!r.ok)throw Error('Session service '+r.status);const me=await r.json();if(!me||!me.id)throw Error('Invalid session response');void globalThis.PhotoNotesLiveTranscription?.refresh();return me;}
-  catch(error){if(attempt===1)throw error;await new Promise(resolve=>setTimeout(resolve,250));}
+  // A response from the server carries its status. A failed connection has none.
+  let status=null;
+  try{const r=await api('/api/me',{signal:controller.signal,timeout:0});status=r.status;if(r.status===401)return null;if(!r.ok)throw Object.assign(Error('Session service '+r.status),{status:r.status});const me=await r.json();if(!me||!me.id)throw Object.assign(Error('Invalid session response'),{status:r.status});void globalThis.PhotoNotesLiveTranscription?.refresh();return me;}
+  catch(error){if(status&&!error.status)error.status=status;if(attempt===1||(offline&&!error.status))throw error;await new Promise(resolve=>setTimeout(resolve,250));}
   finally{clearTimeout(timer);}
  }
 }
 
+// The last account details this browser confirmed, so Capture can open with no connection.
+// Only what Capture needs is kept. Signing out, or a signed-out answer from the server, removes it.
+const SESSION_CACHE_KEY='pn-last-session-v1';
+function rememberSession(me){try{localStorage.setItem(SESSION_CACHE_KEY,JSON.stringify({id:me.id,name:me.name,email:me.email,plan:me.plan,pro_type:me.pro_type,edition_access:me.edition_access,feature_access:me.feature_access||{}}));}catch(error){}}
+function forgetSession(){try{localStorage.removeItem(SESSION_CACHE_KEY);}catch(error){}}
+function cachedSession(){try{const me=JSON.parse(localStorage.getItem(SESSION_CACHE_KEY)||'null');return me&&me.id&&me.email&&Array.isArray(me.edition_access)?{...me,authed:true}:null;}catch(error){return null;}}
+
 async function boot() {
   try {
-  const session=await loadStartupSession();
+  let session;
+  try{session=await loadStartupSession();}
+  catch(error){const cached=!error.status&&cachedSession();if(cached)return await bootOffline(cached);throw error;}
   if (session) {
-    state.me=session;state.plan=session.plan||'free';state.proType=session.pro_type||'paving';
-    await Promise.allSettled([loadAreas(),loadJobs(),loadHoaContext()]);
-    try{await restoreOfflineQueue();await restoreCaptureDraft();}catch(error){console.warn('Local capture recovery unavailable');toast('Local capture recovery is unavailable. Your cloud account is still signed in. Keep this browser’s data until pending captures are recovered.');}
+    state.me=session;state.offlineSession=false;state.plan=session.plan||'free';state.proType=session.pro_type||'paving';
+    rememberSession(session);hookQueueResume();
     // Start loading documents as soon as the user signs in. By the time they
     // open Create, existing documents can be shown immediately instead of
     // appearing only after another action refreshes the list.
     prefetchGroups();
+    // Pending uploads start while the topic, project and community lists load.
+    const queueReady=restoreOfflineQueue();queueReady.catch(()=>{});
+    await Promise.allSettled([loadAreas(),loadJobs(),loadHoaContext(),loadEditionTools()]);
+    try{await queueReady;await restoreCaptureDraft();}catch(error){console.warn('Local capture recovery unavailable');toast('Local capture recovery is unavailable. Your cloud account is still signed in. Keep this browser’s data until pending captures are recovered.');}
     if(new URLSearchParams(location.search).has('issues'))state.view='my-issues';
     renderApp();
     setTimeout(()=>{if(window.PhotoNotesFirstUse?.offer(state.me))installOfferShown=true;else maybeOfferInstall();},700);
-  } else renderLogin();
+  } else {forgetSession();renderLogin();}
   } catch(error) {renderLogin();document.getElementById('loginErr').textContent='Photo Notes could not reach its sign-in service. This does not mean your Wi-Fi is disconnected. Retry the connection; pending captures stay in this browser.';const retry=document.createElement('button');retry.id='retryConnection';retry.className='btn secondary';retry.textContent='Retry Connection';retry.onclick=()=>{retry.disabled=true;void boot();};document.getElementById('loginErr').append(retry);}
+}
+
+// No connection at start: open Capture with the last confirmed account so photos save on this device.
+// Uploads wait in the queue, and the app signs in normally when the connection returns.
+let offlineSessionTimer=null,offlineRefreshRunning=false;
+async function bootOffline(cached){
+  state.me=cached;state.offlineSession=true;state.plan=cached.plan||'free';state.proType=cached.pro_type||'paving';
+  state.view=selectedEdition()==='roads'?'road-report':'capture';
+  hookQueueResume();
+  await loadEditionTools().catch(()=>{});
+  try{await restoreOfflineQueue();await restoreCaptureDraft();}catch(error){toast('Local capture recovery is unavailable. Keep this browser’s data until pending captures are recovered.');}
+  renderApp();
+  toast('No connection. Photos you save stay on this device and upload when the connection returns.',5000);
+  window.addEventListener('online',refreshOnlineSession);
+  clearInterval(offlineSessionTimer);offlineSessionTimer=setInterval(refreshOnlineSession,30000);
+}
+async function refreshOnlineSession(){
+  if(!state.offlineSession){clearInterval(offlineSessionTimer);window.removeEventListener('online',refreshOnlineSession);return;}
+  if(offlineRefreshRunning)return;offlineRefreshRunning=true;
+  try{
+    const r=await api('/api/me',{cache:'no-store'});
+    if(r.status===401){forgetSession();state.offlineSession=false;await persistCaptureDraft().catch(()=>{});state.me=null;queueAccount=null;bgQueue=[];clearTimeout(queueRetryTimer);renderLogin();return;}
+    if(!r.ok)return;
+    const me=await r.json();if(!me||!me.id)return;
+    // Another account signed in on this browser meanwhile: start over with that account.
+    if(String(me.email).toLowerCase()!==String(state.me.email).toLowerCase()){await persistCaptureDraft().catch(()=>{});location.reload();return;}
+    state.offlineSession=false;clearInterval(offlineSessionTimer);window.removeEventListener('online',refreshOnlineSession);
+    state.me=me;state.plan=me.plan||'free';state.proType=me.pro_type||'paving';rememberSession(me);
+    void globalThis.PhotoNotesLiveTranscription?.refresh();
+    prefetchGroups();
+    await Promise.allSettled([loadAreas(),loadJobs(),loadHoaContext()]);
+    // Redraw now unless a photo or note is in progress; otherwise the next screen shows the fresh lists.
+    if(!captureSavePending&&!state.photoFile&&!document.getElementById('note')?.value.trim())renderApp();
+    void restoreOfflineQueue();
+  }catch(error){}
+  finally{offlineRefreshRunning=false;}
 }
 
 function isInstalledApp() {
@@ -339,6 +439,7 @@ function photoToolWorkflowView() {
   return 'organize';
 }
 function renderApp() {
+  ensureEditionTools();
   window.PhotoNotesUsage?.screen(state.view,selectedEdition(),state.me);
   cropReturnContext=null;
   const photoToolOpen=['photo-follow-ups','photo-requests'].includes(state.view);
@@ -406,7 +507,7 @@ function renderApp() {
       profileButton.setAttribute('aria-expanded', 'false');
     }
   };
-  document.getElementById('signout').onclick = async () => { if(captureSavePending){toast('Please wait for this photo to finish saving locally.');return;}try{await persistCaptureDraft();const r=await api('/api/logout',{method:'POST'});if(!r.ok)throw Error();queueAccount=null;bgQueue=[];clearTimeout(queueRetryTimer);stopCaptureDictation();location.reload();}catch(error){toast('Could not sign out. Check your connection and try again.');} };
+  document.getElementById('signout').onclick = async () => { if(captureSavePending){toast('Please wait for this photo to finish saving locally.');return;}try{await persistCaptureDraft();const r=await api('/api/logout',{method:'POST'});if(!r.ok)throw Error();forgetSession();queueAccount=null;bgQueue=[];clearTimeout(queueRetryTimer);stopCaptureDictation();location.reload();}catch(error){toast('Could not sign out. Check your connection and try again.');} };
   document.getElementById('installHelp').onclick=showInstallHelp;
   for(const [id,view] of [['menuHoaCommunities','hoa-communities'],['menuHoaDashboard','hoa-dashboard'],['menuHoaReports','hoa-reports']]){const button=document.getElementById(id);if(button)button.onclick=()=>{profileMenu.hidden=true;profileButton.setAttribute('aria-expanded','false');openHoaManagementView(view);};}
   document.getElementById('pendingPhotos').onclick=showPendingPhotos;
@@ -2293,18 +2394,42 @@ function queueRetryText(){
 async function renderPendingLibrary(){
   const cards=document.getElementById('cards');if(!cards||!state.me||!['organize','photo-library'].includes(state.view))return;
   const account=queueAccount,edition=selectedEdition();
-  let rows;try{rows=await PhotoNotesQueue.all();}catch{return;}
+  let rows;try{rows=await PhotoNotesQueue.list();}catch{return;}
   if(account!==queueAccount||edition!==selectedEdition()||document.getElementById('cards')!==cards)return;
   document.getElementById('pendingLibrary')?.remove();
   rows=rows.filter(row=>PhotoNotesQueue.eligible(row,account,edition));if(!rows.length)return;
   const panel=document.createElement('section');panel.id='pendingLibrary';panel.style.color='#000';
   panel.innerHTML='<h2>Saved on this device</h2><p>These PhotoNotes are in Library on this device. Upload is pending.</p>';
+  const previews=[];
   for(const row of rows){const card=document.createElement('article');card.className='card';card.style.background='#fff';card.style.color='#000';
     const title=document.createElement('strong');title.textContent='PhotoNote - upload pending';card.append(title);
-    if(row.payload?.photo){const img=document.createElement('img'),url=URL.createObjectURL(row.payload.photo);img.src=url;img.alt='Pending PhotoNote';img.onload=img.onerror=()=>URL.revokeObjectURL(url);card.append(img);}
+    if(row.hasPhoto||row.payload?.photo){const img=document.createElement('img');img.alt='Pending PhotoNote';const thumb=PhotoNotesQueue.thumbnailBlob(row);if(thumb)showPendingImage(img,thumb);else previews.push({row,img});card.append(img);}
     const note=document.createElement('p');note.textContent=row.payload?.note||'';card.append(note);panel.append(card);
   }
   cards.before(panel);
+  void fillPendingPreviews(previews);
+}
+function showPendingImage(img,blob){const url=URL.createObjectURL(blob);img.src=url;img.onload=img.onerror=()=>URL.revokeObjectURL(url);}
+// Pending photos without a saved preview get one, one photo at a time, so full photos are never all in memory together.
+async function fillPendingPreviews(items){
+  for(const {row,img} of items){
+    if(!img.isConnected)return;
+    try{
+      if(row.legacyPhoto)await PhotoNotesQueue.migrate(row.id);
+      else{const photo=row.payload?.photo||await PhotoNotesQueue.photo(row.id);if(photo)await PhotoNotesQueue.addThumbnail(row.id,photo);}
+      let blob=await PhotoNotesQueue.thumbnail(row.id);
+      // A browser that cannot make previews shows the saved photo itself.
+      if(!blob)blob=await PhotoNotesQueue.photo(row.id);
+      if(blob&&img.isConnected)showPendingImage(img,blob);
+    }catch{}
+  }
+}
+let queueMigrationRunning=false;
+// PhotoNotes saved by an earlier release keep the photo inside the record. Move them, one at a time, in the background.
+async function migrateLegacyQueue(rows){
+  if(queueMigrationRunning)return;queueMigrationRunning=true;
+  try{for(const row of rows)if(row.legacyPhoto)await PhotoNotesQueue.migrate(row.id).catch(()=>{});}
+  finally{queueMigrationRunning=false;}
 }
 async function queueStore(payload,hadCoords){
   if(!state.me)throw Error('Sign in first');
@@ -2319,18 +2444,18 @@ async function restoreOfflineQueue(){
   const account=await PhotoNotesQueue.accountKey(state.me.email);
   queueAccount=account;
   try{
-    const rows=await PhotoNotesQueue.all();
+    const rows=await PhotoNotesQueue.list();
     if(queueAccount!==account)return;
     legacyPendingCount=rows.filter(row=>!row.account).length;
-    bgQueue=rows.filter(row=>PhotoNotesQueue.eligible(row,account,selectedEdition())).map(row=>({...row,tries:0,receipt:bgQueue.find(item=>item.id===row.id)?.receipt}));
+    bgQueue=rows.filter(row=>PhotoNotesQueue.eligible(row,account,selectedEdition())).map(({thumbBytes,thumbType,...row})=>({...row,tries:0,receipt:bgQueue.find(item=>item.id===row.id)?.receipt}));
     offlineQueueRestored=true;
-    bgIndicator();void drainQueue();
+    bgIndicator();void drainQueue();void migrateLegacyQueue(rows);
   }catch(error){toast('Local pending photos could not be read. Keep this browser data and try again.');}
 }
 async function showPendingPhotos(){
   if(!state.me)return;
   const account=await PhotoNotesQueue.accountKey(state.me.email);
-  let rows;try{rows=await PhotoNotesQueue.all();}catch(error){toast('Local storage is unavailable. Do not clear browser data.');return;}
+  let rows;try{rows=await PhotoNotesQueue.list();}catch(error){toast('Local storage is unavailable. Do not clear browser data.');return;}
   if(!state.me||account!==queueAccount)return;
   document.getElementById('pendingPhotosDialog')?.remove();
   const dialog=document.createElement('dialog');dialog.id='pendingPhotosDialog';dialog.className='web-help-dialog';dialog.style.background='#fff';dialog.style.color='#000';
@@ -2376,11 +2501,59 @@ async function enqueueUpload(payload, hadCoords, options = {}) {
   if(row.account!==queueAccount||row.edition!==selectedEdition())return;
   // Migrate a legacy account-wide pause before adding this new capture.
   if(queuePaused()&&!localStorage.getItem(queuePausedIdsKey()))localStorage.setItem(queuePausedIdsKey(),JSON.stringify(bgQueue.map(item=>item.requestId)));
-  bgQueue.push({...row,tries:0,receipt:options.receipt});
-  if(!bgOnlineHooked){window.addEventListener('online',()=>void restoreOfflineQueue());bgOnlineHooked=true;}
+  // The photo stays on this device's storage until its turn to upload, instead of in memory.
+  bgQueue.push({...row,payload:{...row.payload,photo:null},tries:0,receipt:options.receipt});
+  hookQueueResume();
   bgIndicator();void drainQueue();
 }
-function uploadTimeoutMs(payload){const bytes=Number(payload?.photo?.size)||0;return Math.min(10*60*1000,60000+Math.ceil(bytes/50000)*1000);}
+// Uploads are stopped only when no bytes move for a minute, so a slow connection keeps going instead of
+// starting over. A generous overall limit still ends an upload that never finishes.
+const UPLOAD_STALL_MS=60000,UPLOAD_MAX_MS=60*60*1000;
+let activeUpload=null;
+function uploadStalledError(){return Object.assign(Error('Upload timed out'),{stalled:true,userMessage:'The connection is too slow right now. Your PhotoNotes are saved on this device and will upload automatically.'});}
+function uploadCapture(url,{headers,body}){
+  return new Promise((resolve,reject)=>{
+    const xhr=new XMLHttpRequest();let stall=null,cap=null,done=false;
+    const finish=(settle,value)=>{if(done)return;done=true;clearTimeout(stall);clearTimeout(cap);if(activeUpload&&activeUpload.xhr===xhr)activeUpload=null;settle(value);};
+    const stop=()=>{if(done)return;try{xhr.abort();}catch{}finish(reject,uploadStalledError());};
+    const progress=()=>{if(activeUpload&&activeUpload.xhr===xhr)activeUpload.lastProgress=Date.now();clearTimeout(stall);stall=setTimeout(stop,UPLOAD_STALL_MS);};
+    xhr.open('POST',url);xhr.withCredentials=true;xhr.responseType='text';
+    for(const [key,value] of Object.entries(headers||{}))xhr.setRequestHeader(key,value);
+    xhr.upload.onprogress=progress;xhr.upload.onload=progress;xhr.onprogress=progress;
+    xhr.onload=()=>{const status=xhr.status;finish(resolve,new Response([101,204,205,304].includes(status)?null:xhr.responseText,{status,headers:{'Content-Type':xhr.getResponseHeader('Content-Type')||'application/json'}}));};
+    xhr.onerror=()=>finish(reject,new TypeError('Upload connection failed'));
+    xhr.onabort=()=>finish(reject,uploadStalledError());
+    activeUpload={xhr,lastProgress:Date.now(),stop};
+    progress();cap=setTimeout(stop,UPLOAD_MAX_MS);
+    xhr.send(body);
+  });
+}
+// Coming back online or back to the app restarts an upload that has stalled or is waiting to retry.
+let queueResumeWanted=false;
+function resumeStalledQueue(always){
+  if(!state.me||!queueAccount)return;
+  // An upload that made no progress while the app was away is stopped and started again right away.
+  if(activeUpload&&Date.now()-activeUpload.lastProgress>15000){queueResumeWanted=true;activeUpload.stop();return;}
+  if(!bgDraining&&(always||nextQueueUpload()))void restoreOfflineQueue();
+}
+function hookQueueResume(){
+  if(bgOnlineHooked)return;bgOnlineHooked=true;
+  window.addEventListener('online',()=>resumeStalledQueue(true));
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)resumeStalledQueue(false);});
+}
+// Library reloads once after the uploads in progress finish, instead of after every photo.
+let libraryRefreshPending=false,libraryRefreshTimer=null;
+function refreshLibraryAfterUploads(){
+  libraryRefreshPending=true;clearTimeout(libraryRefreshTimer);
+  libraryRefreshTimer=setTimeout(()=>{
+    if(bgDraining&&nextQueueUpload())return;
+    libraryRefreshPending=false;
+    if(!['organize','edit'].includes(state.view))return;
+    // An open PhotoNote stays open: loadCards refreshes it in place where that is supported, otherwise it waits.
+    if(state._libraryOpenId&&state.view==='edit'&&typeof libraryPhotoOpen!=='function')return;
+    const f=document.getElementById('filter');void loadCards(f?f.value||'':'');
+  },600);
+}
 async function timedFetch(url,opts,ms){const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),ms);try{return await fetch(url,{...opts,signal:controller.signal});}catch(error){if(controller.signal.aborted)throw Object.assign(Error('Upload timed out'),{userMessage:'The connection is too slow right now. Your PhotoNotes are saved on this device and will upload automatically.'});throw error;}finally{clearTimeout(timer);}}
 let storagePersistAsked=false;
 function askPersistentStorage(){if(storagePersistAsked)return;storagePersistAsked=true;try{void navigator.storage?.persist?.().catch(()=>{});}catch{}}
@@ -2404,7 +2577,10 @@ async function drainQueue() {
         if(await PhotoNotesQueue.accountKey(identity.email)!==account)throw Object.assign(Error('Sign in to the original account to upload these PhotoNotes.'),{blocked:true,userMessage:'Sign in to the original account to upload these PhotoNotes.'});
         if(queueAccount!==account||selectedEdition()!==edition)break;
         // Each upload carries its request ID, so a timed-out upload is retried without creating a duplicate.
-        const r=await timedFetch('/api/captures',{method:'POST',credentials:'same-origin',headers:PhotoNotesQueue.headers(item),body:payloadFormData(item.payload)},uploadTimeoutMs(item.payload));
+        // Only this PhotoNote's photo is read from device storage, just before it uploads.
+        const photo=item.payload.photo||(item.hasPhoto?await PhotoNotesQueue.photo(item.id):null);
+        if(item.hasPhoto&&!photo)throw Object.assign(Error('Saved photo could not be read'),{userMessage:'The saved photo could not be read from this device. Keep this browser data. Upload will be tried again.'});
+        const r=await uploadCapture('/api/captures',{headers:PhotoNotesQueue.headers(item),body:payloadFormData(photo?{...item.payload,photo}:item.payload)});
         if(!r.ok&&[404,409].includes(r.status)&&PhotoNotesQueue.linked?.(item.payload)){
           const body=await r.clone().json().catch(()=>({}));
           if(!/capture identity|original Photo Notes version/i.test(body.error||'')){
@@ -2421,7 +2597,7 @@ async function drainQueue() {
         bgQueue=bgQueue.filter(row=>row.id!==item.id);
         void renderPendingLibrary();
         if(!item.receipt?.captureShare)toast((edition==='basic'||edition==='issue'||edition==='security')?'Saved to Photo Notes.':'Saved to Photo Notes. Find it in Library.');
-        if(state.view==='organize'||state.view==='edit'){const f=document.getElementById('filter');void loadCards(f?f.value||'':'');}
+        if(state.view==='organize'||state.view==='edit')refreshLibraryAfterUploads();
       }catch(error){
         if(queueAccount!==account||selectedEdition()!==edition)break;
         item.tries++;item.blocked=!!error.blocked;
@@ -2431,7 +2607,7 @@ async function drainQueue() {
       }
       bgIndicator();
     }
-  }finally{bgDraining=false;bgIndicator();if(queueAccount!==account||selectedEdition()!==edition)void drainQueue();}
+  }finally{bgDraining=false;bgIndicator();if(libraryRefreshPending)refreshLibraryAfterUploads();if(queueResumeWanted){queueResumeWanted=false;setTimeout(()=>void restoreOfflineQueue(),0);}if(queueAccount!==account||selectedEdition()!==edition)void drainQueue();}
 }
 
 let captureSavePending=false;
@@ -3139,6 +3315,7 @@ async function doFixAddresses() {
     });
     if (!r.ok) throw new Error('bad');
     const d = await r.json();
+    if (d.queued) { toast(`Fixing ${d.total} address${d.total === 1 ? '' : 'es'}. Library shows each corrected address the next time it loads.`, 4000); return; }
     const parts = [`Corrected ${d.updated} address${d.updated === 1 ? '' : 'es'}`];
     if (d.unchanged) parts.push(`${d.unchanged} already matched`);
     if (d.unresolved) parts.push(`${d.unresolved} could not be resolved`);
@@ -3164,7 +3341,9 @@ async function loadCards(area, query = '', filters = {}) {
   if(filters.from){const start=new Date(filters.from+'T00:00:00');if(Number.isFinite(start.getTime()))params.set('from_at',start.toISOString());}
   if(filters.to){const end=new Date(filters.to+'T00:00:00');if(Number.isFinite(end.getTime())){end.setDate(end.getDate()+1);params.set('to_before',end.toISOString());}}
   for(const k of ['favorite','flagged'])if(filters[k])params.set(k,'1');
-  const r = await api(smart ? `/api/captures/search?${params}` : '/api/captures' + (area ? `?area=${encodeURIComponent(area)}` : ''));
+  let r;
+  try { r = await api(smart ? `/api/captures/search?${params}` : '/api/captures' + (area ? `?area=${encodeURIComponent(area)}` : '')); }
+  catch (e) { r = { ok: false }; } // No connection: say so instead of loading forever.
   if(request!==cardsRequest||document.getElementById('cards')!==cards)return;
   if (!r.ok) { cards.innerHTML = '<p class="status">Could not load.</p>'; return; }
   let rows = await r.json();

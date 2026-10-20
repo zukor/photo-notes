@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS property_floor_plans (
  active BOOLEAN NOT NULL DEFAULT true, created_by INTEGER REFERENCES users(id) ON DELETE SET NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS property_floor_plans_idx ON property_floor_plans(company_id,community_id,active);
+CREATE INDEX IF NOT EXISTS property_floor_plans_photo_path_idx ON property_floor_plans(photo_path);
 ALTER TABLE captures ADD COLUMN IF NOT EXISTS indoor_building TEXT;
 ALTER TABLE captures ADD COLUMN IF NOT EXISTS indoor_floor TEXT;
 ALTER TABLE captures ADD COLUMN IF NOT EXISTS indoor_suite TEXT;

@@ -28,7 +28,7 @@ const express=require('express');
  }
  }
  // A failed renderer may leave its hidden frame behind. Retrying must recover.
- await page.evaluate(()=>{window.actualRenderer=window.html2canvas;let calls=0;window.html2canvas=(...args)=>{if(++calls%2){const frame=document.createElement('iframe');frame.className='html2canvas-container';document.body.append(frame);return Promise.reject(Error('Synthetic intermittent renderer failure'));}return window.actualRenderer(...args);};});
+ await page.evaluate(()=>loadIssueScreenshotLibrary());await page.evaluate(()=>{window.actualRenderer=window.html2canvas;let calls=0;window.html2canvas=(...args)=>{if(++calls%2){const frame=document.createElement('iframe');frame.className='html2canvas-container';document.body.append(frame);return Promise.reject(Error('Synthetic intermittent renderer failure'));}return window.actualRenderer(...args);};});
  for(let n=0;n<5;n++){
  await page.locator('#issueFab').dispatchEvent('click');await page.waitForFunction(()=>!!issueScreenshotBlob,{},{timeout:20000});await page.evaluate(()=>issueMarkupEditor.ready);assert.equal(await page.locator('iframe.html2canvas-container').count(),0);await page.locator('#issueClose').click();
  }

@@ -46,7 +46,16 @@ function issueCaptureViewport(){
   const v=window.visualViewport;
   return {width:v?.width||window.innerWidth,height:v?.height||window.innerHeight,x:v?.pageLeft??window.scrollX,y:v?.pageTop??window.scrollY,scrollX:window.scrollX,scrollY:window.scrollY,windowWidth:window.innerWidth,windowHeight:window.innerHeight};
 }
+// The screenshot library is large, so it loads when a screenshot is first needed instead of with
+// every page load. The service worker keeps a copy, so later loads come from the device.
+let html2canvasLoading=null;
+function loadIssueScreenshotLibrary(){
+  if(window.html2canvas)return Promise.resolve();
+  if(!html2canvasLoading)html2canvasLoading=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src='/vendor/html2canvas.min.js?v=59';script.async=true;script.onload=()=>resolve();script.onerror=()=>{html2canvasLoading=null;script.remove();reject(Error('Screenshot capture is unavailable'));};document.head.append(script);});
+  return html2canvasLoading;
+}
 async function captureIssueScreenshot(quality=.78,viewport=issueCaptureViewport()){
+  if(!window.html2canvas)await loadIssueScreenshotLibrary().catch(()=>{});
   if(!window.html2canvas)throw Error('Screenshot capture is unavailable');
   const {width,height}=viewport;
   const scale=Math.min(window.devicePixelRatio||1,1.5,Math.sqrt(4000000/(width*height)));
@@ -74,6 +83,7 @@ function updateIssueDescriptionLabel(){
 }
 async function openIssueReporter(testingContext=null) {
   const captureViewport=issueCaptureViewport();
+  void loadIssueScreenshotLibrary().catch(()=>{}); // Starts loading while the dialog opens.
   closeIssueReporter();
   issueTestingContext=testingContext?.assignmentId?testingContext:null;
   const generation=issueGeneration;
