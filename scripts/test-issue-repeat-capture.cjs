@@ -17,7 +17,7 @@ const express=require('express');
  await page.evaluate(()=>{const original=captureIssueScreenshot;captureIssueScreenshot=async(...args)=>{try{return await original(...args);}catch(e){console.log('CAPTURE',e.message);throw e;}};});
  page.on('console',m=>{if(m.type()==='error')console.log(m.text());});
  for(const view of ['organize','edit','send']){
- await page.evaluate(view=>{state.view=view;renderApp();},view);
+ await page.evaluate(view=>{state.view=view;state._libraryOpenId=view==='edit'?1:null;renderApp();},view);
  for(let n=1;n<=6;n++){
  await page.locator('#issueFab').dispatchEvent('click');
  await page.waitForFunction(()=>document.querySelector('#issueShotStatus').textContent!=='Capturing this page...');

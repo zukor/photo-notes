@@ -406,14 +406,12 @@ textarea { min-height: 96px; resize: vertical; }
 .document-preview-photos section { min-width:0; }.document-preview-photos h3 { margin:0 0 10px; font-size:20px; }.document-preview-photos img { width:100%; max-height:540px; margin:0; border-radius:6px; object-fit:contain; background:var(--pn-bg-f2f2f2,#f2f2f2); }
 .document-preview-photos.two-up img { max-height:300px; }.document-preview-location { margin-top:10px; font-size:12px; font-weight:700; }.document-preview-photos p { font-size:14px; line-height:1.45; }
 .document-preview-empty { display:flex; min-height:650px; align-items:center; justify-content:center; color:var(--pn-text-555,#555); text-align:center; }
-.send-capture-row { display:grid; grid-template-columns:24px minmax(120px,150px) minmax(0,1fr); grid-template-areas:"check photo details" ". photo delete"; gap:8px 12px; align-items:start; padding:12px; margin:0; border:1px solid var(--pn-border-000,#000); border-radius:10px; background:var(--pn-bg-fff,#fff); text-transform:none; letter-spacing:0; font-size:14px; }
+.send-capture-row { display:grid; grid-template-columns:24px minmax(120px,150px) minmax(0,1fr); grid-template-areas:"check photo details"; gap:8px 12px; align-items:start; padding:12px; margin:0; border:1px solid var(--pn-border-000,#000); border-radius:10px; background:var(--pn-bg-fff,#fff); text-transform:none; letter-spacing:0; font-size:14px; }
 .send-capture-row input { width:20px; height:20px; }
 .send-capture-row .sendchk { grid-area:check; align-self:start; }
 .send-capture-row img, .send-no-photo { grid-area:photo; width:100%; height:auto; aspect-ratio:4/3; object-fit:cover; border:1px solid var(--pn-border-aab3bf,#aab3bf); border-radius:7px; margin:0; background:var(--pn-bg-eee,#eee); display:flex; align-items:center; justify-content:center; }
 .send-capture-details { grid-area:details; min-width:0; }
 .send-capture-details strong { display:block; margin-bottom:5px; font-size:16px; line-height:1.2; }
-.send-delete-capture { grid-area:delete; align-self:end; justify-self:start; max-width:100%; padding:6px 9px; border:1px solid var(--pn-border-b3261e,#b3261e); border-radius:7px; background:var(--pn-bg-fff,#fff); color:var(--pn-text-b3261e,#b3261e); font:800 12px/1.15 Arial,Helvetica,sans-serif; cursor:pointer; }
-.send-delete-capture:disabled { opacity:.55; cursor:wait; }
 .share-requirement { display:flex; flex-direction:column; gap:4px; margin:10px 0 14px; padding:12px 14px; border:2px solid var(--pn-border-1d4ed8,#1d4ed8); border-radius:10px; background:var(--pn-bg-eef4ff,#eef4ff); color:var(--pn-text-000,#000); font-size:14px; line-height:1.35; }
 .share-requirement strong { font-size:15px; }
 .ticket-entry { display:flex; align-items:center; justify-content:space-between; gap:16px; margin:0 0 18px; padding:14px; border:2px solid var(--pn-border-1d4ed8,#1d4ed8); border-radius:10px; background:var(--pn-bg-eef4ff,#eef4ff); }
@@ -944,13 +942,6 @@ body:has(#desktopHelp) .issue-fab { left:max(14px,env(safe-area-inset-left)); ri
 #captureSettings :is(input,select,textarea){width:100%;box-sizing:border-box}
 .shared-photo-tools{justify-content:center}
 
-.batch-annotation-panel { border:1px solid #000; border-radius:10px; padding:14px; margin-top:16px; color:var(--pn-text-000,#000); text-align:left; }
-.batch-annotation-panel h2 { font-size:18px; margin:0 0 8px; }
-.batch-annotation-panel p { color:var(--pn-text-000,#000); }
-#batchAnnotationConfirm { width:auto; margin-right:8px; }
-#batchAnnotationConfirmLabel { text-transform:none; letter-spacing:normal; }
-
-.batch-annotation-panel [hidden] { display:none!important; }
 /* Match the outer spacing above and below the optional capture rows. */
 #note{display:block}
 #captureSettings>:first-child{margin-top:0}
@@ -1179,6 +1170,8 @@ button:disabled {
 .library-photo-card .library-note,
 .library-photo-card .library-membership { margin-top:2px; margin-bottom:2px; font-size:14px; line-height:1.22; }
 .library-photo-card .library-open { min-height:27px; padding:2px 7px; margin-top:5px; margin-bottom:6px; }
+.library-photo-card .library-card-meta { margin:0 0 2px; font-size:13px; line-height:1.25; color:var(--pn-text-000,#000); min-width:0; max-width:100%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.payments-dialog .send-feature-panel { margin:0; padding:0; border:0; border-radius:0; }
 .library-details { padding:4px 0 2px; margin-top:2px; border:0; border-radius:0; }
 .organize-library-heading,
 .library-filter-panel,

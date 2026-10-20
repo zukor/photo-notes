@@ -54,19 +54,28 @@ test('Customer approval and Stripe payment actions are grouped and compact',()=>
   assert.match(app,/class="btn slim send-feature-action" id="createApproval">Create Customer Review Link/);
   assert.match(app,/aria-labelledby="paymentsHeading"/);
   assert.match(app,/class="btn slim billing-checkout"[^>]*>Pay with Stripe/);
+  assert.doesNotMatch(app,/id="billingOffers"><\/div>`/);
   assert.match(css,/\.send-feature-panel \{[^}]*border:2px solid #2455d9/);
   assert.match(css,/\.send-feature-panel \.send-feature-action, \.send-feature-panel \.billing-checkout \{[^}]*width:auto/);
 });
 
-test('Send cards use identifiable previews and allow a confirmed Photo Note deletion',()=>{
+test('Send cards use identifiable previews and leave deletion to Library',()=>{
   assert.match(app,/class="send-capture-details"/);
   assert.match(app,/c\.photo_title \|\| 'Untitled Photo'/);
-  assert.match(app,/data-delete-capture="\$\{c\.id\}"[^>]*>Delete Photo Note<\/button>/);
-  assert.match(app,/async function deleteSendCapture\(id, button\)/);
-  assert.match(app,/Delete this Photo Note\? This can't be undone\./);
-  assert.match(app,/JSON\.stringify\(\{ ids: \[id\] \}\)/);
+  assert.doesNotMatch(app,/data-delete-capture|send-delete-capture|deleteSendCapture|Delete Photo Note<\/button>/);
+  assert.match(app,/data-delete-organize="\$\{c\.id\}"[^>]*>Delete PhotoNote<\/button>/);
   assert.match(css,/\.send-capture-row \{[^}]*minmax\(120px,150px\)/);
+  assert.match(css,/\.send-capture-row \{[^}]*grid-template-areas:"check photo details";/);
   assert.match(css,/\.send-capture-row img, \.send-no-photo \{[^}]*aspect-ratio:4\/3/);
+});
+
+test('Payments opens from the account menu, not Send',()=>{
+  const send=app.slice(app.indexOf('async function renderSend('),app.indexOf('// Payments lives in the account menu'));
+  assert.doesNotMatch(send,/billingOffers|loadBillingOffers\(\)/);
+  assert.match(app,/paymentsAvailable\(\)\?'<button type="button" id="menuPayments" hidden>Payments<\/button>':''/);
+  assert.match(app,/function paymentsAvailable\(\)\{return !!state\.me&&!isBasicClient\(\)&&!isRoadIssuesClient\(\);\}/);
+  assert.match(app,/item\.hidden=!\(d&&d\.checkout_enabled&&Object\.keys\(d\.offers\|\|\{\}\)\.length\)/);
+  assert.match(app,/function showPayments\(\)\{[\s\S]*?className='web-help-dialog payments-dialog'[\s\S]*?id="closePayments"[\s\S]*?showModal\(\)/);
 });
 
 test('photo sharing is sized, bounded, visible, and recoverable',()=>{

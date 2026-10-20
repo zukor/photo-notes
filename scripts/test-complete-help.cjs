@@ -73,7 +73,7 @@ function data(url){const p=url.pathname;
   }
   for(const edition of ['basic','issue','roads','general','contractor','paving','hoa','property','concrete','roofer']){
    const views=['basic','issue','roads'].includes(edition)?['capture']:['capture','organize','edit','create','send','my-issues','my-assignment','manage-testing'];
-   for(const view of views){await page.evaluate(async({edition,view})=>{state.plan=['basic','issue','roads'].includes(edition)?'free':'pro';state.proType=edition==='basic'?'general':edition;state.view=view;state.groupId=null;state.ewrId=null;state.jobs=[{id:1,name:'Test job'}];state.communities=[{id:1,name:'Test property'}];renderApp();},{edition,view});await page.waitForTimeout(150);await check(edition+'/'+view);}
+   for(const view of views){await page.evaluate(async({edition,view})=>{state.plan=['basic','issue','roads'].includes(edition)?'free':'pro';state.proType=edition==='basic'?'general':edition;state.view=view;state._libraryOpenId=view==='edit'?1:null;state.groupId=null;state.ewrId=null;state.jobs=[{id:1,name:'Test job'}];state.communities=[{id:1,name:'Test property'}];renderApp();},{edition,view});await page.waitForTimeout(150);await check(edition+'/'+view);}
   }
   await page.evaluate(()=>{state.plan='pro';state.proType='paving';state.view='capture';renderApp();});
   for(const fn of ['renderCameraTools','renderTicketScanner','renderAlignmentTool']){await page.evaluate(fn=>window[fn](),fn);await page.waitForTimeout(150);await check(fn);}
@@ -81,7 +81,7 @@ function data(url){const p=url.pathname;
   for(const fn of ['renderHoaAsset','renderHoaVisit','renderHoaItem']){await page.evaluate(async fn=>window[fn](1),fn);await page.waitForTimeout(150);await check(fn);}
   await page.evaluate(()=>{state.proType='general';state.view='create';state.groupId=1;renderApp();});await page.waitForTimeout(200);await check('Document composer');
   await page.locator('#editTitle').click();await check('Edit document title');await page.locator('#cancelTitle').click();
-  await page.evaluate(()=>{state.proType='general';state.view='edit';renderApp();});await page.waitForTimeout(150);
+  await page.evaluate(()=>{state.proType='general';state._libraryOpenId=1;state.view='edit';renderApp();});await page.waitForTimeout(150);
   await page.evaluate(c=>renderStampEditor(c),photo);await page.waitForTimeout(150);await check('Markup editor');
   for(const kind of ['custom','rect','arrow']){await page.evaluate(kind=>addOverlayItem(kind),kind);await check('Markup '+kind);}
   await page.evaluate(c=>renderCropEditor(c),photo);await page.waitForTimeout(150);await check('Crop editor');

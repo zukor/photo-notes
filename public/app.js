@@ -442,9 +442,11 @@ function renderApp() {
   ensureEditionTools();
   window.PhotoNotesUsage?.screen(state.view,selectedEdition(),state.me);
   cropReturnContext=null;
+  // The old Edit page is retired. The 'edit' view key only shows one PhotoNote in the Library photo detail view.
+  if(state.view==='edit'&&!state._libraryOpenId)state.view=isHoaClient()?'photo-library':'organize';
   const photoToolOpen=['photo-follow-ups','photo-requests'].includes(state.view);
   const workflowView=photoToolOpen?photoToolWorkflowView():state.view;
-  const photoToolSection=['capture','camera-tools','ticket','camera-reader','alignment','concrete-ticket','concrete-temperature','concrete-yield','concrete-estimates','concrete-estimate','concrete-price-book','paving-takeoff'].includes(workflowView)?'Capture':['edit','hoa-assets','hoa-asset'].includes(workflowView)?(isHoaClient()?'Assets':'Edit'):['create','hoa-inspections'].includes(workflowView)?(isHoaClient()?'Inspections':'Create'):['send','hoa-maintenance','hoa-communities','hoa-dashboard','hoa-reports'].includes(workflowView)?(isHoaClient()?'Records':'Send'):'Organize';
+  const photoToolSection=['capture','camera-tools','ticket','camera-reader','alignment','concrete-ticket','concrete-temperature','concrete-yield','concrete-estimates','concrete-estimate','concrete-price-book','paving-takeoff'].includes(workflowView)?'Capture':['hoa-assets','hoa-asset'].includes(workflowView)?'Assets':['create','hoa-inspections'].includes(workflowView)?(isHoaClient()?'Inspections':'Create'):['send','hoa-maintenance','hoa-communities','hoa-dashboard','hoa-reports'].includes(workflowView)?(isHoaClient()?'Records':'Send'):'Organize';
   document.body.classList.toggle('admin-testing-page',isTestingManager()&&['my-assignment','my-issues','manage-testing'].includes(state.view));
   window.PhotoNotesMatchCamera?.stop();
   document.getElementById('captureShareDialog')?.remove();
@@ -468,6 +470,7 @@ function renderApp() {
               <button type="button" id="myAssignment" ${state.me?.is_tester||state.me?.is_testing_manager||state.me?.role==='admin'?'':'hidden'}>${uiT(isTestingManager()?'My Testing Dashboard':'Testing Dashboard')}</button>
               ${isHoaClient()?`<button type="button" id="menuHoaCommunities">${hoaManagementLabel('communities')}</button><button type="button" id="menuHoaDashboard">${hoaManagementLabel('dashboard')}</button><button type="button" id="menuHoaReports">${hoaManagementLabel('reports')}</button>`:''}
               <button type="button" id="installHelp">Install Photo Notes</button>
+              ${paymentsAvailable()?'<button type="button" id="menuPayments" hidden>Payments</button>':''}
               ${selectedEdition()==='basic'?'':'<button type="button" id="pendingPhotos">Pending Photos</button>'}
               <button type="button" id="setupPermissions">Set Up Permissions</button>
               <button type="button" id="recordNotesSelfTest">Record Notes Self-Test</button>
@@ -509,6 +512,7 @@ function renderApp() {
   };
   document.getElementById('signout').onclick = async () => { if(captureSavePending){toast('Please wait for this photo to finish saving locally.');return;}try{await persistCaptureDraft();const r=await api('/api/logout',{method:'POST'});if(!r.ok)throw Error();forgetSession();queueAccount=null;bgQueue=[];clearTimeout(queueRetryTimer);stopCaptureDictation();location.reload();}catch(error){toast('Could not sign out. Check your connection and try again.');} };
   document.getElementById('installHelp').onclick=showInstallHelp;
+  const menuPayments=document.getElementById('menuPayments');if(menuPayments){menuPayments.onclick=()=>{profileMenu.hidden=true;profileButton.setAttribute('aria-expanded','false');showPayments();};void revealPaymentsMenu();}
   for(const [id,view] of [['menuHoaCommunities','hoa-communities'],['menuHoaDashboard','hoa-dashboard'],['menuHoaReports','hoa-reports']]){const button=document.getElementById(id);if(button)button.onclick=()=>{profileMenu.hidden=true;profileButton.setAttribute('aria-expanded','false');openHoaManagementView(view);};}
   const pendingPhotos=document.getElementById('pendingPhotos');if(pendingPhotos)pendingPhotos.onclick=showPendingPhotos; // Basic shares without saving, so it has no pending uploads.
   const myIssues=document.getElementById('myIssues');if(myIssues)myIssues.onclick=()=>enterTesting('my-issues');
@@ -566,7 +570,7 @@ function renderApp() {
   const issueFab = document.getElementById('issueFab'); if (issueFab) issueFab.onclick = openIssueReporter;
   const tabCapture=document.getElementById('tabCapture');if(tabCapture)tabCapture.onclick = () => { state._libraryOpenId=null;state.view='capture'; renderApp(); };
   const tabOrganize=document.getElementById('tabOrganize');if(tabOrganize)tabOrganize.onclick = () => { state._libraryOpenId=null;state.view=isHoaClient()?'hoa-visits':'organize'; renderApp(); };
-  const tabEdit=document.getElementById('tabEdit');if(tabEdit)tabEdit.onclick = () => { state.view=isHoaClient()?'hoa-assets':'edit'; renderApp(); };
+  const tabEdit=document.getElementById('tabEdit');if(tabEdit)tabEdit.onclick = () => { state.view='hoa-assets'; renderApp(); };
   const tabCreate=document.getElementById('tabCreate');if(tabCreate)tabCreate.onclick = () => { state.view=isHoaClient()?'hoa-inspections':'create'; state.groupId=null; renderApp(); };
   const tabSend=document.getElementById('tabSend');if(tabSend)tabSend.onclick = () => { state.view=isHoaClient()?'hoa-maintenance':'send'; renderApp(); };
   if(photoToolOpen)window.scrollTo(0,0);
@@ -587,11 +591,11 @@ function renderApp() {
   else if (state.view === 'alignment') renderAlignmentTool();
   else if (state.view === 'photo-library') { if(isBasicClient()||isRoadIssuesClient())renderDevicePhotoNotesLibrary();else renderList(); }
   else if (state.view === 'organize') isHoaClient()?renderHoaVisits():renderList();
-  else if (state.view === 'edit') renderEdit();
+  else if (state.view === 'edit') renderLibraryPhoto();
   else if (state.view === 'create') renderGroups();
   else if (state.view === 'send') renderSend();
   else if (state.view === 'hoa-maintenance') renderHoaMaintenance();
-  else if (state.view === 'photo-requests') window.PhotoNotesRequests.render({api,esc,toast,followUp:state._photoRequestFollowUp,focusRequestId:state._photoRequestFocus,clearFollowUp:()=>{state._photoRequestFollowUp=null;state._photoRequestFocus=null;},edition:state.proType,openPhoto:id=>{state.view='edit';state.editTopic='';state._focusCapture=id;state.selectedIds=new Set([String(id)]);renderApp();}});
+  else if (state.view === 'photo-requests') window.PhotoNotesRequests.render({api,esc,toast,followUp:state._photoRequestFollowUp,focusRequestId:state._photoRequestFocus,clearFollowUp:()=>{state._photoRequestFollowUp=null;state._photoRequestFocus=null;},edition:state.proType,openPhoto:id=>openLibraryPhoto(id)});
   else if (state.view === 'hoa-visits') renderHoaVisits();
   else if (state.view === 'hoa-visit') renderHoaVisit(state.hoaVisitId);
   else if (state.view === 'hoa-assets') renderHoaAssets();
@@ -1041,7 +1045,7 @@ function renderCapture() {
       acquireLocation();
     }
   }
-  window.PhotoNotesIncidents?.mount({state,body,api,esc,toast,renderCapture,photoSrc,downloadBlob,toggleDictation,finishCaptureDictation,stopCaptureDictation,addZoom:installPhotoViewerButtons,openPhoto:id=>{state.view='edit';state.editTopic='';state._focusCapture=id;state.selectedIds=new Set([String(id)]);renderApp();}});
+  window.PhotoNotesIncidents?.mount({state,body,api,esc,toast,renderCapture,photoSrc,downloadBlob,toggleDictation,finishCaptureDictation,stopCaptureDictation,addZoom:installPhotoViewerButtons,openPhoto:id=>openLibraryPhoto(id)});
   mountDuplicateContext();
 }
 
@@ -2272,7 +2276,7 @@ function renderSavedDimsEditor(c) {
   const body = document.getElementById('body');
   body.className = 'workflow-edit';
   body.innerHTML = `
-    <button class="backlink" id="dimsBack">← Back to Edit</button>
+    <button class="backlink" id="dimsBack">‹ Back to PhotoNote</button>
     <div class="workflow-intro"><strong>Measure this photo</strong><span>Use AI with a visible reference object, or enter the dimensions yourself.</span></div>
     ${c.photo_path ? `<div class="photo-box"><img src="${capturePhotoSrc(c)}" alt="capture" style="display:block" /></div>` : ''}
     ${precisionMeasureOn()&&c.photo_path?'<button class="btn secondary" id="measureWithCard" type="button">Measure With Card</button><div class="status">Uses the PhotoNotes Measuring Card if it is lying flat beside the damage in this photo.</div>':''}
@@ -2280,7 +2284,7 @@ function renderSavedDimsEditor(c) {
     <button class="btn" id="saveDims">Save Measurements</button>`;
   wireDims();
   const withCard=document.getElementById('measureWithCard');if(withCard)withCard.onclick=()=>measureSavedWithCard(c,withCard);
-  document.getElementById('dimsBack').onclick = () => { state._editMeasureCapture = null; state._dims = null; state._measure = null; renderEdit(); };
+  document.getElementById('dimsBack').onclick = () => { state._editMeasureCapture = null; state._dims = null; state._measure = null; renderApp(); };
   document.getElementById('saveDims').onclick = saveSavedDims;
 }
 
@@ -2293,7 +2297,7 @@ async function measureSavedWithCard(c,button){
       onDone:async({dims,record})=>{
         const d=precisionDims(dims),body={dim_length:d.length,dim_length_unit:'in',dim_width:d.width,dim_width_unit:'in',dim_depth:d.depth,dim_shape:d.shape,dim_area_sqft:d.area,dim_source:'card',dim_confidence:'high',dim_confirmed:true,dim_ai:record};
         const s=await api(`/api/captures/${c.id}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-        if(s.ok){toast(precisionSummary(d));state._editMeasureCapture=null;state._dims=null;state._measure=null;renderEdit();}else{toast('Measurements could not be saved');button.disabled=false;}
+        if(s.ok){toast(precisionSummary(d));state._editMeasureCapture=null;state._dims=null;state._measure=null;renderApp();}else{toast('Measurements could not be saved');button.disabled=false;}
       }});
   }catch{toast('The photo could not be opened for measuring.');button.disabled=false;}
 }
@@ -2320,7 +2324,7 @@ async function saveSavedDims() {
   if (r.ok) {
     toast('Measurements saved');
     state._editMeasureCapture = null; state._dims = null; state._measure = null;
-    renderEdit();
+    renderApp();
   } else {
     btn.disabled = false; btn.textContent = 'Save Measurements'; toast('Measurements could not be saved');
   }
@@ -2983,7 +2987,7 @@ const ANNOTATION_TEMPLATES=window.PhotoNotesAnnotationTemplates;
 let savedAnnotationTemplates=[],savedAnnotationLoad=0;
 function annotationTemplateItems(key){return key.startsWith('saved:')?savedAnnotationTemplates.find(t=>String(t.id)===key.slice(6))?.overlays:ANNOTATION_TEMPLATES[key];}
 async function loadSavedAnnotationTemplates(){
- const generation=++savedAnnotationLoad,owner=state.me?.id,targets=['batchTemplate','singleTemplate'].map(id=>document.getElementById(id)).filter(Boolean);
+ const generation=++savedAnnotationLoad,owner=state.me?.id,targets=['singleTemplate'].map(id=>document.getElementById(id)).filter(Boolean);
  try{const r=await api('/api/annotation-templates');if(!r.ok)throw Error();const rows=await r.json();if(state.me?.id!==owner||generation!==savedAnnotationLoad)return;savedAnnotationTemplates=rows;
  for(const select of targets){if(!select.isConnected)continue;const selected=select.value;select.querySelector('[data-saved-annotation-templates]')?.remove();if(rows.length){const group=document.createElement('optgroup');group.label=uiT('My Annotation Templates');group.dataset.savedAnnotationTemplates='true';for(const template of rows){const option=document.createElement('option');option.value='saved:'+template.id;option.textContent=template.name;group.append(option);}select.append(group);}if([...select.options].some(o=>o.value===selected))select.value=selected;}
  updateSavedAnnotationDelete();
@@ -3054,36 +3058,8 @@ async function replaceTopicsOnSelected() {
   loadCards((document.getElementById('filter')||{}).value||'');
 }
 
-async function renderEdit() {
-  if(state._libraryOpenId)return renderLibraryPhoto();
-  const body = document.getElementById('body');
-  body.className = 'workflow-edit';
-  body.innerHTML = `
-    <label for="filter">Filter</label>
-    <select id="filter"><option value="">All Topics</option>${filterTopics().map(a => `<option value="${esc(a)}">${esc(a)}</option>`).join('')}</select>
-    <div class="row" style="margin-top:10px"><button class="btn secondary" id="selall">Select All</button><button class="btn secondary" id="selnone">Clear Selected</button></div>
-    <div class="row" style="margin-top:8px"><button class="btn" id="delbtn" style="background:var(--pn-bg-b3261e,#b3261e)">Delete Selected</button><button class="btn" id="delall" style="background:var(--pn-bg-b3261e,#b3261e)">Delete All</button></div>
-    <section class="batch-annotation-panel">
-      <h2>Apply Annotation Template</h2>
-      <p>Select photos below, then add a preset of markings to every selected photo. Original thumbnails stay unchanged. Use Preview / Adjust Photo to see the saved markings.</p>
-      <label for="batchTemplate">Annotation Template</label><select id="batchTemplate"><option value="date_address">Date + Address</option><option value="evidence">Evidence Details</option><option value="copyright">Copyright Only</option></select>
-      <label for="batchAnnotationMode">Existing Markings</label><select id="batchAnnotationMode"><option value="add">Add template, keep existing markings</option><option value="replace">Replace existing markings</option></select>
-      <p id="batchAnnotationEffect">Existing markings will be kept. New template items may overlap them; review each photo.</p>
-      <label id="batchAnnotationConfirmLabel" hidden><input type="checkbox" id="batchAnnotationConfirm"> I understand that replacing removes all existing markings from the selected photos.</label>
-      <p id="batchAnnotationSelected" role="status"></p><button class="btn secondary" id="applyBatchAnnotations">Apply to Selected Photos</button>
-      <p id="batchAnnotationStatus" role="status" aria-live="polite"></p>
-      <div id="batchAnnotationReview" hidden><label for="batchAnnotationPhoto">Review Applied Markings</label><select id="batchAnnotationPhoto"></select><button class="btn secondary" id="previewBatchAnnotations">Preview / Adjust Photo</button></div>
-    </section>
-    <div id="cards" style="margin-top:16px"></div>`;
-  document.getElementById('filter').onchange = e => {state.editTopic=e.target.value;loadCards(e.target.value);};
-  document.getElementById('selall').onclick = () => {document.querySelectorAll('.capchk').forEach(c => { c.checked = true; state.selectedIds.add(String(c.value)); });updateAnnotationSelection();};
-  document.getElementById('selnone').onclick = () => { state.selectedIds.clear(); document.querySelectorAll('.capchk').forEach(c => c.checked = false);updateAnnotationSelection(); };
-  document.getElementById('delbtn').onclick = () => doDeleteSelected();
-  document.getElementById('delall').onclick = () => doDeleteSelected(true);
-  wireBatchAnnotations();
-  document.getElementById('filter').value=state.editTopic||'';
-  loadCards(state.editTopic||'');
-}
+// Opens one saved PhotoNote in the Library photo detail view (view key 'edit').
+function openLibraryPhoto(id){state._libraryOpenId=Number(id);state._focusCapture=null;state.selectedIds=new Set([String(id)]);state.view='edit';renderApp();}
 
 // True while the Library photo detail is the screen on display (not a crop or mark-up editor opened from it).
 function libraryPhotoOpen(){
@@ -3115,25 +3091,7 @@ async function renderLibraryPhoto(refresh=false){
   wireCards(body.querySelector('#cards'),shown);retryPhotoImages(body.querySelector('#cards'));
 }
 
-function updateAnnotationSelection(){const count=selectedCaptureIds().length,p=document.getElementById('batchAnnotationSelected'),panel=document.getElementById('organizeWorkSection'),label=document.getElementById('librarySelectionCount');if(p)p.textContent=`${count} photos selected, including selections retained across filters.`;if(panel)panel.hidden=!count;if(label)label.textContent=`${count} PhotoNote${count===1?'':'s'} Selected`;}
-function wireBatchAnnotations(){
- void loadSavedAnnotationTemplates();
- updateAnnotationSelection();
- const mode=document.getElementById('batchAnnotationMode');mode.onchange=()=>{const replace=mode.value==='replace';document.getElementById('batchAnnotationConfirmLabel').hidden=!replace;document.getElementById('batchAnnotationConfirm').checked=false;document.getElementById('batchAnnotationEffect').textContent=replace?'All existing markings on the selected photos will be removed and replaced by this template.':'Existing markings will be kept. New template items may overlap them; review each photo.';};
- document.getElementById('applyBatchAnnotations').onclick=applyBatchAnnotations;
- document.getElementById('previewBatchAnnotations').onclick=async()=>{const id=Number(document.getElementById('batchAnnotationPhoto').value),r=await api(`/api/captures/${id}/annotation-preview`);if(!r.ok)return toast('Photo could not be opened');renderStampEditor(await r.json());};
-}
-async function applyBatchAnnotations(){
- const ids=selectedCaptureIds(),button=document.getElementById('applyBatchAnnotations'),status=document.getElementById('batchAnnotationStatus'),mode=document.getElementById('batchAnnotationMode').value;
- if(!ids.length){status.textContent='Select at least one photo.';return;}
- const confirmed=document.getElementById('batchAnnotationConfirm').checked;if(mode==='replace'&&!confirmed){status.textContent='Confirm replacement of existing markings before applying.';return;}
- button.disabled=true;status.textContent='Applying template...';
- try{const r=await api('/api/captures/annotations',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids,template:document.getElementById('batchTemplate').value,mode,confirm_replace:confirmed})}),d=await r.json();if(!r.ok)throw Error(d.error||'Templates could not be applied');
- state.imgv++;status.textContent=`Template applied to ${d.updated} photo${d.updated===1?'':'s'}. ${mode==='add'?'Existing markings kept.':'Existing markings replaced.'} Preview each photo to check placement.`;
- document.getElementById('batchAnnotationConfirm').checked=false;const review=document.getElementById('batchAnnotationReview');review.hidden=false;document.getElementById('batchAnnotationPhoto').innerHTML=d.ids.map((id,i)=>`<option value="${id}">Photo ${i+1} - ${esc((window._lastCards||[]).find(c=>c.id===id)?.photo_title||String(id))}</option>`).join('');await loadCards(state.editTopic||'');
- }catch(e){status.textContent=e.message;}finally{button.disabled=false;}
-}
-
+function updateAnnotationSelection(){const count=selectedCaptureIds().length,panel=document.getElementById('organizeWorkSection'),label=document.getElementById('librarySelectionCount');if(panel)panel.hidden=!count;if(label)label.textContent=`${count} PhotoNote${count===1?'':'s'} Selected`;}
 async function pairSelected() {
   const ids=selectedCaptureIds(),rows=window._lastCards||[];
   if(ids.length!==2)return toast('Select exactly two Photo Notes');
@@ -3299,41 +3257,6 @@ async function doExportSelected() {
   toast('Exported');
 }
 
-async function doDeleteSelected(all = false) {
-  const buttons = ['delbtn','delall'].map(id=>document.getElementById(id)).filter(Boolean);
-  if(buttons.some(btn=>btn.disabled))return;
-  const btn = document.getElementById(all?'delall':'delbtn');
-  const filter = document.getElementById('filter');
-  const label = all?'Delete All':'Delete Selected';
-  buttons.forEach(b=>b.disabled=true);
-  try {
-    let ids = Array.from(document.querySelectorAll('.capchk:checked')).map(x => x.value);
-    if(all){
-      btn.textContent=uiT('Loading...');
-      const response=await api('/api/captures');
-      if(!response.ok)throw new Error('load');
-      const rows=await response.json();
-      ids=rows.map(row=>String(row.id));
-      if(!btn.isConnected)return;
-    }
-    if(!ids.length){toast(all?'No captures to delete':'Select at least one capture');return;}
-    const warning=all
-      ? uiT('Delete ALL saved captures in your account, across all topics, including captures hidden by the current filter? This permanently deletes their photos and notes and cannot be undone.')+'\n\n'+uiT('Captures to delete:')+' '+ids.length
-      : uiT(`Delete ${ids.length} capture${ids.length > 1 ? 's' : ''}? This can't be undone.`);
-    if(!confirm(warning))return;
-    btn.textContent = uiT('Deleting...');
-    const r = await api('/api/captures/delete', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ids }),
-    });
-    if (!r.ok) throw new Error('delete');
-    ids.forEach(id=>state.selectedIds.delete(String(id)));
-    toast('Deleted');
-    if(filter.isConnected)await loadCards(filter.value || '');
-  } catch (e) { toast('Delete failed'); }
-  finally { buttons.forEach(b=>b.disabled=false);btn.textContent=uiT(label); }
-}
-
 async function doFixAddresses() {
   const checked = Array.from(document.querySelectorAll('.capchk:checked')).map(x => x.value);
   const btn = document.getElementById('fixaddr');
@@ -3428,6 +3351,17 @@ function gaugePhotoHtml(c,full=false){if(!c.gauge_record||!['contractor','paving
 function photoEvidencePreview(c,full=false){return gaugePhotoHtml(c,full)+(isConcreteClient()?(c.footprints||[]).map(f=>`<section class="concrete-evidence"><strong>Saved Area: ${esc(f.name)}</strong><p>${esc(concreteAreaText(f))}</p>${f.notes?`<p>${esc(f.notes)}</p>`:''}</section>`).join(''):'');}
 // Urgency chosen at capture is shown only when it is Urgent; Standard needs no label.
 function urgencyBadge(c){return c&&c.urgency==='urgent'?'<span class="badge urgent">Urgent</span>':'';}
+// Street and city from a saved address, such as "123 Main St, San Antonio" from "123 Main St, San Antonio, TX 78201, USA".
+function shortAddress(address){
+  const parts=String(address||'').split(',').map(part=>part.trim()).filter(Boolean);
+  if(parts.length>2&&/^\d+[A-Za-z]?$/.test(parts[0]))parts.splice(0,2,parts[0]+' '+parts[1]);
+  return parts.slice(0,2).join(', ');
+}
+function libraryCardMetaHtml(c){
+  const time=new Date(c.captured_at||c.created_at),date=Number.isFinite(time.getTime())?time.toLocaleDateString(uiLocale(),{year:'numeric',month:'short',day:'numeric'}):'';
+  const place=shortAddress(c.address),text=[date,place].filter(Boolean).join(' · ');
+  return text?`<div class="library-card-meta" title="${esc([date,c.address||''].filter(Boolean).join(' · '))}">${esc(text)}</div>`:'';
+}
 function libraryCardHtml(c){
   const memberships=c.project_memberships||[];
   const projects=memberships.length?memberships.map(project=>esc(project.job_number?project.job_number+' - '+project.name:project.name)).join(', '):(c.job_name?esc(c.job_number?c.job_number+' - '+c.job_name:c.job_name):'None');
@@ -3436,6 +3370,7 @@ function libraryCardHtml(c){
     <label class="library-photo-select"><input type="checkbox" class="capchk" value="${c.id}" aria-label="Select ${esc(c.photo_title||'Untitled PhotoNote')}"></label>
     ${c.photo_path?`<img data-capture-photo="${c.id}" loading="lazy" decoding="async" src="${captureThumbSrc(c)}" data-full-src="${capturePhotoSrc(c)}" alt="${esc(c.photo_title||'PhotoNote')}">`:''}
     <div class="photo-title">${esc(c.photo_title||'Untitled PhotoNote')}</div>
+    ${libraryCardMetaHtml(c)}
     ${c.urgency==='urgent'?`<div class="meta">${urgencyBadge(c)}</div>`:''}
     <div class="library-details"><div class="library-note"><strong>Notes:</strong> ${esc(c.note||'None')}</div>
     <div class="library-membership"><strong>Project(s):</strong> ${projects}</div>
@@ -3644,7 +3579,7 @@ async function deleteOrganizePhotoNote(id, button) {
     if (!r.ok) throw new Error('delete failed');
     state.selectedIds.delete(String(id));
     toast('Photo Note deleted');
-    if(state._libraryOpenId){state._libraryOpenId=null;state.view='organize';renderApp();}else runSmartSearch();
+    if(state._libraryOpenId){state._libraryOpenId=null;state.view=isHoaClient()?'photo-library':'organize';renderApp();}else runSmartSearch();
   } catch (e) {
     button.disabled = false;
     button.textContent = 'Delete PhotoNote';
@@ -3765,9 +3700,11 @@ function renderStampEditor(c) {
     </div>
     <div class="status" style="margin-top:8px"><strong>Save Changes</strong> keeps the markings with this photo in Photo Notes. <strong>Download Marked Photo</strong> saves a separate JPEG with the markings permanently visible.</div>
     <button class="backlink" id="stampBackBottom" style="margin-top:18px">‹ Back</button>`;
-  const backToEdit = () => { state.view = 'edit'; renderEdit(); };
-  document.getElementById('stampBack').onclick = backToEdit;
-  document.getElementById('stampBackBottom').onclick = backToEdit;
+  // Back returns to the screen that opened Mark Up: Library, the Library photo detail view, or a specialist record.
+  const returnView = state.view;
+  const backFromMarkUp = () => { state.view = returnView; renderApp(); };
+  document.getElementById('stampBack').onclick = backFromMarkUp;
+  document.getElementById('stampBackBottom').onclick = backFromMarkUp;
   document.getElementById('stampAdd').onclick = (e) => { const p = e.target.closest('[data-add]'); if (p) addOverlayItem(p.getAttribute('data-add')); };
   document.getElementById('applySingleTemplate').onclick=()=>{const mode=document.getElementById('singleTemplateMode').value;if(mode==='replace'&&editorOverlays.length&&!confirm('Replace all existing markings on this photo?'))return;const source=annotationTemplateItems(document.getElementById('singleTemplate').value);if(!source)return toast('Saved template is unavailable. Reload and choose another template.');const missing=source.filter(it=>missingLocationMarking(it.t,editorCapture));const items=JSON.parse(JSON.stringify(source.filter(it=>!missingLocationMarking(it.t,editorCapture))));if(missing.length){const status=document.getElementById('stampLocationStatus');if(status)status.textContent='Template skipped missing photo details. '+[...new Set(missing.map(it=>it.t))].map(locationMarkingMessage).join(' ');}const next=mode==='add'?[...editorOverlays,...items]:items;if(next.length>20)return toast('A photo can have up to 20 markings. Remove some or choose Replace existing markings.');editorOverlays=next;editorSel=editorOverlays.length?0:-1;drawOverlayItems();renderStampCtl();toast(missing.length?'Template applied without missing location details. Review placement, then Save Changes.':'Template applied. Review placement, then Save Changes.');};
   document.getElementById('saveAnnotationTemplate').onclick=saveAnnotationTemplate;
@@ -4535,7 +4472,7 @@ async function renderSend() {
     </section>
     </div><div id="sendDocumentWorkflow"${sendSource==='documents'?'':' hidden'}><label for="sendDocumentSearch">Search Documents</label><input id="sendDocumentSearch" type="search" placeholder="Search document titles" value="${esc(sendDocumentSearch)}"><section class="available-documents"><div class="available-documents-heading"><h2>Available Documents</h2><label for="sendDocumentSort">Sort<select id="sendDocumentSort"><option value="alpha"${sendDocumentSort==='alpha'?' selected':''}>A to Z</option><option value="reverse-alpha"${sendDocumentSort==='reverse-alpha'?' selected':''}>Z to A</option><option value="newest"${sendDocumentSort==='newest'?' selected':''}>Newest First</option><option value="oldest"${sendDocumentSort==='oldest'?' selected':''}>Oldest First</option></select></label></div><div id="sendDocs"><p class="status">Loading documents...</p></div></section>
     <details id="sharedDocumentLinks"><summary>Shared document links</summary><div id="sharedDocumentLinksList"></div></details>
-    </div><div id="billingOffers"></div>`;
+    </div>`;
   document.getElementById('sendSource').onchange=e=>{sendSource=e.target.value;renderSend();};
   document.getElementById('sendDocumentSearch').oninput=e=>{sendDocumentSearch=e.target.value;renderSendDocuments(window._sendGroups||[]);};
   document.getElementById('sendDocumentSort').onchange=e=>{sendDocumentSort=e.target.value;renderSendDocuments(window._sendGroups||[]);};
@@ -4554,10 +4491,21 @@ async function renderSend() {
   window.PhotoNotesExportPresets?.mount(document.getElementById('exportPresetSend'));
   loadSendCenter();
   loadApprovalPackages();
-  loadBillingOffers();
 }
 
-async function loadBillingOffers(){const box=document.getElementById('billingOffers');if(!box)return;try{const r=await api('/api/billing/config');if(!r.ok)return;const d=await r.json(),offers=Object.entries(d.offers||{});if(!d.checkout_enabled||!offers.length){box.innerHTML='';return;}box.innerHTML=`<section class="send-feature-panel" aria-labelledby="paymentsHeading"><div class="send-feature-heading" id="paymentsHeading">Payments</div><p class="status">Pay securely on Stripe’s hosted checkout page.</p>${offers.map(([slug,o])=>`<div class="card delivery-card"><div><strong>${esc(o.label)}</strong><div class="meta">Provided by ${esc(o.dba)}</div></div><button class="btn slim billing-checkout" data-offer="${esc(slug)}">Pay with Stripe</button></div>`).join('')}</section>`;box.querySelectorAll('.billing-checkout').forEach(button=>button.onclick=()=>startStripeCheckout(button));}catch(e){box.innerHTML='';}}
+// Payments lives in the account menu. It appears only where Send is available and Stripe checkout has offers.
+let billingConfigLoad=null;
+function billingConfig(){const user=state.me?.id;if(!billingConfigLoad||billingConfigLoad.user!==user){const load=api('/api/billing/config').then(r=>r.ok?r.json():null).catch(()=>null);billingConfigLoad={user,load};load.then(d=>{if(!d&&billingConfigLoad?.load===load)billingConfigLoad=null;});}return billingConfigLoad.load;}
+function paymentsAvailable(){return !!state.me&&!isBasicClient()&&!isRoadIssuesClient();}
+async function revealPaymentsMenu(){const item=document.getElementById('menuPayments');if(!item||!paymentsAvailable())return;const user=state.me.id,d=await billingConfig();if(!item.isConnected||state.me?.id!==user)return;item.hidden=!(d&&d.checkout_enabled&&Object.keys(d.offers||{}).length);window.PhotoNotesAccountMenu.sort();}
+function showPayments(){
+  document.getElementById('paymentsDialog')?.remove();
+  const dialog=document.createElement('dialog');dialog.id='paymentsDialog';dialog.className='web-help-dialog payments-dialog';dialog.setAttribute('aria-labelledby','paymentsHeading');
+  dialog.innerHTML='<div id="billingOffers"><p class="status">Loading payments...</p></div><button class="btn secondary" id="closePayments" type="button">Close</button>';
+  document.body.append(dialog);dialog.querySelector('#closePayments').onclick=()=>dialog.close();dialog.addEventListener('close',()=>dialog.remove());dialog.showModal();
+  return loadBillingOffers();
+}
+async function loadBillingOffers(){const box=document.getElementById('billingOffers');if(!box)return;try{const d=await billingConfig();if(!box.isConnected)return;if(!d){box.innerHTML='<p class="status">Payments could not be loaded. Try again later.</p>';return;}const offers=Object.entries(d.offers||{});if(!d.checkout_enabled||!offers.length){box.innerHTML='<p class="status">No payments are available for this account.</p>';return;}box.innerHTML=`<section class="send-feature-panel" aria-labelledby="paymentsHeading"><div class="send-feature-heading" id="paymentsHeading">Payments</div><p class="status">Pay securely on Stripe’s hosted checkout page.</p>${offers.map(([slug,o])=>`<div class="card delivery-card"><div><strong>${esc(o.label)}</strong><div class="meta">Provided by ${esc(o.dba)}</div></div><button class="btn slim billing-checkout" data-offer="${esc(slug)}">Pay with Stripe</button></div>`).join('')}</section>`;box.querySelectorAll('.billing-checkout').forEach(button=>button.onclick=()=>startStripeCheckout(button));}catch(e){if(box.isConnected)box.innerHTML='<p class="status">Payments could not be loaded. Try again later.</p>';}}
 async function startStripeCheckout(button){button.disabled=true;button.textContent='Opening Stripe...';try{const r=await api('/api/billing/checkout',{method:'POST',headers:{'Content-Type':'application/json','Idempotency-Key':`checkout-${Date.now()}-${crypto.randomUUID()}`},body:JSON.stringify({offer:button.dataset.offer,quantity:1})}),d=await r.json();if(!r.ok||!d.url)throw new Error();location.assign(d.url);}catch(e){toast('Stripe checkout could not be opened');button.disabled=false;button.textContent='Pay with Stripe';}}
 
 async function shareReviewLink(url,title){
@@ -4590,10 +4538,8 @@ function renderSendPhotoLibrary(){
       <input type="checkbox" class="sendchk" value="${c.id}" aria-label="Select ${esc(c.photo_title || 'Photo Note')}" ${state.selectedIds.has(String(c.id)) ? 'checked' : ''}>
       ${c.photo_path ? `<img loading="lazy" decoding="async" src="${captureThumbSrc(c)}" alt="${esc(c.photo_title || 'Photo Note')}">` : '<span class="send-no-photo">Note</span>'}
       <span class="send-capture-details"><strong>${esc(c.photo_title || 'Untitled Photo')}</strong><small>${esc((c.area_tags || []).join(', ') || 'Unfiled')}</small><small>${esc(c.note || 'No notes')}</small></span>
-      <button class="send-delete-capture" type="button" data-delete-capture="${c.id}">Delete Photo Note</button>
     </article>`).join('') : `<p class="empty">${uiT((window._sendCaptures||[]).length?'No Photo Notes match these filters.':'Nothing has been captured yet.')}</p>`;
   capBox.querySelectorAll('.sendchk').forEach(c => c.onchange = () => { if (c.checked) state.selectedIds.add(String(c.value)); else state.selectedIds.delete(String(c.value)); updateSendCount(); });
-  capBox.querySelectorAll('[data-delete-capture]').forEach(button => button.onclick = () => deleteSendCapture(button.dataset.deleteCapture, button));
   updateSendCount();
 }
 
@@ -4611,26 +4557,6 @@ async function loadSendCenter() {
 }
 
 function renderSendDocuments(groups){const docs=document.getElementById('sendDocs');if(!docs)return;const rows=[...groups].filter(g=>String(g.title||'').trim()&&Number(g.item_count)>0&&String(g.title).toLowerCase().includes(sendDocumentSearch.toLowerCase())).sort((a,b)=>sendDocumentSort==='alpha'?a.title.localeCompare(b.title):sendDocumentSort==='reverse-alpha'?b.title.localeCompare(a.title):sendDocumentSort==='newest'?(Date.parse(b.updated_at||b.created_at)||0)-(Date.parse(a.updated_at||a.created_at)||0):(Date.parse(a.updated_at||a.created_at)||0)-(Date.parse(b.updated_at||b.created_at)||0));if(!rows.length){docs.innerHTML='<p class="empty">No matching documents are ready to send.</p>';return;}docs.innerHTML=`<ul class="compact-document-list send-document-list">${rows.map(g=>`<li><div><strong>${esc(g.title)}</strong><span>${g.item_count} PhotoNote${g.item_count===1?'':'s'} · Last Modified: ${esc(documentModifiedLabel(g))}</span></div><div class="compact-document-actions"><button class="btn slim" data-use-document="${g.id}">Use This Document</button><button class="btn secondary slim" data-edit-document="${g.id}">Edit Draft</button></div><div class="document-send-options" data-send-options="${g.id}" hidden><label>File Format<select class="document-delivery-format"><option value="pdf">PDF</option><option value="docx">Word</option><option value="bundle">Markdown + Photos (.zip)</option></select></label><div class="compact-document-actions"><button class="btn slim" data-document-action="share">Share</button><button class="btn secondary slim" data-document-action="download">Download</button><button class="btn secondary slim" data-document-action="print">Print</button></div></div></li>`).join('')}</ul>`;docs.querySelectorAll('[data-use-document]').forEach(button=>button.onclick=()=>{docs.querySelectorAll('[data-send-options]').forEach(x=>x.hidden=x.dataset.sendOptions!==button.dataset.useDocument);});docs.querySelectorAll('[data-edit-document]').forEach(button=>button.onclick=()=>{state.groupId=Number(button.dataset.editDocument);state.view='create';renderApp();});docs.querySelectorAll('[data-send-options]').forEach(control=>{const format=control.querySelector('select');control.querySelectorAll('[data-document-action]').forEach(button=>button.onclick=()=>deliverExport(format.value,control.dataset.sendOptions,button.dataset.documentAction));});}
-
-async function deleteSendCapture(id, button) {
-  if (!id || !confirm(uiT(`Delete this Photo Note? This can't be undone.`))) return;
-  button.disabled = true;
-  button.textContent = 'Deleting...';
-  try {
-    const r = await api('/api/captures/delete', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ids: [id] }),
-    });
-    if (!r.ok) throw new Error('delete failed');
-    state.selectedIds.delete(String(id));
-    toast('Photo Note deleted');
-    await loadSendCenter();
-  } catch (e) {
-    button.disabled = false;
-    button.textContent = 'Delete Photo Note';
-    toast('Delete failed');
-  }
-}
 
 function updateSendCount() {
   const n = state.selectedIds.size;

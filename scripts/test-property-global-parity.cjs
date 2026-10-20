@@ -21,8 +21,8 @@ const {chromium,webkit}=require('playwright');
     let reference;
     for(const edition of ['general','contractor','paving','concrete','roofer','hoa','property']){
      if(['hoa','property'].includes(edition)&&section==='organize')continue;
-     await page.evaluate(({edition,section})=>{state.plan='pro';state.proType=edition;state.view=section;state.groupId=null;state.ewrId=null;state.me.ramo_intake_access=true;renderApp();},{edition,section});
-     await page.locator(section==='organize'?'#photoSearch':section==='edit'?'#delbtn':section==='create'?'#newDocument':'#sendSource').waitFor();
+     await page.evaluate(({edition,section})=>{state.plan='pro';state.proType=edition;state.view=section;state._libraryOpenId=section==='edit'?1:null;state.groupId=null;state.ewrId=null;state.me.ramo_intake_access=true;renderApp();},{edition,section});
+     await page.locator(section==='organize'?'#photoSearch':section==='edit'?'#libraryBack':section==='create'?'#newDocument':'#sendSource').waitFor();
      // Export Presets mounts after its API request; inspect the completed shared UI.
      if(section==='send')await page.locator('#epChoose').waitFor({state:'attached'});
      const toolBoxes=await page.locator('#fuOpen,#requestProjectPhotos').evaluateAll(nodes=>nodes.map(n=>{const r=n.getBoundingClientRect();return {top:r.top,width:r.width,right:r.right};}));
@@ -40,7 +40,7 @@ const {chromium,webkit}=require('playwright');
    assert.deepEqual(await page.locator('.workflow-tabs button').allTextContents(),['Capture','Organize','Assets','Inspections','Records']);
    if(width===1440){
     for(const edition of ['hoa','property'])for(const view of ['capture','organize','edit','create','send','hoa-visits','hoa-assets','hoa-inspections','hoa-maintenance','hoa-reports','hoa-dashboard','hoa-communities']){
-     await page.evaluate(({edition,view})=>{state.proType=edition;state.view=view;renderApp();},{edition,view});
+     await page.evaluate(({edition,view})=>{state.proType=edition;state.view=view;state._libraryOpenId=view==='edit'?1:null;renderApp();},{edition,view});
      await page.locator('.pn-help-fab').click();
      await page.locator('#pnHelpSearch').fill('');
      await page.getByRole('button',{name:'This page',exact:true}).click();
