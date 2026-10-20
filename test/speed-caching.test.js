@@ -19,12 +19,15 @@ test('versioned files are kept for a year, photos stay private, and nothing else
   assert.equal((await header('/app.js?v=1')).cache,'public, max-age=31536000, immutable');
   assert.notEqual((await header('/app.js')).cache,'public, max-age=31536000, immutable');
   assert.notEqual((await header('/no-such-file.js?v=1')).cache,'public, max-age=31536000, immutable','the page fallback for a missing file is never kept');
-  assert.equal((await header('/uploads/photo.jpg?v=3')).cache,'private, max-age=86400');
-  assert.equal((await header('/uploads/photo.jpg')).cache,'private, no-cache');
-  assert.equal((await header('/thumbs/photo.jpg?v=3')).cache,'private, max-age=86400');
-  assert.equal((await header('/thumbs/photo.jpg')).cache,'private, no-cache');
+  // Photos need sign-in or a signed link (see upload privacy tests); a signed link is used here.
+  const q=require('../upload-access').signedUrl(process.env.SESSION_SECRET||'dev-secret-change-me','/uploads/photo.jpg',Date.now()+3600000).split('?')[1];
+  assert.equal((await header('/uploads/photo.jpg')).status,401,'photos are private');
+  assert.equal((await header('/uploads/photo.jpg?'+q+'&v=3')).cache,'private, max-age=86400');
+  assert.equal((await header('/uploads/photo.jpg?'+q)).cache,'private, no-cache');
+  assert.equal((await header('/thumbs/photo.jpg?'+q+'&v=3')).cache,'private, max-age=86400');
+  assert.equal((await header('/thumbs/photo.jpg?'+q)).cache,'private, no-cache');
   assert.equal((await header('/app.js?v=1','gzip')).encoding,'gzip','scripts are compressed');
-  assert.equal((await header('/uploads/photo.jpg','gzip')).encoding,null,'photos are sent as they are');
+  assert.equal((await header('/uploads/photo.jpg?'+q,'gzip')).encoding,null,'photos are sent as they are');
  }finally{await s.close();}
 });
 
