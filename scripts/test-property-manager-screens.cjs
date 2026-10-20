@@ -38,6 +38,22 @@ const assert=require('node:assert/strict'),express=require('express'),path=requi
   await page.locator('[data-edit-community="1"]').click();await page.locator('#hcEditName1').fill('Office Park North');await page.locator('#hcEditManager1').fill('Building Engineer');await page.locator('[data-save-community="1"]').click();
   await page.waitForFunction(()=>true);await page.waitForTimeout(300);const saved=posts.find(x=>x.path==='/api/hoa/communities/1');assert(saved,'Property edit posted');assert.deepEqual(saved.body,{name:'Office Park North',address:'100 Main Street',manager_name:'Building Engineer'});
   assert(await page.locator('#propertyAreasManager').count(),'Property Areas management is reachable');assert.match(await page.locator('body').textContent(),/Team Member/);
+  // Team removal, automatic assignment by category, archive and restore.
+  await page.waitForSelector('[data-rules-community="1"]');
+  assert.equal(await page.locator('[data-remove-member="1"]').count(),0,'administrator cannot remove self');
+  const deletes=[];page.on('request',q=>{if(q.method()==='DELETE')deletes.push(new URL(q.url()).pathname);});
+  await page.locator('summary',{hasText:'Management Company'}).click();
+  await page.locator('[data-remove-member="2"]').click();assert.match(await page.locator('[data-remove-member="2"]').innerText(),/Tap Again to Remove Fixture Mate/);await page.locator('[data-remove-member="2"]').click();
+  await page.waitForFunction(()=>true);await page.waitForTimeout(300);assert(deletes.includes('/api/hoa/members/2'),'member removal sent');
+  await page.waitForSelector('[data-rules-community="1"]');await page.locator('[data-rules-community="1"]').click();
+  const hvac=page.locator('select[data-rule-cat="HVAC"]');await hvac.selectOption('Fixture Mate');
+  const plumbing=page.locator('select[data-rule-cat="Plumbing"]');await plumbing.selectOption('__other');await page.locator('input[data-rule-other="Plumbing"]').fill('ACME Plumbing');
+  await page.locator('#hcRulesSave1').click();await page.waitForTimeout(300);
+  const ruleSave=posts.filter(x=>x.path==='/api/hoa/communities/1').pop();assert.deepEqual(ruleSave.body,{assignment_rules:{HVAC:'Fixture Mate',Plumbing:'ACME Plumbing'}});
+  await page.waitForSelector('[data-archive-community="1"]');await page.locator('[data-archive-community="1"]').click();await page.locator('[data-archive-community="1"]').click();await page.waitForTimeout(300);
+  assert.deepEqual(posts.filter(x=>x.path==='/api/hoa/communities/1').pop().body,{active:false});
+  await page.waitForSelector('#hcArchivedBox');await page.locator('#hcArchivedBox summary').click();await page.waitForSelector('[data-restore-community="1"]');await page.locator('[data-restore-community="1"]').click();await page.waitForTimeout(300);
+  assert.deepEqual(posts.filter(x=>x.path==='/api/hoa/communities/1').pop().body,{active:true});
   // Profile menu: Dashboard, then open the record from its notification.
   await page.locator('#profileButton').click();await page.locator('#menuHoaDashboard').click();await page.waitForSelector('[data-hoa-notification-item="7"]');assert.match(await page.locator('#hoaDashStats').innerText(),/Assigned to Me/);
   await page.locator('[data-hoa-notification-item="7"]').click();await page.waitForSelector('#hiAssigneeUser');

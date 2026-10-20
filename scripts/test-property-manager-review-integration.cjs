@@ -55,5 +55,33 @@ assert(['127.0.0.1','localhost'].includes(target.hostname));assert.equal(target.
  const rooftop=await report({property_area_id:area.id});assert(rooftop.includes('RTU-3 leak'));assert(!rooftop.includes('Pole light out'));
  assert.equal((await A('/api/hoa/report?property_area_id=abc')).status,400);
  const pdf=await A('/api/hoa/report?doc=pdf&property_area_id='+otherArea.id);assert.equal(pdf.status,200);assert.equal(pdf.data.subarray(0,4).toString(),'%PDF');
+ const del=async(api,url)=>{const r=await fetch(base+url,{method:'DELETE',headers:{Cookie:api.cookie}});return {status:r.status,data:await r.json().catch(()=>({}))};};
+ // Automatic assignment rules are cleaned and used for new records.
+ const rules=await A('/api/hoa/communities/'+property.id,{assignment_rules:{HVAC:'Fixture Mate',Roofing:'  ',Plumbing:'ACME Plumbing',bad:{x:1}}});assert.equal(rules.status,200);assert.deepEqual(rules.data.assignment_rules,{HVAC:'Fixture Mate',Plumbing:'ACME Plumbing'});
+ const hvac=await upload(A,{note:'Rooftop unit noisy',hoa_community_id:property.id,hoa_area:'HVAC',hoa_title:'RTU noisy'});assert.equal(hvac.status,200);assert.equal(hvac.data.maintenance_item.primary_assignee,'Fixture Mate');assert.equal(hvac.data.maintenance_item.primary_assignee_user_id,mate.id);
+ // Incidents: creator or administrator may delete; teammates may not; deleted incidents disappear; photos stay.
+ const newIncident=async api=>(await api('/api/property/incidents',{community_id:property.id,title:'Gate arm hit',incident_type:'Vehicle Impact',observed_at:new Date().toISOString()})).data;
+ const byMate=await newIncident(B),byLead=await newIncident(A);assert(byMate.id&&byLead.id);
+ assert.equal((await del(B,'/api/property/incidents/'+byLead.id)).status,403,'a teammate cannot delete another person\'s incident');
+ assert.equal((await del(B,'/api/property/incidents/'+byMate.id)).status,200,'creator deletes');
+ assert.equal((await del(A,'/api/property/incidents/'+byLead.id)).status,200,'administrator deletes');
+ assert.equal((await A('/api/property/incidents/'+byMate.id)).status,404);assert.equal((await A('/api/property/incidents')).data.filter(i=>[byMate.id,byLead.id].includes(i.id)).length,0);
+ assert.equal((await pool.query('SELECT count(*)::int n FROM property_incidents WHERE id=ANY($1) AND deleted_at IS NOT NULL',[[byMate.id,byLead.id]])).rows[0].n,2,'kept, marked deleted');
+ assert.equal((await del(H,'/api/property/incidents/'+byLead.id)).status,403,'other edition gate');
+ // Archive and restore: administrators only; archived properties leave the list and can be restored.
+ assert.equal((await B('/api/hoa/communities/'+property.id,{active:false})).status,403);
+ assert.equal((await A('/api/hoa/communities/'+property.id,{active:false})).status,200);
+ assert(!(await A('/api/hoa/communities')).data.some(c=>c.id===property.id));assert((await A('/api/hoa/communities?archived=1')).data.some(c=>c.id===property.id));
+ assert.equal((await A('/api/hoa/communities/'+property.id,{active:true})).status,200);assert((await A('/api/hoa/communities')).data.some(c=>c.id===property.id));
+ assert.equal((await H('/api/hoa/communities/'+property.id,{active:false})).status,404,'other company');
+ // Removing a team member: administrators only, never yourself; records stay; assignment link cleared.
+ assert.equal((await del(B,'/api/hoa/members/'+lead.id)).status,403);
+ assert.equal((await del(A,'/api/hoa/members/'+lead.id)).status,400);
+ assert.equal((await del(A,'/api/hoa/members/999999')).status,404);
+ assert.equal((await del(A,'/api/hoa/members/'+mate.id)).status,200);
+ assert.deepEqual((await A('/api/hoa/members')).data.map(m=>m.id),[lead.id]);
+ const kept=(await pool.query('SELECT primary_assignee,primary_assignee_user_id FROM hoa_maintenance_items WHERE id=$1',[hvac.data.maintenance_item.id])).rows[0];assert.equal(kept.primary_assignee,'Fixture Mate');assert.equal(kept.primary_assignee_user_id,null);
+ const mateNow=await B('/api/hoa/company');assert.equal(mateNow.status,200);assert.notEqual(mateNow.data.id,(await A('/api/hoa/company')).data.id,'removed member gets their own company');
+ assert.equal((await B('/api/hoa/items/'+hvac.data.maintenance_item.id)).status,404,'removed member loses access');
  console.log('PASS Property Manager Pro team assignment, document-only capture, Property edit, readable history, Assigned to Me and Area report filter');
  }finally{server?.close();await pool.end();}})().catch(e=>{console.error(e);process.exitCode=1;});
