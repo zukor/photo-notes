@@ -917,6 +917,36 @@
     'The download could not be created. Try again, or choose fewer photos.': 'No se pudo crear la descarga. Inténtelo de nuevo o elija menos fotos.'
   });
 
+  // One set of document settings: account defaults, shared presets and captions for one document.
+  Object.assign(ES, {
+    'Account Defaults': 'Valores predeterminados de la cuenta',
+    'Account Defaults are shown first. Choosing a preset shows its settings below instead. These are the same Export Presets offered in Send and on each document page.': 'Primero se muestran los valores predeterminados de la cuenta. Al elegir un ajuste preestablecido, abajo se muestran sus ajustes. Son los mismos ajustes de exportación que se ofrecen en Enviar y en la página de cada documento.',
+    'Your account defaults are shown below.': 'Abajo se muestran los valores predeterminados de su cuenta.',
+    'These settings are used for this new document when you save it. Save as Default or Save as Preset keeps them for later documents.': 'Estos ajustes se usan para este documento nuevo cuando lo guarde. Guardar como predeterminado o Guardar como ajuste preestablecido los conserva para documentos futuros.',
+    'Account default template:': 'Plantilla predeterminada de la cuenta:',
+    '. New documents start with a copy of it unless you upload a different template below.': '. Los documentos nuevos empiezan con una copia, a menos que cargue otra plantilla abajo.',
+    'No account default template. Save as Default with a template chosen below to start every new document with it.': 'No hay plantilla predeterminada de la cuenta. Use Guardar como predeterminado con una plantilla elegida abajo para que cada documento nuevo empiece con ella.',
+    'Remove Default Template': 'Quitar plantilla predeterminada',
+    'Preset Name': 'Nombre del ajuste preestablecido', 'Preset name': 'Nombre del ajuste preestablecido',
+    'Save Preset and Continue': 'Guardar ajuste preestablecido y continuar', 'Cancel Preset': 'Cancelar ajuste preestablecido',
+    'Loading document settings...': 'Cargando ajustes del documento...',
+    'Default document settings saved.': 'Ajustes predeterminados del documento guardados.',
+    'Default document settings saved, but the Word template could not be uploaded. It will still be used for this document.': 'Se guardaron los ajustes predeterminados, pero no se pudo cargar la plantilla de Word. Se usará de todos modos en este documento.',
+    'Default document settings could not be saved. Nothing was changed.': 'No se pudieron guardar los ajustes predeterminados. No se cambió nada.',
+    'Enter a preset name.': 'Ingrese un nombre para el ajuste preestablecido.', 'Document settings preset saved.': 'Ajuste preestablecido del documento guardado.',
+    'Preset could not be saved': 'No se pudo guardar el ajuste preestablecido',
+    'Default template could not be removed': 'No se pudo quitar la plantilla predeterminada',
+    'Default template removed. Existing documents keep their own copy.': 'Plantilla predeterminada quitada. Los documentos existentes conservan su propia copia.',
+    'Save for This Document': 'Guardar para este documento', 'Save as Account Default': 'Guardar como predeterminado de la cuenta',
+    'Save for This Document changes only this document. Save as Account Default changes the company name, header and footer for every document that has not set its own.': 'Guardar para este documento cambia solo este documento. Guardar como predeterminado de la cuenta cambia el nombre de la empresa, el encabezado y el pie de página de todos los documentos que no tengan los suyos.',
+    'Branding saved for this document': 'Marca guardada para este documento', 'Branding saved as the account default': 'Marca guardada como predeterminada de la cuenta',
+    'Use Photo Note': 'Usar nota de la foto',
+    'Caption for this document only. The photo note in Library is unchanged.': 'Pie de foto solo para este documento. La nota de la foto en la Biblioteca no cambia.',
+    'Using the photo note. Saving a different caption changes this document only.': 'Se usa la nota de la foto. Guardar un pie de foto distinto cambia solo este documento.',
+    'This document now uses the photo note': 'Este documento ahora usa la nota de la foto',
+    'Photos per Page': 'Fotos por página', '2 per Page': '2 por página', '2 Vertical': '2 verticales', '2 Horizontal': '2 horizontales', '3 Vertical': '3 verticales', '3 Horizontal': '3 horizontales'
+  });
+
   // Property Manager display vocabulary, without changing HOA translations.
   Object.assign(ES, {
   "Properties and Team": "Propiedades y equipo",

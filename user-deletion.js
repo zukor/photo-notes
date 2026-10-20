@@ -4,7 +4,7 @@ const FILE_SOURCES=[
  ['asphalt_tickets','photo_path'],['camera_readings','photo_path'],['road_issue_reports','photo_path'],
  ['paving_temperatures','photo_path'],['concrete_tickets','photo_path'],['concrete_temperatures','photo_path'],
  ['issue_reports','screenshot_path'],['issue_reports','result_screenshot_path'],['issue_reports','voice_path'],
- ['users','document_logo_path'],['users','word_template_path'],['groups','word_template_path']
+ ['users','document_logo_path'],['users','word_template_path'],['users','default_template_path'],['groups','word_template_path']
 ];
 // Stored paths are flat /uploads/<file>. Customer feedback screenshots are stored privately and
 // recorded as /uploads/customer-feedback/<file>.

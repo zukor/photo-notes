@@ -11,13 +11,14 @@ function normalize(value){
  const v=value&&typeof value==='object'?value:{},warnings=[],config={version:1};
  if(v.version!=null&&v.version!==1)warnings.push('This preset uses a newer configuration version. Supported settings were applied.');
  if(Array.isArray(value))warnings.push('Invalid preset configuration was replaced with defaults.');
- const choices={format:['pdf','docx','bundle'],resolution:['standard','print','web'],font:['Arial','Aptos','Calibri','Georgia','Times New Roman'],photo_layout:['one_per_page','two_per_page']};
+ // Presets hold every document layout option, so New Document setup and Send share one set of saved settings.
+ const choices={format:['pdf','docx','bundle'],resolution:['standard','print','web'],font:['Arial','Helvetica','Aptos','Calibri','Georgia','Times New Roman'],photo_layout:['one_per_page','two_vertical','two_horizontal','two_per_page','three_vertical','three_horizontal','four_per_page','five_per_page','six_per_page'],document_type:['standard','exhibit'],orientation:['portrait','landscape'],page_number_position:['bottom_left','bottom_center','bottom_right']};
  config.format=choices.format.includes(v.format)?v.format:'pdf';config.resolution=choices.resolution.includes(v.resolution)?v.resolution:'standard';
  config.layout={};const l=v.layout||{};
  for(const key of ['cover_page','header','footer','page_numbers'])if(typeof l[key]==='boolean')config.layout[key]=l[key];
- for(const key of ['font','photo_layout'])if(choices[key].includes(l[key]))config.layout[key]=l[key];else if(l[key]!=null)warnings.push(`Unavailable ${key} was skipped.`);
+ for(const key of ['font','photo_layout','document_type','orientation','page_number_position'])if(choices[key].includes(l[key]))config.layout[key]=l[key];else if(l[key]!=null)warnings.push(`Unavailable ${key} was skipped.`);
  if(/^#[0-9a-f]{6}$/i.test(l.accent||''))config.layout.accent=l.accent;else if(l.accent!=null)warnings.push('Unavailable accent was skipped.');
- for(const key of Object.keys(l))if(!['cover_page','header','footer','page_numbers','font','photo_layout','accent'].includes(key))warnings.push(`Unavailable layout ${key} was skipped.`);
+ for(const key of Object.keys(l))if(!['cover_page','header','footer','page_numbers','font','photo_layout','accent','document_type','orientation','page_number_position'].includes(key))warnings.push(`Unavailable layout ${key} was skipped.`);
  config.branding={};for(const [key,max] of Object.entries({company_name:160,header_text:200,footer_text:240}))if(typeof v.branding?.[key]==='string')config.branding[key]=v.branding[key].slice(0,max);
  config.logo=v.logo!==false;
  for(const key of Object.keys(v))if(!['version','format','resolution','layout','branding','logo'].includes(key))warnings.push(`Unavailable ${key} was skipped.`);

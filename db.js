@@ -165,6 +165,7 @@ CREATE TABLE IF NOT EXISTS group_items (
   group_id    INTEGER NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
   capture_id  INTEGER NOT NULL REFERENCES captures(id) ON DELETE CASCADE,
   position    INTEGER NOT NULL DEFAULT 0,
+  caption     TEXT,
   PRIMARY KEY (group_id, capture_id)
 );
 CREATE TABLE IF NOT EXISTS areas (
@@ -804,7 +805,7 @@ ALTER TABLE hoa_completion_photo_requests ADD COLUMN IF NOT EXISTS instructions 
 
 // Columns that store uploaded file paths in tables created here. Clean-up after a failed
 // upload or a delete checks each of them, so each one is indexed.
-const UPLOAD_PATH_INDEXES = [['captures','photo_path'],['captures','photo_original_path'],['camera_readings','photo_path'],['ewr_photos','photo_path'],['asphalt_tickets','photo_path'],['concrete_tickets','photo_path'],['concrete_temperatures','photo_path'],['paving_temperatures','photo_path'],['road_issue_reports','photo_path'],['issue_reports','screenshot_path'],['issue_reports','result_screenshot_path'],['issue_reports','voice_path'],['groups','word_template_path'],['users','document_logo_path'],['users','word_template_path']];
+const UPLOAD_PATH_INDEXES = [['captures','photo_path'],['captures','photo_original_path'],['camera_readings','photo_path'],['ewr_photos','photo_path'],['asphalt_tickets','photo_path'],['concrete_tickets','photo_path'],['concrete_temperatures','photo_path'],['paving_temperatures','photo_path'],['road_issue_reports','photo_path'],['issue_reports','screenshot_path'],['issue_reports','result_screenshot_path'],['issue_reports','voice_path'],['groups','word_template_path'],['users','document_logo_path'],['users','word_template_path'],['users','default_template_path']];
 async function init() {
   await pool.query(SCHEMA);
   await pool.query(require('fs').readFileSync(require('path').join(__dirname,'photo-requests-schema.sql'),'utf8'));
@@ -897,6 +898,10 @@ async function init() {
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS document_logo_name TEXT`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS word_template_path TEXT`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS word_template_name TEXT`);
+  // Account document defaults: layout options (NULL until first saved) and the Word template new documents start with.
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS document_layout JSONB`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS default_template_path TEXT`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS default_template_name TEXT`);
   // Pro-tier: capture dimension fields (see SCHEMA above for semantics).
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS dim_length_in DOUBLE PRECISION`);
   await pool.query(`ALTER TABLE captures ADD COLUMN IF NOT EXISTS dim_length_unit TEXT`);
@@ -960,6 +965,8 @@ async function init() {
   await pool.query(`ALTER TABLE groups ADD COLUMN IF NOT EXISTS word_template_name TEXT`);
   await pool.query(`ALTER TABLE groups ADD COLUMN IF NOT EXISTS layout JSONB NOT NULL DEFAULT '{}'::jsonb`);
   await pool.query(`ALTER TABLE groups ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now()`);
+  // A caption written for one document. NULL means the document shows the photo's own note.
+  await pool.query(`ALTER TABLE group_items ADD COLUMN IF NOT EXISTS caption TEXT`);
   await pool.query(`UPDATE groups SET user_id = $1 WHERE user_id IS NULL`, [adminId]);
   // Tester issue triage. These ALTERs upgrade existing production databases
   // without changing or losing previously submitted reports.

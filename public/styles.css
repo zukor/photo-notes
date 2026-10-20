@@ -1296,3 +1296,13 @@ html[data-theme="dark"] :is(.workflow-intro,.organize-panel,.send-feature-panel,
 #pavingScanner[hidden] { display:none; }
 #pavingCaptureType { -webkit-appearance:none; appearance:none; height:44px; display:block; box-sizing:border-box; width:100%; min-height:44px; padding:10px 8px; border:1px solid #000; border-radius:8px; background:#fff; color:#000; font:16px Arial,Helvetica,sans-serif; text-align:left; background-image:linear-gradient(45deg,transparent 50%,#000 50%),linear-gradient(135deg,#000 50%,transparent 50%); background-position:calc(100% - 16px) 19px,calc(100% - 11px) 19px; background-size:5px 5px; background-repeat:no-repeat; padding-right:28px; }
 .paving-photo-context > label:not(:first-child) { margin-top:12px; }
+/* One set of document settings: save note, preset name row, account default template. */
+.document-settings-save-note{font-size:14px;color:var(--pn-text-000,#000)}
+.document-preset-name{display:grid;gap:10px;width:max-content;max-width:100%;margin:14px auto 0}
+.document-preset-name .btn{width:100%;margin:0}
+.document-default-template{margin:10px 0;color:var(--pn-text-000,#000)}
+.document-caption-source{margin-top:4px}
+.document-caption-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+.document-caption-actions .btn{margin:0}
+html[data-theme="dark"] :is(.document-settings-save-note,.document-default-template){color:#fff}
+html[data-theme="light"] :is(.document-settings-save-note,.document-default-template){color:#000}

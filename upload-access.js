@@ -10,7 +10,7 @@ const SOURCES = [
   ['ewr_photos', 'photo_path', 'owned'], ['asphalt_tickets', 'photo_path', 'owned'], ['camera_readings', 'photo_path', 'owned'],
   ['paving_temperatures', 'photo_path', 'owned'], ['concrete_tickets', 'photo_path', 'owned'], ['concrete_temperatures', 'photo_path', 'owned'],
   ['road_issue_reports', 'photo_path', 'owned'], ['groups', 'word_template_path', 'owned'],
-  ['users', 'document_logo_path', 'self'], ['users', 'word_template_path', 'self'],
+  ['users', 'document_logo_path', 'self'], ['users', 'word_template_path', 'self'], ['users', 'default_template_path', 'self'],
   ['issue_reports', 'screenshot_path', 'issue'], ['issue_reports', 'result_screenshot_path', 'issue'], ['issue_reports', 'voice_path', 'issue'],
   ['property_floor_plans', 'photo_path', 'company'],
 ];

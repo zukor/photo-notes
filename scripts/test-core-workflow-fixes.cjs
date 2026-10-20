@@ -7,7 +7,7 @@ const year=new Date().getFullYear();
 try{for(const engine of [chromium,webkit]){const browser=await engine.launch();try{for(const width of [390,1440]){
 const page=await browser.newPage({viewport:{width,height:950},serviceWorkers:'block'});
 const dialogs=[];page.on('dialog',d=>{dialogs.push(d.message());d.dismiss();});
-const posts=[];let groupItems=[{id:1}];
+const posts=[];let groupItems=[{id:1}];const captions={};
 const photos=()=>[
  {id:1,photo_title:'Detail photo',note:'First note',photo_path:'/icon-192.png',area_tags:['Retired topic'],urgency:'urgent',created_at:'2026-10-01T12:00:00Z'},
  {id:2,photo_title:'Second photo',note:'Second note',photo_path:'/icon-192.png',area_tags:['Site'],urgency:'standard',created_at:'2026-10-02T12:00:00Z'}];
@@ -15,9 +15,12 @@ await page.route('**/api/**',r=>{const u=new URL(r.request().url()),p=u.pathname
  if(m==='POST')posts.push([p,r.request().postData()]);
  if(p==='/api/me')return r.fulfill({json:{id:1,name:'Fixture User',email:'fixture@example.invalid',role:'user',plan:'pro',pro_type:'general',edition_access:['pro']}});
  if(p==='/api/captures'&&m==='GET')return r.fulfill({json:photos()});
- if(p==='/api/document-settings'&&m==='GET')return r.fulfill({json:{branding:{company_name:'Account Co',header_text:'Account header',footer_text:'Account footer'}}});
+ if(p==='/api/document-settings'&&m==='GET')return r.fulfill({json:{branding:{company_name:'Account Co',header_text:'Account header',footer_text:'Account footer'},layout:{photo_layout:'two_vertical',font:'Georgia'},layout_saved:true,default_template_ready:true,default_template_name:'company.docx'}});
+ if(p==='/api/export-presets'&&m==='GET')return r.fulfill({json:[{id:4,name:'Site Preset',description:'',is_default:false,config:{version:1,format:'pdf',resolution:'standard',layout:{photo_layout:'six_per_page'},branding:{header_text:'Preset header'},logo:true}}]});
+ if(p==='/api/export-presets'&&m==='POST')return r.fulfill({status:201,json:{id:5,...JSON.parse(r.request().postData())}});
+ if(p==='/api/groups/5/caption'){const b=JSON.parse(r.request().postData());captions[b.capture_id]=b.caption;return r.fulfill({json:{ok:true,caption:b.caption}});}
  if(p==='/api/document-settings/template')return r.fulfill({status:500,json:{error:'template failed'}});
- if(p==='/api/groups/5'&&m==='GET')return r.fulfill({json:{group:{id:5,title:'Roof Report',layout:{company_name:'Doc Co',header_text:'Doc Header',header:true}},items:photos().filter(c=>groupItems.some(i=>i.id===c.id)),pairs:[]}});
+ if(p==='/api/groups/5'&&m==='GET')return r.fulfill({json:{group:{id:5,title:'Roof Report',layout:{company_name:'Doc Co',header_text:'Doc Header',header:true}},items:photos().filter(c=>groupItems.some(i=>i.id===c.id)).map(c=>({...c,document_caption:captions[c.id]??null})),pairs:[]}});
  if(p==='/api/groups/5/add')return r.fulfill({json:{ok:true,added:1}});
  if(p==='/api/groups'&&m==='POST')return r.fulfill({json:{id:9,title:'New'}});
  if(p==='/api/jobs'&&m==='POST')return r.fulfill({json:{id:3,name:'Harbor'}});
@@ -67,10 +70,43 @@ assert.equal(await page.locator('#addDocumentPhotosSave').isDisabled(),true);
 await page.locator('[data-document-source-photo="2"]').check();groupItems=[{id:1},{id:2}];await page.locator('#addDocumentPhotosSave').click();await page.locator('#gaddphotos').waitFor();
 assert.deepEqual(JSON.parse(posts.filter(([p])=>p==='/api/groups/5/add').pop()[1]),{ids:[2]});
 assert.equal(await page.locator('#gitems .card').count(),2);
+
+// B: a caption saved on the document page belongs to this document; the photo note is never changed.
+const notePosts=()=>posts.filter(([p])=>p==='/api/captures/1').length,notesBefore=notePosts(),lastCaption=()=>JSON.parse(posts.filter(([p])=>p==='/api/groups/5/caption').pop()[1]);
+assert.equal(await page.locator('.gcaption[data-i="0"]').inputValue(),'First note');assert.equal(await page.locator('.gusenote[data-i="0"]').isDisabled(),true,'Use Photo Note waits for a document caption');
+assert.match(await page.locator('[data-caption-source="0"]').textContent(),/Using the photo note/);
+await page.locator('.gcaption[data-i="0"]').fill('Document only caption');await page.locator('.gsavecaption[data-i="0"]').click();await page.waitForFunction(()=>!document.querySelector('.gusenote[data-i="0"]').disabled);
+assert.deepEqual(lastCaption(),{capture_id:1,caption:'Document only caption'});assert.equal(notePosts(),notesBefore,'the photo note is not saved');
+assert.match(await page.locator('[data-caption-source="0"]').textContent(),/this document only/);assert.ok((await page.locator('#documentPreview').innerText()).includes('Document only caption'),'the preview uses the document caption');
+await page.locator('.gusenote[data-i="0"]').click();await page.waitForFunction(()=>toasts.includes('This document now uses the photo note'));assert.equal(await page.locator('.gusenote[data-i="0"]').isDisabled(),true);
+assert.equal(lastCaption().caption,null);assert.equal(await page.locator('.gcaption[data-i="0"]').inputValue(),'First note');assert.ok((await page.locator('#documentPreview').innerText()).includes('First note'));
+await page.locator('.gcaption[data-i="1"]').fill('Second note');await page.locator('.gsavecaption[data-i="1"]').click();for(let i=0;i<60&&!posts.some(([p,b])=>p==='/api/groups/5/caption'&&JSON.parse(b).capture_id===2);i++)await page.waitForTimeout(50);assert.equal(lastCaption().caption,null,'a caption equal to the photo note keeps following the note');
+// A: Save for This Document changes only this document; values matching the account branding stay blank.
+const accountPosts=()=>posts.filter(([p])=>p==='/api/document-settings').length,accountBefore=accountPosts();
+await page.locator('#documentHeaderText').fill('Only here');await page.locator('#saveDocumentBranding').click();await page.waitForFunction(()=>toasts.includes('Branding saved for this document'));
+const own=JSON.parse(posts.filter(([p])=>p==='/api/groups/5').pop()[1]).layout;assert.equal(own.header_text,'Only here');assert.equal(own.company_name,'Doc Co');assert.equal(own.footer_text,'','account footer is not copied into the document');assert.equal(accountPosts(),accountBefore,'the account branding is unchanged');
+await page.locator('#saveAccountBranding').click();await page.waitForFunction(()=>toasts.includes('Branding saved as the account default'));assert.deepEqual(JSON.parse(posts.filter(([p])=>p==='/api/document-settings').pop()[1]),{company_name:'Doc Co',header_text:'Only here',footer_text:'Account footer'});
 await page.locator('#gaddphotos').click();await page.locator('#backToDocument').click();await page.locator('#gdelete').waitFor();
 const deletes=()=>posts.filter(([p])=>p==='/api/groups/5/delete').length;
 await page.locator('#gdelete').click();assert.equal(await page.locator('#gdelete').textContent(),'Tap Again to Delete Document');assert.equal(deletes(),0,'first tap only asks');
 await page.locator('#gdelete').click();await page.locator('#newDocument').waitFor();assert.equal(deletes(),1);
+
+// A: New Document setup starts from the account defaults and saves presets and defaults on the account, never in this browser.
+await page.locator('#newDocument').click();await page.locator('#gtitle').waitFor();
+assert.equal((await page.locator('#documentSetupPreset option').first().textContent()).trim(),'Account Defaults');
+assert.equal(await page.locator('#newDocumentPhotoLayout').inputValue(),'two_vertical');assert.equal(await page.locator('#newDocumentFont').inputValue(),'Georgia');assert.equal(await page.locator('#newDocumentCompany').inputValue(),'Account Co');
+assert.ok(!(await page.locator('.new-document-settings').innerText()).includes('automatically saved'));assert.ok((await page.locator('#newDocumentDefaultTemplate').textContent()).includes('company.docx'),await page.locator('#newDocumentDefaultTemplate').textContent());
+await page.locator('#gtitle').fill('Defaults test');await page.locator('.new-document-settings summary').first().click();await page.locator('#newDocumentFooterText').fill('New default footer');await page.locator('#saveDefaultSettings').click();await page.locator('#backDocumentSetup').waitFor();
+const defaults=JSON.parse(posts.filter(([p])=>p==='/api/document-settings').pop()[1]);assert.equal(defaults.layout.photo_layout,'two_vertical');assert.equal(defaults.layout.footer_text,undefined,'branding text is not part of the layout');assert.equal(defaults.footer_text,'New default footer');
+await page.locator('#backDocumentSetup').click();await page.locator('#documentSetupPreset').selectOption('4');
+assert.equal(await page.locator('#gtitle').inputValue(),'Defaults test','choosing a preset keeps the title');assert.equal(await page.locator('#newDocumentPhotoLayout').inputValue(),'six_per_page');assert.equal(await page.locator('#newDocumentHeaderText').inputValue(),'Preset header');assert.equal(await page.locator('#newDocumentCompany').inputValue(),'Account Co','blank preset branding uses the account branding');
+await page.locator('#savePresetSettings').click();await page.locator('#newDocumentPresetName').waitFor();await page.locator('#confirmNewDocumentPreset').click();assert.ok(await page.evaluate(()=>toasts.includes('Enter a preset name.')));
+await page.locator('#newDocumentPresetName').fill('My Preset');await page.locator('#confirmNewDocumentPreset').click();await page.locator('[data-document-source-photo="1"]').waitFor();
+const preset=JSON.parse(posts.filter(([p])=>p==='/api/export-presets').pop()[1]);assert.equal(preset.name,'My Preset');assert.equal(preset.is_default,false);assert.equal(preset.config.layout.photo_layout,'six_per_page');assert.equal(preset.config.branding.header_text,'Preset header');
+await page.locator('[data-document-source-photo="1"]').check();await page.locator('#gcreate').click();await page.waitForFunction(()=>toasts.includes('New document saved.'));
+const created=JSON.parse(posts.filter(([p])=>p==='/api/groups').pop()[1]);assert.equal(created.layout.company_name,'','account branding is not copied into the document');assert.equal(created.layout.header_text,'Preset header');assert.equal(created.use_default_template,true);
+assert.deepEqual(await page.evaluate(()=>Object.keys(localStorage).filter(k=>/^pn-document-/.test(k))),[],'nothing is kept in browser storage');
+await page.evaluate(()=>{toasts.length=0;state.groupId=null;documentCreateStep='list';renderGroups();});await page.locator('#newDocument').waitFor();
 
 // 13: New Document Cancel clears earlier picks; a failed Word template upload is reported.
 await page.evaluate(()=>{state.selectedIds=new Set();});await page.locator('#newDocument').click();await page.locator('#gtitle').fill('Cancel test');await page.locator('#useDocumentSettings').click();
@@ -92,5 +128,5 @@ assert.equal(await page.locator('#pendingPhotos').count(),1,'Pro keeps Pending P
 assert.deepEqual(dialogs,[],'no browser dialogs');
 assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
 assert.deepEqual(await page.evaluate(()=>PhotoNotesHelp.inspect().filter(i=>!i.authored).map(i=>i.key)),[]);
-console.log(engine.name(),width,'Library detail stays open, topics kept, urgency shown, copyright and document branding, document add/delete, New Project details, New Document cleanup, failed download message, Basic pending hidden PASS');
+console.log(engine.name(),width,'Document captions, branding for this document or the account, New Document account defaults and presets, Library detail stays open, topics kept, urgency shown, copyright and document branding, document add/delete, New Project details, New Document cleanup, failed download message, Basic pending hidden PASS');
 await page.close();}}finally{await browser.close();}}}finally{server.close();}})().catch(e=>{console.error(e);process.exitCode=1;});
