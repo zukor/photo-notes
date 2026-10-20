@@ -57,7 +57,14 @@
     const facing = d.camera_direction != null ? ` The photo was taken facing ${compassName(d.camera_direction)}.` : '';
     $('wsWhere').textContent = t
       ? (t.source === 'marked' ? 'The pin marks the problem.' : `The pin is where the photo was taken${t.accuracy_m ? `, accurate to about ${formatDistance(t.accuracy_m * FT_PER_M)}` : ''}.`) + facing + (d.location_description ? ' ' + d.location_description : '')
-      : 'This photo has no saved location. Use the address and the photo to find the problem.';
+      : (d.indoor ? 'This photo has no GPS location. Use the address for directions, then the indoor location below.' : 'This photo has no saved location. Use the address and the photo to find the problem.');
+    if (d.indoor && (d.indoor.text || d.indoor.plan_url)) {
+      $('wsIndoor').hidden = false; $('wsIndoorText').textContent = d.indoor.text || 'See the floor plan';
+      if (d.indoor.plan_url) {
+        $('wsPlanWrap').hidden = false; $('wsPlanImg').src = d.indoor.plan_url; $('wsPlanLabel').textContent = 'Floor plan: ' + (d.indoor.plan_label || '') + (d.indoor.x != null ? '. The yellow dot is where the photo was taken.' : '');
+        if (d.indoor.x != null) { const pin = $('wsPlanPin'); pin.hidden = false; pin.style.left = (d.indoor.x * 100) + '%'; pin.style.top = (d.indoor.y * 100) + '%'; }
+      }
+    }
     const dir = directionsUrl(t, d.property.address, navigator.userAgent);
     if (dir) $('wsDirections').href = dir; else $('wsDirections').hidden = true;
     if (!t) { $('wsFind').hidden = true; $('wsMap').hidden = true; $('wsLayer').hidden = true; }
