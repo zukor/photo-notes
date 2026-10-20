@@ -12,6 +12,8 @@ const SCHEMA=`CREATE TABLE IF NOT EXISTS property_incidents (
  status TEXT NOT NULL DEFAULT 'Open' CHECK(status IN ('Open','Documented','Closed')),
  skipped_views JSONB NOT NULL DEFAULT '{}', created_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+ALTER TABLE property_incidents ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+ALTER TABLE property_incidents ADD COLUMN IF NOT EXISTS deleted_by INTEGER REFERENCES users(id);
 CREATE INDEX IF NOT EXISTS property_incidents_owner_idx ON property_incidents(created_by,company_id);
 CREATE INDEX IF NOT EXISTS property_incidents_company_idx ON property_incidents(company_id,updated_at DESC);
 CREATE INDEX IF NOT EXISTS property_incidents_area_idx ON property_incidents(property_area_id) WHERE property_area_id IS NOT NULL;
@@ -30,7 +32,7 @@ function normalize(b){
  return out;
 }
 // Incidents are company records: every member of the management company may view and edit them, like maintenance records.
-async function owned(db,user,company,id){if(!Number.isSafeInteger(id)||id<=0||!company)fail('Incident not found',404);const row=(await db.query('SELECT i.* FROM property_incidents i WHERE i.id=$1 AND i.company_id=$2 AND EXISTS(SELECT 1 FROM hoa_company_members m WHERE m.company_id=i.company_id AND m.user_id=$3)',[id,company,user])).rows[0];if(!row)fail('Incident not found',404);return row;}
+async function owned(db,user,company,id){if(!Number.isSafeInteger(id)||id<=0||!company)fail('Incident not found',404);const row=(await db.query('SELECT i.* FROM property_incidents i WHERE i.id=$1 AND i.company_id=$2 AND i.deleted_at IS NULL AND EXISTS(SELECT 1 FROM hoa_company_members m WHERE m.company_id=i.company_id AND m.user_id=$3)',[id,company,user])).rows[0];if(!row)fail('Incident not found',404);return row;}
 async function linkCapture(db,{userId,product,companyId,incidentId,captureId,view,hasPhoto}){
  if(product!=='property')fail('Property Manager Pro required',403);if(!hasPhoto)fail('An incident view requires a photograph');if(!VIEWS.includes(view))fail('Invalid photographic view');
  const incident=await owned(db,userId,companyId,Number(incidentId));
@@ -44,7 +46,7 @@ function register(app,deps){
  const run=fn=>async(req,res)=>{try{await fn(req,res);}catch(e){console.error('[property.incidents]',e.message);if(!res.headersSent)res.status(e.status||500).json({error:e.status?e.message:'Incident operation failed'});}};
  const route=(method,url,fn)=>app[method](url,requireAuth,requireHoa,gate,run(fn));
  const detail=async(req)=>{const incident=await owned(pool,req.user.id,req.hoaCompany.id,Number(req.params.id));const context=(await pool.query('SELECT c.name property_name,c.address property_address,a.name asset_name FROM hoa_communities c LEFT JOIN hoa_assets a ON a.id=$2 AND a.company_id=c.company_id WHERE c.id=$1 AND c.company_id=$3',[incident.community_id,incident.asset_id,req.hoaCompany.id])).rows[0];const photos=(await pool.query('SELECT c.*,p.view_name,p.linked_at FROM property_incident_photos p JOIN captures c ON c.id=p.capture_id WHERE p.incident_id=$1 ORDER BY p.linked_at,c.id',[incident.id])).rows;photos.sort((a,b)=>VIEWS.indexOf(a.view_name)-VIEWS.indexOf(b.view_name));return {incident:{...incident,...context},photos};};
- route('get','/api/property/incidents',async(req,res)=>res.json((await pool.query('SELECT i.*,c.name property_name,u.name created_by_name,(SELECT count(*)::int FROM property_incident_photos p WHERE p.incident_id=i.id) photo_count FROM property_incidents i JOIN hoa_communities c ON c.id=i.community_id LEFT JOIN users u ON u.id=i.created_by WHERE i.company_id=$1 AND EXISTS(SELECT 1 FROM hoa_company_members m WHERE m.company_id=i.company_id AND m.user_id=$2) ORDER BY i.updated_at DESC',[req.hoaCompany.id,req.user.id])).rows));
+ route('get','/api/property/incidents',async(req,res)=>res.json((await pool.query('SELECT i.*,c.name property_name,u.name created_by_name,(SELECT count(*)::int FROM property_incident_photos p WHERE p.incident_id=i.id) photo_count FROM property_incidents i JOIN hoa_communities c ON c.id=i.community_id LEFT JOIN users u ON u.id=i.created_by WHERE i.company_id=$1 AND i.deleted_at IS NULL AND EXISTS(SELECT 1 FROM hoa_company_members m WHERE m.company_id=i.company_id AND m.user_id=$2) ORDER BY i.updated_at DESC',[req.hoaCompany.id,req.user.id])).rows));
  const save=async(req,res)=>{const b=req.body||{},data=normalize(b),existing=req.params.id?await owned(pool,req.user.id,req.hoaCompany.id,Number(req.params.id)):null;
  const community=existing?existing.community_id:Number(b.community_id);
  if(!(await pool.query('SELECT id FROM hoa_communities WHERE id=$1 AND company_id=$2',[community,req.hoaCompany.id])).rowCount)fail('Select a Property');
@@ -56,6 +58,9 @@ function register(app,deps){
  else{Object.assign(data,{community_id:community,created_by:req.user.id,company_id:req.hoaCompany.id});const k=Object.keys(data);row=(await pool.query(`INSERT INTO property_incidents(${k.join(',')}) VALUES(${k.map((_,i)=>'$'+(i+1)).join(',')}) RETURNING *`,Object.values(data))).rows[0];}res.json(row);};
  route('post','/api/property/incidents',save);route('post','/api/property/incidents/:id',save);
  route('get','/api/property/incidents/:id',async(req,res)=>res.json(await detail(req)));
+ // Delete: the person who created the incident or a company administrator. The incident leaves the list and reports;
+ // its photos stay in the Library. The record is kept (marked deleted) so it can be recovered by support if needed.
+ route('delete','/api/property/incidents/:id',async(req,res)=>{const incident=await owned(pool,req.user.id,req.hoaCompany.id,Number(req.params.id));if(Number(incident.created_by)!==Number(req.user.id)&&req.hoaCompany.company_role!=='administrator')fail('Only the person who created this incident or a company administrator can delete it',403);await pool.query('UPDATE property_incidents SET deleted_at=now(),deleted_by=$1,updated_at=now() WHERE id=$2 AND company_id=$3',[req.user.id,incident.id,req.hoaCompany.id]);res.json({ok:true});});
  route('get','/api/property/incidents/:id/report',async(req,res)=>{const d=await detail(req);await report(req,res,d,EVIDENCE,VIEWS);});
 }
 module.exports={SCHEMA,TYPES,VIEWS,EVIDENCE,normalize,linkCapture,register};
