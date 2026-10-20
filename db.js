@@ -805,6 +805,7 @@ async function init() {
   await pool.query(require('fs').readFileSync(require('path').join(__dirname,'photo-requests-schema.sql'),'utf8'));
   await pool.query(require('./custom-fields').SCHEMA);
   await pool.query(require('./property-areas').SCHEMA);
+  await pool.query(require('./property-floor-plans').SCHEMA);
   await pool.query(require('./property-incidents').SCHEMA);
   await pool.query(require('./photo-markers').SCHEMA);
   await pool.query(require('./photo-follow-ups').SCHEMA);

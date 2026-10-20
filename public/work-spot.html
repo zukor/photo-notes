@@ -1,8 +1,8 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Work Order</title>
 <link rel="stylesheet" href="/vendor/leaflet/leaflet.css?v=1.9.4"><link rel="stylesheet" href="/help.css?v=376">
-<script src="/help-catalog.js?v=494" defer></script><script src="/help.js?v=470" defer></script>
-<script src="/vendor/leaflet/leaflet.js?v=1.9.4" defer></script><script src="/photo-location.js?v=1" defer></script><script src="/work-spot.js?v=1" defer></script>
+<script src="/help-catalog.js?v=495" defer></script><script src="/help.js?v=470" defer></script>
+<script src="/vendor/leaflet/leaflet.js?v=1.9.4" defer></script><script src="/photo-location.js?v=1" defer></script><script src="/work-spot.js?v=2" defer></script>
 <style>
 body{font:17px/1.45 Arial,Helvetica,sans-serif;color:#000;background:#fff;margin:0;text-align:left}
 main{max-width:760px;margin:auto;padding:16px 16px 60px}
@@ -37,6 +37,7 @@ input[type=text],textarea{width:100%;box-sizing:border-box;padding:12px;font:17p
 #wsMatchBar{position:absolute;left:0;right:0;bottom:0;background:#fff;padding:10px 12px;border-top:2px solid #000}
 #wsMatchBar label{margin:0 0 4px}
 #wsMatchFade{width:100%;min-height:36px}
+.ws-plan{position:relative;border:2px solid #000;border-radius:10px;overflow:hidden;line-height:0;margin-top:8px}.ws-plan img{width:100%;height:auto;display:block}.ws-plan-pin{position:absolute;width:28px;height:28px;margin:-14px 0 0 -14px;border-radius:50%;background:#ffd400;border:4px solid #000;box-sizing:border-box;box-shadow:0 0 0 3px #fff}
 .ws-you{width:18px;height:18px;border-radius:50%;background:#1565ff;border:3px solid #fff;box-shadow:0 0 0 2px #000;box-sizing:border-box;margin:-9px 0 0 -9px}
 </style></head>
 <body><main id="wsPage">
@@ -49,6 +50,7 @@ input[type=text],textarea{width:100%;box-sizing:border-box;padding:12px;font:17p
   <div class="ws-thumbs" id="wsThumbs"></div>
   <h2>Where It Is</h2>
   <p id="wsWhere"></p>
+  <div class="ws-box" id="wsIndoor" hidden><p><strong>Inside the building:</strong> <span id="wsIndoorText"></span></p><p class="ws-meta" id="wsPlanLabel"></p><div class="ws-plan" id="wsPlanWrap" hidden><img id="wsPlanImg" alt="Floor plan with a pin where the photo was taken"><span class="ws-plan-pin" id="wsPlanPin" hidden></span></div></div>
   <div id="wsMap" role="region" aria-label="Map with a pin where the photo was taken"></div>
   <div class="ws-row"><button type="button" class="ws-btn secondary" id="wsLayer">Show Street Map</button></div>
   <div class="ws-row"><a class="ws-btn" id="wsDirections" target="_blank" rel="noopener">Get Directions</a><button type="button" class="ws-btn" id="wsFind">Find the Spot</button></div>
