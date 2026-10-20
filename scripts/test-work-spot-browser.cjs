@@ -52,7 +52,12 @@ const assert = require('node:assert/strict'), jwt = require('jsonwebtoken'), { c
     assert.match(await w.locator('#wsWhere').innerText(), /pin is where the photo was taken.*facing east/);
     assert.equal(await w.locator('#wsDirections').getAttribute('href'), `https://www.google.com/maps/dir/?api=1&destination=${spot.lat},${spot.lng}`);
     await w.waitForSelector('#wsMap .leaflet-marker-icon');
-    assert.equal(await w.locator('#wsMainPhoto').getAttribute('src'), '/uploads/light.jpg');
+    // The worker has no account: the photo link is signed, loads, and the plain file address stays private.
+    const signedSrc = await w.locator('#wsMainPhoto').getAttribute('src');
+    assert.match(signedSrc, /^\/uploads\/light\.jpg\?exp=\d+&sig=[0-9a-f]{64}$/);
+    await w.waitForFunction(() => document.getElementById('wsMainPhoto').naturalWidth > 0);
+    assert.equal((await fetch(base + signedSrc)).status, 200);
+    assert.equal((await fetch(base + '/uploads/light.jpg')).status, 401);
     // The manager's history shows the link was opened.
     assert.equal((await pool.query("SELECT count(*)::int n FROM hoa_item_history WHERE item_id=$1 AND action='work_link_opened'", [item])).rows[0].n, 1);
     assert.ok((await pool.query('SELECT opened_at FROM hoa_completion_photo_requests WHERE item_id=$1', [item])).rows[0].opened_at);

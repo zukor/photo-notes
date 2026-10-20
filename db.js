@@ -847,13 +847,21 @@ async function init() {
   }
 
   // 1b. One-time admin password reset. When ADMIN_PASSWORD_RESET is set, force the
-  //     admin account's password to the current ADMIN_PASSWORD. The flag is turned
-  //     off again after use so ordinary redeploys never override a password the
-  //     admin later changes from the admin area.
+  //     admin account's password to the current ADMIN_PASSWORD. Each distinct
+  //     ADMIN_PASSWORD_RESET value applies once: a marker row keeps a hash of the value,
+  //     so ordinary redeploys never override a password the admin later changes from
+  //     the admin area. To reset again, set ADMIN_PASSWORD_RESET to a new value.
   if (process.env.ADMIN_PASSWORD_RESET && String(process.env.ADMIN_PASSWORD_RESET).trim() && process.env.ADMIN_PASSWORD) {
-    const hash = bcrypt.hashSync(process.env.ADMIN_PASSWORD, 10);
-    await pool.query(`UPDATE users SET password_hash = $1 WHERE id = $2`, [hash, adminId]);
-    console.log('[db] admin password reset applied for user ' + adminId);
+    await pool.query(`CREATE TABLE IF NOT EXISTS system_markers (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
+    const marker = require('crypto').createHash('sha256').update('admin-password-reset\n' + String(process.env.ADMIN_PASSWORD_RESET).trim()).digest('hex');
+    const applied = (await pool.query(`SELECT 1 FROM system_markers WHERE key='admin_password_reset' AND value=$1`, [marker])).rowCount;
+    if (!applied) {
+      const hash = bcrypt.hashSync(process.env.ADMIN_PASSWORD, 10);
+      await pool.query(`UPDATE users SET password_hash = $1 WHERE id = $2`, [hash, adminId]);
+      // Recorded after the password changes, so a failed reset is tried again on the next start.
+      await pool.query(`INSERT INTO system_markers(key,value) VALUES('admin_password_reset',$1) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value,updated_at=now()`, [marker]);
+      console.log('[db] admin password reset applied for user ' + adminId);
+    } else console.log('[db] ADMIN_PASSWORD_RESET was already applied; set a new value to reset again');
   }
 
   // 2. Add owner columns to existing tables (idempotent) and backfill legacy
@@ -1070,6 +1078,9 @@ async function init() {
   await pool.query(require('fs').readFileSync(require('path').join(__dirname,'qr-codes-schema.sql'),'utf8'));
   await pool.query(require('./ai-settings').SCHEMA);
   await pool.query(require('./customer-feedback').SCHEMA);
+  // Private file lookups, single-session sign out and daily AI limits.
+  await pool.query(require('./upload-access').SCHEMA);
+  await pool.query(require('./session-security').SCHEMA);
   // Library lookups by photo. These columns exist only after the migrations above.
   await pool.query(`CREATE INDEX IF NOT EXISTS hoa_items_capture_idx ON hoa_maintenance_items (capture_id)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS camera_readings_capture_idx ON camera_readings (user_id, capture_id)`);

@@ -3,7 +3,8 @@ const fs=require('node:fs/promises'),os=require('node:os'),path=require('node:pa
 const {registerUserDeletion,uploadFile}=require('../user-deletion');
 test('deletion accepts only flat upload paths inside the upload directory',()=>{
   assert.equal(uploadFile('/tmp/uploads','/uploads/photo.jpg'),'/tmp/uploads/photo.jpg');
-  for(const value of [null,'/etc/passwd','/uploads/../secret','/uploads/..','/uploads/a/b','/uploads/a\\b'])assert.equal(uploadFile('/tmp/uploads',value),null);
+  assert.equal(uploadFile('/tmp/uploads','/uploads/customer-feedback/shot.png'),'/tmp/uploads/.private-feedback/shot.png');
+  for(const value of [null,'/etc/passwd','/uploads/../secret','/uploads/..','/uploads/a/b','/uploads/a\\b','/uploads/customer-feedback/..','/uploads/customer-feedback/a/b'])assert.equal(uploadFile('/tmp/uploads',value),null);
 });
 test('deletion endpoints require admin authorization and reject invalid IDs before database access',async()=>{
   const routes=[],admin=()=>{};
@@ -39,6 +40,12 @@ test('permanent deletion with real PostgreSQL constraints and files',{skip:!url}
   await pool.query("INSERT INTO issue_reports(user_id,description,result_screenshot_path) VALUES($1,'Result evidence fixture','/uploads/result.png')",[id]);
   await fs.writeFile(path.join(root,'result.png'),'fixture result');
   await fs.writeFile(path.join(root,'private.jpg'),'private');await fs.writeFile(path.join(root,'shared.jpg'),'shared');
+  // Customer feedback screenshot, a document's Word template, an edited photo with its backup, thumbnails and a stray backup.
+  await pool.query("INSERT INTO issue_reports(user_id,description,screenshot_path,feedback_category) VALUES($1,'Feedback fixture','/uploads/customer-feedback/feedback.png','idea')",[id]);
+  await pool.query("INSERT INTO groups(user_id,title,word_template_path) VALUES($1,'Templated document','/uploads/template.docx')",[id]);
+  await pool.query("INSERT INTO captures(user_id,photo_path,photo_original_path) VALUES($1,'/uploads/edited.jpg','/uploads/edited-orig.jpg')",[id]);
+  await fs.mkdir(path.join(root,'.private-feedback'));await fs.mkdir(path.join(root,'.thumbs'));
+  for(const file of ['.private-feedback/feedback.png','template.docx','edited.jpg','edited-orig.jpg','private-orig.jpg','.thumbs/private.jpg.w480.jpg','.thumbs/edited-orig.jpg.w480.jpg','.thumbs/shared.jpg.w480.jpg'])await fs.writeFile(path.join(root,file),'fixture');
   await t.test('database failure rolls back account and queued files',async()=>{
     await pool.query("CREATE FUNCTION fail_test_delete() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'test rollback'; END $$");
     await pool.query('CREATE TRIGGER fail_test_delete BEFORE DELETE ON users FOR EACH ROW EXECUTE FUNCTION fail_test_delete()');
@@ -49,6 +56,8 @@ test('permanent deletion with real PostgreSQL constraints and files',{skip:!url}
     const r=await call('delete',id,'remove@example.test');assert.equal(r.code,200,JSON.stringify(r.body));assert.equal(r.body.file_cleanup_pending,false);assert.equal(await exists(id),false);assert.ok(await exists(other));
     for(const table of ['captures','groups','jobs','testing_assignments'])assert.equal((await pool.query(`SELECT 1 FROM ${table} WHERE user_id=$1`,[id])).rowCount,0);
     await assert.rejects(fs.access(path.join(root,'result.png')));await assert.rejects(fs.access(path.join(root,'private.jpg')));await fs.access(path.join(root,'shared.jpg'));
+    for(const file of ['.private-feedback/feedback.png','template.docx','edited.jpg','edited-orig.jpg','private-orig.jpg','.thumbs/private.jpg.w480.jpg','.thumbs/edited-orig.jpg.w480.jpg'])await assert.rejects(fs.access(path.join(root,file)),file);
+    await fs.access(path.join(root,'.thumbs/shared.jpg.w480.jpg'));
     assert.equal((await pool.query("SELECT 1 FROM retired_testing_assignment_keys WHERE assignment_key='fictional-deletion-test'")).rowCount,1);
     assert.equal((await pool.query("SELECT 1 FROM events WHERE user_id=$1 AND action='admin_user_delete'",[actor])).rowCount,1);
   });

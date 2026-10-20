@@ -884,6 +884,7 @@
       const password = document.getElementById('cpass').value;
       if (name.split(/\s+/).filter(Boolean).length < 2) { toast('First and last name are required'); return; }
       if (!email || !password) { toast('Email and password are required'); return; }
+      if (password.length < 8) { toast('Password must be at least 8 characters'); return; }
       const btn = document.getElementById('createbtn'); btn.disabled = true; btn.textContent = 'Creating...';
       try {
         const r = await api('/api/admin/users', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name, email, industry, password, edition_access, user_category:document.getElementById('ccategory').value }) });
