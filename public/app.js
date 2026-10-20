@@ -367,7 +367,7 @@ function renderApp() {
               <button type="button" id="myAssignment" ${state.me?.is_tester||state.me?.is_testing_manager||state.me?.role==='admin'?'':'hidden'}>${uiT(isTestingManager()?'My Testing Dashboard':'Testing Dashboard')}</button>
               ${isHoaClient()?`<button type="button" id="menuHoaCommunities">${hoaManagementLabel('communities')}</button><button type="button" id="menuHoaDashboard">${hoaManagementLabel('dashboard')}</button><button type="button" id="menuHoaReports">${hoaManagementLabel('reports')}</button>`:''}
               <button type="button" id="installHelp">Install Photo Notes</button>
-              <button type="button" id="pendingPhotos">Pending Photos</button>
+              ${selectedEdition()==='basic'?'':'<button type="button" id="pendingPhotos">Pending Photos</button>'}
               <button type="button" id="setupPermissions">Set Up Permissions</button>
               <button type="button" id="recordNotesSelfTest">Record Notes Self-Test</button>
               <button type="button" id="myIssues" ${state.me?.is_tester||isTestingManager()?'hidden':''}>My Issue Reports</button>
@@ -409,7 +409,7 @@ function renderApp() {
   document.getElementById('signout').onclick = async () => { if(captureSavePending){toast('Please wait for this photo to finish saving locally.');return;}try{await persistCaptureDraft();const r=await api('/api/logout',{method:'POST'});if(!r.ok)throw Error();queueAccount=null;bgQueue=[];clearTimeout(queueRetryTimer);stopCaptureDictation();location.reload();}catch(error){toast('Could not sign out. Check your connection and try again.');} };
   document.getElementById('installHelp').onclick=showInstallHelp;
   for(const [id,view] of [['menuHoaCommunities','hoa-communities'],['menuHoaDashboard','hoa-dashboard'],['menuHoaReports','hoa-reports']]){const button=document.getElementById(id);if(button)button.onclick=()=>{profileMenu.hidden=true;profileButton.setAttribute('aria-expanded','false');openHoaManagementView(view);};}
-  document.getElementById('pendingPhotos').onclick=showPendingPhotos;
+  const pendingPhotos=document.getElementById('pendingPhotos');if(pendingPhotos)pendingPhotos.onclick=showPendingPhotos; // Basic shares without saving, so it has no pending uploads.
   const myIssues=document.getElementById('myIssues');if(myIssues)myIssues.onclick=()=>enterTesting('my-issues');
   const setupPermissions=document.getElementById('setupPermissions');if(setupPermissions)setupPermissions.onclick=()=>{profileMenu.hidden=true;profileButton.setAttribute('aria-expanded','false');window.PhotoNotesFirstUse?.offer(state.me,{force:true});};
   const selfTest=document.getElementById('recordNotesSelfTest');if(selfTest)selfTest.onclick=()=>{location.href='/record-notes-self-test.html';};
@@ -876,7 +876,7 @@ function renderCapture() {
 
     ${isProClient()?`<details id="captureUrgencyOptions"><summary id="captureUrgencyHeading">Urgency (optional): ${state.urgency==='urgent'?'Urgent':'Standard'}</summary><select id="captureUrgency" aria-label="Urgency"><option value="standard" ${state.urgency==='urgent'?'':'selected'}>Standard</option><option value="urgent" ${state.urgency==='urgent'?'selected':''}>Urgent</option></select></details>`:''}
     </section>
-    ${isProClient()?'<button class="btn secondary" id="captureSaveToJob" type="button">Save to Job</button>':''}
+    ${isProClient()?'<button class="btn secondary" id="captureSaveToJob" type="button">Save to Project</button>':''}
     <div class="capture-actions">${isBasicClient()?'':'<button class="btn" id="save" type="button">Save</button>'}<button class="btn" id="send" type="button">Send/Share</button></div>
   `;
 
@@ -1378,6 +1378,7 @@ async function restoreCaptureDraft(){
     if(!row)return;
     Object.assign(state,row.context||{});
     state.photoFile=new File([row.photo],row.photoName,{type:row.photoType});
+    state._photoTakenAt=state._photoSource==='library'&&window.PhotoNotesPhotoLocation?.readCaptureTime?PhotoNotesPhotoLocation.readCaptureTime(state.photoFile).catch(()=>null):null;
     state._note=row.note||'';state.location=row.location;state.address=row.address;
     state.view=selectedEdition()==='roads'?'road-report':'capture';
   }catch(error){toast('Unfinished photos could not be read. Keep this browser data and try again.');}
@@ -1400,6 +1401,8 @@ function onPhotoChosen(file, source='camera') {
   captureLocationGeneration++;
   if(replacing){state._note='';const note=document.getElementById('note');if(note)note.value='';}
   state.photoFile = file;state._photoSource=source==='library'?'library':'camera';
+  // A library photo keeps the date it was taken (EXIF DateTimeOriginal), not the time it is saved.
+  state._photoTakenAt=source==='library'&&window.PhotoNotesPhotoLocation?.readCaptureTime?PhotoNotesPhotoLocation.readCaptureTime(file).catch(()=>null):null;
   state.location=null;state.address=null;
   void persistCaptureDraft().catch(()=>{});
   state._qualityResult = null;
@@ -2346,6 +2349,7 @@ async function showPendingPhotos(){
     dialog.querySelector('#pendingRetryStatus').textContent=unresolved?queueRetryText():'';
     const retry=dialog.querySelector('#pendingRetryToggle');retry.hidden=!pending;retry.textContent=queuePaused()?'Continue Retrying':'Stop Retrying';
     dialog.querySelector('#pendingSaveLibrary').textContent=unresolved?'Save to PhotoNotes Library':'Open PhotoNotes Library';
+    dialog.querySelector('#pendingSaveLibrary').hidden=edition==='basic'; // Basic has no PhotoNotes Library.
     dialog.querySelector('#pendingStorageWarning').hidden=!unresolved&&!other.length;
   };
   dialog.querySelector('#pendingRetryToggle').onclick=()=>{setQueuePaused(!queuePaused());update();};
@@ -2415,7 +2419,7 @@ async function drainQueue() {
         }
         if(!r.ok){const body=await r.json().catch(()=>({}));throw Object.assign(Error(body.error||'Upload needs attention'),{blocked:PhotoNotesQueue.permanent(r.status),userMessage:({400:'The PhotoNote details were rejected. Report this issue.',401:'Sign in to upload your PhotoNotes.',403:'This account cannot upload these PhotoNotes. Report this issue.',409:'The PhotoNote could not be matched to this account. Report this issue.',413:'The PhotoNote is too large to upload. Report this issue.',422:'The PhotoNote details were rejected. Report this issue.'})[r.status]||'The server could not upload your PhotoNotes. They are saved on this device.'});}
         const saved=await r.json();if(!saved.id)throw Error('Upload confirmation missing');
-        if(item.receipt)item.receipt.uploaded=true;
+        if(item.receipt){item.receipt.uploaded=true;item.receipt.captureId=saved.id;if(Object.prototype.hasOwnProperty.call(item.receipt,'jobId')&&String(saved.job_id||'')!==String(item.receipt.jobId||''))void setSavedCaptureProject(item.receipt,item.receipt.jobId);}
         await queueDelete(item.id);
         if(queueAccount!==account||selectedEdition()!==edition)break;
         bgQueue=bgQueue.filter(row=>row.id!==item.id);
@@ -2438,14 +2442,14 @@ let captureSavePending=false;
 async function chooseCaptureJob(){
  if(!state.photoFile&&!document.getElementById('note')?.value.trim())return toast('Take a photo or add a note first');
  const dialog=document.createElement('dialog');dialog.className='capture-job-dialog';
- const existingJobs=state.jobs.length?`<label for="captureJobChoice">Select Existing Job</label><select id="captureJobChoice">${state.jobs.map(j=>`<option value="${j.id}">${esc(j.name)}</option>`).join('')}</select><button class="btn" id="captureJobSave">Save to Selected Job</button>`:'<p class="capture-job-empty">No Existing Jobs</p>';
- dialog.innerHTML=`<h2>Save to Job</h2>${existingJobs}<label for="captureNewJobName">New Job Name</label><input id="captureNewJobName" maxlength="200"><button class="btn secondary" id="captureJobCreate">Create Job and Save</button><button class="btn secondary" id="captureJobUnassigned">Save Without a Job</button><button class="btn secondary" id="captureJobCancel">Cancel</button><p id="captureJobStatus" role="status"></p>`;
+ const existingJobs=state.jobs.length?`<label for="captureJobChoice">Select Existing Project</label><select id="captureJobChoice">${state.jobs.map(j=>`<option value="${j.id}">${esc(j.name)}</option>`).join('')}</select><button class="btn" id="captureJobSave">Save to Selected Project</button>`:'<p class="capture-job-empty">No Existing Projects</p>';
+ dialog.innerHTML=`<h2>Save to Project</h2>${existingJobs}<label for="captureNewJobName">New Project Name</label><input id="captureNewJobName" maxlength="200"><button class="btn secondary" id="captureJobCreate">Create Project and Save</button><button class="btn secondary" id="captureJobUnassigned">Save Without a Project</button><button class="btn secondary" id="captureJobCancel">Cancel</button><p id="captureJobStatus" role="status"></p>`;
  document.body.append(dialog);dialog.showModal();dialog.onclose=()=>dialog.remove();
  const save=async job=>{dialog.close();await saveCapture({jobId:job});};
  dialog.querySelector('#captureJobCancel').onclick=()=>dialog.close();
  dialog.querySelector('#captureJobUnassigned').onclick=()=>save(null);
  const saveToExisting=dialog.querySelector('#captureJobSave');if(saveToExisting)saveToExisting.onclick=()=>void save(Number(dialog.querySelector('#captureJobChoice').value));
- dialog.querySelector('#captureJobCreate').onclick=async()=>{const name=dialog.querySelector('#captureNewJobName').value.trim();const status=dialog.querySelector('#captureJobStatus'),button=dialog.querySelector('#captureJobCreate');if(!name){status.textContent='Enter a job name';return;}button.disabled=true;try{const r=await api('/api/jobs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});if(!r.ok)throw Error();const job=await r.json();state.jobs.push(job);if(dialog.open)await save(job.id);}catch{status.textContent='Job could not be created. Your capture is still here. You can save without a job.';}finally{button.disabled=false;}};
+ dialog.querySelector('#captureJobCreate').onclick=async()=>{const name=dialog.querySelector('#captureNewJobName').value.trim();const status=dialog.querySelector('#captureJobStatus'),button=dialog.querySelector('#captureJobCreate');if(!name){status.textContent='Enter a project name';return;}button.disabled=true;try{const r=await api('/api/jobs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});if(!r.ok)throw Error();const job=await r.json();state.jobs.push(job);if(dialog.open)await save(job.id);}catch{status.textContent='Project could not be created. Your capture is still here. You can save without a project.';}finally{button.disabled=false;}};
 }
 async function saveCapture(options = {}) {
   if(captureSavePending)return false;
@@ -2464,7 +2468,8 @@ async function saveCaptureDurably(options = {}) {
   if(isHoaClient()&&!globalThis.PhotoNotesIncidents?.active()&&document.getElementById('hoaCreateRecord')?.checked!==false&&!document.getElementById('hoaTitle').value.trim()&&!note){toast('Enter an issue title or note');return;}
   if (!(await confirmPhotoQuality())) { toast('Photo kept for retaking'); return; }
   // Build the payload from the CURRENT state before we clear the form.
-  const payload={photo:state.photoFile||null,photoName:state.photoFile&&state.photoFile.name||'offline-photo.jpg',note,area_tags:JSON.stringify(isHoaClient()?[document.getElementById('hoaArea').value]:(state.area?[state.area]:[])),kind:'note',captured_at:new Date().toISOString()};
+  const takenAt=state.photoFile&&state._photoSource==='library'&&state._photoTakenAt?await state._photoTakenAt:null;
+  const payload={photo:state.photoFile||null,photoName:state.photoFile&&state.photoFile.name||'offline-photo.jpg',note,area_tags:JSON.stringify(isHoaClient()?[document.getElementById('hoaArea').value]:(state.area?[state.area]:[])),kind:'note',captured_at:takenAt||new Date().toISOString()};
   if(state._duplicateContext){payload.context_source_id=state._duplicateContext.sourceId;if(state.jobId)payload.job_id=state.jobId;}
   if(isSecurityClient())payload.security_issue_type=document.getElementById('securityIssueType').value;
   if(document.getElementById('captureUrgency'))payload.urgency=state.urgency==='urgent'?'urgent':'standard';
@@ -2487,23 +2492,39 @@ async function saveCaptureDurably(options = {}) {
   if (state.address) payload.address=state.address;
   // Send/Share keeps the draft visible. Reuse its durable save when the user
   // cancels sharing and taps Save again without changing the capture.
-  const signature=JSON.stringify({...payload,photo:null,latitude:undefined,longitude:undefined,address:undefined,captured_at:undefined});
+  // The project is left out of the signature: choosing a project after Send/Share moves the saved capture instead of saving it twice.
+  const signature=JSON.stringify({...payload,photo:null,latitude:undefined,longitude:undefined,address:undefined,captured_at:undefined,job_id:undefined});
   const previous=state._captureShareSave;
   const alreadySaved=previous&&previous.photo===payload.photo&&previous.signature===signature&&previous.account===state.me?.email&&previous.edition===selectedEdition();
   const receipt=alreadySaved?previous.receipt:{uploaded:false,captureShare:!!options.preserveDraft};
+  const jobId=Object.prototype.hasOwnProperty.call(payload,'job_id')?(payload.job_id||null):undefined;
+  let jobChanged=false;
   if(!alreadySaved){
+    if(jobId!==undefined)receipt.jobId=jobId;
     try{await enqueueUpload(payload,hadCoords,{requireDurable:true,receipt});}
     catch(e){toast('Could not save this photo. Your draft is still here.');return false;}
+  }else if(Object.prototype.hasOwnProperty.call(options,'jobId')&&String(receipt.jobId||'')!==String(jobId||'')){
+    jobChanged=true;
+    if(!(await setSavedCaptureProject(receipt,jobId))){toast('The project could not be changed. The capture is saved; change its project in Library.');return false;}
   }
   if(options.preserveDraft){
     state._captureShareSave={photo:payload.photo,signature,receipt,account:state.me?.email,edition:selectedEdition()};
     return true;
   }
   clearCompletedCapture();
-  toast(alreadySaved?'This capture is already saved in Photo Notes.':'Saved on this device. Waiting to upload to Photo Notes.');
+  toast(jobChanged?(jobId?'This capture is already saved. It is now in the selected project.':'This capture is already saved. It is no longer in a project.'):alreadySaved?'This capture is already saved in Photo Notes.':'Saved on this device. Waiting to upload to Photo Notes.');
   return true;
 }
 
+// Moves a capture saved by Send/Share to the project chosen afterward. A capture still waiting to upload
+// carries the project with it; one already uploaded is updated on the server.
+async function setSavedCaptureProject(receipt,jobId){
+  receipt.jobId=jobId;
+  const waiting=bgQueue.find(item=>item.receipt===receipt);
+  if(waiting&&waiting.payload)waiting.payload.job_id=jobId||'';
+  if(!receipt.captureId)return true; // Upload still pending; drainQueue applies receipt.jobId when it finishes.
+  try{const r=await api('/api/captures/batch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids:[receipt.captureId],job_id:jobId})});return r.ok;}catch{return false;}
+}
 function clearCompletedCapture() {
   state._captureShareSave=null;state._duplicateContext=null;state._followUp=null;
   void persistCaptureDraft(true).catch(()=>{});
@@ -2511,7 +2532,7 @@ function clearCompletedCapture() {
   captureLocationGeneration++;
   globalThis.PhotoNotesIncidents?.advance();
   globalThis.PhotoNotesCustomFields?.clear();
-  state._captureTemplateName=''; state.securityIssueType='Security Issue'; state.urgency='standard'; state.photoFile = null; state._note = ''; state.location = null; state.address = null; state._locationPromise = null;
+  state._captureTemplateName=''; state.securityIssueType='Security Issue'; state.urgency='standard'; state._photoTakenAt=null; state.photoFile = null; state._note = ''; state.location = null; state.address = null; state._locationPromise = null;
   state._dims = freshDims(); state._measure = null; state._measureRecord = null; state._precisionFile = null;
   if(isConcreteClient()){const d=concreteCaptureDraft();state._concreteCapture={phase:d.phase,purpose:d.purpose,element:d.element,jobId:d.jobId};}
   renderCapture();
@@ -2661,7 +2682,7 @@ async function renderList() {
     <div class="library-search-row">
       <input id="photoSearch" type="search" placeholder="Search photo titles, notes, and details" aria-label="Search PhotoNotes">
       <button class="btn secondary slim" id="libraryFilters" type="button" aria-expanded="false">Filters</button>
-      <button class="btn secondary slim" id="librarySavedSearches" type="button" aria-expanded="false">Saved Searches</button>
+      <button class="btn secondary slim" id="librarySavedSearches" type="button" aria-expanded="false">Saved Views</button>
     </div>
     <section id="libraryFilterPanel" class="library-filter-panel" hidden>
       <label for="filter">Topic<select id="filter"><option value="">All Topics</option>${filterTopics().map(a=>`<option value="${esc(a)}">${esc(a)}</option>`).join('')}</select></label>
@@ -2743,8 +2764,8 @@ async function loadLibraryGroups(mode){
 }
 function openLibraryProjectDialog(assignAfterCreate){
   const dialog=document.createElement('dialog');dialog.className='library-simple-dialog';
-  dialog.innerHTML=`<form method="dialog"><h2>Create New Project</h2><input id="libraryNewProjectName" placeholder="Project name" aria-label="Project name"><div class="dialog-actions"><button class="btn" id="libraryCreateProjectConfirm" value="save">Create Project</button><button class="btn secondary" value="cancel">Cancel</button></div><p role="status"></p></form>`;
-  document.body.appendChild(dialog);dialog.addEventListener('close',async()=>{if(dialog.returnValue!=='save'){dialog.remove();return;}const name=dialog.querySelector('#libraryNewProjectName').value.trim();if(!name){dialog.querySelector('[role=status]').textContent='Enter a project name.';dialog.showModal();return;}const response=await api('/api/jobs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});if(!response.ok){dialog.querySelector('[role=status]').textContent='Project could not be created.';dialog.showModal();return;}const project=await response.json();await loadJobs();dialog.remove();if(assignAfterCreate){document.getElementById('libraryAssignProject').innerHTML='<option value="">Choose Project</option>'+state.jobs.map(job=>`<option value="${job.id}">${esc(job.name)}</option>`).join('');document.getElementById('libraryAssignProject').value=String(project.id);await loadLibraryGroups('assign');await assignSelectedToProject();}else{renderList();}});dialog.showModal();dialog.querySelector('input').focus();
+  dialog.innerHTML=`<form method="dialog"><h2>Create New Project</h2><input id="libraryNewProjectName" placeholder="Project name" aria-label="Project name" maxlength="200"><input id="newJobNumber" placeholder="Project number (optional)" aria-label="Project number (optional)" maxlength="100"><input id="newJobCustomer" placeholder="Customer (optional)" aria-label="Customer (optional)" maxlength="200"><input id="newJobAddress" placeholder="Project address (optional)" aria-label="Project address (optional)" maxlength="500"><div class="dialog-actions"><button class="btn" id="libraryCreateProjectConfirm" value="save">Create Project</button><button class="btn secondary" value="cancel">Cancel</button></div><p role="status"></p></form>`;
+  document.body.appendChild(dialog);dialog.addEventListener('close',async()=>{if(dialog.returnValue!=='save'){dialog.remove();return;}const name=dialog.querySelector('#libraryNewProjectName').value.trim();if(!name){dialog.querySelector('[role=status]').textContent='Enter a project name.';dialog.showModal();return;}const value=id=>dialog.querySelector('#'+id).value.trim();const response=await api('/api/jobs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,job_number:value('newJobNumber'),customer:value('newJobCustomer'),address:value('newJobAddress')})});if(!response.ok){dialog.querySelector('[role=status]').textContent='Project could not be created.';dialog.showModal();return;}const project=await response.json();await loadJobs();dialog.remove();if(assignAfterCreate){document.getElementById('libraryAssignProject').innerHTML='<option value="">Choose Project</option>'+state.jobs.map(job=>`<option value="${job.id}">${esc(job.name)}</option>`).join('');document.getElementById('libraryAssignProject').value=String(project.id);await loadLibraryGroups('assign');await assignSelectedToProject();}else{renderList();}});dialog.showModal();dialog.querySelector('input').focus();
 }
 function openLibraryGroupDialog(){
   const projectId=document.getElementById('jobFilter')?.value;if(!projectId||projectId==='unassigned')return toast('Choose a project first');
@@ -2780,7 +2801,6 @@ function runSmartSearch(){
 }
 async function exportPavingJobEvidence(format){const id=(document.getElementById('jobFilter')||{}).value;if(!id||id==='unassigned'){toast('Choose a job first');return;}const button=document.getElementById(format==='docx'?'pavingJobWord':'pavingJobPdf');if(button){button.disabled=true;button.textContent='Preparing...';}try{const r=await api(`/api/paving/jobs/${id}/report?doc=${format}`);if(!r.ok)throw new Error();const blob=await r.blob(),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`paving-job-evidence.${format==='docx'?'docx':'pdf'}`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);toast('Paving job evidence report ready');}catch(e){toast('Paving job report could not be created');}finally{if(button){button.disabled=false;button.textContent=format==='docx'?'Job Evidence Word':'Job Evidence PDF';}}}
 async function loadPavingReadiness(){const box=document.getElementById('pavingReadiness'),id=(document.getElementById('jobFilter')||{}).value;if(!box)return;if(!id||id==='unassigned'){box.textContent='Choose a job to check its photo evidence.';return;}const r=await api(`/api/paving/jobs/${id}/completeness`);if(!r.ok){box.textContent='Photo evidence readiness could not be checked.';return;}const d=await r.json();box.innerHTML=`<strong>Photo evidence readiness: ${d.complete}/${d.total}</strong>${d.checks.map(x=>`<div class="${x.complete?'evidence-ok':'evidence-missing'}">${x.complete?'✓':'○'} ${esc(x.label)}</div>`).join('')}`;}
-async function createJob(){const name=document.getElementById('newJobName').value.trim();if(!name){toast('Enter a job name');return;}const body={name,job_number:document.getElementById('newJobNumber').value.trim(),customer:document.getElementById('newJobCustomer').value.trim(),address:document.getElementById('newJobAddress').value.trim()};const r=await api('/api/jobs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});if(!r.ok){toast('Job could not be created');return;}const job=await r.json();await loadJobs();state.jobId=String(job.id);toast('Job created');renderList();}
 async function deleteSelectedJob(){const id=document.getElementById('jobFilter').value,job=state.jobs.find(j=>String(j.id)===id);if(!job)return toast('Choose a project first');if(!confirm('Delete project '+job.name+'? PhotoNotes and other records will be kept without this project assignment.'))return;const button=document.getElementById('deleteJobBtn');button.disabled=true;try{const r=await api('/api/jobs/'+id,{method:'DELETE'});if(!r.ok)throw Error();await loadJobs();state.jobId='';toast('Project deleted. PhotoNotes and records were kept.');renderList();}catch{toast('Project could not be deleted');button.disabled=false;}}
 async function showSelectedJobTimeline(){const id=(document.getElementById('jobFilter')||{}).value;if(!id||id==='unassigned'){toast('Choose a project first');return;}const r=await api(`/api/jobs/${id}/timeline`);if(!r.ok){toast('Project details could not be loaded');return;}const d=await r.json(),body=document.getElementById('body');body.innerHTML=`<button class="backlink" id="timelineBack">← Back to Library</button><div class="workflow-intro"><strong>${esc(d.job.name)}</strong><span>${esc([d.job.job_number,d.job.customer,d.job.address].filter(Boolean).join(' · '))}</span></div><div class="row"><span class="badge">${esc(d.job.status)}</span><button class="btn secondary slim" id="jobStatusBtn">${d.job.status==='active'?'Mark Project Complete':'Reopen Project'}</button></div><div>${d.captures.length?d.captures.map(c=>`<div style="display:grid;grid-template-columns:90px 1fr;gap:12px;padding:0 0 20px 16px"><div><strong>${new Date(c.created_at).toLocaleDateString(uiLocale())}</strong><div class="meta">${new Date(c.created_at).toLocaleTimeString(uiLocale(),{hour:'numeric',minute:'2-digit'})}</div></div><div class="card" style="margin:0"><div class="photo-title">${esc(c.photo_title||'Untitled PhotoNote')}</div>${c.photo_path?`<img src="${capturePhotoSrc(c)}" alt="Project PhotoNote">`:''}${photoLocationHtml(c)}${window.PhotoComments?.enabled()&&c.photo_path?`<button class="btn secondary slim" data-html2canvas-ignore="true" data-comments-id="${c.id}">Comments</button>`:''}<div>${esc(c.note||'No notes added.')}</div></div></div>`).join(''):'<p class="empty">No PhotoNotes are assigned to this project yet.</p>'}</div>`;document.getElementById('timelineBack').onclick=renderList;document.getElementById('jobStatusBtn').onclick=async()=>{const u=await api(`/api/jobs/${id}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:d.job.status==='active'?'completed':'active'})});if(u.ok){toast('Project status updated');await loadJobs();renderList();}else toast('Project status could not be updated');};}
 const ANNOTATION_TEMPLATES=window.PhotoNotesAnnotationTemplates;
@@ -2889,19 +2909,30 @@ async function renderEdit() {
   loadCards(state.editTopic||'');
 }
 
-async function renderLibraryPhoto(){
-  const body=document.getElementById('body');body.className='workflow-edit library-photo-detail';
+// True while the Library photo detail is the screen on display (not a crop or mark-up editor opened from it).
+function libraryPhotoOpen(){
+  if(typeof state==='undefined'||!state._libraryOpenId||state.view!=='edit'||typeof document==='undefined')return false;
+  const body=document.getElementById('body');return !!(body&&body.classList.contains('library-photo-detail')&&body.querySelector('#cards'));
+}
+let libraryPhotoRequest=0;
+async function renderLibraryPhoto(refresh=false){
+  const body=document.getElementById('body'),request=++libraryPhotoRequest;
+  // A refresh keeps the photo on screen while the updated record loads.
+  if(!refresh||!libraryPhotoOpen()){
+  body.className='workflow-edit library-photo-detail';
   body.innerHTML='<button type="button" class="backlink" id="libraryBack">‹ Back to Library</button><div id="cards"><p class="status">Loading PhotoNote...</p></div>';
   document.getElementById('libraryBack').onclick=()=>{state._libraryOpenId=null;state.view=isHoaClient()?'photo-library':'organize';renderApp();};
+  }
   const detailCards=body.querySelector('#cards'),openedId=Number(state._libraryOpenId);
   const r=await api('/api/captures');
+  if(request!==libraryPhotoRequest)return;
   if(!detailCards.isConnected||Number(state._libraryOpenId)!==openedId)return;
   if(!r.ok||!document.getElementById('cards')){body.querySelector('#cards').innerHTML='<p class="status">PhotoNote could not be loaded.</p>';return;}
   const rows=await r.json(),photo=rows.find(c=>Number(c.id)===Number(state._libraryOpenId));
   if(!photo){body.querySelector('#cards').innerHTML='<p class="status">This PhotoNote is no longer available.</p>';return;}
   let pair=null,partner=null;
   if(beforeAfterOn())try{const response=await api('/api/pairs');if(response.ok){const pairs=await response.json();pair=pairs.find(p=>Number(p.before_id)===Number(photo.id)||Number(p.after_id)===Number(photo.id));if(pair)partner=rows.find(c=>Number(c.id)===Number(Number(pair.before_id)===Number(photo.id)?pair.after_id:pair.before_id));}}catch(e){}
-  if(Number(state._libraryOpenId)!==openedId||!detailCards.isConnected)return;
+  if(request!==libraryPhotoRequest||Number(state._libraryOpenId)!==openedId||!detailCards.isConnected)return;
   const shown=partner?[rows.find(c=>Number(c.id)===Number(pair.before_id)),rows.find(c=>Number(c.id)===Number(pair.after_id))]:[photo];
   window._lastCards=shown;
   body.querySelector('#cards').innerHTML=(partner?`<p class="status">Saved Before / After pair. Both original photos are shown below.</p><button class="btn secondary" type="button" data-view-pair="${pair.id}" data-before="${pair.before_id}" data-after="${pair.after_id}" data-opacity="${pair.comparison_opacity??''}">View Before &amp; After</button>`:'')+shown.map((c,index)=>(partner?`<div class="formhead">${index===0?'BEFORE':'AFTER'}</div>`:'')+captureCardHtml(c)).join('');
@@ -3150,6 +3181,8 @@ async function doFixAddresses() {
 
 let cardsRequest = 0;
 async function loadCards(area, query = '', filters = {}) {
+  // An open Library photo refreshes in place instead of turning into the full card list.
+  if(typeof libraryPhotoOpen==='function'&&libraryPhotoOpen())return renderLibraryPhoto(true);
   if(typeof renderPendingLibrary==='function')void renderPendingLibrary();
   if(arguments.length<3&&typeof state!=='undefined'&&['organize','photo-library'].includes(state.view)&&document.getElementById('photoSearch'))return runSmartSearch();
   const request = ++cardsRequest;
@@ -3214,6 +3247,8 @@ function photoLocationHtml(c,addressFallback='No address'){
 }
 function gaugePhotoHtml(c,full=false){if(!c.gauge_record||!['contractor','paving','concrete','hoa','property'].includes(state.proType))return '';const f=c.gauge_record.fields||{},field=(key,label)=>f[key]?`<div><b>${label}:</b> ${esc(f[key])}</div>`:'';return `<section class="gauge-photo-details"><strong>Gauge &amp; Instrument</strong><div class="${full?'':'specialist-record-summary'}">${field('reading','Reading')}${field('unit','Unit')}${field('instrument_type','Instrument Type')}${field('equipment_name','Equipment Name')}</div>${full?`${field('observed_at','Observed At')}${f.notes?`<strong>Additional Details</strong>${field('notes','Notes')}`:''}`:`<details data-gauge-photo-details><summary>Show More</summary>${field('observed_at','Observed At')}${field('notes','Notes')}</details>`}</section>`;}
 function photoEvidencePreview(c,full=false){return gaugePhotoHtml(c,full)+(isConcreteClient()?(c.footprints||[]).map(f=>`<section class="concrete-evidence"><strong>Saved Area: ${esc(f.name)}</strong><p>${esc(concreteAreaText(f))}</p>${f.notes?`<p>${esc(f.notes)}</p>`:''}</section>`).join(''):'');}
+// Urgency chosen at capture is shown only when it is Urgent; Standard needs no label.
+function urgencyBadge(c){return c&&c.urgency==='urgent'?'<span class="badge urgent">Urgent</span>':'';}
 function libraryCardHtml(c){
   const memberships=c.project_memberships||[];
   const projects=memberships.length?memberships.map(project=>esc(project.job_number?project.job_number+' - '+project.name:project.name)).join(', '):(c.job_name?esc(c.job_number?c.job_number+' - '+c.job_name:c.job_name):'None');
@@ -3222,6 +3257,7 @@ function libraryCardHtml(c){
     <label class="library-photo-select"><input type="checkbox" class="capchk" value="${c.id}" aria-label="Select ${esc(c.photo_title||'Untitled PhotoNote')}"></label>
     ${c.photo_path?`<img data-capture-photo="${c.id}" loading="lazy" decoding="async" src="${captureThumbSrc(c)}" data-full-src="${capturePhotoSrc(c)}" alt="${esc(c.photo_title||'PhotoNote')}">`:''}
     <div class="photo-title">${esc(c.photo_title||'Untitled PhotoNote')}</div>
+    ${c.urgency==='urgent'?`<div class="meta">${urgencyBadge(c)}</div>`:''}
     <div class="library-details"><div class="library-note"><strong>Notes:</strong> ${esc(c.note||'None')}</div>
     <div class="library-membership"><strong>Project(s):</strong> ${projects}</div>
     <div class="library-membership"><strong>Group(s):</strong> ${groups}</div></div>
@@ -3232,6 +3268,7 @@ function captureCardHtml(c) {
   const when = new Date(c.created_at).toLocaleString(uiLocale(), { year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' });
   const tags = (c.area_tags || []).map(t => `<span class="badge">${esc(t)}</span>`).join('');
   const kind = c.kind === 'task' ? `<span class="badge task">Task</span>` : '';
+  const urgent = urgencyBadge(c);
   const dims = measurementOn() ? fmtDimsClient(c) : '';
   const classifyRow = featureOn('measurements')
     ? (c.defect_type
@@ -3260,7 +3297,7 @@ function captureCardHtml(c) {
     ${photoLocationHtml(c)}
     ${isProClient()&&c.photo_path?`<button class="btn secondary slim relatedOpen" data-related-id="${c.id}">Related Photos</button>`:''}${window.PhotoNotesFollowUps?.allowed()&&c.photo_path?`<button type="button" class="btn secondary slim" data-fu-source="${c.id}" data-fu-type="capture">Schedule Follow-Up Photo</button>`:''}
     ${state.view === 'edit' ? `<button class="editlink editaddress" data-id="${c.id}" style="padding-left:0">Edit Address</button>` : ''}
-    <div class="topicwrap" data-id="${c.id}"><div class="meta">${kind}${tags||'<span class="badge">No Topic</span>'}</div>${topicAction}</div>
+    <div class="topicwrap" data-id="${c.id}"><div class="meta">${kind}${urgent}${tags||'<span class="badge">No Topic</span>'}</div>${topicAction}</div>
     ${c.paving_photo_reason?`<div class="paving-photo-reason-label">${esc(PAVING_PHOTO_REASONS.find(r=>r.id===c.paving_photo_reason)?.label||c.paving_photo_reason)}</div>`:''}
     ${concreteRow}
     ${isConcreteClient()&&c.concrete_stage!=='batch_ticket'?`<button type="button" class="btn secondary slim editconcrete" data-id="${c.id}">Edit Concrete Details</button>`:''}
@@ -3359,13 +3396,13 @@ function pairCardHtml(before, after, pair={}) {
       ${badge ? `<div style="margin:4px 0">${badge}</div>` : ''}
       ${photoLocationHtml(c)}
       ${state.view === 'edit' ? `<button class="editlink editaddress" data-id="${c.id}" style="padding-left:0">Edit Address</button>` : ''}
-      <div class="topicwrap" data-id="${c.id}"><div class="meta">${tags}</div><button class="editlink edittopics" data-id="${c.id}" type="button">Change Topics</button></div>
+      <div class="topicwrap" data-id="${c.id}"><div class="meta">${urgencyBadge(c)}${tags}</div><button class="editlink edittopics" data-id="${c.id}" type="button">Change Topics</button></div>
       ${dims ? `<div class="meta"><strong>Dimensions:</strong> ${esc(dims)}</div>` : ''}
       ${measurementOn() && state.view === 'edit' && c.photo_path ? `<button class="btn secondary slim editdims" data-id="${c.id}">Measurements</button>` : ''}
       ${photoMarkerControls(c)}
       ${matchingPhotoAction(c)}${duplicateAction(c)}<button class="btn secondary slim evidencebtn" data-id="${c.id}">Photo Details &amp; History</button>
       <div class="photo-notes-panel"><div class="photo-notes-heading">Notes</div><div class="photo-notes-box">${esc(c.note || 'No notes added.')}</div></div>${window.PhotoNotesCustomFields?.html(c)||''}
-      ${['organize','photo-library'].includes(state.view) ? `<button class="btn secondary slim organize-delete-capture" data-delete-organize="${c.id}" type="button">Delete Photo Note</button>` : ''}
+      ${['organize','photo-library'].includes(state.view) ? `<button class="btn secondary slim organize-delete-capture" data-delete-organize="${c.id}" type="button">Delete PhotoNote</button>` : ''}
     </div>`;
   };
   return `<div class="card">
@@ -3400,7 +3437,7 @@ function wireCards(cards, rows) {
   cards.querySelectorAll('.classifybtn').forEach(b => b.onclick = async () => {
     b.disabled = true; b.textContent = 'Classifying...';
     const d = await classifyOne(parseInt(b.getAttribute('data-id'), 10));
-    if (d && d.ok) loadCards(document.getElementById('filter').value || '');
+    if (d && d.ok) loadCards((document.getElementById('filter') || {}).value || '');
     else { b.disabled = false; b.textContent = 'Classify (AI)'; toast('Could not classify this photo'); }
   });
   cards.querySelectorAll('.overridebtn').forEach(b => b.onclick = () => startOverride(parseInt(b.getAttribute('data-id'), 10), rows));
@@ -3431,7 +3468,7 @@ async function deleteOrganizePhotoNote(id, button) {
     if(state._libraryOpenId){state._libraryOpenId=null;state.view='organize';renderApp();}else runSmartSearch();
   } catch (e) {
     button.disabled = false;
-    button.textContent = 'Delete Photo Note';
+    button.textContent = 'Delete PhotoNote';
     toast('Delete failed');
   }
 }
@@ -3495,12 +3532,19 @@ function overlayTextClient(item, c) {
     case 'topic': return (c.area_tags || []).length ? `Topic: ${(c.area_tags || []).join(', ')}` : '';
     case 'dims': return fmtDimsClient(c);
     case 'defect': return c.defect_type ? ('Defect: ' + defectLabelClient(c.defect_type) + (c.defect_severity ? ', ' + c.defect_severity : '')) : '';
-    case 'copyright': return item.text || ('© ' + new Date().getFullYear() + ' Zukor AI. All Rights Reserved.');
+    case 'copyright': return item.text || copyrightDefaultText();
     default: return item.text || '';
   }
 }
+// Copyright markings name the user's company from Document branding, or the user's name. PhotoNotes is never named on customer photos.
+function copyrightDefaultText(){const name=String(state._copyrightName||state.me?.name||'').trim();return '© '+new Date().getFullYear()+(name?' '+name:'')+'. All Rights Reserved.';}
+async function loadCopyrightName(){
+  if(state._copyrightName!=null)return state._copyrightName;
+  try{const r=await api('/api/document-settings');if(r.ok){const d=await r.json();state._copyrightName=String(d.branding?.company_name||'').trim();}}catch(e){}
+  return state._copyrightName;
+}
 function missingLocationMarking(t,c){return ['address','gps'].includes(t)&&!overlayTextClient({t},c||{}).trim();}
-function locationMarkingMessage(t){return t==='address'?'This photo has no saved address. Go back to Edit, use Edit Address, then reopen Mark Up Photo.':'This photo has no saved GPS coordinates. GPS markings require coordinates saved with that photo.';}
+function locationMarkingMessage(t){return t==='address'?'This photo has no saved address. Go back, use Edit Address, then reopen Mark Up Photo.':'This photo has no saved GPS coordinates. GPS markings require coordinates saved with that photo.';}
 function renderStampEditor(c) {
   editorCapture = c;
   editorOverlays = Array.isArray(c.overlays) ? JSON.parse(JSON.stringify(c.overlays)) : [];
@@ -3517,7 +3561,7 @@ function renderStampEditor(c) {
     if (c.defect_type) addOpts.push('defect');
   }
   body.innerHTML = `
-    <button class="backlink" id="stampBack">‹ Back to Edit</button>
+    <button class="backlink" id="stampBack">‹ Back</button>
     <div class="formhead">Mark Up Photo</div>
     <div class="status">Add labels, text, boxes, or arrows. Drag each item where you want it, then adjust its appearance below.</div>
     <div id="stampStage" style="position:relative;display:inline-block;max-width:100%;border:1px solid var(--pn-border-000,#000);border-radius:8px;overflow:hidden;touch-action:none">
@@ -3541,7 +3585,7 @@ function renderStampEditor(c) {
       <button class="btn secondary" id="stampCopy">Download Marked Photo</button>
     </div>
     <div class="status" style="margin-top:8px"><strong>Save Changes</strong> keeps the markings with this photo in Photo Notes. <strong>Download Marked Photo</strong> saves a separate JPEG with the markings permanently visible.</div>
-    <button class="backlink" id="stampBackBottom" style="margin-top:18px">‹ Back to Edit</button>`;
+    <button class="backlink" id="stampBackBottom" style="margin-top:18px">‹ Back</button>`;
   const backToEdit = () => { state.view = 'edit'; renderEdit(); };
   document.getElementById('stampBack').onclick = backToEdit;
   document.getElementById('stampBackBottom').onclick = backToEdit;
@@ -3551,6 +3595,7 @@ function renderStampEditor(c) {
   document.getElementById('deleteAnnotationTemplate').onclick=deleteAnnotationTemplate;
   document.getElementById('singleTemplate').onchange=updateSavedAnnotationDelete;
   void loadSavedAnnotationTemplates();
+  void loadCopyrightName().then(()=>{if(editorCapture===c)drawOverlayItems();});
   document.getElementById('stampSave').onclick = saveOverlays;
   document.getElementById('stampCopy').onclick = saveStampedCopy;
   const img = document.getElementById('stampImg');
@@ -3571,7 +3616,7 @@ function addOverlayItem(t) {
   } else if (t === 'arrow') {
     item = { t: 'arrow', x: 25, y: 25, w: 40, h: 30, color: '#ff0000', thickness: 0.8, dir: 'se' };
   } else {
-    item = { t, text: t === 'copyright' ? ('© ' + new Date().getFullYear() + ' Zukor AI. All Rights Reserved.') : (t === 'custom' ? 'Text' : ''), x: 4, y: 84, size: 3, color: '#ffffff', font: 'sans', outline: true };
+    item = { t, text: t === 'copyright' ? copyrightDefaultText() : (t === 'custom' ? 'Text' : ''), x: 4, y: 84, size: 3, color: '#ffffff', font: 'sans', outline: true };
   }
   editorOverlays.push(item);
   editorSel = editorOverlays.length - 1;
@@ -3944,8 +3989,10 @@ function startEditNote(id, rows) {
     </div>`;
   const ta = wrap.querySelector('.editarea');
   ta.focus();
-  wrap.querySelector('.cancelnote').onclick = () => loadCards(document.getElementById('filter').value || '');
-  wrap.querySelector('.savenote').onclick = () => saveNote(id, ta.value, () => loadCards(document.getElementById('filter').value || ''));
+  // The Library photo detail has no Topic filter; loadCards keeps that detail open.
+  const refresh = () => loadCards((document.getElementById('filter') || {}).value || '');
+  wrap.querySelector('.cancelnote').onclick = refresh;
+  wrap.querySelector('.savenote').onclick = () => saveNote(id, ta.value, refresh);
 }
 
 function startEditPhotoTitle(id, rows) {
@@ -3970,7 +4017,9 @@ function startEditPhotoTitle(id, rows) {
 function startEditTopics(id, rows) {
   const wrap=document.querySelector(`.topicwrap[data-id="${id}"]`);if(!wrap)return;
   const row=rows.find(r=>r.id===id),current=new Set(row&&row.area_tags||[]);
-  wrap.innerHTML=`<fieldset class="topic-editor"><legend>Topics for this photo</legend>${state.areas.map(a=>`<label><input type="checkbox" value="${esc(a)}" ${current.has(a)?'checked':''}> ${esc(a)}</label>`).join('')}<div class="row compact"><button class="btn slim savetopics" type="button">Save Topics</button><button class="btn secondary slim canceltopics" type="button">Cancel</button></div></fieldset>`;
+  // Labels removed from the topic list stay on photos that already have them.
+  const choices=[...state.areas,...[...current].filter(a=>!state.areas.includes(a))];
+  wrap.innerHTML=`<fieldset class="topic-editor"><legend>Topics for this photo</legend>${choices.map(a=>`<label><input type="checkbox" value="${esc(a)}" ${current.has(a)?'checked':''}> ${esc(a)}</label>`).join('')}<div class="row compact"><button class="btn slim savetopics" type="button">Save Topics</button><button class="btn secondary slim canceltopics" type="button">Cancel</button></div></fieldset>`;
   wrap.querySelector('.canceltopics').onclick=()=>loadCards((document.getElementById('filter')||{}).value||'');
   wrap.querySelector('.savetopics').onclick=async()=>{const area_tags=Array.from(wrap.querySelectorAll('input:checked')).map(x=>x.value);const r=await api(`/api/captures/${id}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({area_tags})});if(r.ok){toast('Photo topics saved');loadCards((document.getElementById('filter')||{}).value||'');}else toast('Photo topics could not be saved');};
 }
@@ -4289,7 +4338,7 @@ async function renderSend() {
     <details id="sendPhotoSelection"><summary id="sendPhotoSelectionSummary">Select Photos <span id="sendPhotoSelectionCount"></span></summary>
       <div class="formhead">Photo Library</div>
       <p>Select the Photo Notes you want to share, download, or include in a customer approval package. Closing this section keeps your selection.</p>
-      <div class="send-photo-filters"><div><label for="sendJobFilter">Job</label><select id="sendJobFilter"><option value="">All Jobs</option></select></div><div><label for="sendTopicFilter">Topic</label><select id="sendTopicFilter"><option value="">All Topics</option></select></div></div>
+      <div class="send-photo-filters"><div><label for="sendJobFilter">Project</label><select id="sendJobFilter"><option value="">All Projects</option></select></div><div><label for="sendTopicFilter">Topic</label><select id="sendTopicFilter"><option value="">All Topics</option></select></div></div>
       <p>Filters narrow the library without changing your selection. Select All Matching adds the displayed records. Clear All clears every selected record.</p>
       <p id="sendFilterCount" role="status" aria-live="polite"></p>
       <div class="send-selection-actions">
@@ -4339,16 +4388,23 @@ async function shareReviewLink(url,title){
 async function createApprovalPackage(){const ids=Array.from(state.selectedIds).map(Number);if(!ids.length){toast('Select at least one capture');return;}const title=document.getElementById('approvalTitle').value.trim()||'Photo Review',message=document.getElementById('approvalMessage').value.trim();const r=await api('/api/approvals',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids,title,message})});const d=await r.json().catch(()=>({}));if(!r.ok){toast(d.error||'Review link could not be created');return;}const box=document.getElementById('approvalResult');box.innerHTML=`<div class="card"><strong>Customer review link ready</strong><input id="approvalUrl" readonly value="${esc(d.url)}"><div class="row compact"><button class="btn secondary slim" id="copyApproval">Copy Link</button><button class="btn secondary slim" id="shareApproval">Share Link</button></div><div class="meta">Expires in 14 days</div></div>`;document.getElementById('copyApproval').onclick=async()=>{try{await navigator.clipboard.writeText(d.url);toast('Link copied');}catch(e){document.getElementById('approvalUrl').select();}};document.getElementById('shareApproval').onclick=()=>shareReviewLink(d.url,title);loadApprovalPackages();}
 async function loadApprovalPackages(){const box=document.getElementById('approvalList');if(!box)return;const r=await api('/api/approvals');if(!r.ok)return;const rows=await r.json();box.innerHTML=rows.length?`<div class="formhead">Recent Customer Reviews</div>${rows.slice(0,10).map(x=>`<div class="card"><strong>${esc(x.title)}</strong> <span class="badge">${esc(x.status.replace('_',' '))}</span><div class="meta">${x.photo_count} photo${x.photo_count===1?'':'s'} · expires ${new Date(x.expires_at).toLocaleDateString(uiLocale())}</div>${x.customer_name?`<div>Response from ${esc(x.customer_name)}${x.customer_comment?`: ${esc(x.customer_comment)}`:''}</div>`:''}<button class="btn secondary slim copyExistingApproval" data-url="${esc(location.origin+'/review/'+x.token)}">Copy Link</button><button class="btn secondary slim shareExistingApproval" data-url="${esc(location.origin+'/review/'+x.token)}" data-title="${esc(x.title)}">Share Link</button></div>`).join('')}`:'';box.querySelectorAll('.shareExistingApproval').forEach(b=>b.onclick=()=>shareReviewLink(b.dataset.url,b.dataset.title));box.querySelectorAll('.copyExistingApproval').forEach(b=>b.onclick=async()=>{try{await navigator.clipboard.writeText(b.dataset.url);toast('Link copied');}catch(e){}});}
 
+// Every project a photo belongs to, as Library shows it: its primary project plus any added project memberships.
+function captureProjects(c){
+ const out=new Map();
+ if(c&&c.job_id!=null)out.set(String(c.job_id),c.job_number?c.job_number+' - '+(c.job_name||''):(c.job_name||uiT('Project')+' '+c.job_id));
+ for(const p of (c&&c.project_memberships)||[])if(p&&p.id!=null)out.set(String(p.id),p.job_number?p.job_number+' - '+p.name:p.name);
+ return out;
+}
 function fillSendPhotoFilters(captures){
  const jobs=new Map((state.jobs||[]).map(j=>[String(j.id),j.job_number?j.job_number+' - '+j.name:j.name])),topics=new Set(state.areas||[]);
- for(const c of captures){if(c.job_id&&!jobs.has(String(c.job_id)))jobs.set(String(c.job_id),c.job_name||uiT('Job')+' '+c.job_id);for(const topic of c.area_tags||[])topics.add(topic);}
- for(const [id,values,label] of [['sendJobFilter',jobs,'All Jobs'],['sendTopicFilter',new Map([...topics].map(t=>[t,t])),'All Topics']]){const select=document.getElementById(id);if(!select)continue;const chosen=select.value;if(chosen&&!values.has(chosen))values.set(chosen,select.selectedOptions[0].textContent);select.innerHTML=`<option value="">${uiT(label)}</option>`+[...values].sort((a,b)=>a[1].localeCompare(b[1])).map(([value,name])=>`<option value="${esc(value)}">${esc(name)}</option>`).join('');select.value=chosen;}
+ for(const c of captures){for(const [id,name] of captureProjects(c))if(!jobs.has(id))jobs.set(id,name);for(const topic of c.area_tags||[])topics.add(topic);}
+ for(const [id,values,label] of [['sendJobFilter',jobs,'All Projects'],['sendTopicFilter',new Map([...topics].map(t=>[t,t])),'All Topics']]){const select=document.getElementById(id);if(!select)continue;const chosen=select.value;if(chosen&&!values.has(chosen))values.set(chosen,select.selectedOptions[0].textContent);select.innerHTML=`<option value="">${uiT(label)}</option>`+[...values].sort((a,b)=>a[1].localeCompare(b[1])).map(([value,name])=>`<option value="${esc(value)}">${esc(name)}</option>`).join('');select.value=chosen;}
 }
 function renderSendPhotoLibrary(){
   const capBox = document.getElementById('sendCaptures');
   if(!capBox)return;
   const job=document.getElementById('sendJobFilter')?.value||'',topic=document.getElementById('sendTopicFilter')?.value||'';
-  const visible=(window._sendCaptures||[]).filter(c=>(!job||String(c.job_id)===job)&&(!topic||(c.area_tags||[]).includes(topic)));
+  const visible=(window._sendCaptures||[]).filter(c=>(!job||captureProjects(c).has(job))&&(!topic||(c.area_tags||[]).includes(topic)));
   window._sendMatchedCaptures=visible;
   capBox.innerHTML = visible.length ? visible.map(c => `
     <article class="send-capture-row">
@@ -4401,7 +4457,7 @@ function updateSendCount() {
   const n = state.selectedIds.size;
   const count=document.getElementById('sendPhotoSelectionCount');if(count)count.textContent=uiT('({count} selected)').replace('{count}',n);
   const s = document.getElementById('sendSelection');
-  if (s) s.textContent = n ? uiT('{count} selected. Open Select Photos to change your selection.').replace('{count}',n) : uiT('Open Select Photos to choose photos, or return to Organize.');
+  if (s) s.textContent = n ? uiT('{count} selected. Open Select Photos to change your selection.').replace('{count}',n) : uiT('Open Select Photos to choose photos, or return to Library.');
   const clear = document.getElementById('clearSendSelection');
   if (clear) clear.disabled = !n;
   const selectAll = document.getElementById('selectAllSendCaptures');
@@ -4517,6 +4573,17 @@ function openPreparedExportShare(file, format, groupId) {
   (supported?share:modal.querySelector('[data-share-download]')).focus();
 }
 
+// A download that fails on the server leaves this screen in place (the server answers 204 and sets
+// pn_download_failed for 60 seconds). Watching that marker turns the failure into a message here.
+let downloadFailureWatch=0;
+function watchDownloadFailure(){
+  if(typeof document==='undefined'||typeof setInterval!=='function')return;
+  clearInterval(downloadFailureWatch);const started=Date.now();
+  downloadFailureWatch=setInterval(()=>{
+    if(/(?:^|;\s*)pn_download_failed=1/.test(document.cookie)){document.cookie='pn_download_failed=; Max-Age=0; Path=/; SameSite=Lax';clearInterval(downloadFailureWatch);toast('The download could not be created. Try again, or choose fewer photos.');}
+    else if(Date.now()-started>5*60*1000)clearInterval(downloadFailureWatch);
+  },700);
+}
 async function deliverExport(format, groupId, action = 'download') {
   if(action==='print')format='pdf';
   const ext = format === 'bundle' ? 'zip' : format;
@@ -4526,6 +4593,7 @@ async function deliverExport(format, groupId, action = 'download') {
       // Let the browser handle the server's attachment response directly.
       // A delayed synthetic blob click can be ignored by mobile browsers.
       window.location.assign(exportDownloadUrl(format, groupId));
+      watchDownloadFailure();
       return;
     }
     const blob = await exportBlob(format, groupId);
@@ -4624,6 +4692,7 @@ let preparedPhotoShare = { signature: '', files: [], text: '' };
 
 // ---- Create (ordered documents, stored as groups) ----
 let documentCreationPending=false;
+let documentAddTargetId=null;
 let documentCreateStep='list',documentListSort='alpha',documentListQuery='',newDocumentPhotos=[],newDocumentPhotoIds=new Set(),newDocumentSetup=null,newDocumentPhotoTopic='',newDocumentPhotoJob='';
 const builtInDocumentSetup=()=>({title:'',description:'',layout:{document_type:'standard',orientation:'portrait',photo_layout:'four_per_page',font:'Arial',accent:'#1d4ed8',header:false,header_text:'',footer:false,footer_text:'',page_numbers:true,page_number_position:'bottom_right',cover_page:false,company_name:''}});
 const documentSettingsStorageKey=kind=>`pn-document-${kind}-${state.me?.id||'local'}`;
@@ -4635,12 +4704,13 @@ function documentModifiedLabel(group){const value=group.updated_at||group.create
 function sortedDocuments(groups){return [...groups].filter(g=>String(g.title||'').trim()&&String(g.title).toLowerCase().includes(documentListQuery.toLowerCase())).sort((a,b)=>documentListSort==='alpha'?a.title.localeCompare(b.title):documentListSort==='reverse-alpha'?b.title.localeCompare(a.title):documentListSort==='newest'?(Date.parse(b.updated_at||b.created_at)||0)-(Date.parse(a.updated_at||a.created_at)||0):(Date.parse(a.updated_at||a.created_at)||0)-(Date.parse(b.updated_at||b.created_at)||0));}
 async function renderGroups() {
   if (state.ewrId != null) { renderEwrDetail(); return; }
+  if (state.groupId&&documentAddTargetId===state.groupId) return renderNewDocumentPhotos();
   if (state.groupId) { renderGroupDetail(state.groupId); return; }
   if(documentCreateStep==='setup')return renderNewDocumentSetup();
   if(documentCreateStep==='photos')return renderNewDocumentPhotos();
   const body=document.getElementById('body');body.className='workflow-create';
   body.innerHTML=`<div class="create-heading"><h1>Create</h1><button class="btn" id="newDocument">New Document</button></div><label for="documentSearch">Search Document Title</label><input id="documentSearch" type="search" placeholder="Search document titles" value="${esc(documentListQuery)}"><section class="available-documents"><div class="available-documents-heading"><h2>Available Documents</h2><label for="createDocumentSort">Sort<select id="createDocumentSort"><option value="alpha"${documentListSort==='alpha'?' selected':''}>A to Z</option><option value="reverse-alpha"${documentListSort==='reverse-alpha'?' selected':''}>Z to A</option><option value="newest"${documentListSort==='newest'?' selected':''}>Newest First</option><option value="oldest"${documentListSort==='oldest'?' selected':''}>Oldest First</option></select></label></div><div id="glist"><p class="status">Loading documents...</p></div></section>`;
-  document.getElementById('newDocument').onclick=()=>{newDocumentSetup=documentSetupDefault();newDocumentSetup.title='';newDocumentSetup.description='';newDocumentPhotoTopic='';newDocumentPhotoJob='';documentCreateStep='setup';renderGroups();};
+  document.getElementById('newDocument').onclick=()=>{newDocumentPhotoIds.clear();newDocumentSetup=documentSetupDefault();newDocumentSetup.title='';newDocumentSetup.description='';newDocumentPhotoTopic='';newDocumentPhotoJob='';documentCreateStep='setup';renderGroups();};
   document.getElementById('documentSearch').oninput=e=>{documentListQuery=e.target.value;renderGroupCards(document.getElementById('glist'),state.groups||[]);};
   document.getElementById('createDocumentSort').onchange=e=>{documentListSort=e.target.value;renderGroupCards(document.getElementById('glist'),state.groups||[]);};
   loadGroups();
@@ -4649,15 +4719,17 @@ function documentSetupFields(){const l=newDocumentSetup.layout,presets=documentP
 function renderNewDocumentSetup(){const body=document.getElementById('body');body.className='workflow-create';body.innerHTML=`<div class="create-heading"><h1>Create Document</h1></div><section class="new-document-setup">${documentSetupFields()}</section>`;wireNewDocumentSetup();}
 function readNewDocumentSetup(){const l=newDocumentSetup.layout;newDocumentSetup.title=document.getElementById('gtitle').value;newDocumentSetup.description=document.getElementById('gdesc').value;l.document_type=document.getElementById('newDocumentType').value;l.orientation=document.getElementById('newDocumentOrientation').value;l.photo_layout=document.getElementById('newDocumentPhotoLayout').value;l.font=document.getElementById('newDocumentFont').value;l.accent=document.getElementById('newDocumentAccent').value;l.header=document.getElementById('newDocumentHeader').checked;l.header_text=document.getElementById('newDocumentHeaderText').value;l.footer=document.getElementById('newDocumentFooter').checked;l.footer_text=document.getElementById('newDocumentFooterText').value;l.page_numbers=document.getElementById('newDocumentNumbers').checked;l.page_number_position=document.getElementById('newDocumentPagePosition').value;l.cover_page=document.getElementById('newDocumentCover').checked;l.company_name=document.getElementById('newDocumentCompany').value;}
 function validateNewDocumentTitle(){readNewDocumentSetup();if(!newDocumentSetup.title.trim()){toast('Enter a document title.');document.getElementById('gtitle').focus();return false;}return true;}
-function wireNewDocumentSetup(){const sections=[...document.querySelectorAll('.new-document-settings details')];sections.forEach(section=>section.ontoggle=()=>{if(section.open)sections.forEach(other=>{if(other!==section)other.open=false;});});document.querySelectorAll('.new-document-setup input,.new-document-setup textarea,.new-document-setup select').forEach(el=>{if(el.id!=='documentSetupPreset'&&el.id!=='newDocumentTemplate')el.oninput=readNewDocumentSetup;});document.getElementById('documentSetupPreset').onchange=e=>{const p=documentPresets().find(p=>p.id===e.target.value);if(p){const title=newDocumentSetup.title,description=newDocumentSetup.description;newDocumentSetup={title,description,layout:structuredClone(p.layout)};renderGroups();}};document.getElementById('newDocumentTemplate').onchange=e=>newDocumentSetup.template=e.target.files[0]||null;const next=()=>{if(!validateNewDocumentTitle())return;documentCreateStep='photos';renderGroups();};document.getElementById('useDocumentSettings').onclick=next;document.getElementById('saveDefaultSettings').onclick=()=>{if(!validateNewDocumentTitle())return;writeDocumentSetting('default',{title:'',description:'',layout:structuredClone(newDocumentSetup.layout)});toast('Default document settings saved.');next();};document.getElementById('savePresetSettings').onclick=()=>{if(!validateNewDocumentTitle())return;const name=prompt(uiT('Preset name:'));if(!name?.trim())return;const rows=documentPresets();rows.push({id:crypto.randomUUID(),name:name.trim(),layout:structuredClone(newDocumentSetup.layout)});writeDocumentSetting('presets',rows);toast('Document settings preset saved.');next();};document.getElementById('cancelNewDocument').onclick=()=>{documentCreateStep='list';renderGroups();};}
-async function renderNewDocumentPhotos(){const body=document.getElementById('body');body.className='workflow-create';body.innerHTML=`<div class="create-heading"><h1>Choose Photos</h1></div><div class="document-photo-toolbar"><input id="newDocumentPhotoSearch" type="search" placeholder="Search PhotoNotes and details"><button class="btn secondary slim" id="selectAllDocumentPhotos">Select All</button><button class="btn secondary slim" id="clearDocumentPhotos">Clear All</button></div><div class="row"><div><label for="newDocumentTopic">Filter by Topic</label><select id="newDocumentTopic" disabled><option value="">All Topics</option></select></div><div><label for="newDocumentJob">Filter by Job</label><select id="newDocumentJob" disabled><option value="">All Jobs</option></select></div></div><div id="newDocumentPhotoList" class="document-source-photos"><p class="status">Loading PhotoNotes...</p></div><div class="new-document-final-actions"><button class="btn secondary" id="backDocumentSetup">Back to Document Setup</button><button class="btn" id="gcreate" disabled>Save New Document</button></div>`;document.getElementById('backDocumentSetup').onclick=()=>{documentCreateStep='setup';renderGroups();};document.getElementById('gcreate').onclick=createGroup;try{const r=await api('/api/captures');if(!r.ok)throw Error();newDocumentPhotos=(await r.json()).filter(p=>p.photo_path);const topics=[...new Set(newDocumentPhotos.flatMap(p=>p.area_tags||[]))].sort((a,b)=>a.localeCompare(b));const jobs=[...new Map(newDocumentPhotos.filter(p=>p.job_id!=null).map(p=>[String(p.job_id),p.job_name||'Job '+p.job_id])).entries()].sort((a,b)=>a[1].localeCompare(b[1]));const topic=document.getElementById('newDocumentTopic'),job=document.getElementById('newDocumentJob');topic.innerHTML='<option value="">All Topics</option>'+topics.map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join('');job.innerHTML='<option value="">All Jobs</option>'+jobs.map(([id,name])=>`<option value="${esc(id)}">${esc(name)}</option>`).join('');topic.value=newDocumentPhotoTopic;job.value=newDocumentPhotoJob;if(!topic.value)newDocumentPhotoTopic='';if(!job.value)newDocumentPhotoJob='';topic.disabled=false;job.disabled=false;topic.onchange=()=>{newDocumentPhotoTopic=topic.value;renderNewDocumentPhotoList();};job.onchange=()=>{newDocumentPhotoJob=job.value;renderNewDocumentPhotoList();};if(!newDocumentPhotoIds.size)for(const id of state.selectedIds)newDocumentPhotoIds.add(String(id));renderNewDocumentPhotoList();document.getElementById('newDocumentPhotoSearch').oninput=renderNewDocumentPhotoList;document.getElementById('selectAllDocumentPhotos').onclick=()=>{for(const p of visibleNewDocumentPhotos())newDocumentPhotoIds.add(String(p.id));renderNewDocumentPhotoList();};document.getElementById('clearDocumentPhotos').onclick=()=>{newDocumentPhotoIds.clear();renderNewDocumentPhotoList();};}catch{document.getElementById('newDocumentPhotoList').innerHTML='<p class="status">PhotoNotes could not be loaded. Return and try again.</p>';}}
-function visibleNewDocumentPhotos(){const q=document.getElementById('newDocumentPhotoSearch')?.value.toLowerCase()||'';return newDocumentPhotos.filter(p=>(!newDocumentPhotoTopic||(p.area_tags||[]).includes(newDocumentPhotoTopic))&&(!newDocumentPhotoJob||String(p.job_id)===newDocumentPhotoJob)&&`${p.photo_title||''} ${p.note||''} ${p.address||''}`.toLowerCase().includes(q));}
+function wireNewDocumentSetup(){const sections=[...document.querySelectorAll('.new-document-settings details')];sections.forEach(section=>section.ontoggle=()=>{if(section.open)sections.forEach(other=>{if(other!==section)other.open=false;});});document.querySelectorAll('.new-document-setup input,.new-document-setup textarea,.new-document-setup select').forEach(el=>{if(el.id!=='documentSetupPreset'&&el.id!=='newDocumentTemplate')el.oninput=readNewDocumentSetup;});document.getElementById('documentSetupPreset').onchange=e=>{const p=documentPresets().find(p=>p.id===e.target.value);if(p){const title=newDocumentSetup.title,description=newDocumentSetup.description;newDocumentSetup={title,description,layout:structuredClone(p.layout)};renderGroups();}};document.getElementById('newDocumentTemplate').onchange=e=>newDocumentSetup.template=e.target.files[0]||null;const next=()=>{if(!validateNewDocumentTitle())return;documentCreateStep='photos';renderGroups();};document.getElementById('useDocumentSettings').onclick=next;document.getElementById('saveDefaultSettings').onclick=()=>{if(!validateNewDocumentTitle())return;writeDocumentSetting('default',{title:'',description:'',layout:structuredClone(newDocumentSetup.layout)});toast('Default document settings saved.');next();};document.getElementById('savePresetSettings').onclick=()=>{if(!validateNewDocumentTitle())return;const name=prompt(uiT('Preset name:'));if(!name?.trim())return;const rows=documentPresets();rows.push({id:crypto.randomUUID(),name:name.trim(),layout:structuredClone(newDocumentSetup.layout)});writeDocumentSetting('presets',rows);toast('Document settings preset saved.');next();};document.getElementById('cancelNewDocument').onclick=()=>{newDocumentPhotoIds.clear();newDocumentSetup=null;documentCreateStep='list';renderGroups();};}
+async function renderNewDocumentPhotos(){const adding=documentAddTargetId!=null&&documentAddTargetId===state.groupId,existing=new Set(adding?currentGroupItems.map(c=>String(c.id)):[]);const body=document.getElementById('body');body.className='workflow-create';body.innerHTML=`<div class="create-heading"><h1>${adding?'Add Photos to Document':'Choose Photos'}</h1></div><div class="document-photo-toolbar"><input id="newDocumentPhotoSearch" type="search" placeholder="Search PhotoNotes and details"><button class="btn secondary slim" id="selectAllDocumentPhotos">Select All</button><button class="btn secondary slim" id="clearDocumentPhotos">Clear All</button></div><div class="row"><div><label for="newDocumentTopic">Filter by Topic</label><select id="newDocumentTopic" disabled><option value="">All Topics</option></select></div><div><label for="newDocumentJob">Filter by Project</label><select id="newDocumentJob" disabled><option value="">All Projects</option></select></div></div><div id="newDocumentPhotoList" class="document-source-photos"><p class="status">Loading PhotoNotes...</p></div><div class="new-document-final-actions">${adding?'<button class="btn secondary" id="backToDocument">Back to Document</button><button class="btn" id="addDocumentPhotosSave" disabled>Add Selected Photos</button>':'<button class="btn secondary" id="backDocumentSetup">Back to Document Setup</button><button class="btn" id="gcreate" disabled>Save New Document</button>'}</div>`;if(adding){document.getElementById('backToDocument').onclick=()=>{documentAddTargetId=null;newDocumentPhotoIds.clear();renderGroups();};document.getElementById('addDocumentPhotosSave').onclick=addPhotosToDocument;}else{document.getElementById('backDocumentSetup').onclick=()=>{documentCreateStep='setup';renderGroups();};document.getElementById('gcreate').onclick=createGroup;}try{const r=await api('/api/captures');if(!r.ok)throw Error();newDocumentPhotos=(await r.json()).filter(p=>p.photo_path&&!existing.has(String(p.id)));const topics=[...new Set(newDocumentPhotos.flatMap(p=>p.area_tags||[]))].sort((a,b)=>a.localeCompare(b));const jobs=[...new Map(newDocumentPhotos.flatMap(p=>[...captureProjects(p)])).entries()].sort((a,b)=>a[1].localeCompare(b[1]));const topic=document.getElementById('newDocumentTopic'),job=document.getElementById('newDocumentJob');topic.innerHTML='<option value="">All Topics</option>'+topics.map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join('');job.innerHTML='<option value="">All Projects</option>'+jobs.map(([id,name])=>`<option value="${esc(id)}">${esc(name)}</option>`).join('');topic.value=newDocumentPhotoTopic;job.value=newDocumentPhotoJob;if(!topic.value)newDocumentPhotoTopic='';if(!job.value)newDocumentPhotoJob='';topic.disabled=false;job.disabled=false;topic.onchange=()=>{newDocumentPhotoTopic=topic.value;renderNewDocumentPhotoList();};job.onchange=()=>{newDocumentPhotoJob=job.value;renderNewDocumentPhotoList();};if(!adding&&!newDocumentPhotoIds.size)for(const id of state.selectedIds)newDocumentPhotoIds.add(String(id));renderNewDocumentPhotoList();document.getElementById('newDocumentPhotoSearch').oninput=renderNewDocumentPhotoList;document.getElementById('selectAllDocumentPhotos').onclick=()=>{for(const p of visibleNewDocumentPhotos())newDocumentPhotoIds.add(String(p.id));renderNewDocumentPhotoList();};document.getElementById('clearDocumentPhotos').onclick=()=>{newDocumentPhotoIds.clear();renderNewDocumentPhotoList();};}catch{document.getElementById('newDocumentPhotoList').innerHTML='<p class="status">PhotoNotes could not be loaded. Return and try again.</p>';}}
+function visibleNewDocumentPhotos(){const q=document.getElementById('newDocumentPhotoSearch')?.value.toLowerCase()||'';return newDocumentPhotos.filter(p=>(!newDocumentPhotoTopic||(p.area_tags||[]).includes(newDocumentPhotoTopic))&&(!newDocumentPhotoJob||captureProjects(p).has(newDocumentPhotoJob))&&`${p.photo_title||''} ${p.note||''} ${p.address||''}`.toLowerCase().includes(q));}
 function renderNewDocumentPhotoList(){const box=document.getElementById('newDocumentPhotoList');if(!box)return;const photos=visibleNewDocumentPhotos();box.innerHTML=photos.length?photos.map(p=>`<label class="document-source-photo"><input type="checkbox" data-document-source-photo="${p.id}"${newDocumentPhotoIds.has(String(p.id))?' checked':''}><img loading="lazy" decoding="async" src="${captureThumbSrc(p)}" alt="${esc(p.photo_title||'PhotoNote')}"><span><strong>${esc(p.photo_title||'PhotoNote')}</strong><br>${esc(p.note||'')}</span></label>`).join(''):'<p class="empty">No PhotoNotes match this search.</p>';box.querySelectorAll('[data-document-source-photo]').forEach(input=>input.onchange=()=>{if(input.checked)newDocumentPhotoIds.add(input.dataset.documentSourcePhoto);else newDocumentPhotoIds.delete(input.dataset.documentSourcePhoto);updateNewDocumentSave();});updateNewDocumentSave();}
-function updateNewDocumentSave(){const button=document.getElementById('gcreate');if(button)button.disabled=documentCreationPending||!newDocumentPhotoIds.size;}
-async function createGroup(){if(documentCreationPending||!newDocumentSetup?.title.trim()||!newDocumentPhotoIds.size)return;const btn=document.getElementById('gcreate');documentCreationPending=true;btn.disabled=true;try{const r=await api('/api/groups',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:newDocumentSetup.title.trim(),description:newDocumentSetup.description.trim(),ids:[...newDocumentPhotoIds],layout:newDocumentSetup.layout})});const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.error||'Could not save document');if(newDocumentSetup.template){const fd=new FormData();fd.append('template',newDocumentSetup.template);fd.append('group',String(d.id));await api('/api/document-settings/template',{method:'POST',body:fd});}state.selectedIds.clear();newDocumentPhotoIds.clear();state.groups=null;state.groupId=d.id;documentCreateStep='list';toast('New document saved.');renderGroups();}catch(e){toast(e.message||'Could not save document');}finally{documentCreationPending=false;if(btn.isConnected)updateNewDocumentSave();}}
+function updateNewDocumentSave(){const button=document.getElementById('gcreate')||document.getElementById('addDocumentPhotosSave');if(button)button.disabled=documentCreationPending||!newDocumentPhotoIds.size;}
+async function addPhotosToDocument(){const id=documentAddTargetId,ids=[...newDocumentPhotoIds].map(Number).filter(Number.isInteger),btn=document.getElementById('addDocumentPhotosSave');if(documentCreationPending||id==null||!ids.length)return;documentCreationPending=true;btn.disabled=true;try{const r=await api(`/api/groups/${id}/add`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids})});const d=await r.json().catch(()=>({}));if(!r.ok)throw Error();const added=Number(d.added??ids.length);newDocumentPhotoIds.clear();documentAddTargetId=null;toast(`Added ${added} PhotoNote${added===1?'':'s'} to the document.`);renderGroups();}catch{toast('Photos could not be added to the document');}finally{documentCreationPending=false;if(btn.isConnected)updateNewDocumentSave();}}
+async function createGroup(){if(documentCreationPending||!newDocumentSetup?.title.trim()||!newDocumentPhotoIds.size)return;const btn=document.getElementById('gcreate');documentCreationPending=true;btn.disabled=true;try{const r=await api('/api/groups',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:newDocumentSetup.title.trim(),description:newDocumentSetup.description.trim(),ids:[...newDocumentPhotoIds],layout:newDocumentSetup.layout})});const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.error||'Could not save document');let templateFailed=false;if(newDocumentSetup.template){const fd=new FormData();fd.append('template',newDocumentSetup.template);fd.append('group',String(d.id));const t=await api('/api/document-settings/template',{method:'POST',body:fd}).catch(()=>null);templateFailed=!t||!t.ok;}state.selectedIds.clear();newDocumentPhotoIds.clear();state.groups=null;state.groupId=d.id;documentCreateStep='list';toast(templateFailed?'New document saved, but the Word template could not be uploaded. Import it again in Company Branding & Word Template.':'New document saved.');renderGroups();}catch(e){toast(e.message||'Could not save document');}finally{documentCreationPending=false;if(btn.isConnected)updateNewDocumentSave();}}
 async function loadGroups(){const list=document.getElementById('glist');if(!list)return;const r=await api('/api/groups');if(!r.ok){list.innerHTML='<p class="status">Could not load documents.</p>';return;}state.groups=await r.json();if(list.isConnected)renderGroupCards(list,state.groups);}
 function renderGroupCards(list,groups){const rows=sortedDocuments(groups);if(!rows.length){list.innerHTML='<p class="empty">No matching documents.</p>';return;}list.innerHTML=`<ul class="compact-document-list">${rows.map(g=>`<li><div><strong>${esc(g.title)}</strong><span>${g.item_count} PhotoNote${g.item_count===1?'':'s'} · Last Modified: ${esc(documentModifiedLabel(g))}</span></div><button class="btn secondary slim gopen" data-id="${g.id}">Open Document</button></li>`).join('')}</ul>`;list.querySelectorAll('.gopen').forEach(b=>b.onclick=()=>{state.groupId=Number(b.dataset.id);renderGroups();});}
-async function deleteGroup(id){if(!confirm(uiT('Delete this document? The photos themselves are kept.')))return;const r=await api(`/api/groups/${id}/delete`,{method:'POST'});if(r.ok){toast('Document deleted');loadGroups();}else toast('Delete failed');}
+// Delete Document asks for a second tap instead of a browser dialog. The photos themselves are kept.
+async function deleteGroup(id,button){if(!button||button.disabled||!hoaArmed(button,'Tap Again to Delete Document'))return;button.disabled=true;try{const r=await api(`/api/groups/${id}/delete`,{method:'POST'});if(!r.ok)throw Error();toast('Document deleted. The photos themselves are kept.');state.groupId=null;state.groups=null;documentAddTargetId=null;renderGroups();}catch{button.disabled=false;toast('Document could not be deleted');}}
 
 // Condition-score color: green good -> red failed (pins/badges only, never text).
 function scoreColor(score) {
@@ -4668,12 +4740,6 @@ function scoreColor(score) {
   if (score >= 41) return '#c1121f';
   if (score >= 26) return '#8a1a12';
   return '#5a0f0a';
-}
-
-async function deleteGroup(id) {
-  if (!confirm(uiT('Delete this document? The photos themselves are kept.'))) return;
-  const r = await api(`/api/groups/${id}/delete`, { method: 'POST' });
-  if (r.ok) { toast('Document deleted'); loadGroups(); } else toast('Delete failed');
 }
 
 async function renderGroupDetail(id) {
@@ -4730,15 +4796,16 @@ async function renderGroupDetail(id) {
     <div class="status">These photos and captions are the document preview. Edit captions, change their order, or remove anything you do not want included.</div>
     <div id="gpairpreview"></div>
     <div id="gitems" style="margin-top:12px"></div>
-    <button class="btn secondary slim" id="greverse" style="margin-top:10px">Reverse Photo Order</button>
+    <div class="row compact" style="margin-top:10px"><button class="btn secondary slim" id="gaddphotos" type="button">Add Photos</button><button class="btn secondary slim" id="greverse">Reverse Photo Order</button></div>
 
     <section aria-label="Download Document" style="margin-top:24px">
       <div class="formhead">5. Download Document</div>
       <p class="status">Save your title, captions, branding, and layout changes before downloading.</p>
       <div class="row compact">
-        <a class="btn secondary" href="/api/export/pdf?group=${encodeURIComponent(currentGroup.id)}&amp;res=standard&amp;fmt=jpeg" download>Download PDF</a>
-        <a class="btn secondary" href="/api/export/docx?group=${encodeURIComponent(currentGroup.id)}&amp;res=standard&amp;fmt=jpeg" download>Download Word</a>
+        <a class="btn secondary" data-document-download href="/api/export/pdf?group=${encodeURIComponent(currentGroup.id)}&amp;res=standard&amp;fmt=jpeg" download>Download PDF</a>
+        <a class="btn secondary" data-document-download href="/api/export/docx?group=${encodeURIComponent(currentGroup.id)}&amp;res=standard&amp;fmt=jpeg" download>Download Word</a>
       </div>
+      <button class="delete-text" id="gdelete" type="button" style="margin-top:16px">Delete Document</button>
     </section>
 
     ${featureOn('extra_work') ? `<label style="margin-top:16px">Extra Work Records</label>
@@ -4749,6 +4816,9 @@ async function renderGroupDetail(id) {
     `;
   document.getElementById('gback').onclick = () => { state.groupId = null; renderGroups(); };
   document.getElementById('greverse').onclick = reverseItems;
+  document.getElementById('gaddphotos').onclick = () => { documentAddTargetId = currentGroup.id; newDocumentPhotoIds.clear(); newDocumentPhotoTopic = ''; newDocumentPhotoJob = ''; renderGroups(); };
+  document.getElementById('gdelete').onclick = e => deleteGroup(currentGroup.id, e.currentTarget);
+  body.querySelectorAll('[data-document-download]').forEach(a => a.addEventListener('click', watchDownloadFailure));
   document.getElementById('exhibit-open').onclick = () => window.PhotoNotesExhibit.open({group:currentGroup,items:currentGroupItems,photoSrc:capturePhotoSrc,userId:state.me.id});
   const gm = document.getElementById('gotoMap'); if (gm) gm.onclick = () => { state.view = 'map'; state.groupId = null; renderApp(); };
   const pp = document.getElementById('proppdf'); if (pp) pp.onclick = () => exportProposal('pdf');
@@ -5062,8 +5132,13 @@ function renderEwrView(body, data) {
 
 function normalizedDocumentLayout(){return{document_type:'standard',orientation:'portrait',cover_page:false,header:false,footer:false,page_numbers:true,page_number_position:'bottom_right',font:'Arial',photo_layout:'four_per_page',accent:'#1d4ed8',header_text:'',footer_text:'',company_name:'',...(currentGroup&&currentGroup.layout||{})};}
 function documentPhotosPerPage(layout){return({one_per_page:1,two_vertical:2,two_horizontal:2,two_per_page:2,three_vertical:3,three_horizontal:3,four_per_page:4,five_per_page:5,six_per_page:6})[layout?.photo_layout]||4;}
+// Header, footer and company name entered in New Document setup belong to this document and replace the account branding.
+// Blank document values fall back to the account branding, as in PDF and Word downloads.
+const DOCUMENT_BRANDING_KEYS=['company_name','header_text','footer_text'];
+function effectiveDocumentBranding(account,layout){const out={...(account||{})};for(const k of DOCUMENT_BRANDING_KEYS)if(String(layout?.[k]||'').trim())out[k]=String(layout[k]).trim();return out;}
+function documentHasOwnBranding(){const l=normalizedDocumentLayout();return DOCUMENT_BRANDING_KEYS.some(k=>String(l[k]||'').trim());}
 function renderDocumentSetup(){
-  const box=document.getElementById('documentSetup');if(!box)return;const b=currentDocumentSettings.branding||{};
+  const box=document.getElementById('documentSetup');if(!box)return;const b=effectiveDocumentBranding(currentDocumentSettings.branding,normalizedDocumentLayout());
   box.innerHTML=`
     <div class="document-brand-grid">
       <label>Company Name<input id="documentCompanyName" value="${esc(b.company_name||'')}" placeholder="Company name"></label>
@@ -5084,7 +5159,10 @@ function renderDocumentSetup(){
   document.getElementById('documentTemplateFile').onchange=e=>uploadDocumentAsset('template',e.target.files[0]);
   box.querySelectorAll('[data-remove-document-asset]').forEach(button=>button.onclick=()=>removeDocumentAsset(button.dataset.removeDocumentAsset));
 }
-async function saveDocumentBranding(){const payload={company_name:document.getElementById('documentCompanyName').value,header_text:document.getElementById('documentHeaderText').value,footer_text:document.getElementById('documentFooterText').value};const r=await api('/api/document-settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});if(r.ok){const d=await r.json();currentDocumentSettings.branding=d.branding;toast('Branding saved');renderDocumentPreview();}else toast('Branding could not be saved');}
+async function saveDocumentBranding(){const payload={company_name:document.getElementById('documentCompanyName').value,header_text:document.getElementById('documentHeaderText').value,footer_text:document.getElementById('documentFooterText').value};const r=await api('/api/document-settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});if(!r.ok){toast('Branding could not be saved');return;}const d=await r.json();currentDocumentSettings.branding=d.branding;state._copyrightName=String(d.branding?.company_name||'').trim();
+  // A document with its own branding text keeps what was just entered, so the download matches these fields.
+  if(currentGroup&&documentHasOwnBranding()){const layout={...normalizedDocumentLayout()};for(const k of DOCUMENT_BRANDING_KEYS)layout[k]=String(payload[k]||'').trim();const g=await api(`/api/groups/${currentGroup.id}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({layout})});if(!g.ok){toast('Branding saved for the account, but this document could not be updated');renderDocumentPreview();return;}currentGroup.layout=layout;}
+  toast('Branding saved');renderDocumentPreview();}
 async function uploadDocumentAsset(kind,file){if(!file)return;const fd=new FormData();fd.append(kind,file);fd.append('group',String(currentGroup.id));const r=await api(`/api/document-settings/${kind}`,{method:'POST',body:fd});const d=await r.json().catch(()=>({}));if(!r.ok){toast(d.error||'Upload failed');return;}if(kind==='logo'){currentDocumentSettings.logo_path=d.logo_path;currentDocumentSettings.logo_name=d.logo_name;}else{currentDocumentSettings.template_name=d.template_name;currentDocumentSettings.template_ready=true;}toast(kind==='logo'?'Logo uploaded':'Word template imported');renderDocumentSetup();renderDocumentPreview();}
 async function removeDocumentAsset(kind){const r=await api('/api/document-settings/remove-asset',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({kind,group:currentGroup.id})});if(!r.ok){toast('Remove failed');return;}if(kind==='logo'){currentDocumentSettings.logo_path=null;currentDocumentSettings.logo_name=null;}else{currentDocumentSettings.template_name=null;currentDocumentSettings.template_ready=false;}renderDocumentSetup();renderDocumentPreview();toast(kind==='logo'?'Logo removed':'Template removed');}
 function renderDocumentLayoutControls(){const box=document.getElementById('documentLayoutControls');if(!box)return;const l=normalizedDocumentLayout();box.innerHTML=`<div class="document-layout-grid">
@@ -5103,12 +5181,12 @@ function layoutFromControls(){const prior=normalizedDocumentLayout();return{...p
 function renderDocumentPreviewFromControls(){renderDocumentPreview(layoutFromControls());}
 async function saveDocumentLayout(){const layout=layoutFromControls(),r=await api(`/api/groups/${currentGroup.id}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({layout})});if(r.ok){currentGroup.layout=layout;toast('Layout saved');renderDocumentPreview(layout);}else toast('Layout could not be saved');}
 function documentPreviewItems(){return currentGroupItems;}
-function renderDocumentPreview(layoutOverride){const box=document.getElementById('documentPreview');if(!box)return;if(currentDocumentSettings.template_ready&&window.PhotoNotesWordPreview){const target=document.createElement('div');box.replaceChildren(target);window.PhotoNotesWordPreview.render(target,currentGroup.id);return;}const l=layoutOverride||normalizedDocumentLayout(),b=window.PhotoNotesExportPresets?.previewBranding()||currentDocumentSettings.branding||{},perPage=documentPhotosPerPage(l),pages=[],previewItems=documentPreviewItems();const used=new Set(),byId=new Map(previewItems.map(c=>[Number(c.id),c]));let pending=[];const flush=()=>{if(pending.length){pages.push(pending);pending=[];}};for(const c of previewItems){if(used.has(Number(c.id)))continue;const pair=currentGroupPairs.find(p=>(Number(p.before_id)===Number(c.id)||Number(p.after_id)===Number(c.id))&&byId.has(Number(p.before_id))&&byId.has(Number(p.after_id)));if(pair){flush();const page=[byId.get(Number(pair.before_id)),byId.get(Number(pair.after_id))];page.isPair=true;pages.push(page);page.forEach(c=>used.add(Number(c.id)));}else{pending.push(c);used.add(Number(c.id));if(pending.length===perPage)flush();}}flush();const totalPreviewPages=pages.length+(l.cover_page?1:0)||1;let pageNo=0;const chrome=(content)=>{pageNo++;return `<article class="document-preview-page ${l.orientation==='landscape'?'landscape':''}" style="font-family:${esc(l.font)}"><div class="document-preview-header">${l.header?esc(b.header_text||b.company_name||''):''}</div><div class="document-preview-content">${content}</div><div class="document-preview-footer">${l.footer?esc(b.footer_text||''):''}${l.page_numbers&&totalPreviewPages>1?`${l.footer&&b.footer_text?' · ':''}Page ${pageNo}`:''}</div></article>`;};let html='';if(l.cover_page)html+=chrome(`<div class="document-preview-cover">${currentDocumentSettings.logo_path&&window.PhotoNotesExportPresets?.includeLogo()!==false?`<img src="${esc(currentDocumentSettings.logo_path)}" alt="Company logo">`:''}<div class="document-preview-company" style="color:${esc(l.accent)}">${esc(b.company_name||'')}</div><h2>${esc(currentGroup.title||'Untitled Document')}</h2><p>${esc(currentGroup.description||'')}</p></div>`);if(!pages.length)html+=chrome(`<div class="document-preview-empty">Add photos from Organize to preview the document.</div>`);for(const page of pages)html+=chrome(`<div class="document-preview-photos photos-${page.isPair?2:perPage} ${page.isPair?'two-up':''}">${page.map((c,index)=>`<section>${page.isPair?`<strong>${index===0?'BEFORE':'AFTER'}</strong>`:''}<h3>${esc(String(c.photo_title||'').trim()?c.photo_title:'Photo '+(previewItems.indexOf(c)+1))}</h3>${c.photo_path?`<img src="${capturePhotoSrc(c)}" alt="${esc(c.photo_title||'Photo')}">`:''}${photoLocationHtml(c)}<div>${esc(new Date(c.created_at).toLocaleString(uiLocale()))}</div><div>${esc((c.area_tags||[]).join(', '))}</div>${c.gauge_record?.generated_note?'':`<p>${esc(c.note||'No notes')}</p>`}${photoEvidencePreview(c,true)}${window.PhotoNotesCustomFields?.html(c)||''}</section>`).join('')}</div>`);box.innerHTML=html;}
+function renderDocumentPreview(layoutOverride){const box=document.getElementById('documentPreview');if(!box)return;if(currentDocumentSettings.template_ready&&window.PhotoNotesWordPreview){const target=document.createElement('div');box.replaceChildren(target);window.PhotoNotesWordPreview.render(target,currentGroup.id);return;}const l=layoutOverride||normalizedDocumentLayout(),b=effectiveDocumentBranding(window.PhotoNotesExportPresets?.previewBranding()||currentDocumentSettings.branding||{},l),perPage=documentPhotosPerPage(l),pages=[],previewItems=documentPreviewItems();const used=new Set(),byId=new Map(previewItems.map(c=>[Number(c.id),c]));let pending=[];const flush=()=>{if(pending.length){pages.push(pending);pending=[];}};for(const c of previewItems){if(used.has(Number(c.id)))continue;const pair=currentGroupPairs.find(p=>(Number(p.before_id)===Number(c.id)||Number(p.after_id)===Number(c.id))&&byId.has(Number(p.before_id))&&byId.has(Number(p.after_id)));if(pair){flush();const page=[byId.get(Number(pair.before_id)),byId.get(Number(pair.after_id))];page.isPair=true;pages.push(page);page.forEach(c=>used.add(Number(c.id)));}else{pending.push(c);used.add(Number(c.id));if(pending.length===perPage)flush();}}flush();const totalPreviewPages=pages.length+(l.cover_page?1:0)||1;let pageNo=0;const chrome=(content)=>{pageNo++;return `<article class="document-preview-page ${l.orientation==='landscape'?'landscape':''}" style="font-family:${esc(l.font)}"><div class="document-preview-header">${l.header?esc(b.header_text||b.company_name||''):''}</div><div class="document-preview-content">${content}</div><div class="document-preview-footer">${l.footer?esc(b.footer_text||''):''}${l.page_numbers&&totalPreviewPages>1?`${l.footer&&b.footer_text?' · ':''}Page ${pageNo}`:''}</div></article>`;};let html='';if(l.cover_page)html+=chrome(`<div class="document-preview-cover">${currentDocumentSettings.logo_path&&window.PhotoNotesExportPresets?.includeLogo()!==false?`<img src="${esc(currentDocumentSettings.logo_path)}" alt="Company logo">`:''}<div class="document-preview-company" style="color:${esc(l.accent)}">${esc(b.company_name||'')}</div><h2>${esc(currentGroup.title||'Untitled Document')}</h2><p>${esc(currentGroup.description||'')}</p></div>`);if(!pages.length)html+=chrome(`<div class="document-preview-empty">Use Add Photos in Document Contents to preview the document.</div>`);for(const page of pages)html+=chrome(`<div class="document-preview-photos photos-${page.isPair?2:perPage} ${page.isPair?'two-up':''}">${page.map((c,index)=>`<section>${page.isPair?`<strong>${index===0?'BEFORE':'AFTER'}</strong>`:''}<h3>${esc(String(c.photo_title||'').trim()?c.photo_title:'Photo '+(previewItems.indexOf(c)+1))}</h3>${c.photo_path?`<img src="${capturePhotoSrc(c)}" alt="${esc(c.photo_title||'Photo')}">`:''}${photoLocationHtml(c)}<div>${esc(new Date(c.created_at).toLocaleString(uiLocale()))}</div><div>${esc((c.area_tags||[]).join(', '))}</div>${c.urgency==='urgent'?'<div>Urgency: Urgent</div>':''}${c.gauge_record?.generated_note?'':`<p>${esc(c.note||'No notes')}</p>`}${photoEvidencePreview(c,true)}${window.PhotoNotesCustomFields?.html(c)||''}</section>`).join('')}</div>`);box.innerHTML=html;}
 
 function renderTitleView() {
   const box = document.getElementById('titleview');
   if (!box) return;
-  box.innerHTML = `<span class="fieldval big">${esc(currentGroup.title || 'Untitled group')}</span><button class="editlink" id="editTitle">Edit</button>`;
+  box.innerHTML = `<span class="fieldval big">${esc(currentGroup.title || 'Untitled document')}</span><button class="editlink" id="editTitle">Edit</button>`;
   document.getElementById('editTitle').onclick = editTitle;
 }
 function editTitle() {
@@ -5160,7 +5238,7 @@ function renderGroupItems() {
   const box = document.getElementById('gitems');
   if (!box) return;
   const items = currentGroupItems;
-  if (!items.length) { box.innerHTML = '<p class="empty">No photos in this document yet. Go to Organize, select some, and use "Add Selected to a Document".</p>'; return; }
+  if (!items.length) { box.innerHTML = '<p class="empty">No photos in this document yet. Use Add Photos below to choose PhotoNotes.</p>'; return; }
   box.innerHTML = items.map((c, i) => `
     <div class="card">
       <div class="meta">#${i + 1}</div>

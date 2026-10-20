@@ -41,7 +41,7 @@ const browserSuites = [
  'automation-edition-browser','capture-recovery','capture-result','capture-share-metadata','pending-retry','proposal-exhibit','capture-draft-recovery','issue-report-display',
  'complete-help','admin-help','all-edition-help','shared-workflow-parity','location-intelligence',
  'investigation-repairs','linked-photo-records','shared-camera-readers','specialist-scanner-reports','capture-voice','capture-speech-continuation','live-record-notes','precision-measure','paving-quality','concrete-quality','first-use','customer-feedback','issue-completion-browser','issue-result-screenshot','sticky-workflow-menu','batch-annotations-browser','custom-annotation-templates','document-title','create-photo-filters','create-send-dark','document-photo-source','crop-context-browser','testing-dashboard','record-notes-check','speech-session-check','capture-templates','property-incidents',
- 'property-incident-report','property-terminology','photo-markers','send-shortcuts','send-photo-selection','send-photo-filters','review-share-organize','capture-job-library',
+ 'property-incident-report','property-terminology','photo-markers','send-shortcuts','send-photo-selection','send-photo-filters','review-share-organize','capture-job-library','core-workflow-fixes',
  'visual-analysis-browser','photo-requests-browser','qr-codes-browser','related-photos-browser',
  'photo-comments-browser','photo-comments-app','bulk-metadata-browser','custom-fields-browser',
  'saved-views-browser','saved-views-help','property-global-parity','shared-before-after-browser','property-manager-screens'

@@ -88,6 +88,14 @@ registerStripeWebhook(app, { pool });
 app.use('/api/ramo-intake',express.json({limit:'2mb'}));
 app.use(express.json());
 app.use(cookieParser());
+// Downloads open as a page navigation. A failure answers 204 so the app screen stays in place, and a short-lived
+// marker cookie lets the app show its own message instead of raw JSON.
+app.use('/api/export',(req,res,next)=>{
+  if(req.get('sec-fetch-mode')!=='navigate')return next();
+  const json=res.json.bind(res);
+  res.json=body=>{if(res.statusCode>=400&&!res.headersSent){res.setHeader('Set-Cookie','pn_download_failed=1; Max-Age=60; Path=/; SameSite=Lax');return res.status(204).end();}return json(body);};
+  next();
+});
 // Large document exports take turns so several at once cannot run the server out of memory.
 const exportGate=require('./export-gate');
 app.use(exportGate.EXPORT_PATHS,exportGate.createExportGate({max:Math.max(1,Number(process.env.EXPORT_CONCURRENCY)||2)}).middleware);
@@ -2372,6 +2380,11 @@ function cleanDocumentBranding(value) {
     footer_text: ticketText(v.footer_text, 240),
   };
 }
+function documentBranding(account,layout){
+  const out={...account};
+  for(const key of ['company_name','header_text','footer_text'])if(String(layout&&layout[key]||'').trim())out[key]=String(layout[key]).trim();
+  return out;
+}
 function unlinkOwnedAsset(assetPath) { const local=localPhoto(assetPath); if(local)try{fs.unlinkSync(local);}catch(e){} }
 
 app.get('/api/document-settings', requireAuth, async (req,res) => {
@@ -3293,8 +3306,12 @@ async function resolveExport(req) {
   }
   const scope = groupId ? 'group' : (ids ? 'selection' : (area ? 'area' : 'all'));
   if(!groupId){layout.cover_page=false;heading=heading||(rows.length===1?rows[0].photo_title||'Photo Note':'Photo Notes');}
-  const u=(await pool.query(`SELECT document_branding,document_logo_path FROM users WHERE id=$1`,[userId])).rows[0]||{};
+  const u=(await pool.query(`SELECT name,document_branding,document_logo_path FROM users WHERE id=$1`,[userId])).rows[0]||{};
   let branding=cleanDocumentBranding(groupId?u.document_branding:{}),logoPath=groupId?u.document_logo_path||null:null;
+  // Header, footer and company name entered for this document replace the account branding; blank ones fall back to it.
+  if(groupId)branding=documentBranding(branding,layout);
+  const copyrightName=(groupId&&layout.company_name||'').trim()||cleanDocumentBranding(u.document_branding).company_name||String(u.name||'').trim();
+  for(const capture of rows)capture._copyright_name=copyrightName;
   if(req.query.packaging && require('./export-presets').supported(req.user)){
     let input;try{input=JSON.parse(String(req.query.packaging).slice(0,6000));}catch{input={};}
     const {config}=require('./export-presets').normalize(input);
@@ -3357,13 +3374,21 @@ function overlayItemText(item, c) {
     case 'topic': return (c.area_tags || []).length ? `Topic: ${(c.area_tags || []).join(', ')}` : '';
     case 'dims': return c && c.dim_confirmed === false ? '' : fmtDims(c); // unconfirmed AI sizes are never stamped
     case 'defect': return fmtDefect(c) ? `Defect: ${fmtDefect(c)}` : '';
-    case 'copyright': return item.text || `© ${new Date().getFullYear()} Zukor AI. All Rights Reserved.`;
+    case 'copyright': return item.text || copyrightText(c && c._copyright_name);
     default: return item.text || '';
   }
+}
+// A copyright marking without its own text names the customer's company (or the user), never PhotoNotes.
+function copyrightText(name) { const who = String(name || '').trim(); return `© ${new Date().getFullYear()}${who ? ' ' + who : ''}. All Rights Reserved.`; }
+async function copyrightNameForUser(userId) {
+  if (!userId) return '';
+  try { const u = (await pool.query('SELECT name,document_branding FROM users WHERE id=$1', [userId])).rows[0] || {}; return cleanDocumentBranding(u.document_branding).company_name || String(u.name || '').trim(); }
+  catch (e) { return ''; }
 }
 // Burn overlays onto an image buffer of known pixel size via an SVG composite.
 async function burnOverlays(buffer, width, height, overlays, c) {
   if (!Array.isArray(overlays) || !overlays.length || !width || !height) return buffer;
+  if (c && !c._copyright_name && overlays.some(it => it && it.t === 'copyright' && !it.text)) c = { ...c, _copyright_name: await copyrightNameForUser(c.user_id) };
   const parts = [];
   for (const it of overlays) {
     // Rectangle / box annotation: stroked outline, no fill. Geometry and line
@@ -3523,7 +3548,7 @@ app.get('/api/export/pdf', requireAuth, async (req, res) => {
 function documentPhotoDetails(c,pro){
  const fields=c.custom_fields?.length?require('./custom-fields').lines(c):'';
  const defect=pro?fmtDefect(c):'',dimensions=pro?exportDims(c):'';
- return [c.address&&'Location: '+c.address,c.latitude!=null&&c.longitude!=null?`GPS: ${Number(c.latitude).toFixed(5)}, ${Number(c.longitude).toFixed(5)}`:'',(c.area_tags||[]).length?'Topic: '+c.area_tags.join(', '):'',defect&&'Defect: '+defect,dimensions&&'Dimensions: '+dimensions,'Date: '+fmtWhen(c.created_at),c.property_area_name&&'Area: '+c.property_area_name,c.note||'(no note)',fields&&'Additional Details (user-entered)\n'+fields].filter(Boolean);
+ return [c.address&&'Location: '+c.address,c.latitude!=null&&c.longitude!=null?`GPS: ${Number(c.latitude).toFixed(5)}, ${Number(c.longitude).toFixed(5)}`:'',(c.area_tags||[]).length?'Topic: '+c.area_tags.join(', '):'',c.urgency==='urgent'&&'Urgency: Urgent',defect&&'Defect: '+defect,dimensions&&'Dimensions: '+dimensions,'Date: '+fmtWhen(c.created_at),c.property_area_name&&'Area: '+c.property_area_name,c.note||'(no note)',fields&&'Additional Details (user-entered)\n'+fields].filter(Boolean);
 }
 
 async function buildDocumentWord(req,resolved){

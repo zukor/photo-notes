@@ -74,7 +74,7 @@
     'Close Photo Selection':'Cerrar selección de fotos',
     '({count} selected)':'({count} seleccionadas)',
     '{count} selected. Open Select Photos to change your selection.':'{count} seleccionadas. Abre Seleccionar fotos para cambiar la selección.',
-    'Open Select Photos to choose photos, or return to Organize.':'Abre Seleccionar fotos para elegir fotos o vuelve a Organizar.',
+    'Open Select Photos to choose photos, or return to Library.':'Abre Seleccionar fotos para elegir fotos o vuelve a la Biblioteca.',
     'Select the Photo Notes you want to share, download, or include in a customer approval package. Closing this section keeps your selection.':'Selecciona las notas fotográficas que quieras compartir, descargar o incluir en un paquete de aprobación para el cliente. Cerrar esta sección conserva tu selección.',
     'Photos from Job or Topic (optional)':'Fotos de trabajo o tema (opcional)',
     'Use current Organize selection':'Usar la selección actual de Organizar',
@@ -326,7 +326,7 @@
     "Save Layout": "Guardar diseño",
     "Layout saved": "Diseño guardado",
     "Layout could not be saved": "No se pudo guardar el diseño",
-    "Add photos from Organize to preview the document.": "Agregue fotos desde Organizar para ver la vista previa del documento.",
+    "Use Add Photos in Document Contents to preview the document.": "Use Agregar fotos en Contenido del documento para ver la vista previa del documento.",
     "Photo Notes Test Checkout": "Pago de prueba de Photo Notes",
     'Document ready to share': 'Documento listo para compartir',
     'Tap Share to choose an app for this document.': 'Pulse Compartir para elegir una aplicación para este documento.',
@@ -717,7 +717,7 @@
     'Customer / GC Notification': 'Notificación al cliente / contratista general', 'Delete Record': 'Eliminar registro', 'Delete This Item': 'Eliminar este elemento',
     'Description': 'Descripción', 'Dimensions:': 'Dimensiones:', 'Direction': 'Dirección', 'Edit points': 'Editar puntos', 'Export PDF': 'Exportar PDF',
     'Font': 'Fuente', 'Heavy (Impact)': 'Gruesa (Impact)', 'Line Thickness': 'Grosor de línea', 'Measure': 'Medir', 'Measure this site on the Map': 'Medir este sitio en el mapa',
-    'No photos in this document yet. Go to Organize, select some, and use "Add Selected to a Document".': 'Este documento todavía no tiene fotos. Vaya a Organizar, seleccione algunas y use "Agregar la selección a un documento".',
+    'No photos in this document yet. Use Add Photos below to choose PhotoNotes.': 'Este documento todavía no tiene fotos. Use Agregar fotos abajo para elegir PhotoNotes.',
     'No reference object found.': 'No se encontró ningún objeto de referencia.', 'Open in Organize': 'Abrir en Organizar', 'Outline for legibility': 'Contorno para mejorar la legibilidad',
     'Photo Notes': 'Photo Notes', 'Photos': 'Fotos', 'Position (corners)': 'Posición (esquinas)', 'Save PDF': 'Guardar PDF', 'Save Word': 'Guardar Word',
     'Select the original photo, use it as your framing reference, then compare the new photo before saving the pair.': 'Seleccione la foto original, úsela como referencia de encuadre y compare la foto nueva antes de guardar el par.',
@@ -893,6 +893,29 @@
     'Landscaping and Irrigation': 'Jardinería y riego', 'Lighting and Electrical': 'Iluminación y electricidad', 'Signs and Pavement Markings': 'Señales y marcas del pavimento', 'Pools and Recreation': 'Piscinas y recreación',
     'Clubhouse and Buildings': 'Casa club y edificios', 'Mailboxes': 'Buzones', 'Trees': 'Árboles', 'Utilities': 'Servicios públicos', 'General Appearance': 'Aspecto general'
   };
+
+  // Project wording in Capture, Send and Create; document photo and delete controls; urgency; download failures.
+  Object.assign(ES, {
+    'Save to Project': 'Guardar en proyecto', 'Select Existing Project': 'Seleccionar proyecto existente', 'Save to Selected Project': 'Guardar en el proyecto seleccionado',
+    'No Existing Projects': 'No hay proyectos existentes', 'New Project Name': 'Nombre del proyecto nuevo', 'Create Project and Save': 'Crear proyecto y guardar',
+    'Save Without a Project': 'Guardar sin proyecto', 'Enter a project name': 'Ingrese el nombre del proyecto',
+    'Project could not be created. Your capture is still here. You can save without a project.': 'No se pudo crear el proyecto. Su captura sigue aquí. Puede guardarla sin proyecto.',
+    'This capture is already saved. It is now in the selected project.': 'Esta captura ya está guardada. Ahora está en el proyecto seleccionado.',
+    'This capture is already saved. It is no longer in a project.': 'Esta captura ya está guardada. Ya no está en un proyecto.',
+    'The project could not be changed. The capture is saved; change its project in Library.': 'No se pudo cambiar el proyecto. La captura está guardada; cambie su proyecto en la Biblioteca.',
+    'Project': 'Proyecto', 'All Projects': 'Todos los proyectos', 'Filter by Project': 'Filtrar por proyecto',
+    'Project number (optional)': 'Número de proyecto (opcional)', 'Customer (optional)': 'Cliente (opcional)', 'Project address (optional)': 'Dirección del proyecto (opcional)',
+    'Back': 'Volver', 'Saved Views': 'Vistas guardadas', 'Delete PhotoNote': 'Eliminar PhotoNote',
+    'This photo has no saved address. Go back, use Edit Address, then reopen Mark Up Photo.': 'Esta foto no tiene una dirección guardada. Vuelva, use Editar dirección y luego abra de nuevo Marcar foto.',
+    'Urgent': 'Urgente', 'Urgency: Urgent': 'Urgencia: Urgente',
+    'Add Photos': 'Agregar fotos', 'Add Photos to Document': 'Agregar fotos al documento', 'Back to Document': 'Volver al documento', 'Add Selected Photos': 'Agregar fotos seleccionadas',
+    'Photos could not be added to the document': 'No se pudieron agregar las fotos al documento',
+    'Delete Document': 'Eliminar documento', 'Tap Again to Delete Document': 'Toque de nuevo para eliminar el documento',
+    'Document deleted. The photos themselves are kept.': 'Documento eliminado. Las fotos se conservan.', 'Document could not be deleted': 'No se pudo eliminar el documento',
+    'New document saved, but the Word template could not be uploaded. Import it again in Company Branding & Word Template.': 'Se guardó el documento nuevo, pero no se pudo cargar la plantilla de Word. Impórtela de nuevo en Marca de la empresa y plantilla de Word.',
+    'Branding saved for the account, but this document could not be updated': 'La marca se guardó para la cuenta, pero no se pudo actualizar este documento',
+    'The download could not be created. Try again, or choose fewer photos.': 'No se pudo crear la descarga. Inténtelo de nuevo o elija menos fotos.'
+  });
 
   // Property Manager display vocabulary, without changing HOA translations.
   Object.assign(ES, {
