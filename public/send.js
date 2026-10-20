@@ -34,8 +34,9 @@
     var location=current.location;
     var gps=location&&Number.isFinite(location.lat)&&Number.isFinite(location.lng)?location.lat+', '+location.lng:(q('gps')?.textContent||'').trim();
     if(/^-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?$/.test(gps))add('GPS Coordinates',gps);
-    var address=current.address||(q('addr')?.textContent||'').trim();
-    if(address&&!/\.\.\.|^(waiting|getting|looking up|address lookup|address not found|exact address not found|no address|tap retry|you can still)/i.test(address))add('Address',address);
+    // The address box also shows instructions and status messages. Only a saved address is ever sent.
+    var address=typeof state!=='undefined'?current.address:(q('addr')?.textContent||'').trim();
+    if(address&&!/\.\.\.|^(waiting|getting|looking up|address lookup|address not found|exact address not found|no address|tap retry|you can still|enter the address)/i.test(address))add('Address',address);
     add('Notes',noteVal());
     add('Topic',current.area);
     add('Saved Capture Settings',current._captureTemplateName);

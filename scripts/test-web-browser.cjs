@@ -34,15 +34,20 @@ async function saveThroughUI(page){await page.locator('#save').click();}
    if(engine===webkit)await context.route('**/api/**',route=>route.abort('internetdisconnected'));else await context.setOffline(true);
    await page.locator('#photoLib').setInputFiles({name:'offline.jpg',mimeType:'image/jpeg',buffer:image});
    const offlineNote='Offline recovery '+name+' '+Date.now();await page.locator('#note').fill(offlineNote);await saveThroughUI(page);
-   await page.waitForFunction(()=>bgQueue.length===1);await page.reload({waitUntil:'domcontentloaded'});await page.locator('#loginErr').waitFor();
-   assert(/connection/i.test(await page.locator('#loginErr').textContent()));
+   await page.waitForFunction(()=>bgQueue.length===1);await page.reload({waitUntil:'domcontentloaded'});
+   // With no connection the app opens Capture with the last confirmed account, and the photo stays queued.
+   await page.waitForFunction(()=>typeof state!=='undefined'&&state.offlineSession===true&&!!document.getElementById('save'));
+   assert.equal(await page.locator('#loginBtn').count(),0);assert.equal(await page.evaluate(async()=>(await PhotoNotesQueue.list()).length),1);
    if(engine===webkit)await context.unroute('**/api/**');else await context.setOffline(false);await page.reload({waitUntil:'domcontentloaded'});await page.locator('#profileButton').waitFor();await page.waitForFunction(()=>bgQueue.length===0);
    const captures=await (await context.request.get(base+'/api/captures')).json();assert.equal(captures.filter(x=>x.note===offlineNote).length,1);
    // Lose the response after the server commits, then retry the exact same capture identity.
    if(await page.locator('#tabCapture').isVisible())await page.locator('#tabCapture').click();
-   await page.evaluate(()=>{const original=window.fetch;window.__restoreAcceptanceFetch=()=>window.fetch=original;let dropped=false;window.fetch=async(input,options)=>{const response=await original(input,options);if(!dropped&&String(input)==='/api/captures'&&options?.method==='POST'){dropped=true;throw new TypeError('Simulated response lost after server commit');}return response;};});
+   // Uploads use XMLHttpRequest for progress, so the response is dropped at the network layer.
+   // Playwright cannot forward an XMLHttpRequest file upload body through route.fetch() in WebKit (the photo part is dropped),
+   // so in WebKit the first attempt is cut off before it reaches the server; Chromium covers the committed-then-lost case.
+   let dropped=false;const loseResponse=async route=>{if(dropped||route.request().method()!=='POST')return route.fallback();dropped=true;if(engine===webkit)return route.abort('connectionreset');await route.fetch();return route.abort('connectionreset');};await page.route('**/api/captures',loseResponse);
    await page.locator('#photoLib').setInputFiles({name:'retry.jpg',mimeType:'image/jpeg',buffer:image});const retryNote='Lost response '+name+' '+Date.now();await page.locator('#note').fill(retryNote);await saveThroughUI(page);
-   await page.waitForFunction(()=>bgQueue.length===1&&bgQueue[0].tries>0);await page.evaluate(()=>window.__restoreAcceptanceFetch());await page.evaluate(()=>restoreOfflineQueue());await page.waitForFunction(()=>bgQueue.length===0);
+   await page.waitForFunction(()=>bgQueue.length===1&&bgQueue[0].tries>0);await page.unroute('**/api/captures',loseResponse);await page.evaluate(()=>restoreOfflineQueue());await page.waitForFunction(()=>bgQueue.length===0);
    const retried=await (await context.request.get(base+'/api/captures')).json();assert.equal(retried.filter(x=>x.note===retryNote).length,1);
    await page.reload({waitUntil:'domcontentloaded'});await page.locator('#profileButton').waitFor();
    await page.locator('#profileButton').click();await page.locator('#installHelp').click();await page.locator('#installHelpDialog').waitFor({state:'visible'});

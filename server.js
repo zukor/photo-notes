@@ -8,6 +8,7 @@ const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 const express = require('express');
+const compression = require('compression');
 const cookieParser = require('cookie-parser');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
@@ -58,6 +59,8 @@ fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
 const app = express();
 app.disable('x-powered-by');
+// Railway runs one proxy in front of the app: trust it for the client address and https links.
+app.set('trust proxy', 1);
 app.use((req, res, next) => {
   const cspNonce=crypto.randomBytes(18).toString('base64');
   res.locals.cspNonce=cspNonce;
@@ -74,8 +77,8 @@ app.use((req, res, next) => {
     speechFrame ? "frame-ancestors 'self'" : "frame-ancestors 'none'",
     "form-action 'self'",
     "object-src 'none'",
-    `script-src 'self' 'nonce-${cspNonce}' https://unpkg.com`,
-    "style-src 'self' 'unsafe-inline' https://unpkg.com",
+    `script-src 'self' 'nonce-${cspNonce}'`,
+    "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob: https://*.arcgisonline.com https://api.mapbox.com https://tile.openstreetmap.org",
     "connect-src 'self' https://*.arcgisonline.com https://api.mapbox.com wss://streaming.assemblyai.com",
     "font-src 'self' data:"
@@ -88,21 +91,42 @@ registerStripeWebhook(app, { pool });
 app.use('/api/ramo-intake',express.json({limit:'2mb'}));
 app.use(express.json());
 app.use(cookieParser());
+// Downloads open as a page navigation. A failure answers 204 so the app screen stays in place, and a short-lived
+// marker cookie lets the app show its own message instead of raw JSON.
+app.use('/api/export',(req,res,next)=>{
+  if(req.get('sec-fetch-mode')!=='navigate')return next();
+  const json=res.json.bind(res);
+  res.json=body=>{if(res.statusCode>=400&&!res.headersSent){res.setHeader('Set-Cookie','pn_download_failed=1; Max-Age=60; Path=/; SameSite=Lax');return res.status(204).end();}return json(body);};
+  next();
+});
 // Large document exports take turns so several at once cannot run the server out of memory.
 const exportGate=require('./export-gate');
 app.use(exportGate.EXPORT_PATHS,exportGate.createExportGate({max:Math.max(1,Number(process.env.EXPORT_CONCURRENCY)||2)}).middleware);
 
+// Text responses (scripts, styles, JSON, pages) are compressed. Photos, media, archives,
+// documents and downloads are already compressed or streamed, so they are sent unchanged.
+const UNCOMPRESSED_TYPES=/^(image\/(?!svg)|video\/|audio\/|font\/woff|application\/(zip|x-zip|gzip|x-gzip|octet-stream|pdf|vnd\.openxmlformats|vnd\.ms-|msword))/i;
+app.use(compression({filter(req,res){
+  if(/^\/(uploads|thumbs)\//.test(req.path)||res.getHeader('Content-Disposition'))return false;
+  if(UNCOMPRESSED_TYPES.test(String(res.getHeader('Content-Type')||'')))return false;
+  return compression.filter(req,res);
+}}));
+// A versioned asset (?v=) never changes at that address, so browsers may keep it for a year.
+// These headers are set only when a real file is sent, never on an error or the page fallback.
+const IMMUTABLE_CACHE='public, max-age=31536000, immutable';
+function versionedRequest(req){return !!req&&Object.prototype.hasOwnProperty.call(req.query||{},'v');}
+function versionedStaticHeaders(res){if(versionedRequest(res.req))res.setHeader('Cache-Control',IMMUTABLE_CACHE);}
 // ---- static frontend + uploaded photos ----
 // Uploads from a request that failed are removed unless the database already uses them.
 app.use((req,res,next)=>{res.on('finish',()=>{if(res.statusCode<400)return;const files=[req.file,...(Array.isArray(req.files)?req.files:Object.values(req.files||{}).flat())].filter(f=>f&&f.path);if(files.length)void removeUnreferencedUploads(files.map(f=>'/uploads/'+path.basename(f.path))).catch(()=>{});});next();});
 app.get('/vendor/jszip.min.js',(req,res)=>res.sendFile(require.resolve('jszip/dist/jszip.min.js')));
 app.get('/vendor/docx-preview.min.js',(req,res)=>res.sendFile(path.join(path.dirname(require.resolve('docx-preview')),'docx-preview.min.js')));
-app.get('/vendor/html2canvas.min.js', (req, res) => res.sendFile(require.resolve('html2canvas/dist/html2canvas.min.js')));
+app.get('/vendor/html2canvas.min.js', (req, res) => res.sendFile(require.resolve('html2canvas/dist/html2canvas.min.js'),versionedRequest(req)?{headers:{'Cache-Control':IMMUTABLE_CACHE}}:{}));
 app.get('/sw.js', (req, res) => {
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.sendFile(path.join(__dirname, 'public', 'sw.js'));
 });
-app.use('/vendor/leaflet',express.static(path.dirname(require.resolve('leaflet/dist/leaflet.js'))));
+app.use('/vendor/leaflet',express.static(path.dirname(require.resolve('leaflet/dist/leaflet.js')),{setHeaders:versionedStaticHeaders}));
 // A stable additive build key refreshes preset consumers without changing shared edition asset counters.
 app.get(['/', '/index.html'], (req,res,next) => {
   try {
@@ -110,22 +134,28 @@ app.get(['/', '/index.html'], (req,res,next) => {
     res.set('Cache-Control','no-store').type('html').send(html);
   } catch { next(); }
 });
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, 'public'),{setHeaders:versionedStaticHeaders}));
 app.use('/uploads/customer-feedback',requireAuth,async(req,res)=>{
  try{const file=path.basename(req.path);const row=(await pool.query('SELECT user_id FROM issue_reports WHERE screenshot_path=$1 AND feedback_category IS NOT NULL',['/uploads/customer-feedback/'+file])).rows[0];if(!row||(row.user_id!==req.user.id&&!require('./customer-feedback').canReview(req.user)))return res.status(404).end();res.set('Cache-Control','private, no-store');res.sendFile(path.join(UPLOAD_DIR,'.private-feedback',file),{dotfiles:'allow'});}catch{res.status(500).end();}
 });
+// Photos and files are private: a signed-in user who can see a record using the file, or a signed expiring link.
+const uploadAccess=require('./upload-access').createUploadAccess({pool,secret:SESSION_SECRET});
+app.use('/thumbs',uploadAccess.middleware(requireAuth));
 require('./thumbnails').register(app,{uploadDir:UPLOAD_DIR,sharp});
 app.use('/uploads',(req,res,next)=>{try{if(decodeURIComponent(req.path).split('/').includes('.private-feedback'))return res.status(404).end();next();}catch{res.status(400).end();}});
+app.use('/uploads',uploadAccess.middleware(requireAuth));
 // Uploaded files are user content. Serve them sandboxed so no file can run
 // script on this site, and download anything that is not an image or audio.
 app.use('/uploads', express.static(UPLOAD_DIR,{setHeaders(res,file){
+  // Photos are private to the signed-in browser. A versioned address may be reused for a day.
+  res.setHeader('Cache-Control',versionedRequest(res.req)?'private, max-age=86400':'private, no-cache');
   res.setHeader('Content-Security-Policy',"sandbox; default-src 'none'; img-src 'self' data:; media-src 'self'; style-src 'unsafe-inline'");
   if(!/\.(jpe?g|png|webp|gif|heic|heif|m4a|mp4|mov|webm|ogg|wav|mp3|aac|caf)$/i.test(file))res.setHeader('Content-Disposition','attachment');
 }}));
 
 // ---- auth ----
 function setSession(res, user) {
-  const token = jwt.sign({ id: user.id, email: user.email, name: user.name, role: user.role, plan: user.plan || 'free', pro_type:normalizeProType(user.pro_type), pv:passwordVersion(user.password_hash) }, SESSION_SECRET, { expiresIn: '30d' });
+  const token = jwt.sign({ id: user.id, email: user.email, name: user.name, role: user.role, plan: user.plan || 'free', pro_type:normalizeProType(user.pro_type), pv:passwordVersion(user.password_hash), sid:SessionSecurity.newSessionId() }, SESSION_SECRET, { expiresIn: '30d' });
   res.cookie(COOKIE, token, {
     httpOnly: true,
     sameSite: 'lax',
@@ -138,14 +168,19 @@ function passwordVersion(hash){return hash?crypto.createHash('sha256').update(St
 function readUser(req) {
   const token = req.cookies && req.cookies[COOKIE];
   if (!token) return null;
-  try { return jwt.verify(token, SESSION_SECRET); } catch { return null; }
+  try { const session=jwt.verify(token, SESSION_SECRET); if(session&&typeof session==='object')Object.defineProperty(session,'key',{value:SessionSecurity.sessionKey(session,token)}); return session; } catch { return null; }
 }
+// Signing out ends that one session on the server. Other devices stay signed in.
+const SessionSecurity=require('./session-security');
+const sessionRevocation=SessionSecurity.createSessionRevocation({pool});
 async function requireAuth(req, res, next) {
   const session = readUser(req);
   if (!session || !session.id) return res.status(401).json({ error: 'not authenticated' });
+  if (sessionRevocation.revokedHere(session.key)) return res.status(401).json({ error: 'not authenticated' });
   try {
-    const user=(await pool.query('SELECT id,email,name,role,plan,pro_type,active,is_testing_manager,password_hash FROM users WHERE id=$1',[session.id])).rows[0];
-    if(!user||!user.active)return res.status(401).json({error:'not authenticated'});
+    const user=(await pool.query(`SELECT id,email,name,role,plan,pro_type,active,is_testing_manager,password_hash,${sessionRevocation.sql} FROM users WHERE id=$1`,[session.id,session.key])).rows[0];
+    if(!user||!user.active||user.session_revoked)return res.status(401).json({error:'not authenticated'});
+    delete user.session_revoked;
     // Sessions from before this check have no fingerprint and stay valid until they expire.
     if(session.pv&&session.pv!==passwordVersion(user.password_hash))return res.status(401).json({error:'not authenticated'});
     delete user.password_hash;req.user=user;
@@ -595,24 +630,22 @@ async function photoDhash(localPath){
 function deviceCaptureTime(value,now=Date.now()){const t=Date.parse(String(value||''));if(!Number.isFinite(t)||t>now+5*60*1000||t<now-30*24*60*60*1000||now-t<2*60*1000)return null;return new Date(t).toISOString();}
 function hashDistance(a,b){if(!a||!b||a.length!==b.length)return 99;let x=BigInt('0x'+a)^BigInt('0x'+b),n=0;while(x){n+=Number(x&1n);x>>=1n;}return n;}
 
-// Failed sign-ins per email. Stops password guessing without locking out anyone who types correctly.
-const LOGIN_FAILURE_LIMIT=10,LOGIN_FAILURE_WINDOW_MS=15*60*1000,loginFailures=new Map();
-function loginBlocked(email,now=Date.now()){const list=(loginFailures.get(email)||[]).filter(t=>now-t<LOGIN_FAILURE_WINDOW_MS);if(list.length)loginFailures.set(email,list);else loginFailures.delete(email);return list.length>=LOGIN_FAILURE_LIMIT;}
-function noteLoginFailure(email,now=Date.now()){const list=(loginFailures.get(email)||[]).filter(t=>now-t<LOGIN_FAILURE_WINDOW_MS);list.push(now);loginFailures.set(email,list);if(loginFailures.size>10000)for(const key of loginFailures.keys()){loginFailures.delete(key);if(loginFailures.size<=5000)break;}}
+// Failed sign-ins per email and per network address. Stops password guessing without locking out anyone who types correctly.
+const loginLimiter=SessionSecurity.createLoginLimiter();
 app.post('/api/login', async (req, res) => {
   try {
     const b = req.body || {};
     const email = String(b.email || '').toLowerCase().trim();
     const password = String(b.password || '');
     if (!email || !password) return res.status(400).json({ error: 'email and password required' });
-    if (loginBlocked(email)) return res.status(429).json({ error: 'Too many wrong passwords. Wait 15 minutes, then try again.' });
+    if (loginLimiter.blocked(email,req.ip)) return res.status(429).json({ error: 'Too many wrong passwords. Wait 15 minutes, then try again.' });
     const { rows } = await pool.query(`SELECT * FROM users WHERE email = $1 AND active = true`, [email]);
     const user = rows[0];
     if (!user || !user.password_hash || !(await bcrypt.compare(password, user.password_hash))) {
-      noteLoginFailure(email);
+      loginLimiter.failure(email,req.ip);
       return res.status(401).json({ error: 'wrong email or password' });
     }
-    loginFailures.delete(email);
+    loginLimiter.success(email);
     await pool.query(`UPDATE users SET last_login_at = now() WHERE id = $1`, [user.id]);
     setSession(res, user);
     logEvent(user.id, 'login', {});
@@ -623,8 +656,13 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
-app.post('/api/logout', (req, res) => {
+app.post('/api/logout', async (req, res) => {
+  const session = readUser(req);
   res.clearCookie(COOKIE);
+  if (session && session.id) {
+    try { await sessionRevocation.revoke(session.key, Number(session.exp) * 1000); }
+    catch (e) { console.error('[logout]', e && e.message); return res.status(503).json({ ok: false, error: 'You were signed out on this device, but the server could not confirm it. Please try again.' }); }
+  }
   res.json({ ok: true });
 });
 
@@ -658,10 +696,12 @@ async function featureAllowed(userId, feature) {
 }
 
 app.get('/api/me', requireAuth, async (req, res) => {
+  try {
   res.setHeader('X-Photo-Notes-Upload-Receipts','1');
   const row = (await pool.query(`SELECT name,email,role,plan,pro_type,feature_access,edition_access,is_tester,is_testing_manager FROM users WHERE id=$1 AND active=true`, [req.user.id])).rows[0];
   if (!row) return res.status(401).json({ error:'not authenticated' });
   res.json({ authed:true, id:req.user.id, ramo_intake_access:require('./ramo-intake').allowed(req.user), is_super_admin:isSuperAdmin(req.user), is_tester:row.is_tester, is_testing_manager:row.is_testing_manager, edition_access:editionAccess(row), name:row.name, role:row.role, email:row.email, plan:row.plan === 'pro' ? 'pro' : 'free', pro_type:normalizeProType(row.pro_type), feature_access:await currentFeatureAccess(req.user.id) });
+  } catch (e) { console.error('[me]', e && e.message); res.status(503).json({ error:'Account could not be checked. Please try again.' }); }
 });
 
 const photoFollowUps=require('./photo-follow-ups');
@@ -720,6 +760,8 @@ function geographicAreaLabel(data, lat, lng) {
   const region = a.state || a.region || '';
   return [...new Set([feature, locality, region].filter(Boolean))].join(', ') || null;
 }
+// A slow address service gives up after a few seconds instead of holding the request open.
+const GEOCODE_TIMEOUT_MS = 5000;
 async function reverseGeocode(lat, lng) {
   if (lat == null || lng == null) return null;
   const GOOGLE_KEY = process.env.GOOGLE_MAPS_API_KEY || '';
@@ -733,7 +775,7 @@ async function reverseGeocode(lat, lng) {
       featureTypes: 'PointAddress,StreetAddress',
       preferredLabelValues: 'localCity',
     });
-    const esri = await fetch(`https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/reverseGeocode?${esriParams}`);
+    const esri = await fetch(`https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/reverseGeocode?${esriParams}`, { signal: AbortSignal.timeout(GEOCODE_TIMEOUT_MS) });
     if (esri.ok) {
       const data = await esri.json();
       const a = data.address || {};
@@ -747,7 +789,7 @@ async function reverseGeocode(lat, lng) {
     }
     if (GOOGLE_KEY) {
       const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${GOOGLE_KEY}`;
-      const r = await fetch(url);
+      const r = await fetch(url, { signal: AbortSignal.timeout(GEOCODE_TIMEOUT_MS) });
       if (r.ok) {
         const d = await r.json();
         const first = d.status === 'OK' && d.results && d.results[0];
@@ -767,7 +809,7 @@ async function reverseGeocode(lat, lng) {
     // whenever OpenStreetMap has one for that point (the default reverse call
     // often came back with only the street name).
     const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=18&addressdetails=1&lat=${lat}&lon=${lng}`;
-    const r = await fetch(url, { headers: { 'User-Agent': 'PhotoNotes/1.0 (turcotte@zukor.com)' } });
+    const r = await fetch(url, { headers: { 'User-Agent': 'PhotoNotes/1.0 (turcotte@zukor.com)' }, signal: AbortSignal.timeout(GEOCODE_TIMEOUT_MS) });
     if (!r.ok) return null;
     const data = await r.json();
     const a = data.address || {};
@@ -784,7 +826,7 @@ async function reverseGeocode(lat, lng) {
     // feature and return a named forest, river, park, neighborhood, or locality
     // instead. Never use the nearest road as a substitute for the photo site.
     const areaUrl = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=14&addressdetails=1&namedetails=1&extratags=1&lat=${lat}&lon=${lng}`;
-    const areaResponse = await fetch(areaUrl, { headers: { 'User-Agent': 'PhotoNotes/1.0 (turcotte@zukor.com)' } });
+    const areaResponse = await fetch(areaUrl, { headers: { 'User-Agent': 'PhotoNotes/1.0 (turcotte@zukor.com)' }, signal: AbortSignal.timeout(GEOCODE_TIMEOUT_MS) });
     if (!areaResponse.ok) return null;
     return geographicAreaLabel(await areaResponse.json(), lat, lng);
   } catch {
@@ -793,12 +835,24 @@ async function reverseGeocode(lat, lng) {
 }
 
 // ---- captures (all scoped to the logged-in user) ----
+// Everything the save needs from the photo file, read once: fingerprint, size, dimensions, likeness hash and camera direction.
+async function capturePhotoFacts(file){
+  const facts={sha256:null,bytes:null,dims:null,perceptualHash:null,direction:null};
+  try{const buffer=await fs.promises.readFile(file.path);facts.sha256=crypto.createHash('sha256').update(buffer).digest('hex');facts.bytes=buffer.length;}
+  catch(e){console.error('[evidence.fingerprint]',e&&e.message);}
+  [facts.dims,facts.perceptualHash,facts.direction]=await Promise.all([imageDims(file.path),photoDhash(file.path),require('./camera-direction').readCameraDirection(file.path)]);
+  return facts;
+}
 app.post('/api/captures', requireAuth, validateCaptureAccount, upload.single('photo'), async (req, res) => {
   let receipt;
   try {
-    receipt=await beginCaptureReceipt(req,pool);
+    // File work happens before the database transaction opens, so a slow photo never holds a connection or lock.
+    const photoFacts=req.file?await capturePhotoFacts(req.file):null;
+    receipt=await beginCaptureReceipt(req,pool,{photoSha256:photoFacts&&photoFacts.sha256});
     if(receipt.replay){if(req.file)await fs.promises.unlink(req.file.path).catch(()=>{});return res.json(receipt.replay);}
     const db=receipt.db;
+    // The account row read when the receipt started (or by sign-in) supplies the plan and edition for this save.
+    const captureAccount=receipt.user||req.user;
     const b = req.body || {};
     if(b.incident_id&&!req.get('X-Photo-Notes-Capture-Id'))throw Object.assign(new Error('Incident photos require a durable capture identity'),{status:400});
     if(b.incident_id&&b.follow_up_occurrence_id)throw Object.assign(new Error('Complete the current photographic workflow before starting another'),{status:400});
@@ -824,15 +878,15 @@ app.post('/api/captures', requireAuth, validateCaptureAccount, upload.single('ph
     if(jobId){const ok=(await db.query(`SELECT 1 FROM jobs WHERE id=$1 AND user_id=$2`,[jobId,req.user.id])).rowCount;if(!ok)jobId=null;}
 
     let pw = null, ph = null;
-    if (req.file) { const d = await imageDims(req.file.path); if (d) { pw = d.w; ph = d.h; } }
-    const perceptualHash=req.file?await photoDhash(req.file.path):null;
+    if (photoFacts && photoFacts.dims) { pw = photoFacts.dims.w; ph = photoFacts.dims.h; }
+    const perceptualHash=photoFacts?photoFacts.perceptualHash:null;
     let duplicateMatches=[];
     if(perceptualHash){const prior=(await db.query(`SELECT id,photo_path,created_at,perceptual_hash FROM captures WHERE user_id=$1 AND perceptual_hash IS NOT NULL ORDER BY created_at DESC LIMIT 500`,[req.user.id])).rows;duplicateMatches=prior.map(x=>({...x,distance:hashDistance(perceptualHash,x.perceptual_hash)})).filter(x=>x.distance<=6).slice(0,5);}
 
     // Pro-tier dimension fields. Only stored for Pro users; ignored otherwise.
     let dLenIn = null, dLenUnit = null, dWidIn = null, dWidUnit = null, dDepthIn = null, dShape = null, dArea = null;
     let dSource = null, dConf = null, dAi = null, dConfirmed = true;
-    const isProUser = await currentPlan(req.user.id,db) === 'pro';
+    const isProUser = captureAccount.plan === 'pro';
     if (isProUser) {
       const lenUnit = b.dim_length_unit === 'in' ? 'in' : 'ft';
       const widUnit = b.dim_width_unit === 'in' ? 'in' : 'ft';
@@ -867,11 +921,10 @@ app.post('/api/captures', requireAuth, validateCaptureAccount, upload.single('ph
       }
     }
 
-    const captureProduct=await currentProduct(req.user.id,db);
+    const captureProduct=isProUser?normalizeProType(captureAccount.pro_type):'basic';
     let securityIssueType=null;
     if(b.security_issue_type){
-      const captureUser=(await db.query('SELECT plan,pro_type FROM users WHERE id=$1',[req.user.id])).rows[0];
-      if(!captureUser||currentEdition(captureUser)!=='security')throw Object.assign(new Error('Issue Type requires Security Issue Reporter Pro'),{status:403});
+      if(currentEdition(captureAccount)!=='security')throw Object.assign(new Error('Issue Type requires Security Issue Reporter Pro'),{status:403});
       if(!['Security Issue','Maintenance Issue','Urgent Issue','Emergency'].includes(b.security_issue_type))throw Object.assign(new Error('Choose a valid Issue Type'),{status:400});
       securityIssueType=b.security_issue_type;
     }
@@ -900,16 +953,14 @@ app.post('/api/captures', requireAuth, validateCaptureAccount, upload.single('ph
     const { rows } = await db.query(q, vals);
     const saved = rows[0];
     if(req.file&&require('./location-intelligence').EDITIONS.has(captureProduct)){
-      const direction=await require('./camera-direction').readCameraDirection(req.file.path);
+      const direction=photoFacts.direction;
       if(direction){await db.query(`UPDATE captures SET camera_direction=$1,camera_direction_source=$2 WHERE id=$3`,[direction.degrees,direction.source,saved.id]);saved.camera_direction=direction.degrees;saved.camera_direction_source=direction.source;}
     }
     {const acc=Number(b.location_accuracy_m);if(lat!=null&&lng!=null&&b.location_accuracy_m!=null&&b.location_accuracy_m!==''&&Number.isFinite(acc)&&acc>=0&&acc<100000){await db.query('UPDATE captures SET location_accuracy_m=$1 WHERE id=$2',[acc,saved.id]);saved.location_accuracy_m=acc;}}
     if(customValues.length){saved.custom_fields=customValues;await db.query('UPDATE captures SET custom_fields=$1 WHERE id=$2',[JSON.stringify(customValues),saved.id]);}
-    if (req.file) {
+    if (req.file && photoFacts.sha256) {
       try {
-        const buffer=fs.readFileSync(req.file.path);
-        const hash=crypto.createHash('sha256').update(buffer).digest('hex');
-        await db.query(`INSERT INTO capture_evidence (capture_id,user_id,original_sha256,original_bytes,original_name) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (capture_id) DO NOTHING`, [saved.id,req.user.id,hash,buffer.length,ticketText(req.file.originalname,255)]);
+        await db.query(`INSERT INTO capture_evidence (capture_id,user_id,original_sha256,original_bytes,original_name) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (capture_id) DO NOTHING`, [saved.id,req.user.id,photoFacts.sha256,photoFacts.bytes,ticketText(req.file.originalname,255)]);
       } catch (e) { console.error('[evidence.fingerprint]',e&&e.message); }
     }
     await recordCaptureHistory(req.user.id,saved.id,'captured',{photo:!!req.file,gps:lat!=null&&lng!=null,address:!!address,custom_fields:saved.custom_fields||[]},db);
@@ -929,7 +980,7 @@ app.post('/api/captures', requireAuth, validateCaptureAccount, upload.single('ph
       const company=await hoaCompanyForUser(req.user.id,false,db),communityId=Number(b.hoa_community_id);
       if(company&&await hoaOwnsCommunity(company.id,communityId,db)){const areaId=await require('./property-areas').validate(db,company.id,communityId,b.property_area_id);await db.query('UPDATE captures SET property_area_id=$1,property_community_id=$2 WHERE id=$3',[areaId,communityId,saved.id]);saved.property_area_id=areaId;saved.property_community_id=communityId;}
     }
-    if(!documentOnly&&['hoa','property'].includes(await currentProduct(req.user.id,db))&&b.hoa_community_id&&!b.follow_up_occurrence_id&&!b.incident_id){
+    if(!documentOnly&&['hoa','property'].includes(captureProduct)&&b.hoa_community_id&&!b.follow_up_occurrence_id&&!b.incident_id){
       const company=await hoaCompanyForUser(req.user.id,false,db),communityId=Number(b.hoa_community_id);
       if(company&&await hoaOwnsCommunity(company.id,communityId,db)){
         const itemType=HOA_TYPES.includes(b.hoa_item_type)?b.hoa_item_type:'maintenance',priority=HOA_PRIORITIES.includes(b.hoa_priority)?b.hoa_priority:'routine',stage=HOA_STAGES.includes(b.hoa_photo_stage)?b.hoa_photo_stage:'initial';
@@ -939,7 +990,7 @@ app.post('/api/captures', requireAuth, validateCaptureAccount, upload.single('ph
         const assigneeMember=b.hoa_assignee_user_id?await hoaTeamMember(company.id,b.hoa_assignee_user_id,db):await hoaTeamMemberByName(company.id,autoAssignee,db);
         maintenance_item=(await db.query(`INSERT INTO hoa_maintenance_items(company_id,community_id,capture_id,created_by,title,item_type,description,area,priority,target_date,primary_assignee,directed_to,budget_source,photo_stage,primary_assignee_user_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,[company.id,communityId,saved.id,req.user.id,title,itemType,ticketText(b.note,4000),ticketText(b.hoa_area,100)||'Maintenance',priority,b.hoa_target_date||null,assigneeMember?assigneeMember.name:autoAssignee,ticketText(b.hoa_directed_to,200),HOA_BUDGETS.includes(b.hoa_budget_source)?b.hoa_budget_source:'unassigned',stage,assigneeMember?assigneeMember.id:null])).rows[0];
         await db.query(`INSERT INTO hoa_item_photos(item_id,capture_id,photo_stage) VALUES($1,$2,$3)`,[maintenance_item.id,saved.id,stage]);
-        if(await currentProduct(req.user.id,db)==='property'){const areaId=await require('./property-areas').validate(db,company.id,communityId,b.property_area_id);await db.query('UPDATE captures SET property_area_id=$1,property_community_id=$2 WHERE id=$3',[areaId,communityId,saved.id]);await db.query('UPDATE hoa_maintenance_items SET property_area_id=$1 WHERE id=$2',[areaId,maintenance_item.id]);saved.property_area_id=areaId;maintenance_item.property_area_id=areaId;}
+        if(captureProduct==='property'){const areaId=await require('./property-areas').validate(db,company.id,communityId,b.property_area_id);await db.query('UPDATE captures SET property_area_id=$1,property_community_id=$2 WHERE id=$3',[areaId,communityId,saved.id]);await db.query('UPDATE hoa_maintenance_items SET property_area_id=$1 WHERE id=$2',[areaId,maintenance_item.id]);saved.property_area_id=areaId;maintenance_item.property_area_id=areaId;}
         await hoaHistory(maintenance_item.id,req.user.id,'created',{priority,item_type:itemType,photo_stage:stage},db);
         const notifiedAssignee=await hoaNotifyAssignee(maintenance_item.id,maintenance_item.primary_assignee_user_id,req.user.id,title,db);
         await hoaNotifyCompany(company.id,maintenance_item.id,`${itemType==='information'?'New Information Request':'New Maintenance Item'}: ${title}`,notifiedAssignee?[req.user.id,maintenance_item.primary_assignee_user_id]:req.user.id,db);
@@ -975,6 +1026,10 @@ app.post('/api/captures', requireAuth, validateCaptureAccount, upload.single('ph
   } finally { if(receipt)receipt.release(); }
 });
 
+// Library lists leave out stored AI responses and the duplicate-check hash. No screen reads them
+// from a list, and they were the largest part of each row.
+const LIBRARY_LIST_OMIT=['dim_ai','defect_ai','perceptual_hash'];
+function libraryRows(rows){for(const row of rows)for(const key of LIBRARY_LIST_OMIT)delete row[key];return rows;}
 app.get('/api/captures', requireAuth, async (req, res) => {
   try {
     const { area } = req.query;
@@ -987,7 +1042,7 @@ app.get('/api/captures', requireAuth, async (req, res) => {
     }
     await libraryProjects.attach(pool,req.user.id,rows);
     await LinkedPhotoEvidence.attach(pool,req.user.id,await currentProduct(req.user.id),rows);
-    res.json(rows);
+    res.json(libraryRows(rows));
   } catch (err) {
     console.error('[captures.list]', err);
     res.status(500).json({ error: 'failed to list captures' });
@@ -1076,7 +1131,7 @@ app.get('/api/captures/search', requireAuth, async (req,res)=>{
     if(req.query.has_photo==='1')where.push(`c.photo_path IS NOT NULL`);
     const rows=(await pool.query(`SELECT c.*,h.community_id duplicate_community_id,h.area duplicate_category,h.item_type duplicate_record_type,(SELECT name FROM property_areas WHERE id=c.property_area_id) property_area_name,j.name job_name,j.job_number FROM captures c LEFT JOIN jobs j ON j.id=c.job_id LEFT JOIN LATERAL (SELECT community_id,area,item_type FROM hoa_maintenance_items WHERE capture_id=c.id LIMIT 1) h ON true WHERE ${where.join(' AND ')} ORDER BY c.created_at DESC LIMIT 500`,vals)).rows;
     await libraryProjects.attach(pool,req.user.id,rows);
-    res.json(rows);
+    res.json(libraryRows(rows));
   }catch(err){console.error('[captures.search]',err);res.status(500).json({error:'search failed'});}
 });
 
@@ -1170,8 +1225,8 @@ app.post('/api/hoa/notifications/read',requireAuth,requireHoa,async(req,res)=>{t
 function photoGps(b={}){const lat=Number(b.latitude),lng=Number(b.longitude),acc=Number(b.location_accuracy_m),ok=b.latitude!=null&&b.latitude!==''&&b.longitude!=null&&b.longitude!==''&&Number.isFinite(lat)&&Number.isFinite(lng)&&Math.abs(lat)<=90&&Math.abs(lng)<=180&&!(lat===0&&lng===0);return {lat:ok?lat:null,lng:ok?lng:null,accuracy:ok&&b.location_accuracy_m!=null&&b.location_accuracy_m!==''&&Number.isFinite(acc)&&acc>=0&&acc<100000?acc:null};}
 // Work link: a private page for the person doing the work. Shows the issue, the photo, a map pin and directions
 // back to the spot the photo was taken, live distance and direction on site, and accepts completion photos.
-async function workLinkRow(token){return (await pool.query(`SELECT q.*,i.title,i.description,i.priority,i.target_date,i.area,i.capture_id,i.company_id,i.community_id,i.property_area_id,(SELECT name FROM property_areas WHERE id=i.property_area_id) property_area_name,c.name community_name,c.address community_address FROM hoa_completion_photo_requests q JOIN hoa_maintenance_items i ON i.id=q.item_id JOIN hoa_communities c ON c.id=i.community_id WHERE q.token=$1`,[String(token||'').slice(0,100)])).rows[0];}
-function workLinkMessage(res,status,title,text){res.status(status).send(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>${escXml(title)}</title><link rel="stylesheet" href="/help.css?v=376"><script src="/help-catalog.js?v=495" defer></script><script src="/help.js?v=470" defer></script><style>body{font:17px Arial,Helvetica,sans-serif;color:#000;text-align:left;padding:30px 20px;max-width:640px;margin:auto}</style></head><body><h1>${escXml(title)}</h1><p>${escXml(text)}</p></body></html>`);}
+async function workLinkRow(token){return (await pool.query(`SELECT q.*,i.title,i.description,i.priority,i.target_date,i.area,i.capture_id,i.company_id,i.community_id,i.property_area_id,(SELECT name FROM property_areas WHERE id=i.property_area_id) property_area_name,c.name community_name,c.address community_address FROM hoa_completion_photo_requests q JOIN hoa_maintenance_items i ON i.id=q.item_id JOIN hoa_communities c ON c.id=i.community_id JOIN users u ON u.id=q.created_by AND u.active=true WHERE q.token=$1`,[String(token||'').slice(0,100)])).rows[0];}
+function workLinkMessage(res,status,title,text){res.status(status).send(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>${escXml(title)}</title><link rel="stylesheet" href="/help.css?v=376"><script src="/help-catalog.js?v=496" defer></script><script src="/help.js?v=470" defer></script><style>body{font:17px Arial,Helvetica,sans-serif;color:#000;text-align:left;padding:30px 20px;max-width:640px;margin:auto}</style></head><body><h1>${escXml(title)}</h1><p>${escXml(text)}</p></body></html>`);}
 app.get('/completion-photos/:token',async(req,res)=>{try{const row=await workLinkRow(req.params.token);if(!row)return workLinkMessage(res,404,'Work Link Not Found','Check that the whole link was copied, or ask the property manager to send it again.');if(row.status!=='open'||new Date(row.expires_at)<new Date())return workLinkMessage(res,410,'Work Link Closed',row.status==='submitted'?'Completion photos were already sent with this link. Thank you.':'This work link is no longer open. Ask the property manager for a new link.');res.set('Cache-Control','no-store');res.sendFile(path.join(__dirname,'public','work-spot.html'));}catch(e){res.status(500).send('The work link could not load.');}});
 app.get('/api/public/work-spot/:token',async(req,res)=>{try{const row=await workLinkRow(req.params.token);if(!row)return res.status(404).json({error:'Work link not found.'});if(row.status!=='open'||new Date(row.expires_at)<new Date())return res.status(410).json({error:'This work link is no longer open. Ask the property manager for a new link.'});
  const photos=(await pool.query(`SELECT c.id,c.photo_path,c.note,c.photo_title,c.created_at,c.latitude,c.longitude,c.location_accuracy_m,c.indoor_building,c.indoor_floor,c.indoor_suite,c.indoor_room,c.floor_plan_id,c.floor_plan_x,c.floor_plan_y,c.subject_latitude,c.subject_longitude,c.location_description,c.camera_direction,c.address,COALESCE(p.photo_stage,'initial') photo_stage FROM captures c LEFT JOIN hoa_item_photos p ON p.capture_id=c.id AND p.item_id=$1 WHERE c.photo_path IS NOT NULL AND (c.id=$2 OR (p.item_id=$1 AND p.photo_stage IN ('initial','inspection','follow_up'))) ORDER BY (c.id=$2) DESC,c.created_at LIMIT 6`,[row.item_id,row.capture_id||0])).rows;
@@ -1180,7 +1235,9 @@ app.get('/api/public/work-spot/:token',async(req,res)=>{try{const row=await work
  if(!row.opened_at){await pool.query('UPDATE hoa_completion_photo_requests SET opened_at=now() WHERE id=$1 AND opened_at IS NULL',[row.id]);await hoaHistory(row.item_id,null,'work_link_opened',{recipient_name:row.recipient_name});}
  res.set('Cache-Control','no-store');
  const FP=require('./property-floor-plans'),inside=photos.find(p=>p.floor_plan_id&&p.floor_plan_x!=null)||photos.find(p=>FP.indoorText(p)),plan=inside&&inside.floor_plan_id?(await pool.query('SELECT * FROM property_floor_plans WHERE id=$1',[inside.floor_plan_id])).rows[0]:null;
- res.json({indoor:inside?{text:FP.indoorText(inside),plan_url:plan?plan.photo_path:null,plan_label:plan?FP.planLabel(plan):null,x:inside.floor_plan_x==null?null:Number(inside.floor_plan_x),y:inside.floor_plan_y==null?null:Number(inside.floor_plan_y)}:null,property:{name:row.community_name,address:row.community_address||null,area:row.property_area_name||null},item:{title:row.title,description:row.description||'',category:row.area||null,priority:row.priority||null,target_date:row.target_date?String(row.target_date instanceof Date?row.target_date.toISOString():row.target_date).slice(0,10):null},recipient_name:row.recipient_name||null,instructions:row.instructions||null,expires_at:row.expires_at,target,location_description:withGps&&withGps.location_description||null,camera_direction:withGps&&withGps.camera_direction!=null?Number(withGps.camera_direction):null,photos:photos.map(p=>({url:p.photo_path,stage:p.photo_stage,note:p.note||p.photo_title||'',taken_at:p.created_at,camera_direction:p.camera_direction!=null?Number(p.camera_direction):null}))});
+ // The person doing the work has no account, so photo links are signed and expire with the work link.
+ const linkUrl=photoPath=>uploadAccess.signedUrl(photoPath,new Date(row.expires_at));
+ res.json({indoor:inside?{text:FP.indoorText(inside),plan_url:plan?linkUrl(plan.photo_path):null,plan_label:plan?FP.planLabel(plan):null,x:inside.floor_plan_x==null?null:Number(inside.floor_plan_x),y:inside.floor_plan_y==null?null:Number(inside.floor_plan_y)}:null,property:{name:row.community_name,address:row.community_address||null,area:row.property_area_name||null},item:{title:row.title,description:row.description||'',category:row.area||null,priority:row.priority||null,target_date:row.target_date?String(row.target_date instanceof Date?row.target_date.toISOString():row.target_date).slice(0,10):null},recipient_name:row.recipient_name||null,instructions:row.instructions||null,expires_at:row.expires_at,target,location_description:withGps&&withGps.location_description||null,camera_direction:withGps&&withGps.camera_direction!=null?Number(withGps.camera_direction):null,photos:photos.map(p=>({url:linkUrl(p.photo_path),stage:p.photo_stage,note:p.note||p.photo_title||'',taken_at:p.created_at,camera_direction:p.camera_direction!=null?Number(p.camera_direction):null}))});
 }catch(e){console.error('[work-spot]',e);res.status(500).json({error:'The work link could not load.'});}});
 app.post('/completion-photos/:token',(req,res,next)=>require('./external-photo-submission').externalPhotoUpload(UPLOAD_DIR)(req,res,async error=>{if(error){await require('./external-photo-submission').removeUploads(req.files);return res.status(400).send('Use at most 8 photographs, up to 25 MB each.');}next();}),async(req,res)=>{
  const {inspectPhotos,saveExternalPhoto,removeUploads}=require('./external-photo-submission');
@@ -1199,14 +1256,14 @@ app.post('/completion-photos/:token',(req,res,next)=>require('./external-photo-s
   await hoaNotifyCompany(q.company_id,q.item_id,'Completion photos submitted',0,db);
   await db.query('COMMIT');committed=true;
   if(/json/.test(req.get('accept')||''))return res.json({ok:true,photo_count:req.files.length});
-  res.send('<!doctype html><meta name="viewport" content="width=device-width"><link rel="stylesheet" href="/help.css?v=376"><script src="/help-catalog.js?v=495" defer></script><script src="/help.js?v=470" defer></script><style>body{font-family:Arial;color:#000;text-align:left;padding:30px 20px}</style><h1>Photos received</h1><p>Thank you. The completion photos were added to the maintenance record.</p>');
+  res.send('<!doctype html><meta name="viewport" content="width=device-width"><link rel="stylesheet" href="/help.css?v=376"><script src="/help-catalog.js?v=496" defer></script><script src="/help.js?v=470" defer></script><style>body{font-family:Arial;color:#000;text-align:left;padding:30px 20px}</style><h1>Photos received</h1><p>Thank you. The completion photos were added to the maintenance record.</p>');
  }catch(e){if(db&&!committed)await db.query('ROLLBACK').catch(()=>{});await removeUploads(req.files);res.status(400).send('Photos could not be submitted. Use supported photographs and try again.');}
  finally{if(db)db.release();}
 });
 
 // ---- jobs: the organizing parent for captures ----
 libraryProjects.register(app,{pool,requireAuth});
-app.get('/api/jobs',requireAuth,async(req,res)=>{try{const rows=(await pool.query(`SELECT j.*,COUNT(c.id)::int photo_count FROM jobs j LEFT JOIN captures c ON c.user_id=j.user_id AND (c.job_id=j.id OR EXISTS(SELECT 1 FROM capture_project_memberships m WHERE m.capture_id=c.id AND m.job_id=j.id AND m.user_id=j.user_id)) WHERE j.user_id=$1 GROUP BY j.id ORDER BY (j.status='active') DESC,j.created_at DESC`,[req.user.id])).rows;res.json(rows);}catch(e){console.error('[jobs.list]',e);res.status(500).json({error:'jobs failed'});}});
+app.get('/api/jobs',requireAuth,async(req,res)=>{try{const rows=(await pool.query(`SELECT j.*,COALESCE(n.photo_count,0)::int photo_count FROM jobs j LEFT JOIN (SELECT job_id,COUNT(*) photo_count FROM (SELECT c.job_id,c.id capture_id FROM captures c WHERE c.user_id=$1 AND c.job_id IS NOT NULL UNION SELECT m.job_id,m.capture_id FROM capture_project_memberships m JOIN captures c ON c.id=m.capture_id AND c.user_id=$1 WHERE m.user_id=$1) linked GROUP BY job_id) n ON n.job_id=j.id WHERE j.user_id=$1 ORDER BY (j.status='active') DESC,j.created_at DESC`,[req.user.id])).rows;res.json(rows);}catch(e){console.error('[jobs.list]',e);res.status(500).json({error:'jobs failed'});}});
 app.post('/api/jobs',requireAuth,async(req,res)=>{try{const b=req.body||{},name=String(b.name||'').trim();if(!name)return res.status(400).json({error:'name required'});const status=['active','completed','archived'].includes(b.status)?b.status:'active';const row=(await pool.query(`INSERT INTO jobs(user_id,name,job_number,customer,address,status,start_date,end_date) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,[req.user.id,name,ticketText(b.job_number),ticketText(b.customer),ticketText(b.address,500),status,b.start_date||null,b.end_date||null])).rows[0];logEvent(req.user.id,'job_create',{});res.json(row);}catch(e){console.error('[jobs.create]',e);res.status(500).json({error:'job failed'});}});
 app.post('/api/jobs/:id',requireAuth,async(req,res)=>{try{const id=Number(req.params.id),b=req.body||{},sets=[],vals=[];for(const [k,max] of [['name',200],['job_number',100],['customer',200],['address',500]])if(typeof b[k]==='string'){vals.push(ticketText(b[k],max));sets.push(`${k}=$${vals.length}`);}if(['active','completed','archived'].includes(b.status)){vals.push(b.status);sets.push(`status=$${vals.length}`);}for(const k of ['start_date','end_date'])if(b[k]!==undefined){vals.push(b[k]||null);sets.push(`${k}=$${vals.length}`);}if(!sets.length)return res.status(400).json({error:'nothing to update'});vals.push(id,req.user.id);const row=(await pool.query(`UPDATE jobs SET ${sets.join(',')} WHERE id=$${vals.length-1} AND user_id=$${vals.length} RETURNING *`,vals)).rows[0];if(!row)return res.status(404).json({error:'not found'});res.json(row);}catch(e){console.error('[jobs.update]',e);res.status(500).json({error:'job update failed'});}});
 app.delete('/api/jobs/:id',requireAuth,async(req,res)=>{try{const id=Number(req.params.id);if(!Number.isInteger(id)||id<1)return res.status(400).json({error:'Invalid job'});const result=await pool.query('DELETE FROM jobs WHERE id=$1 AND user_id=$2 RETURNING id',[id,req.user.id]);if(!result.rowCount)return res.status(404).json({error:'Job not found'});logEvent(req.user.id,'job_deleted',{job_id:id});res.json({ok:true});}catch(e){console.error('[jobs.delete]',e);res.status(500).json({error:'Job could not be deleted'});}});
@@ -1221,7 +1278,7 @@ app.get('/api/approvals',requireAuth,async(req,res)=>{try{res.json((await pool.q
 app.post('/api/approvals',requireAuth,async(req,res)=>{try{const b=req.body||{},ids=Array.isArray(b.ids)?b.ids.map(Number).filter(Number.isInteger).slice(0,100):[];if(!ids.length)return res.status(400).json({error:'select photos'});if(!(await ownsCaptures(req.user.id,ids)))return res.status(403).json({error:'invalid photos'});let jobId=Number.isInteger(Number(b.job_id))?Number(b.job_id):null;if(jobId&&!(await pool.query(`SELECT 1 FROM jobs WHERE id=$1 AND user_id=$2`,[jobId,req.user.id])).rowCount)return res.status(403).json({error:'invalid job'});const token=crypto.randomBytes(24).toString('base64url'),title=ticketText(b.title,200)||'Photo Review',expires=new Date(Date.now()+14*86400000);const row=(await pool.query(`INSERT INTO approval_packages(user_id,job_id,token,title,message,capture_ids,expires_at) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *`,[req.user.id,jobId,token,title,ticketText(b.message,1000),ids,expires])).rows[0];logEvent(req.user.id,'approval_package',{count:ids.length});res.json({...row,url:`${req.protocol}://${req.get('host')}/review/${token}`});}catch(e){console.error('[approvals.create]',e);res.status(500).json({error:'approval failed'});}});
 app.get('/review/:token/photos/:id',async(req,res)=>{
   try{
-    const p=(await pool.query(`SELECT user_id,capture_ids FROM approval_packages WHERE token=$1 AND expires_at>now()`,[req.params.token])).rows[0];
+    const p=(await pool.query(`SELECT p.user_id,p.capture_ids FROM approval_packages p JOIN users u ON u.id=p.user_id AND u.active=true WHERE p.token=$1 AND p.expires_at>now()`,[req.params.token])).rows[0];
     const id=Number(req.params.id);if(!p||!p.capture_ids.map(Number).includes(id))return res.sendStatus(404);
     const c=(await pool.query('SELECT * FROM captures WHERE id=$1 AND user_id=$2',[id,p.user_id])).rows[0];
     const image=c&&localPhoto(c.photo_path);if(!image)return res.sendStatus(404);
@@ -1229,8 +1286,8 @@ app.get('/review/:token/photos/:id',async(req,res)=>{
     res.setHeader('Cache-Control','private, no-store');res.type('jpeg').send(rendered.buffer);
   }catch(e){res.sendStatus(500);}
 });
-app.get('/review/:token',async(req,res)=>{try{const p=(await pool.query(`SELECT * FROM approval_packages WHERE token=$1`,[req.params.token])).rows[0];if(!p)return res.status(404).send('Review link not found.');if(new Date(p.expires_at)<new Date())return res.status(410).send('This review link has expired.');const photos=(await pool.query(`SELECT id,photo_path,note,address,created_at FROM captures WHERE user_id=$1 AND id=ANY($2) ORDER BY created_at`,[p.user_id,p.capture_ids])).rows;const cards=photos.map(c=>`<article><img src="/review/${encodeURIComponent(p.token)}/photos/${c.id}" alt="Project photo"><p><b>${escXml(c.address||'')}</b></p><p>${escXml(c.note||'')}</p><small>${new Date(c.created_at).toLocaleString()}</small></article>`).join('');res.send(`<!doctype html><html><head><meta name="viewport" content="width=device-width"><link rel="stylesheet" href="/help.css?v=376"><script src="/help-catalog.js?v=495" defer></script><script src="/help.js?v=470" defer></script><title>${escXml(p.title)}</title><style>body{font-family:Arial;margin:auto;max-width:850px;padding:20px;color:#111}article{border:1px solid #ccc;border-radius:10px;padding:12px;margin:18px 0}img{width:100%;max-height:650px;object-fit:contain}textarea,input,button{box-sizing:border-box;width:100%;padding:12px;margin:6px 0;font-size:16px}button{background:#2455d9;color:white;border:0;border-radius:8px;font-weight:bold}.changes{background:#555}.status{padding:12px;background:#eef3ff}</style></head><body><h1>${escXml(p.title)}</h1>${p.message?`<p>${escXml(p.message)}</p>`:''}<div class="status">Status: ${escXml(p.status)}</div>${cards}${p.status==='pending'?`<form method="post" action="/review/${p.token}"><input name="customer_name" placeholder="Your name" required><textarea name="comment" placeholder="Comment (optional)"></textarea><button name="decision" value="approved">Approve Photos</button><button class="changes" name="decision" value="changes_requested">Request Changes</button></form>`:`<p><b>Response received. Thank you.</b></p>`}</body></html>`);}catch(e){res.status(500).send('Review unavailable.');}});
-app.post('/review/:token',express.urlencoded({extended:false}),async(req,res)=>{try{const decision=req.body.decision==='approved'?'approved':'changes_requested';const row=(await pool.query(`UPDATE approval_packages SET status=$1,customer_name=$2,customer_comment=$3,responded_at=now() WHERE token=$4 AND status='pending' AND expires_at>now() RETURNING token`,[decision,ticketText(req.body.customer_name,200),ticketText(req.body.comment,1000),req.params.token])).rows[0];if(!row)return res.status(400).send('This review can no longer be changed.');res.redirect(`/review/${row.token}`);}catch(e){res.status(500).send('Response could not be saved.');}});
+app.get('/review/:token',async(req,res)=>{try{const p=(await pool.query(`SELECT p.* FROM approval_packages p JOIN users u ON u.id=p.user_id AND u.active=true WHERE p.token=$1`,[req.params.token])).rows[0];if(!p)return res.status(404).send('Review link not found.');if(new Date(p.expires_at)<new Date())return res.status(410).send('This review link has expired.');const photos=(await pool.query(`SELECT id,photo_path,note,address,created_at FROM captures WHERE user_id=$1 AND id=ANY($2) ORDER BY created_at`,[p.user_id,p.capture_ids])).rows;const cards=photos.map(c=>`<article><img src="/review/${encodeURIComponent(p.token)}/photos/${c.id}" alt="Project photo"><p><b>${escXml(c.address||'')}</b></p><p>${escXml(c.note||'')}</p><small>${new Date(c.created_at).toLocaleString()}</small></article>`).join('');res.send(`<!doctype html><html><head><meta name="viewport" content="width=device-width"><link rel="stylesheet" href="/help.css?v=376"><script src="/help-catalog.js?v=496" defer></script><script src="/help.js?v=470" defer></script><title>${escXml(p.title)}</title><style>body{font-family:Arial;margin:auto;max-width:850px;padding:20px;color:#111}article{border:1px solid #ccc;border-radius:10px;padding:12px;margin:18px 0}img{width:100%;max-height:650px;object-fit:contain}textarea,input,button{box-sizing:border-box;width:100%;padding:12px;margin:6px 0;font-size:16px}button{background:#2455d9;color:white;border:0;border-radius:8px;font-weight:bold}.changes{background:#555}.status{padding:12px;background:#eef3ff}</style></head><body><h1>${escXml(p.title)}</h1>${p.message?`<p>${escXml(p.message)}</p>`:''}<div class="status">Status: ${escXml(p.status)}</div>${cards}${p.status==='pending'?`<form method="post" action="/review/${p.token}"><input name="customer_name" placeholder="Your name" required><textarea name="comment" placeholder="Comment (optional)"></textarea><button name="decision" value="approved">Approve Photos</button><button class="changes" name="decision" value="changes_requested">Request Changes</button></form>`:`<p><b>Response received. Thank you.</b></p>`}</body></html>`);}catch(e){res.status(500).send('Review unavailable.');}});
+app.post('/review/:token',express.urlencoded({extended:false}),async(req,res)=>{try{const decision=req.body.decision==='approved'?'approved':'changes_requested';const row=(await pool.query(`UPDATE approval_packages SET status=$1,customer_name=$2,customer_comment=$3,responded_at=now() WHERE token=$4 AND status='pending' AND expires_at>now() AND EXISTS(SELECT 1 FROM users u WHERE u.id=approval_packages.user_id AND u.active=true) RETURNING token`,[decision,ticketText(req.body.customer_name,200),ticketText(req.body.comment,1000),req.params.token])).rows[0];if(!row)return res.status(400).send('This review can no longer be changed.');res.redirect(`/review/${row.token}`);}catch(e){res.status(500).send('Response could not be saved.');}});
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 app.get('/api/release',async(req,res)=>{try{await pool.query('SELECT 1');res.set('Cache-Control','no-store').json({ok:true,commit:process.env.RAILWAY_GIT_COMMIT_SHA||null,deployment:process.env.RAILWAY_DEPLOYMENT_ID||null});}catch{res.status(503).json({ok:false});}});
@@ -1263,6 +1320,7 @@ app.post('/api/measure', requireAuth, upload.single('photo'), async (req, res) =
     const refType = String((req.body && req.body.reference_type) || 'ruler_12in');
     const refLenIn = MeasureCheck.referenceLength(refType, req.body && req.body.reference_length_in);
     if (!refLenIn) { cleanup(); return res.status(400).json({ error: 'reference length required' }); }
+    if (!(await SessionSecurity.takeAiAllowance(pool, req.user.id, 'measure'))) { cleanup(); return res.status(429).json({ ok: false, error: 'daily_limit', ai_error: 'daily_limit', ai_message: SessionSecurity.aiLimitMessage('measure') }); }
     const refLabel = refType === 'ruler_12in' ? 'a standard 12-inch ruler'
       : refType === 'tape_25ft' ? 'a tape measure extended to a known length'
       : 'a reference object';
@@ -1881,6 +1939,7 @@ app.post('/api/admin/issues/:id/mark-tester-notified',requireAdmin,async(req,res
 });
 
 app.get('/api/admin/health', requireAdmin, async (req, res) => {
+  try {
   const checkedAt = new Date().toISOString();
   const services = [];
   const started = Date.now();
@@ -1915,14 +1974,17 @@ app.get('/api/admin/health', requireAdmin, async (req, res) => {
     services,
     issue_counts:issueCounts,
   });
+  } catch (e) { console.error('[admin.health]', e && e.message); res.status(503).json({ error:'Health check is temporarily unavailable. Please try again.' }); }
 });
 
 // ---- AI defect classification (Pro): classify one saved capture ----
+const CLASSIFY_BATCH_LIMIT = 50;
 async function classifyCapture(userId, id) {
   const row = (await pool.query(`SELECT * FROM captures WHERE id = $1 AND user_id = $2`, [id, userId])).rows[0];
   if (!row) return { error: 'not_found' };
   const local = localPhoto(row.photo_path);
   if (!local) return { error: 'no_photo' };
+  if (!(await SessionSecurity.takeAiAllowance(pool, userId, 'classify'))) return { error: 'daily_limit', ai_error: 'daily_limit', ai_message: SessionSecurity.aiLimitMessage('classify') };
   const prompt =
 `You are analyzing a pavement photo for a paving contractor. Classify the primary visible defect as one of: pothole, alligator_cracking, transverse_cracking, longitudinal_cracking, rutting, raveling, edge_cracking, joint_failure, utility_cut_failure, surface_deformation, drainage_damage, base_failure, other, none.
 Rate severity as low, medium, or high using visible width, depth, and extent cues.
@@ -1948,7 +2010,7 @@ app.post('/api/captures/:id/classify', requireAuth, async (req, res) => {
     const id = parseInt(req.params.id, 10);
     if (!Number.isInteger(id)) return res.status(400).json({ error: 'bad id' });
     const r = await classifyCapture(req.user.id, id);
-    if (r.error) return res.status(r.error === 'not_found' ? 404 : 200).json({ ok: false, error: r.error, ai_error:r.ai_error, ai_message:r.ai_message });
+    if (r.error) return res.status(r.error === 'not_found' ? 404 : r.error === 'daily_limit' ? 429 : 200).json({ ok: false, error: r.error, ai_error:r.ai_error, ai_message:r.ai_message });
     res.json({ ok: true, capture: r.capture });
   } catch (err) { console.error('[classify]', err); res.status(200).json({ ok: false, error: 'classify_unavailable' }); }
 });
@@ -1958,11 +2020,14 @@ app.post('/api/captures/classify-batch', requireAuth, async (req, res) => {
     if (!(await pavingMeasurementsAllowed(req.user.id))) return res.status(403).json({ error: 'feature unavailable' });
     const ids = Array.isArray(req.body && req.body.ids) ? req.body.ids.map(n => parseInt(n, 10)).filter(Number.isInteger) : [];
     if (!ids.length) return res.status(400).json({ error: 'no ids' });
+    // Each photo is a paid AI request, so one request handles a limited number.
+    if (ids.length > CLASSIFY_BATCH_LIMIT) return res.status(400).json({ error: `Choose ${CLASSIFY_BATCH_LIMIT} photos or fewer at a time.` });
     const results = [];
     // sequential (not parallel) per spec so we never hammer the vision API
     for (const id of ids) {
       const r = await classifyCapture(req.user.id, id);
       results.push({ id, ok: !r.error, error: r.error || null, ai_error:r.ai_error, ai_message:r.ai_message, capture: r.capture || null });
+      if (r.error === 'daily_limit') break;
     }
     res.json({ ok: true, results });
   } catch (err) { console.error('[classify-batch]', err); res.status(500).json({ error: 'batch failed' }); }
@@ -2042,6 +2107,8 @@ async function removeUnreferencedUploads(paths){
   catch(e){console.error('[uploads.references]',e&&e.message);return;} // When unsure, keep the file.
   for(const p of unique){if(still.has(p))continue;const local=localPhoto(p);if(local)await fs.promises.unlink(local).catch(()=>{});const thumb=require('./thumbnails').thumbPathFor(UPLOAD_DIR,p);if(thumb)await fs.promises.unlink(thumb).catch(()=>{});}
 }
+// The "-orig" backup name rotate and crop use for a photo, so a stray backup is never left behind.
+function originalBackupPath(photoPath){const m=/^\/uploads\/([^/\\]+?)(\.[A-Za-z0-9]+)$/.exec(String(photoPath||''));return m&&!m[1].endsWith('-orig')?`/uploads/${m[1]}-orig${m[2]}`:null;}
 function quoteIdent(name){return '"'+String(name).replace(/"/g,'""')+'"';}
 
 // ---- delete selected captures ----
@@ -2053,7 +2120,8 @@ app.post('/api/captures/delete', requireAuth, async (req, res) => {
     if (!ids.length) return res.status(400).json({ error: 'no ids provided' });
     const { rows } = await pool.query(`DELETE FROM captures WHERE id = ANY($1) AND user_id = $2 RETURNING photo_path, photo_original_path`, [ids, req.user.id]);
     // Files can be shared (for example a Camera Reading saved to the Library), so only remove files nothing else uses.
-    await removeUnreferencedUploads(rows.flatMap(r=>[r.photo_path,r.photo_original_path]));
+    // The "-orig" backup and thumbnails go too (removeUnreferencedUploads also removes each file's thumbnail).
+    await removeUnreferencedUploads(rows.flatMap(r=>[r.photo_path,r.photo_original_path,originalBackupPath(r.photo_path)]));
     logEvent(req.user.id, 'delete', { count: rows.length });
     res.json({ ok: true, deleted: rows.length });
   } catch (err) {
@@ -2063,6 +2131,26 @@ app.post('/api/captures/delete', requireAuth, async (req, res) => {
 });
 
 // ---- re-run geocoding on the user's own captures ----
+// Nominatim allows one request per second and one photo can need two lookups, so background
+// work spaces photos about two seconds apart and runs in small batches.
+const REGEOCODE_INLINE_MAX = 3, REGEOCODE_BATCH = 10, REGEOCODE_SPACING_MS = 2100;
+const regeocodeJobs = new Map();
+async function regeocodeRows(userId, rows, spacingMs) {
+  let updated = 0, unchanged = 0, unresolved = 0;
+  for (let start = 0; start < rows.length; start += REGEOCODE_BATCH) {
+    for (const c of rows.slice(start, start + REGEOCODE_BATCH)) {
+      const began = Date.now();
+      const addr = await reverseGeocode(c.latitude, c.longitude);
+      if (!addr) unresolved++;
+      else if (String(addr).trim().toLowerCase() === String(c.address || '').trim().toLowerCase()) unchanged++;
+      else { await pool.query(`UPDATE captures SET address = $1 WHERE id = $2 AND user_id = $3`, [addr, c.id, userId]); updated++; }
+      const wait = spacingMs - (Date.now() - began);
+      if (wait > 0) await new Promise(resolve => setTimeout(resolve, wait));
+    }
+  }
+  logEvent(userId, 'fix_addresses', { updated, unchanged, unresolved, total: rows.length });
+  return { updated, unchanged, unresolved, total: rows.length };
+}
 app.post('/api/regeocode', requireAuth, async (req, res) => {
   try {
     const onlyIds = Array.isArray(req.body && req.body.ids)
@@ -2076,16 +2164,15 @@ app.post('/api/regeocode', requireAuth, async (req, res) => {
       ({ rows } = await pool.query(
         `SELECT id, latitude, longitude, address FROM captures WHERE user_id = $1 AND latitude IS NOT NULL AND longitude IS NOT NULL`, [req.user.id]));
     }
-    let updated = 0, unchanged = 0, unresolved = 0;
-    for (const c of rows) {
-      const addr = await reverseGeocode(c.latitude, c.longitude);
-      if (!addr) { unresolved++; continue; }
-      if (String(addr).trim().toLowerCase() === String(c.address || '').trim().toLowerCase()) { unchanged++; continue; }
-      await pool.query(`UPDATE captures SET address = $1 WHERE id = $2 AND user_id = $3`, [addr, c.id, req.user.id]);
-      updated++;
-    }
-    logEvent(req.user.id, 'fix_addresses', { updated, unchanged, unresolved, total: rows.length });
-    res.json({ ok: true, updated, unchanged, unresolved, total: rows.length });
+    // A few selected photos are answered right away. Larger sets continue after the response,
+    // so one request never waits on hundreds of address lookups.
+    if (rows.length <= REGEOCODE_INLINE_MAX) return res.json({ ok: true, ...await regeocodeRows(req.user.id, rows, 0) });
+    if (regeocodeJobs.has(req.user.id)) return res.json({ ok: true, queued: true, running: true, total: regeocodeJobs.get(req.user.id) });
+    regeocodeJobs.set(req.user.id, rows.length);
+    res.json({ ok: true, queued: true, total: rows.length });
+    regeocodeRows(req.user.id, rows, REGEOCODE_SPACING_MS)
+      .catch(err => console.error('[regeocode.background]', err && err.message))
+      .finally(() => regeocodeJobs.delete(req.user.id));
   } catch (err) {
     console.error('[regeocode]', err);
     res.status(500).json({ error: 'regeocode failed' });
@@ -2222,24 +2309,34 @@ app.get('/api/captures/:id/stamped', requireAuth, async (req, res) => {
 });
 
 // ---- rotate a capture's photo (own only) ----
+// Rotate, crop and restore take turns per photo, so two quick taps never interleave their file writes.
+const photoEditLocks=new Map();
+async function withPhotoEditLock(id,work){const prior=photoEditLocks.get(id)||Promise.resolve();let release;const mine=new Promise(r=>release=r);const chained=prior.then(()=>mine);photoEditLocks.set(id,chained);await prior;try{return await work();}finally{release();if(photoEditLocks.get(id)===chained)photoEditLocks.delete(id);}}
+// Writes beside the target and renames over it, so a reader never sees a half-written photo.
+function writeFileAtomic(target,data){const temp=`${target}.${process.pid}.${crypto.randomBytes(6).toString('hex')}.tmp`;try{fs.writeFileSync(temp,data);fs.renameSync(temp,target);}catch(e){try{fs.unlinkSync(temp);}catch{}throw e;}}
+// Keeps one untouched "-orig" copy of the photo as first saved. An existing backup is never replaced,
+// so a later rotate or crop cannot overwrite the original with an already edited image.
+async function ensureOriginalBackup(id,userId,row,p){
+  if(row.photo_original_path)return row.photo_original_path;
+  const ext=path.extname(p),backupName=`${path.basename(p,ext)}-orig${ext}`,backup=path.join(UPLOAD_DIR,backupName);
+  try{fs.copyFileSync(p,backup,fs.constants.COPYFILE_EXCL);}catch(e){if(e.code!=='EEXIST')throw e;}
+  const originalPath=`/uploads/${backupName}`;
+  const saved=(await pool.query(`UPDATE captures SET photo_original_path=$1 WHERE id=$2 AND user_id=$3 AND photo_original_path IS NULL RETURNING photo_original_path`,[originalPath,id,userId])).rows[0];
+  return saved?saved.photo_original_path:(await pool.query(`SELECT photo_original_path FROM captures WHERE id=$1 AND user_id=$2`,[id,userId])).rows[0].photo_original_path;
+}
 app.post('/api/captures/:id/rotate', requireAuth, async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     if (!Number.isInteger(id)) return res.status(400).json({ error: 'bad id' });
     const requested = req.body && req.body.dir;
     const dir = requested === 'ccw' ? 'ccw' : requested === 'flip' ? 'flip' : 'cw';
+    const result = await withPhotoEditLock(id, async () => {
     const row = (await pool.query(`SELECT photo_path, photo_original_path FROM captures WHERE id = $1 AND user_id = $2`, [id, req.user.id])).rows[0];
-    if (!row) return res.status(404).json({ error: 'not found' });
+    if (!row) return { status: 404, body: { error: 'not found' } };
     const p = localPhoto(row.photo_path);
-    if (!p) return res.status(400).json({ error: 'no photo file to rotate' });
+    if (!p) return { status: 400, body: { error: 'no photo file to rotate' } };
     const ext = path.extname(p).toLowerCase();
-    let originalPath=row.photo_original_path;
-    if(!originalPath){
-      const backupName=`${path.basename(p,ext)}-orig${ext}`;
-      fs.copyFileSync(p,path.join(UPLOAD_DIR,backupName));
-      originalPath=`/uploads/${backupName}`;
-      await pool.query(`UPDATE captures SET photo_original_path=$1 WHERE id=$2 AND user_id=$3`,[originalPath,id,req.user.id]);
-    }
+    await ensureOriginalBackup(id, req.user.id, row, p);
     const angle = dir === 'ccw' ? 270 : 90;
     const buf = fs.readFileSync(p);
     const oriented = await sharp(buf).rotate().toBuffer();
@@ -2248,9 +2345,12 @@ app.post('/api/captures/:id/rotate', requireAuth, async (req, res) => {
     if (ext === '.png') out = await s.png().toBuffer();
     else if (ext === '.webp') out = await s.webp().toBuffer();
     else out = await s.jpeg({ quality: 92 }).toBuffer();
-    fs.writeFileSync(p, out);
+    writeFileAtomic(p, out);
     const d = await imageDims(p);
     if (d) await pool.query(`UPDATE captures SET photo_width = $1, photo_height = $2 WHERE id = $3 AND user_id = $4`, [d.w, d.h, id, req.user.id]);
+    return null;
+    });
+    if (result) return res.status(result.status).json(result.body);
     logEvent(req.user.id, 'rotate', { dir });
     await recordCaptureHistory(req.user.id,id,dir==='flip'?'photo_flipped':'photo_rotated',{direction:dir,original_preserved:true});
     res.json({ ok: true });
@@ -2271,20 +2371,15 @@ app.post('/api/captures/:id/crop', requireAuth, async (req, res) => {
     const b = req.body || {};
     const x = Number(b.x), y = Number(b.y), w = Number(b.w), h = Number(b.h);
     if (![x, y, w, h].every(Number.isFinite) || w <= 0 || h <= 0) return res.status(400).json({ error: 'bad crop rect' });
+    const result = await withPhotoEditLock(id, async () => {
     const row = (await pool.query(`SELECT photo_path, photo_original_path FROM captures WHERE id = $1 AND user_id = $2`, [id, req.user.id])).rows[0];
-    if (!row) return res.status(404).json({ error: 'not found' });
+    if (!row) return { status: 404, body: { error: 'not found' } };
     const p = localPhoto(row.photo_path);
-    if (!p) return res.status(400).json({ error: 'no photo file to crop' });
+    if (!p) return { status: 400, body: { error: 'no photo file to crop' } };
     const ext = path.extname(p).toLowerCase();
 
     // Back up the pristine original the first time this photo is cropped.
-    let originalPath = row.photo_original_path;
-    if (!originalPath) {
-      const base = path.basename(p, ext);
-      const backupName = `${base}-orig${ext}`;
-      fs.copyFileSync(p, path.join(UPLOAD_DIR, backupName));
-      originalPath = `/uploads/${backupName}`;
-    }
+    const originalPath = await ensureOriginalBackup(id, req.user.id, row, p);
 
     // Bake EXIF orientation first so the crop rect matches what the user saw.
     const oriented = await sharp(fs.readFileSync(p)).rotate().toBuffer();
@@ -2306,15 +2401,24 @@ app.post('/api/captures/:id/crop', requireAuth, async (req, res) => {
     else out = await s.jpeg({ quality: 92 }).toBuffer();
     const croppedName = `${crypto.randomUUID()}${ext}`;
     const croppedPath = path.join(UPLOAD_DIR,croppedName);
-    fs.writeFileSync(croppedPath, out);
+    writeFileAtomic(croppedPath, out);
 
     const d = await imageDims(croppedPath);
-    const updated=(await pool.query(
-      `UPDATE captures SET photo_original_path = $1, photo_width = $2, photo_height = $3, photo_path = $6 WHERE id = $4 AND user_id = $5 RETURNING id,photo_path,photo_original_path,photo_width,photo_height`,
-      [originalPath, d ? d.w : null, d ? d.h : null, id, req.user.id, `/uploads/${croppedName}`])).rows[0];
+    let updated;
+    try {
+      updated=(await pool.query(
+        `UPDATE captures SET photo_original_path = $1, photo_width = $2, photo_height = $3, photo_path = $6 WHERE id = $4 AND user_id = $5 RETURNING id,photo_path,photo_original_path,photo_width,photo_height`,
+        [originalPath, d ? d.w : null, d ? d.h : null, id, req.user.id, `/uploads/${croppedName}`])).rows[0];
+    } catch (e) { fs.promises.unlink(croppedPath).catch(()=>{}); throw e; }
+    // The replaced photo (the first upload, or an earlier crop) is removed once nothing uses it.
+    // The single "-orig" backup stays for Restore Original.
+    if (row.photo_path && row.photo_path !== originalPath) await removeUnreferencedUploads([row.photo_path]);
+    return { status: 200, body: { ok:true,capture:updated } };
+    });
+    if (result.status !== 200) return res.status(result.status).json(result.body);
     logEvent(req.user.id, 'crop', {});
     await recordCaptureHistory(req.user.id,id,'photo_cropped',{original_preserved:true});
-    res.json({ ok:true,capture:updated });
+    res.json(result.body);
   } catch (err) {
     console.error('[captures.crop]', err);
     res.status(500).json({ error: 'crop failed' });
@@ -2326,18 +2430,22 @@ app.post('/api/captures/:id/restore-original', requireAuth, async (req, res) => 
   try {
     const id = parseInt(req.params.id, 10);
     if (!Number.isInteger(id)) return res.status(400).json({ error: 'bad id' });
+    const result = await withPhotoEditLock(id, async () => {
     const row = (await pool.query(`SELECT photo_path, photo_original_path FROM captures WHERE id = $1 AND user_id = $2`, [id, req.user.id])).rows[0];
-    if (!row) return res.status(404).json({ error: 'not found' });
-    if (!row.photo_original_path) return res.status(400).json({ error: 'no original to restore' });
+    if (!row) return { status: 404, body: { error: 'not found' } };
+    if (!row.photo_original_path) return { status: 400, body: { error: 'no original to restore' } };
     const orig = localPhoto(row.photo_original_path);
     const cur = localPhoto(row.photo_path);
-    if (!orig || !cur) return res.status(400).json({ error: 'original file missing' });
-    fs.copyFileSync(orig, cur);              // put the original back in place
-    try { fs.unlinkSync(orig); } catch (e) {} // drop the backup; photo_path is now the original
+    if (!orig || !cur) return { status: 400, body: { error: 'original file missing' } };
+    writeFileAtomic(cur, fs.readFileSync(orig)); // put the original back in place
     const d = await imageDims(cur);
     await pool.query(
       `UPDATE captures SET photo_original_path = NULL, photo_width = $1, photo_height = $2 WHERE id = $3 AND user_id = $4`,
       [d ? d.w : null, d ? d.h : null, id, req.user.id]);
+    await removeUnreferencedUploads([row.photo_original_path]); // drop the backup and its thumbnail; photo_path is now the original
+    return null;
+    });
+    if (result) return res.status(result.status).json(result.body);
     logEvent(req.user.id, 'restore_original', {});
     await recordCaptureHistory(req.user.id,id,'original_restored',{});
     res.json({ ok: true });
@@ -2371,6 +2479,11 @@ function cleanDocumentBranding(value) {
     header_text: ticketText(v.header_text, 200),
     footer_text: ticketText(v.footer_text, 240),
   };
+}
+function documentBranding(account,layout){
+  const out={...account};
+  for(const key of ['company_name','header_text','footer_text'])if(String(layout&&layout[key]||'').trim())out[key]=String(layout[key]).trim();
+  return out;
 }
 function unlinkOwnedAsset(assetPath) { const local=localPhoto(assetPath); if(local)try{fs.unlinkSync(local);}catch(e){} }
 
@@ -2437,7 +2550,7 @@ app.get('/api/groups', requireAuth, async (req, res) => {
     const { rows } = await pool.query(`
       SELECT g.*, COALESCE(cnt.n, 0)::int AS item_count
       FROM groups g
-      LEFT JOIN (SELECT group_id, COUNT(*) n FROM group_items GROUP BY group_id) cnt ON cnt.group_id = g.id
+      LEFT JOIN (SELECT gi.group_id, COUNT(*) n FROM group_items gi JOIN groups mine ON mine.id = gi.group_id AND mine.user_id = $1 GROUP BY gi.group_id) cnt ON cnt.group_id = g.id
       WHERE g.user_id = $1
       ORDER BY g.title ASC, g.id ASC`, [req.user.id]);
     // Attach a condition score per group (defect data only; one extra query).
@@ -3058,6 +3171,7 @@ app.post('/api/admin/users', requireAdmin, async (req, res) => {
     if(access){proType=EDITIONS[access[0]].pro_type;plan=EDITIONS[access[0]].plan;}
     if (name.split(/\s+/).filter(Boolean).length < 2) return res.status(400).json({ error: 'first and last name are required' });
     if (!email || !password) return res.status(400).json({ error: 'email and password are required' });
+    if (SessionSecurity.passwordProblem(password)) return res.status(400).json({ error: SessionSecurity.passwordProblem(password) });
     const hash = await bcrypt.hash(password, 10);
     const { rows } = await pool.query(
       `INSERT INTO users (email, name, password_hash, role, industry, active, plan, pro_type, edition_access, user_category)
@@ -3118,7 +3232,7 @@ app.post('/api/admin/users/:id/password', requireAdmin, async (req, res) => {
     const id = parseInt(req.params.id, 10);
     if (!Number.isInteger(id)) return res.status(400).json({ error: 'bad id' });
     const password = String((req.body && req.body.password) || '');
-    if (password.length < 4) return res.status(400).json({ error: 'password too short' });
+    if (SessionSecurity.passwordProblem(password)) return res.status(400).json({ error: SessionSecurity.passwordProblem(password) });
     const hash = await bcrypt.hash(password, 10);
     const { rowCount } = await pool.query(`UPDATE users SET password_hash = $1 WHERE id = $2`, [hash, id]);
     if (!rowCount) return res.status(404).json({ error: 'not found' });
@@ -3293,8 +3407,12 @@ async function resolveExport(req) {
   }
   const scope = groupId ? 'group' : (ids ? 'selection' : (area ? 'area' : 'all'));
   if(!groupId){layout.cover_page=false;heading=heading||(rows.length===1?rows[0].photo_title||'Photo Note':'Photo Notes');}
-  const u=(await pool.query(`SELECT document_branding,document_logo_path FROM users WHERE id=$1`,[userId])).rows[0]||{};
+  const u=(await pool.query(`SELECT name,document_branding,document_logo_path FROM users WHERE id=$1`,[userId])).rows[0]||{};
   let branding=cleanDocumentBranding(groupId?u.document_branding:{}),logoPath=groupId?u.document_logo_path||null:null;
+  // Header, footer and company name entered for this document replace the account branding; blank ones fall back to it.
+  if(groupId)branding=documentBranding(branding,layout);
+  const copyrightName=(groupId&&layout.company_name||'').trim()||cleanDocumentBranding(u.document_branding).company_name||String(u.name||'').trim();
+  for(const capture of rows)capture._copyright_name=copyrightName;
   if(req.query.packaging && require('./export-presets').supported(req.user)){
     let input;try{input=JSON.parse(String(req.query.packaging).slice(0,6000));}catch{input={};}
     const {config}=require('./export-presets').normalize(input);
@@ -3357,13 +3475,21 @@ function overlayItemText(item, c) {
     case 'topic': return (c.area_tags || []).length ? `Topic: ${(c.area_tags || []).join(', ')}` : '';
     case 'dims': return c && c.dim_confirmed === false ? '' : fmtDims(c); // unconfirmed AI sizes are never stamped
     case 'defect': return fmtDefect(c) ? `Defect: ${fmtDefect(c)}` : '';
-    case 'copyright': return item.text || `© ${new Date().getFullYear()} Zukor AI. All Rights Reserved.`;
+    case 'copyright': return item.text || copyrightText(c && c._copyright_name);
     default: return item.text || '';
   }
+}
+// A copyright marking without its own text names the customer's company (or the user), never PhotoNotes.
+function copyrightText(name) { const who = String(name || '').trim(); return `© ${new Date().getFullYear()}${who ? ' ' + who : ''}. All Rights Reserved.`; }
+async function copyrightNameForUser(userId) {
+  if (!userId) return '';
+  try { const u = (await pool.query('SELECT name,document_branding FROM users WHERE id=$1', [userId])).rows[0] || {}; return cleanDocumentBranding(u.document_branding).company_name || String(u.name || '').trim(); }
+  catch (e) { return ''; }
 }
 // Burn overlays onto an image buffer of known pixel size via an SVG composite.
 async function burnOverlays(buffer, width, height, overlays, c) {
   if (!Array.isArray(overlays) || !overlays.length || !width || !height) return buffer;
+  if (c && !c._copyright_name && overlays.some(it => it && it.t === 'copyright' && !it.text)) c = { ...c, _copyright_name: await copyrightNameForUser(c.user_id) };
   const parts = [];
   for (const it of overlays) {
     // Rectangle / box annotation: stroked outline, no fill. Geometry and line
@@ -3523,7 +3649,7 @@ app.get('/api/export/pdf', requireAuth, async (req, res) => {
 function documentPhotoDetails(c,pro){
  const fields=c.custom_fields?.length?require('./custom-fields').lines(c):'';
  const defect=pro?fmtDefect(c):'',dimensions=pro?exportDims(c):'';
- return [c.address&&'Location: '+c.address,c.latitude!=null&&c.longitude!=null?`GPS: ${Number(c.latitude).toFixed(5)}, ${Number(c.longitude).toFixed(5)}`:'',(c.area_tags||[]).length?'Topic: '+c.area_tags.join(', '):'',defect&&'Defect: '+defect,dimensions&&'Dimensions: '+dimensions,'Date: '+fmtWhen(c.created_at),c.property_area_name&&'Area: '+c.property_area_name,c.note||'(no note)',fields&&'Additional Details (user-entered)\n'+fields].filter(Boolean);
+ return [c.address&&'Location: '+c.address,c.latitude!=null&&c.longitude!=null?`GPS: ${Number(c.latitude).toFixed(5)}, ${Number(c.longitude).toFixed(5)}`:'',(c.area_tags||[]).length?'Topic: '+c.area_tags.join(', '):'',c.urgency==='urgent'&&'Urgency: Urgent',defect&&'Defect: '+defect,dimensions&&'Dimensions: '+dimensions,'Date: '+fmtWhen(c.created_at),c.property_area_name&&'Area: '+c.property_area_name,c.note||'(no note)',fields&&'Additional Details (user-entered)\n'+fields].filter(Boolean);
 }
 
 async function buildDocumentWord(req,resolved){
@@ -3612,10 +3738,15 @@ app.get('/api/export/bundle', requireAuth, async (req, res) => {
     const archive = archiver('zip', { zlib: { level: 9 } });
     archive.on('error', (e) => { console.error('[export.bundle]', e); try { res.status(500).end(); } catch {} });
     archive.pipe(res);
+    // Photos are already compressed, so they are stored as they are. Each photo is rendered only after the
+    // previous one has been written and a slow download has caught up, so memory holds about one photo at a time.
+    const entryWritten = () => new Promise(resolve => { const done = () => { archive.off('entry', done); archive.off('error', done); res.off('close', done); resolve(); }; archive.on('entry', done); archive.on('error', done); res.on('close', done); });
+    const caughtUp = () => res.writableNeedDrain ? new Promise(resolve => { const done = () => { res.off('drain', done); res.off('close', done); resolve(); }; res.on('drain', done); res.on('close', done); }) : null;
     let md = `# ${heading}\n\n`;
     if (desc) md += `${desc}\n\n`;
     md += `Source captures for reports. Each item has its photo, address, area, and note.\n\n`;
     for (let i = 0; i < rows.length; i++) {
+      if (res.destroyed) break;
       const c = rows[i];
       const n = String(i + 1).padStart(2, '0');
       const img = localPhoto(c.photo_path);
@@ -3625,7 +3756,10 @@ app.get('/api/export/bundle', requireAuth, async (req, res) => {
         if (r) {
           const base = path.basename(img).replace(/\.[a-zA-Z0-9]+$/, '');
           const name = `photos/${n}_${base}${r.ext}`;
-          archive.append(r.buffer, { name });
+          const written = entryWritten();
+          archive.append(r.buffer, { name, store: true });
+          await written;
+          await caughtUp();
           imgRef = name;
         }
       }
@@ -3859,6 +3993,8 @@ if(require.main===module)init()
     backfillPhotoDims();
     cleanupDeletedUserFiles().catch(()=>{});
     setInterval(()=>cleanupDeletedUserFiles().catch(()=>{}),30000).unref();
+    const pruneReceipts=()=>require('./capture-receipts').pruneCaptureReceipts(pool).catch(error=>console.error('[captures.receipts.prune]',error&&error.message));
+    void pruneReceipts();setInterval(pruneReceipts,24*60*60*1000).unref();
   })
   .catch((err) => {
     console.error('[efc] failed to init db', err);

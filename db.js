@@ -10,6 +10,8 @@ const pool = new Pool({
   // stop a forgotten transaction from holding locks indefinitely.
   connectionTimeoutMillis: Number(process.env.PG_CONNECT_TIMEOUT_MS) || 15000,
   idle_in_transaction_session_timeout: 60000,
+  // An explicit ceiling, so a burst of uploads and Library loads cannot open more connections than the database allows.
+  max: Number(process.env.PG_POOL_MAX) || 20,
 });
 // An idle connection dropped by a database restart or failover emits 'error'
 // on the pool. Without this listener Node exits the whole server.
@@ -800,6 +802,9 @@ ALTER TABLE hoa_completion_photo_requests ADD COLUMN IF NOT EXISTS opened_at TIM
 ALTER TABLE hoa_completion_photo_requests ADD COLUMN IF NOT EXISTS instructions TEXT;
 `;
 
+// Columns that store uploaded file paths in tables created here. Clean-up after a failed
+// upload or a delete checks each of them, so each one is indexed.
+const UPLOAD_PATH_INDEXES = [['captures','photo_path'],['captures','photo_original_path'],['camera_readings','photo_path'],['ewr_photos','photo_path'],['asphalt_tickets','photo_path'],['concrete_tickets','photo_path'],['concrete_temperatures','photo_path'],['paving_temperatures','photo_path'],['road_issue_reports','photo_path'],['issue_reports','screenshot_path'],['issue_reports','result_screenshot_path'],['issue_reports','voice_path'],['groups','word_template_path'],['users','document_logo_path'],['users','word_template_path']];
 async function init() {
   await pool.query(SCHEMA);
   await pool.query(require('fs').readFileSync(require('path').join(__dirname,'photo-requests-schema.sql'),'utf8'));
@@ -847,13 +852,21 @@ async function init() {
   }
 
   // 1b. One-time admin password reset. When ADMIN_PASSWORD_RESET is set, force the
-  //     admin account's password to the current ADMIN_PASSWORD. The flag is turned
-  //     off again after use so ordinary redeploys never override a password the
-  //     admin later changes from the admin area.
+  //     admin account's password to the current ADMIN_PASSWORD. Each distinct
+  //     ADMIN_PASSWORD_RESET value applies once: a marker row keeps a hash of the value,
+  //     so ordinary redeploys never override a password the admin later changes from
+  //     the admin area. To reset again, set ADMIN_PASSWORD_RESET to a new value.
   if (process.env.ADMIN_PASSWORD_RESET && String(process.env.ADMIN_PASSWORD_RESET).trim() && process.env.ADMIN_PASSWORD) {
-    const hash = bcrypt.hashSync(process.env.ADMIN_PASSWORD, 10);
-    await pool.query(`UPDATE users SET password_hash = $1 WHERE id = $2`, [hash, adminId]);
-    console.log('[db] admin password reset applied for user ' + adminId);
+    await pool.query(`CREATE TABLE IF NOT EXISTS system_markers (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
+    const marker = require('crypto').createHash('sha256').update('admin-password-reset\n' + String(process.env.ADMIN_PASSWORD_RESET).trim()).digest('hex');
+    const applied = (await pool.query(`SELECT 1 FROM system_markers WHERE key='admin_password_reset' AND value=$1`, [marker])).rowCount;
+    if (!applied) {
+      const hash = bcrypt.hashSync(process.env.ADMIN_PASSWORD, 10);
+      await pool.query(`UPDATE users SET password_hash = $1 WHERE id = $2`, [hash, adminId]);
+      // Recorded after the password changes, so a failed reset is tried again on the next start.
+      await pool.query(`INSERT INTO system_markers(key,value) VALUES('admin_password_reset',$1) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value,updated_at=now()`, [marker]);
+      console.log('[db] admin password reset applied for user ' + adminId);
+    } else console.log('[db] ADMIN_PASSWORD_RESET was already applied; set a new value to reset again');
   }
 
   // 2. Add owner columns to existing tables (idempotent) and backfill legacy
@@ -1070,9 +1083,16 @@ async function init() {
   await pool.query(require('fs').readFileSync(require('path').join(__dirname,'qr-codes-schema.sql'),'utf8'));
   await pool.query(require('./ai-settings').SCHEMA);
   await pool.query(require('./customer-feedback').SCHEMA);
+  // Private file lookups, single-session sign out and daily AI limits.
+  await pool.query(require('./upload-access').SCHEMA);
+  await pool.query(require('./session-security').SCHEMA);
   // Library lookups by photo. These columns exist only after the migrations above.
   await pool.query(`CREATE INDEX IF NOT EXISTS hoa_items_capture_idx ON hoa_maintenance_items (capture_id)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS camera_readings_capture_idx ON camera_readings (user_id, capture_id)`);
+  // Document photo counts and file clean-up look rows up by photo and by stored file path.
+  await pool.query(`CREATE INDEX IF NOT EXISTS group_items_capture_idx ON group_items (capture_id)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS groups_user_idx ON groups (user_id)`);
+  for (const [table, column] of UPLOAD_PATH_INDEXES) await pool.query(`CREATE INDEX IF NOT EXISTS ${table}_${column}_idx ON ${table} (${column})`);
   console.log('[db] schema ready');
 }
 

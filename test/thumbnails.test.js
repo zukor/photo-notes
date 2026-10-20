@@ -14,7 +14,7 @@ test('thumbnails are small, rebuilt after the photo changes, and refuse unsafe n
   const s = await server(dir);
   try {
     let r = await fetch(s.base + '/thumbs/photo.jpg');
-    assert.equal(r.status, 200); assert.equal(r.headers.get('content-type'), 'image/jpeg'); assert.equal(r.headers.get('cache-control'), 'no-cache');
+    assert.equal(r.status, 200); assert.equal(r.headers.get('content-type'), 'image/jpeg'); assert.equal(r.headers.get('cache-control'), 'private, no-cache');
     const first = await sharp(Buffer.from(await r.arrayBuffer())).metadata();
     assert.equal(first.width, thumbnails.WIDTH); assert.ok(first.height <= thumbnails.WIDTH);
     // A restored or replaced photo keeps its name; the thumbnail must follow it.

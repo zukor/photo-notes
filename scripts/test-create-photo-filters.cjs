@@ -8,6 +8,7 @@ const {chromium,webkit}=require('playwright');
   {id:2,photo_path:'/icon-192.png',photo_title:'New road',area_tags:['New topic'],job_id:7,job_name:'North job'},
   {id:3,photo_path:'/icon-192.png',photo_title:'Old wall',area_tags:['Older topic'],job_id:8,job_name:'South job'},
   {id:4,photo_path:'/icon-192.png',photo_title:'Other',area_tags:[],job_id:null},
+  {id:5,photo_path:'/icon-192.png',photo_title:'Shared wall',area_tags:['Older topic'],job_id:null,project_memberships:[{id:8,name:'South job'}]},
  ];
  try{for(const engine of [chromium,webkit]){
   const browser=await engine.launch();try{for(const width of [390,1440]){
@@ -22,13 +23,13 @@ const {chromium,webkit}=require('playwright');
     assert.deepEqual(await page.locator('[data-document-source-photo]').evaluateAll(n=>n.map(x=>x.dataset.documentSourcePhoto)),['1']);
     await page.locator('#selectAllDocumentPhotos').click();assert.deepEqual(await page.evaluate(()=>[...newDocumentPhotoIds].sort()),['1','4']);
     await page.locator('#newDocumentPhotoSearch').fill('wall');assert.equal(await page.locator('[data-document-source-photo]').count(),0);
-    await page.locator('#newDocumentJob').selectOption('8');assert.equal(await page.locator('[data-document-source-photo="3"]').count(),1);
+    await page.locator('#newDocumentJob').selectOption('8');assert.equal(await page.locator('[data-document-source-photo="3"]').count(),1);assert.equal(await page.locator('[data-document-source-photo="5"]').count(),1,'Filter by Project includes added project memberships');assert.equal(await page.locator('label[for="newDocumentJob"]').textContent(),'Filter by Project');
     await page.locator('#newDocumentPhotoSearch').fill('');await page.locator('#newDocumentTopic').selectOption('');await page.locator('#newDocumentJob').selectOption('');
     assert(await page.locator('[data-document-source-photo="1"]').isChecked());assert(await page.locator('[data-document-source-photo="4"]').isChecked());
     assert(await page.locator('#body').evaluate(e=>e.scrollWidth<=innerWidth));
     await page.locator('#clearDocumentPhotos').click();assert.equal(await page.evaluate(()=>newDocumentPhotoIds.size),0);assert(await page.locator('#gcreate').isDisabled());
    }
-   console.log(engine.name(),width,'all ten editions: saved topics/jobs, combined filters and preserved selections PASS');await page.close();
+   console.log(engine.name(),width,'all ten editions: saved topics/projects including memberships, combined filters and preserved selections PASS');await page.close();
   }}finally{await browser.close();}
  }}finally{server.close();}
 })().catch(e=>{console.error(e);process.exitCode=1});

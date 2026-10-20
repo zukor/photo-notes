@@ -38,7 +38,12 @@ assert.equal(await page.evaluate(async()=>(await PhotoNotesQueue.all()).length),
 await page.getByRole('button',{name:'Close',exact:true}).click();
 for(const edition of ['basic','issue','roads','general','contractor','paving','hoa','property','concrete','roofer']){
 await page.evaluate(async edition=>{state.plan=['basic','issue','roads'].includes(edition)?'free':'pro';state.proType=edition==='basic'?'general':edition;state.view='capture';renderApp();await restoreOfflineQueue();const local=await PhotoNotesQueue.create({note:'Local '+edition},false,queueAccount,selectedEdition());bgQueue.push({...local,tries:0});setQueuePaused(true);await restoreOfflineQueue();await showPendingPhotos();},edition);
-await page.getByRole('button',{name:'Save to PhotoNotes Library',exact:true}).click();await page.locator('#pendingLibrary').waitFor();assert.match(await page.locator('#pendingLibrary').innerText(),new RegExp('Local '+edition));assert.deepEqual(await page.evaluate(()=>PhotoNotesHelp.inspect().filter(i=>!i.authored).map(i=>i.key)),[],edition+' device Library Help');
+if(edition==='basic'){
+// Basic shares without saving: no Pending Photos menu item and no Library button, even if old local data exists.
+assert.equal(await page.locator('#pendingPhotos').count(),0,'Basic has no Pending Photos');assert.equal(await page.locator('#pendingSaveLibrary').isVisible(),false,'Basic has no PhotoNotes Library');await page.getByRole('button',{name:'Close',exact:true}).click();
+}else{
+assert.equal(await page.locator('#pendingPhotos').count(),1);
+await page.getByRole('button',{name:'Save to PhotoNotes Library',exact:true}).click();await page.locator('#pendingLibrary').waitFor();assert.match(await page.locator('#pendingLibrary').innerText(),new RegExp('Local '+edition));}assert.deepEqual(await page.evaluate(()=>PhotoNotesHelp.inspect().filter(i=>!i.authored).map(i=>i.key)),[],edition+' device Library Help');
 await page.evaluate(async()=>{for(const row of await PhotoNotesQueue.all())await PhotoNotesQueue.remove(row.id);});
 }
 await page.close();console.log(engine.name()+' '+width+': countdown, pause/resume, local Library, upload completion PASS');
