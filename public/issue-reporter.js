@@ -380,7 +380,8 @@ async function refreshIssueAttention(){
 }
 async function refreshIssueAttentionNow(){
   const profile=document.getElementById('profileButton'),link=document.getElementById('issueUpdates');
-  if((!profile&&!link)||document.hidden)return;
+  // Nothing to check while the app runs from the saved account with no connection.
+  if((!profile&&!link)||document.hidden||(typeof state!=='undefined'&&state.offlineSession)||navigator.onLine===false)return;
   try{
     const r=await api('/api/issues/attention');if(!r.ok)return;const d=await r.json();
     if(profile&&profile===document.getElementById('profileButton')){

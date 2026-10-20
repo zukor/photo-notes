@@ -43,7 +43,9 @@ async function saveThroughUI(page){await page.locator('#save').click();}
    // Lose the response after the server commits, then retry the exact same capture identity.
    if(await page.locator('#tabCapture').isVisible())await page.locator('#tabCapture').click();
    // Uploads use XMLHttpRequest for progress, so the response is dropped at the network layer.
-   let dropped=false;const loseResponse=async route=>{if(dropped||route.request().method()!=='POST')return route.fallback();dropped=true;await route.fetch();return route.abort('connectionreset');};await page.route('**/api/captures',loseResponse);
+   // Playwright cannot forward an XMLHttpRequest file upload body through route.fetch() in WebKit (the photo part is dropped),
+   // so in WebKit the first attempt is cut off before it reaches the server; Chromium covers the committed-then-lost case.
+   let dropped=false;const loseResponse=async route=>{if(dropped||route.request().method()!=='POST')return route.fallback();dropped=true;if(engine===webkit)return route.abort('connectionreset');await route.fetch();return route.abort('connectionreset');};await page.route('**/api/captures',loseResponse);
    await page.locator('#photoLib').setInputFiles({name:'retry.jpg',mimeType:'image/jpeg',buffer:image});const retryNote='Lost response '+name+' '+Date.now();await page.locator('#note').fill(retryNote);await saveThroughUI(page);
    await page.waitForFunction(()=>bgQueue.length===1&&bgQueue[0].tries>0);await page.unroute('**/api/captures',loseResponse);await page.evaluate(()=>restoreOfflineQueue());await page.waitForFunction(()=>bgQueue.length===0);
    const retried=await (await context.request.get(base+'/api/captures')).json();assert.equal(retried.filter(x=>x.note===retryNote).length,1);
