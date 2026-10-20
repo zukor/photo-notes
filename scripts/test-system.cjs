@@ -98,7 +98,8 @@ const databaseSuites = [
  ['photo-follow-ups-integration','DATABASE_URL','pn_followup_integration'],
  ['export-presets','DATABASE_URL','pn_export_presets_test'],
  ['export-presets-private-comments','DATABASE_URL','pn_export_presets_output_test'],
- ['shared-before-after-integration','DATABASE_URL','pn_shared_pairs_test']
+ ['shared-before-after-integration','DATABASE_URL','pn_shared_pairs_test'],
+ ['upload-privacy-integration','DATABASE_URL','pn_upload_privacy_test']
 ];
 if(focus){const known=new Set([...databaseSuites,...legacySuites].map(row=>row[0]).concat(browserSuites));for(const feature of focus)if(!known.has(feature))throw Error('Unknown focused suite: '+feature);}
 (async()=>{

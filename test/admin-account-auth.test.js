@@ -1,7 +1,7 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('fs'),vm=require('vm');
 const source=fs.readFileSync('server.js','utf8');
 function run(user){
-  const ctx=vm.createContext({require:id=>{assert.equal(id,'./ai-request-context');return require('../ai-request-context');},readUser:()=>({id:1,role:'admin'}),pool:{query:async()=>({rows:user?[user]:[]})}});
+  const ctx=vm.createContext({require:id=>{assert.equal(id,'./ai-request-context');return require('../ai-request-context');},readUser:()=>({id:1,role:'admin'}),sessionRevocation:{revokedHere:()=>false,sql:'false AS session_revoked'},pool:{query:async()=>({rows:user?[user]:[]})}});
   vm.runInContext(source.slice(source.indexOf('async function requireAuth'),source.indexOf('function requireTestingQueueToken')),ctx);
   return ctx;
 }
@@ -23,7 +23,7 @@ test('new users can receive multiple versions at creation without changing their
   const ctx=vm.createContext({
     app:{post:(url,middleware,fn)=>handler=fn},requireAdmin(){},
     validateEditions:require('../editions').validateEditions,EDITIONS:require('../editions').EDITIONS,
-    bcrypt:{hash:async()=> 'test-only-hash'},seedUserAreas:async()=>{},logEvent(){},
+    bcrypt:{hash:async()=> 'test-only-hash'},SessionSecurity:require('../session-security'),seedUserAreas:async()=>{},logEvent(){},
     pool:{query:async(sql,params)=>{saved={sql,params};return {rows:[{id:9}]};}}
   });
   const a=source.indexOf("app.post('/api/admin/users',"),b=source.indexOf("app.post('/api/admin/users/:id',",a);

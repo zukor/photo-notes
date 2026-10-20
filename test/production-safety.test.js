@@ -16,7 +16,8 @@ test('security headers protect the application without blocking required photo t
   for (const header of ['X-Content-Type-Options', 'X-Frame-Options', 'Referrer-Policy', 'Permissions-Policy', 'Strict-Transport-Security', 'Content-Security-Policy']) {
     assert.match(server, new RegExp(header));
   }
-  assert.match(server, /script-src 'self' 'nonce-\$\{cspNonce\}' https:\/\/unpkg\.com/);
+  assert.match(server, /script-src 'self' 'nonce-\$\{cspNonce\}'`/);
+  assert.doesNotMatch(server, /unpkg\.com/, 'no scripts or styles load from unpkg');
   assert.match(server, /img-src 'self' data: blob:/);
   assert.match(server, /frame-ancestors 'none'/);
 });

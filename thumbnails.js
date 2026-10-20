@@ -52,7 +52,9 @@ function register(app, { uploadDir, sharp, maxConcurrent = 3, logger = console }
       res.type('image/jpeg').sendFile(file, { dotfiles: 'allow' });
     } catch (error) {
       logger.warn('[thumbs]', name, error && error.message);
-      res.redirect(302, '/uploads/' + encodeURIComponent(name)); // Show the full photo rather than nothing.
+      // Show the full photo rather than nothing. A signed link stays signed (it covers the photo and its thumbnail).
+      const query = req.query && req.query.sig ? `?exp=${encodeURIComponent(String(req.query.exp || ''))}&sig=${encodeURIComponent(String(req.query.sig))}` : '';
+      res.redirect(302, '/uploads/' + encodeURIComponent(name) + query);
     }
   });
 }

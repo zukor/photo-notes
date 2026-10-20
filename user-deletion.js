@@ -2,13 +2,27 @@ const fs=require('fs/promises'),path=require('path');
 const FILE_SOURCES=[
  ['captures','photo_path'],['captures','photo_original_path'],['ewr_photos','photo_path'],
  ['asphalt_tickets','photo_path'],['camera_readings','photo_path'],['road_issue_reports','photo_path'],
+ ['paving_temperatures','photo_path'],['concrete_tickets','photo_path'],['concrete_temperatures','photo_path'],
  ['issue_reports','screenshot_path'],['issue_reports','result_screenshot_path'],['issue_reports','voice_path'],
- ['users','document_logo_path'],['users','word_template_path']
+ ['users','document_logo_path'],['users','word_template_path'],['groups','word_template_path']
 ];
+// Stored paths are flat /uploads/<file>. Customer feedback screenshots are stored privately and
+// recorded as /uploads/customer-feedback/<file>.
 function uploadFile(root,value){
-  if(typeof value!=='string'||!/^\/uploads\/[^/\\]+$/.test(value))return null;
-  const base=path.resolve(root),file=path.resolve(base,value.slice('/uploads/'.length));
-  return file.startsWith(base+path.sep)?file:null;
+  if(typeof value!=='string')return null;
+  const feedback=/^\/uploads\/customer-feedback\/([^/\\]+)$/.exec(value);
+  if(!feedback&&!/^\/uploads\/[^/\\]+$/.test(value))return null;
+  const base=path.resolve(root),dir=feedback?path.join(base,'.private-feedback'):base;
+  const file=path.resolve(dir,feedback?feedback[1]:value.slice('/uploads/'.length));
+  return file.startsWith(dir+path.sep)?file:null;
+}
+// Files made from a photo: its Library thumbnail and the "-orig" backup kept by rotate and crop.
+function derivedFiles(root,value){
+  return /^\/uploads\/[^/\\]+$/.test(String(value||''))?[require('./thumbnails').thumbPathFor(root,value)].filter(Boolean):[];
+}
+function originalBackup(value){
+  const m=/^\/uploads\/([^/\\]+?)(\.[A-Za-z0-9]+)$/.exec(String(value||''));
+  return m&&!m[1].endsWith('-orig')?`/uploads/${m[1]}-orig${m[2]}`:null;
 }
 async function deletionPreview(db,id,actorId){
   const user=(await db.query('SELECT id,name,email,role,active FROM users WHERE id=$1',[id])).rows[0];
@@ -52,7 +66,10 @@ function registerUserDeletion(app,{pool,requireAdmin,uploadDir}){
         if(!file)continue;
         const refs=FILE_SOURCES.map(([table,col])=>`SELECT 1 FROM ${table} WHERE ${col}=$1`).join(' UNION ALL ');
         const referenced=(await pool.query(`SELECT EXISTS(${refs}) AS used`,[file_path])).rows[0].used;
-        if(!referenced){try{await fs.unlink(file);}catch(e){if(e.code!=='ENOENT')continue;}}
+        if(!referenced){
+          try{await fs.unlink(file);}catch(e){if(e.code!=='ENOENT')continue;}
+          for(const extra of derivedFiles(uploadDir,file_path))await fs.unlink(extra).catch(()=>{});
+        }
         await pool.query('DELETE FROM pending_user_file_deletions WHERE file_path=$1',[file_path]);
       }
     }finally{cleaning=false;}
@@ -75,13 +92,16 @@ function registerUserDeletion(app,{pool,requireAdmin,uploadDir}){
       if(preview.blocked){await client.query('ROLLBACK').catch(()=>{});return res.status(409).json({error:preview.blocked});}
       if(!req.body||req.body.confirm_email!==preview.user.email){await client.query('ROLLBACK').catch(()=>{});return res.status(400).json({error:'Type the exact email address to confirm permanent deletion'});}
       // Lock owned records so their attachment paths cannot change while collected.
-      for(const table of ['captures','groups','ewr_photos','asphalt_tickets','camera_readings','road_issue_reports','issue_reports']){
+      for(const table of ['captures','groups','ewr_photos','asphalt_tickets','camera_readings','road_issue_reports','paving_temperatures','concrete_tickets','concrete_temperatures','issue_reports']){
         await client.query(`SELECT id FROM ${table} WHERE user_id=$1 FOR UPDATE`,[id]);
       }
       // Recheck shared references after locking the records they can reference.
       const lockedPreview=await deletionPreview(client,id,req.user.id);
       if(lockedPreview.blocked){await client.query('ROLLBACK').catch(()=>{});return res.status(409).json({error:lockedPreview.blocked});}
       const files=(await client.query(FILE_SOURCES.map(([table,col])=>`SELECT ${col} AS file_path FROM ${table} WHERE ${table==='users'?'id':'user_id'}=$1 AND ${col} IS NOT NULL`).join(' UNION '),[id])).rows;
+      // A stray "-orig" backup of a photo is queued too; it is removed only if nothing references it.
+      const backups=[...new Set(files.map(f=>originalBackup(f.file_path)).filter(p=>p&&!files.some(f=>f.file_path===p)))].map(file_path=>({file_path}));
+      files.push(...backups);
       for(const {file_path} of files){
         if(!uploadFile(uploadDir,file_path))throw new Error('Invalid stored attachment path');
         await client.query('INSERT INTO pending_user_file_deletions(file_path) VALUES($1) ON CONFLICT DO NOTHING',[file_path]);
