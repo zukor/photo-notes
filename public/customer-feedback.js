@@ -10,12 +10,14 @@ let speechDocument=null,speechReady=false;
 const liveSpeech=()=>!!window.PhotoNotesLiveTranscription?.enabled();
 const isolatedSpeech=()=>!liveSpeech()&&(/iP(hone|ad|od)/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1));
 // A recording that could not be transcribed stays on this device until the dialog closes.
-function keptRecording(field,kept){
+// where: {segment, anchor} locates the live words of this recording, which the words
+// checked against the saved recording replace instead of repeating.
+function keptRecording(field,kept,where={},detail=''){
  const status=el('feedbackStatus');if(!status)return;el('feedbackRetryTranscription')?.remove();
- const token=generation;
- const place=text=>{if(token!==generation||el('feedbackDescription')!==field||!el('feedbackDialog')?.open)return false;if(text)field.value=mergeSpeechTranscript(field.value.trim(),text).slice(0,10000);const s=el('feedbackStatus');if(s)s.textContent=text?'Words added from your recording.':'No words were found in the recording.';el('feedbackRetryTranscription')?.remove();return true;};
+ const token=generation,live=window.PhotoNotesLiveTranscription;
+ const place=text=>{if(token!==generation||el('feedbackDescription')!==field||!el('feedbackDialog')?.open)return false;if(text)field.value=(live?.replaceSegment?live.replaceSegment(field.value,where,text,mergeSpeechTranscript):mergeSpeechTranscript(field.value.trim(),text)).slice(0,10000);const s=el('feedbackStatus');if(s)s.textContent=text?'Words added from your recording.':'No words were found in the recording.';el('feedbackRetryTranscription')?.remove();return true;};
  if(kept)window.PhotoNotesLiveTranscription.claimKept(kept.id,place);
- status.textContent='Your recording is saved on this device and will be turned into text automatically when the connection returns. You can also tap Transcribe Recording.';
+ status.textContent=detail==='background'&&live?.messages?.backgroundSaved||'Your recording is saved on this device and will be turned into text automatically when the connection returns. You can also tap Transcribe Recording.';
  const button=document.createElement('button');button.type='button';button.className='btn secondary';button.id='feedbackRetryTranscription';button.textContent='Transcribe Recording';
  button.onclick=async()=>{button.disabled=true;button.textContent='Transcribing...';
   try{const text=await window.PhotoNotesLiveTranscription.retryPending(kept?.id);if(text)place(text);}
@@ -86,7 +88,8 @@ function mount(){if(el('feedbackFab'))return;
    speech.onstatus=e=>{if(token!==generation||recognizer!==speech&&e.state!=='kept')return;speechEvent('live-'+e.state,e.detail||'');const status=el('feedbackStatus');if(!status)return;
     if(e.state==='offline')status.textContent='Connection lost. Still recording. Reconnecting; your words will be added when you stop.';
     else if(e.state==='transcribing')status.textContent='Checking your words against the recording...';
-    else if(e.state==='kept')keptRecording(field,speech.keptRecording);
+    else if(e.state==='kept'){const shown=field.value,start=base.trim();keptRecording(field,speech.keptRecording,{anchor:start,segment:shown.startsWith(start)?shown.slice(start.length).trim():''},e.detail||'');}
+    else if(e.state==='silent'&&live)status.textContent=window.PhotoNotesLiveTranscription.messages?.silent||'';
     else if(e.state==='live'&&speechWanted)status.textContent='Listening. Pause naturally, then keep speaking. Tap Stop dictation when finished.';};
    speech.onresult=e=>{if(token!==generation||recognizer!==speech)return;clearWatchdog();speechEvent('result',Array.from(e.results,r=>r.isFinal?'final':'interim').join(','));const parts=Array.from(e.results).map(r=>r[0].transcript);if(parts.some(text=>text.trim()))received=true;field.value=mergeSpeechTranscript(base,combineSpeechResults(parts)).slice(0,10000);};
    function interrupted(){speechWanted=false;clearTimeout(speechRestart);speechRestart=null;if(speechFinish)speechFinish();else releaseSpeech();speechButton();el('feedbackStatus').textContent='Dictation stopped. Captured words are kept. Tap Dictate feedback to continue or type your feedback.';}
@@ -98,7 +101,7 @@ function mount(){if(el('feedbackFab'))return;
     recognizer=null;
     if(!speechWanted)return;
     // The live engine ends only on Stop or when the phone takes the microphone.
-    if(live){interrupted();return;}
+    if(live){interrupted();const reason=speech.interruption;if(reason&&window.PhotoNotesLiveTranscription.pauseMessage)el('feedbackStatus').textContent=window.PhotoNotesLiveTranscription.pauseMessage(reason,'Tap Dictate feedback to keep going.');return;}
     emptySessions=received?0:emptySessions+1;
     if(emptySessions>=2||navigator.onLine===false||document.visibilityState==='hidden'){interrupted();return;}
     // A normal browser session end is not the user's Stop. Preserve the

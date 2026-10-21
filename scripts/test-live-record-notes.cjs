@@ -111,7 +111,33 @@ const {chromium}=require('playwright');
   assert.ok(['feedback','issue','ewr'].every(surface=>outcomes.some(o=>o.surface===surface)));
   assert.equal(JSON.stringify(outcomes).includes('Final words'),false,'no words in outcomes');
   if(label==='iPhone'){
-   // 10. A saved recording survives closing the app and is recovered at the next open.
+   // 10. Leaving the screen: recording pauses, the audio so far is saved and transcribed
+   // when the app is back, replacing the live words, and Continue Recording keeps going.
+   await page.evaluate(()=>{socketMode='normal';state.view='capture';renderApp();document.getElementById('note').value='Typed first.';state._note='Typed first.';window.__hidden=false;
+    Object.defineProperty(document,'visibilityState',{configurable:true,get:()=>window.__hidden?'hidden':'visible'});Object.defineProperty(document,'hidden',{configurable:true,get:()=>!!window.__hidden});});
+   recordingMode='ok';const before=uploads.length,reported=outcomes.length;
+   await page.locator('#dictate').click();
+   await page.waitForFunction(()=>/live words/.test(document.getElementById('note').value),null,{timeout:15000});
+   await page.evaluate(()=>{window.__hidden=true;document.dispatchEvent(new Event('visibilitychange'));});
+   await page.locator('#dictationInterruptedDialog').waitFor({timeout:10000});
+   assert.equal(await page.locator('#dictationInterruptedTitle').textContent(),'Recording paused');
+   assert.equal(await page.locator('#dictationRestart').textContent(),'Continue Recording');
+   assert.equal(await page.locator('#dictationRestart').isDisabled(),false,'Continue Recording is ready at once');
+   assert.match(await page.locator('#dictationInterruptedReason').textContent(),/Phones do not let web apps record in the background\. Your words so far are saved\./);
+   assert.match(await page.locator('#dictationStatus').textContent(),/saved on this device/);
+   await page.waitForTimeout(1500);
+   assert.equal(uploads.length,before,'nothing is sent while the app is off screen');
+   assert.equal(await page.evaluate(async()=>(await PhotoNotesLiveTranscription.listKept()).filter(i=>i.status==='pending').length),1,'audio saved on the device at once');
+   await page.evaluate(()=>{window.__hidden=false;document.dispatchEvent(new Event('visibilitychange'));});
+   await page.waitForFunction(()=>document.getElementById('note').value==='Typed first. Recovered from the recording.',null,{timeout:15000});
+   assert.equal(uploads.length,before+1);
+   assert.ok(outcomes.slice(reported).some(o=>o.outcome==='recovered'&&o.reason==='background'&&o.cause==='background'&&o.interrupted===true),'background outcome reported');
+   await page.locator('#dictationRestart').click();
+   await page.waitForFunction(()=>document.getElementById('dictate').textContent.includes('Recording')&&/live words/.test(document.getElementById('note').value),null,{timeout:15000});
+   await page.locator('#dictate').click();
+   await page.waitForFunction(()=>/^Typed first\. Recovered from the recording\. Final words \d+\.$/.test(document.getElementById('note').value)&&document.getElementById('dictate').textContent==='Record Notes',null,{timeout:15000});
+   assert.equal(await page.evaluate(async()=>(await PhotoNotesLiveTranscription.listKept()).length),0,'removed from the device once transcribed');
+   // 11. A saved recording survives closing the app and is recovered at the next open.
    await page.evaluate(()=>{socketMode='refuse';state.view='capture';renderApp();document.getElementById('note').value='';});recordingMode='fail';
    await page.locator('#dictate').click();await page.waitForTimeout(1500);await page.locator('#dictate').click();
    await page.locator('#dictationRetryTranscription').waitFor({timeout:20000});
@@ -123,7 +149,7 @@ const {chromium}=require('playwright');
    await page.locator('[data-recovered-discard]').click();
    await page.waitForFunction(()=>!document.getElementById('recoveredRecordingsDialog'));
    assert.equal(await page.evaluate(async()=>(await PhotoNotesLiveTranscription.listKept()).length),0,'removed from the device');
-   // 11. Self-test page: ten recordings in a row with automatic pass/fail.
+   // 12. Self-test page: ten recordings in a row with automatic pass/fail.
    await page.goto(`http://127.0.0.1:${server.address().port}/record-notes-self-test.html`);
    await page.evaluate(()=>{socketMode='normal';});
    await page.locator('#selfTestRecord').waitFor();
@@ -140,6 +166,6 @@ const {chromium}=require('playwright');
    await page.screenshot({path:'/tmp/live-self-test.png',fullPage:true});
   }
   await page.close();
-  console.log(label+': live words, Stop final words, repeated recordings, dropped connection recovery, retry, finish-before-save, Feedback and Capture handoff, Report Issue and Extra Work, outcomes'+(label==='iPhone'?', saved recording across reload, self-test':'')+' passed');
+  console.log(label+': live words, Stop final words, repeated recordings, dropped connection recovery, retry, finish-before-save, Feedback and Capture handoff, Report Issue and Extra Work, outcomes'+(label==='iPhone'?', background pause and Continue Recording, saved recording across reload, self-test':'')+' passed');
  }}finally{await browser.close();server.close();}
 })().catch(e=>{console.error(e);process.exit(1);});

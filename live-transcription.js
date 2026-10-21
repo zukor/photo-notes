@@ -68,33 +68,35 @@ async function requestToken({ env = process.env, fetchImpl = fetch } = {}) {
 }
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+// Failures carry a short code that the browser includes in its reliability report.
+function coded(message, code) { const error = new Error(message); error.code = code; return error; }
 
 async function transcribeRecording(buffer, { env = process.env, fetchImpl = fetch, lang = 'en', pollMs = 1000, timeoutMs = 90000, wait = sleep } = {}) {
   const key = apiKey(env);
   const upload = await fetchImpl(`${API_BASE}/v2/upload`, { method: 'POST', headers: { authorization: key, 'content-type': 'application/octet-stream' }, body: buffer });
-  if (!upload.ok) throw new Error('upload failed');
+  if (!upload.ok) throw coded('upload failed', 'provider-upload-' + upload.status);
   const { upload_url: audioUrl } = await upload.json();
-  if (!audioUrl) throw new Error('upload url missing');
+  if (!audioUrl) throw coded('upload url missing', 'provider-upload');
   const request = body => fetchImpl(`${API_BASE}/v2/transcript`, { method: 'POST', headers: { authorization: key, 'content-type': 'application/json' }, body: JSON.stringify(body) });
   const base = { audio_url: audioUrl, language_code: lang, punctuate: true, format_text: true };
   // Prefer custom vocabulary; if the provider rejects it, transcribe without it.
   let create = await request({ ...base, keyterms_prompt: KEYTERMS });
   if (!create.ok && create.status === 400) create = await request(base);
-  if (!create.ok) throw new Error('transcript request failed');
+  if (!create.ok) throw coded('transcript request failed', 'provider-request-' + create.status);
   const job = await create.json();
-  if (!job || !job.id) throw new Error('transcript id missing');
+  if (!job || !job.id) throw coded('transcript id missing', 'provider-request');
   const deadline = Date.now() + timeoutMs;
   for (;;) {
     const poll = await fetchImpl(`${API_BASE}/v2/transcript/${encodeURIComponent(job.id)}`, { headers: { authorization: key } });
-    if (!poll.ok) throw new Error('transcript status failed');
+    if (!poll.ok) throw coded('transcript status failed', 'provider-status-' + poll.status);
     const status = await poll.json();
     if (status.status === 'completed') {
       // Remove the provider's copy of the transcript and audio once text is returned.
       fetchImpl(`${API_BASE}/v2/transcript/${encodeURIComponent(job.id)}`, { method: 'DELETE', headers: { authorization: key } }).catch(() => {});
       return { text: String(status.text || '').trim(), seconds: Number(status.audio_duration) || 0, provider: 'assemblyai' };
     }
-    if (status.status === 'error') throw new Error('transcription error');
-    if (Date.now() > deadline) throw new Error('transcription timed out');
+    if (status.status === 'error') throw coded('transcription error', 'provider-error');
+    if (Date.now() > deadline) throw coded('transcription timed out', 'provider-timeout');
     await wait(pollMs);
   }
 }
@@ -107,7 +109,7 @@ async function transcribeWithOpenAI(buffer, { env = process.env, fetchImpl = fet
   form.append('language', lang);
   form.append('prompt', 'Field notes about construction, paving, concrete and property maintenance. Terms: ' + KEYTERMS.slice(9, 60).join(', ') + '.');
   const r = await fetchImpl(`${OPENAI_BASE}/audio/transcriptions`, { method: 'POST', headers: { authorization: `Bearer ${openaiKey(env)}` }, body: form });
-  if (!r.ok) throw new Error('backup transcription failed');
+  if (!r.ok) throw coded('backup transcription failed', 'backup-' + r.status);
   const body = await r.json();
   return { text: String(body.text || '').trim(), seconds: 0, provider: 'openai' };
 }
@@ -118,7 +120,8 @@ async function transcribeWithBackup(buffer, options = {}) {
   catch (primary) {
     if (!openaiKey(env)) throw primary;
     options.logger?.warn?.('[live-transcription] primary transcription failed, using backup', primary.message);
-    return transcribeWithOpenAI(buffer, options);
+    try { return await transcribeWithOpenAI(buffer, options); }
+    catch (backup) { backup.code = (primary.code || 'provider') + '+' + (backup.code || 'backup'); throw backup; }
   }
 }
 
@@ -131,26 +134,38 @@ function deviceFrom(userAgent = '') {
   return { os, browser, os_version: version };
 }
 
+// Reason codes only: reason (why the live text was incomplete or the recording ended),
+// cause (what interrupted it), fallback (why the saved recording was not transcribed),
+// wake (screen wake lock state). Never words or audio.
 function outcomeDetail(body = {}, userAgent = '') {
   const b = body || {};
   if (!SURFACES.has(b.surface) || !OUTCOMES.has(b.outcome)) return null;
   const clamp = (n, max) => Math.max(0, Math.min(max, Math.round(Number(n) || 0)));
-  const code = s => String(s || '').toLowerCase().replace(/[^a-z0-9:_-]/g, '').slice(0, 40);
+  const code = s => String(s || '').toLowerCase().replace(/[^a-z0-9:_+-]/g, '').slice(0, 40);
+  const device = deviceFrom(userAgent);
+  // iPad Safari reports itself as a Mac; touch support tells them apart.
+  if (device.os === 'Mac' && b.touch === true) device.os = 'iPad';
   return {
-    surface: b.surface, outcome: b.outcome, ...deviceFrom(userAgent),
+    surface: b.surface, outcome: b.outcome, ...device,
     mode: b.mode === 'installed' ? 'installed' : 'browser',
     version: clamp(b.version, 100000), seconds: clamp(b.seconds, 3600), reconnects: clamp(b.reconnects, 20),
     words: clamp(b.words, 100000), reason: code(b.reason), interrupted: b.interrupted === true,
+    cause: code(b.cause), fallback: code(b.fallback), wake: code(b.wake).slice(0, 10), attempts: clamp(b.attempts, 50),
+    hidden: b.hidden === true, restored: b.restored === true,
   };
 }
 
-function register(app, { requireAuth, requireAdmin, pool, env = process.env, fetchImpl = fetch, limiter = createLimiter(), logger = console } = {}) {
+// Live sessions and saved-recording transcriptions have separate limits, so retries
+// of saved recordings cannot block new recordings from starting.
+function register(app, { requireAuth, requireAdmin, pool, env = process.env, fetchImpl = fetch, limiter, recordingLimiter, logger = console } = {}) {
+  const sessionLimit = limiter || createLimiter({ limit: 60 });
+  const recordingLimit = recordingLimiter || limiter || createLimiter({ limit: 60 });
   app.get('/api/transcription/config', requireAuth, (req, res) => {
     res.set('Cache-Control', 'no-store').json({ live: configured(env), provider: configured(env) ? 'assemblyai' : null });
   });
   app.post('/api/transcription/session', requireAuth, async (req, res) => {
     if (!configured(env)) return res.status(503).json({ error: 'Live transcription is not configured' });
-    if (!limiter(req.user.id)) return res.status(429).json({ error: 'Too many recordings started. Wait a few minutes and try again.' });
+    if (!sessionLimit(req.user.id)) return res.status(429).json({ error: 'Too many recordings started. Wait a few minutes and try again.', code: 'rate-limit' });
     try {
       const token = await requestToken({ env, fetchImpl });
       const params = new URLSearchParams({ ...connectionParams(env, language(req.body && req.body.language)), token });
@@ -161,15 +176,17 @@ function register(app, { requireAuth, requireAdmin, pool, env = process.env, fet
     }
   });
   app.post('/api/transcription/recording', requireAuth, express.raw({ type: ['audio/wav', 'application/octet-stream'], limit: MAX_BATCH_BYTES }), async (req, res) => {
-    if (!configured(env)) return res.status(503).json({ error: 'Transcription is not configured' });
-    if (!Buffer.isBuffer(req.body) || req.body.length < 44) return res.status(400).json({ error: 'Recording missing' });
-    if (!limiter(req.user.id)) return res.status(429).json({ error: 'Too many recordings. Wait a few minutes and try again.' });
+    if (!configured(env)) return res.status(503).json({ error: 'Transcription is not configured', code: 'not-configured' });
+    if (!Buffer.isBuffer(req.body) || req.body.length < 44) return res.status(400).json({ error: 'Recording missing', code: 'too-small' });
+    // The browser sends 16 kHz WAV. Anything else is reported instead of sent on.
+    if (req.body.toString('ascii', 0, 4) !== 'RIFF' || req.body.toString('ascii', 8, 12) !== 'WAVE') return res.status(415).json({ error: 'Recording format not supported', code: 'unsupported-format' });
+    if (!recordingLimit(req.user.id)) return res.status(429).json({ error: 'Too many recordings. Wait a few minutes and try again.', code: 'rate-limit' });
     try {
       const result = await transcribeWithBackup(req.body, { env, fetchImpl, lang: language(req.query.language), logger });
       res.set('Cache-Control', 'no-store').json(result);
     } catch (error) {
-      logger.warn?.('[live-transcription] recording transcription failed', error.message);
-      res.status(502).json({ error: 'The recording could not be transcribed right now' });
+      logger.warn?.('[live-transcription] recording transcription failed', error.message, error.code || '');
+      res.status(502).json({ error: 'The recording could not be transcribed right now', code: String(error.code || 'provider').slice(0, 30) });
     }
   });
   if (!pool) return;
@@ -187,15 +204,24 @@ function register(app, { requireAuth, requireAdmin, pool, env = process.env, fet
     const where = `e.action='record_notes_outcome' AND e.created_at >= now()-($1::int*interval '1 day')`;
     try {
       const totals = (await pool.query(`SELECT e.detail->>'outcome' outcome,COUNT(*)::int count FROM events e WHERE ${where} GROUP BY 1 ORDER BY 2 DESC`, [days])).rows;
-      const devices = (await pool.query(`SELECT e.detail->>'os' os,e.detail->>'browser' browser,e.detail->>'mode' mode,COUNT(*)::int recordings,
-        COUNT(*) FILTER (WHERE e.detail->>'outcome' IN ('live','recovered','retried'))::int succeeded,
+      // A later transcription of a saved recording is reported as 'retried'. It is not a
+      // separate recording, so it is counted as Transcribed later, not in Recordings.
+      const devices = (await pool.query(`SELECT e.detail->>'os' os,e.detail->>'browser' browser,e.detail->>'mode' mode,
+        COUNT(*) FILTER (WHERE e.detail->>'outcome'<>'retried')::int recordings,
+        COUNT(*) FILTER (WHERE e.detail->>'outcome' IN ('live','recovered'))::int succeeded,
         COUNT(*) FILTER (WHERE e.detail->>'outcome'='recovered')::int recovered,
         COUNT(*) FILTER (WHERE e.detail->>'outcome' IN ('kept','failed'))::int not_transcribed,
-        COUNT(*) FILTER (WHERE (e.detail->>'interrupted')::boolean)::int interrupted
+        COUNT(*) FILTER (WHERE e.detail->>'outcome'='retried')::int transcribed_later,
+        COUNT(*) FILTER (WHERE (e.detail->>'interrupted')::boolean OR e.detail->>'outcome'='interrupted')::int interrupted
         FROM events e WHERE ${where} AND e.detail->>'outcome' NOT IN ('cancelled','empty') GROUP BY 1,2,3 ORDER BY recordings DESC`, [days])).rows;
-      const versions = (await pool.query(`SELECT e.detail->>'version' version,COUNT(*)::int recordings,COUNT(*) FILTER (WHERE e.detail->>'outcome' IN ('kept','failed'))::int not_transcribed FROM events e WHERE ${where} AND e.detail->>'outcome' NOT IN ('cancelled','empty') GROUP BY 1 ORDER BY 1 DESC LIMIT 20`, [days])).rows;
+      const versions = (await pool.query(`SELECT e.detail->>'version' version,COUNT(*) FILTER (WHERE e.detail->>'outcome'<>'retried')::int recordings,COUNT(*) FILTER (WHERE e.detail->>'outcome' IN ('kept','failed'))::int not_transcribed FROM events e WHERE ${where} AND e.detail->>'outcome' NOT IN ('cancelled','empty') GROUP BY 1 ORDER BY 1 DESC LIMIT 20`, [days])).rows;
+      // Why recordings were interrupted, needed the saved recording, or were not transcribed, per device.
+      const reasons = (await pool.query(`SELECT e.detail->>'os' os,e.detail->>'browser' browser,e.detail->>'mode' mode,e.detail->>'outcome' outcome,
+        COALESCE(NULLIF(e.detail->>'cause',''),'') cause,COALESCE(e.detail->>'reason','') reason,COALESCE(NULLIF(e.detail->>'fallback',''),'') fallback,COUNT(*)::int count
+        FROM events e WHERE ${where} AND (e.detail->>'outcome' IN ('recovered','kept','failed','interrupted') OR (e.detail->>'interrupted')::boolean)
+        GROUP BY 1,2,3,4,5,6,7 ORDER BY count DESC LIMIT 100`, [days])).rows;
       const problems = (await pool.query(`SELECT e.created_at,u.name,u.email,e.detail FROM events e LEFT JOIN users u ON u.id=e.user_id WHERE ${where} AND e.detail->>'outcome' IN ('recovered','kept','failed','interrupted') ORDER BY e.created_at DESC LIMIT 50`, [days])).rows;
-      res.set('Cache-Control', 'no-store').json({ days, totals, devices, versions, problems });
+      res.set('Cache-Control', 'no-store').json({ days, totals, devices, versions, reasons, problems });
     } catch (e) { logger.error?.('[live-transcription] reliability', e); res.status(500).json({ error: 'Reliability could not be loaded' }); }
   });
 }
