@@ -1653,14 +1653,17 @@ function acquireLocation(force=false) {
   return state._locationPromise;
 }
 
-function showDictationInterruption(reason) {
+// paused: live Record Notes paused on its own (the app left the screen, or the phone
+// used the microphone). The words so far are saved and Continue Recording keeps going.
+function showDictationInterruption(reason,{paused=false}={}) {
   document.getElementById('dictationInterruptedDialog')?.remove();
   const note=document.getElementById('note'),photo=state.photoFile,generation=dictationGeneration;
   if(!note)return;
-  const status=document.getElementById('dictationStatus');if(status)status.textContent='Recording stopped early. Your captured words are kept.';
+  const status=document.getElementById('dictationStatus');if(status&&!document.getElementById('dictationRetryTranscription'))status.textContent=paused?'Recording paused. Your words so far are saved.':'Recording stopped early. Your captured words are kept.';
   const dialog=document.createElement('dialog');dialog.id='dictationInterruptedDialog';dialog.className='web-help-dialog';dialog.style.background='#fff';dialog.style.color='#000';
   dialog.setAttribute('aria-labelledby','dictationInterruptedTitle');
-  dialog.innerHTML='<h2 id="dictationInterruptedTitle">Recording stopped early</h2><p id="dictationInterruptedReason" style="color:#000"></p><p style="color:#000">Your captured words are kept. Restart to continue your note.</p><button class="btn" id="dictationRestart" type="button">Restart Recording</button><button class="btn secondary" id="dictationStop" type="button">Stop</button>';
+  dialog.innerHTML=paused?'<h2 id="dictationInterruptedTitle">Recording paused</h2><p id="dictationInterruptedReason" style="color:#000"></p><button class="btn" id="dictationRestart" type="button">Continue Recording</button><button class="btn secondary" id="dictationStop" type="button">Stop</button>'
+    :'<h2 id="dictationInterruptedTitle">Recording stopped early</h2><p id="dictationInterruptedReason" style="color:#000"></p><p style="color:#000">Your captured words are kept. Restart to continue your note.</p><button class="btn" id="dictationRestart" type="button">Restart Recording</button><button class="btn secondary" id="dictationStop" type="button">Stop</button>';
   dialog.querySelector('#dictationInterruptedReason').textContent=reason;
   // Live Record Notes does not use the browser speech engine, so Restart is ready at once.
   if(isIOS()&&!liveRecordNotes()&&window.PhotoNotesSpeechDocument)dialog.querySelector('#dictationRestart').disabled=!window.PhotoNotesSpeechDocument.constructor();
@@ -1723,9 +1726,12 @@ function liveRecordNotes(){return !!window.PhotoNotesLiveTranscription?.enabled(
 function clearDictationWatch(generation){if(generation===dictationGeneration&&dictationWatchdog){clearTimeout(dictationWatchdog);dictationWatchdog=null;}}
 // Live Record Notes status. "kept" means the recording is held on this device
 // because transcription could not finish; the person can retry it here.
-function showLiveRecordingStatus(phase,photo,noteEl,kept){
+// where: {segment, anchor} locates this recording's live words in the note, so the
+// words checked against the saved recording replace them instead of repeating them.
+function showLiveRecordingStatus(phase,photo,noteEl,kept,where={},detail=''){
   const status=document.getElementById('dictationStatus');if(!status)return;
   if(phase==='capture')return;
+  if(phase==='silent'){status.textContent=window.PhotoNotesLiveTranscription?.messages?.silent||'No sound is reaching PhotoNotes from the microphone.';return;}
   document.getElementById('dictationRetryTranscription')?.remove();
   if(phase==='live'){status.textContent='Listening...';return;}
   if(phase==='offline'){status.textContent='Connection lost. Still recording. Reconnecting; your words will be added when you stop.';return;}
@@ -1734,14 +1740,20 @@ function showLiveRecordingStatus(phase,photo,noteEl,kept){
   // The recording is saved on this device and retried automatically. While this
   // photo is still open, the words are added here; otherwise they appear under
   // Recovered recordings.
-  const place=text=>{
+  const live=window.PhotoNotesLiveTranscription,swap=value=>live?.replaceSegment?live.replaceSegment(value,where,text,mergeSpeechTranscript):mergeSpeechTranscript(String(value||'').trim(),text);let text='';
+  const place=words=>{
     if(document.getElementById('note')!==noteEl||state.photoFile!==photo||!noteEl.isConnected)return false;
-    if(text){noteEl.value=mergeSpeechTranscript(noteEl.value.trim(),text);state._note=noteEl.value;void persistCaptureDraft().catch(()=>{});}
+    text=words;
+    if(text){
+      noteEl.value=swap(noteEl.value);state._note=noteEl.value;void persistCaptureDraft().catch(()=>{});
+      // A recording continued after the pause builds on the note; keep it in step.
+      if(dictationActive&&dictationBase){dictationBase=swap(dictationBase);if(dictationBase&&!dictationBase.endsWith(' '))dictationBase+=' ';}
+    }
     const current=document.getElementById('dictationStatus');if(current)current.textContent=text?'Words added from your recording.':'No words were found in the recording.';
     document.getElementById('dictationRetryTranscription')?.remove();return true;
   };
   if(kept)window.PhotoNotesLiveTranscription.claimKept(kept.id,place);
-  status.textContent='Your recording is saved on this device and will be turned into text automatically when the connection returns. You can also tap Transcribe Recording.';
+  status.textContent=detail==='background'?(live?.messages?.backgroundSaved||'Your words so far are saved on this device.'):'Your recording is saved on this device and will be turned into text automatically when the connection returns. You can also tap Transcribe Recording.';
   const button=document.createElement('button');button.type='button';button.className='btn secondary';button.id='dictationRetryTranscription';button.textContent='Transcribe Recording';
   button.onclick=async()=>{
     button.disabled=true;button.textContent='Transcribing...';
@@ -1834,6 +1846,8 @@ function startDictationSession(SR, continuedText = '') {
   session.continuous = true;
   session.interimResults = true;
   let sessionText = '', microphoneStarted = false;
+  // The note text before this recording, used to find this recording's words later.
+  const sessionBase = dictationBase.trim();
   // Automatic Android restarts belong to one user recording. Reconcile its
   // received snapshots before joining them to words present before the tap.
   const recordingText = () => continuedText ? mergeSpeechContinuation(continuedText,sessionText) : sessionText;
@@ -1889,7 +1903,8 @@ function startDictationSession(SR, continuedText = '') {
   session.onstatus = (e) => {
     if(generation!==dictationGeneration||document.getElementById('note')!==noteEl)return;
     recordDictationEvent('live-'+e.state,e.detail||'');
-    showLiveRecordingStatus(e.state,photoForSession,noteEl,session.keptRecording);
+    const shown=noteEl?noteEl.value:'',where={anchor:sessionBase,segment:shown.startsWith(sessionBase)?shown.slice(sessionBase.length).trim():''};
+    showLiveRecordingStatus(e.state,photoForSession,noteEl,session.keptRecording,where,e.detail||'');
   };
   session.onerror = (e) => {
     if(generation!==dictationGeneration)return;
@@ -1901,8 +1916,9 @@ function startDictationSession(SR, continuedText = '') {
       // Wait for the normal end callback, bounded even if it never arrives.
       watchForWords();return;
     }
+    const installedApp=navigator.standalone===true||!!window.matchMedia?.('(display-mode: standalone)').matches;
     const reason=err==='network'?'Speech recognition lost its connection.':
-      (err==='not-allowed'||err==='service-not-allowed')?'Microphone access was denied. Allow access before restarting.':
+      (err==='not-allowed'||err==='service-not-allowed')?(isIOS()&&installedApp?'Microphone access was not allowed. The Home Screen app can ask again each time it opens. Tap Restart Recording and choose Allow.':'Microphone access was denied. Allow access before restarting.'):
       err==='audio-capture'?'The microphone became unavailable.':
       'Speech recognition stopped before you pressed Stop.';
     stopCaptureDictation();showDictationInterruption(reason);
@@ -1931,8 +1947,8 @@ function startDictationSession(SR, continuedText = '') {
     if(recordingText()){dictationBase=mergeSpeechTranscript(dictationBase,recordingText());if(dictationBase)dictationBase+=' ';}
     cleanupDictation();
     if(interrupted&&current){
-      const status=document.getElementById('dictationStatus');if(status)status.textContent='Recording stopped early. Your captured words are kept.';
-      if(live&&endEvent?.interrupted)showDictationInterruption(endEvent.reason==='background'?'Recording paused because PhotoNotes left the screen. Tap Restart Recording to continue the same note.':'Recording paused because the phone used the microphone, for example a call or Siri. Tap Restart Recording to continue the same note.');
+      const status=document.getElementById('dictationStatus');if(status&&!(live&&endEvent?.interrupted))status.textContent='Recording stopped early. Your captured words are kept.';
+      if(live&&endEvent?.interrupted)showDictationInterruption(window.PhotoNotesLiveTranscription?.pauseMessage?.(endEvent.reason)||'Recording paused. Your words so far are saved. Tap Continue Recording to keep going.',{paused:true});
       else showDictationInterruption('Speech recognition stopped before you pressed Stop.');
     }
   };

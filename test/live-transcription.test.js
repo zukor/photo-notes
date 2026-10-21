@@ -99,7 +99,9 @@ function browser(options = {}) {
   let processor = null;
   const contexts = [];
   class FakeContext {
-    constructor() { this.state = 'running'; this.sampleRate = 48000; this.destination = {}; contexts.push(this); }
+    constructor() { this.state = 'running'; this.sampleRate = 48000; this.destination = {}; this.listeners = {}; contexts.push(this); }
+    addEventListener(name, fn) { this.listeners[name] = fn; }
+    removeEventListener(name) { delete this.listeners[name]; }
     resume() { return Promise.resolve(); }
     close() { this.state = 'closed'; return Promise.resolve(); }
     createMediaStreamSource() { return { connect() {}, disconnect() {} }; }
@@ -115,27 +117,27 @@ function browser(options = {}) {
     dispatchEvent(event) { (listeners[event.type] || []).forEach(fn => fn(event)); return true; },
   };
   const docListeners = {};
-  const document = { visibilityState: 'visible', addEventListener(n, fn) { (docListeners[n] ||= []).push(fn); }, removeEventListener(n, fn) { docListeners[n] = (docListeners[n] || []).filter(f => f !== fn); }, querySelector: () => null, getElementById: () => null, hide() { this.visibilityState = 'hidden'; (docListeners.visibilitychange || []).forEach(fn => fn()); } };
+  const document = { visibilityState: 'visible', addEventListener(n, fn) { (docListeners[n] ||= []).push(fn); }, removeEventListener(n, fn) { docListeners[n] = (docListeners[n] || []).filter(f => f !== fn); }, querySelector: () => null, getElementById: () => null, hide() { this.visibilityState = 'hidden'; (docListeners.visibilitychange || []).forEach(fn => fn()); }, show() { this.visibilityState = 'visible'; (docListeners.visibilitychange || []).forEach(fn => fn()); } };
   const outcomes = [];
   const context = {
     window, document, CustomEvent: class { constructor(type) { this.type = type; } }, crypto, WebSocket: FakeSocket, Blob, URLSearchParams, AbortController, console,
     localStorage: { getItem: () => null, setItem() {} },
-    navigator: { userAgent, onLine: true, mediaDevices: { getUserMedia: async () => ({ getTracks: () => [track], getAudioTracks: () => [track] }) } },
+    navigator: { userAgent, onLine: true, mediaDevices: { getUserMedia: async () => { if (opts.micError) throw Object.assign(new Error('mic'), { name: opts.micError }); return { getTracks: () => [track], getAudioTracks: () => [track] }; } } },
     setTimeout: (fn, ms) => { timers.push({ fn, ms }); if (ms <= 1000) return setTimeout(fn, 0); return timers.length; },
     clearTimeout: id => clearTimeout(id),
     fetch: async (url, options = {}) => {
       fetches.push({ url, options });
       if (url.startsWith('/api/transcription/config')) return json({ live: true });
       if (url.startsWith('/api/transcription/session')) return opts.sessionOk ? json({ url: 'wss://streaming.assemblyai.com/v3/ws?token=t&format_turns=true' }) : { ok: false, status: 502, json: async () => ({}) };
-      if (url.startsWith('/api/transcription/recording')) return opts.recordingOk ? json({ text: opts.recordingText }) : { ok: false, status: 502, json: async () => ({}) };
+      if (url.startsWith('/api/transcription/recording')) { if (opts.recordingNetworkDown) throw new TypeError('Load failed'); return opts.recordingOk ? json({ text: opts.recordingText }) : { ok: false, status: opts.recordingStatus || 502, json: async () => ({ code: opts.recordingCode }) }; }
       if (url.startsWith('/api/transcription/outcome')) { outcomes.push(JSON.parse(options.body)); return json({ ok: true }); }
       throw new Error('unexpected ' + url);
     },
   };
   vm.runInNewContext(fs.readFileSync('public/live-transcription.js', 'utf8'), context);
   const api = window.PhotoNotesLiveTranscription;
-  const speak = (seconds = 1) => { for (let i = 0; i < seconds * 12; i++) processor.onaudioprocess({ inputBuffer: { getChannelData: () => new Float32Array(4000).fill(0.1) } }); };
-  return { api, sockets, fetches, track, speak, timers, outcomes, window, document, opts, contexts };
+  const speak = (seconds = 1, level = 0.1) => { for (let i = 0; i < seconds * 12; i++) processor.onaudioprocess({ inputBuffer: { getChannelData: () => new Float32Array(4000).fill(level) } }); };
+  return { api, sockets, fetches, track, speak, timers, outcomes, window, document, opts, contexts, uploads: () => fetches.filter(f => f.url.startsWith('/api/transcription/recording')) };
 }
 const flush = () => new Promise(r => setTimeout(r, 5));
 function recorder(api) {
@@ -474,4 +476,213 @@ test('after the app leaves the screen, the next recording uses a fresh audio pip
 test('Restart Recording after an interruption is not held for the browser speech engine when live recording is used', () => {
   const app = fs.readFileSync('public/app.js', 'utf8');
   assert.match(app, /if\(isIOS\(\)&&!liveRecordNotes\(\)&&window\.PhotoNotesSpeechDocument\)dialog\.querySelector\('#dictationRestart'\)\.disabled=/);
+});
+
+// ---------- iPhone background, fallback and outcome reasons ----------
+const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X)';
+
+test('leaving the screen saves the captured audio at once and ends without waiting for the network', async () => {
+  const ctx = browser({ userAgent: IPHONE, recordingText: 'Before leaving the gate is cracked.' });
+  await ctx.api.refresh(); ctx.api.unlock();
+  const { r, events, text } = recorder(ctx.api);
+  r.start(); await flush(); await flush();
+  ctx.sockets[0].open(); ctx.speak(2);
+  ctx.sockets[0].message({ type: 'Turn', turn_order: 0, transcript: 'Before leaving', end_of_turn: false });
+  ctx.document.hide();
+  await flush(); await flush();
+  assert.ok(events.includes('end-interrupted'), 'ends without a Termination reply');
+  assert.ok(events.includes('status:kept'), 'audio saved on the device before any network step');
+  assert.ok(r.keptRecording && r.keptRecording.seconds >= 2);
+  assert.equal(ctx.uploads().length, 0, 'nothing is sent while the app is off screen');
+  assert.equal(ctx.outcomes.length, 0, 'the outcome waits for the result');
+  assert.equal(text(), 'Before leaving', 'live words stay in the note');
+  assert.equal(ctx.track.stopped, true, 'microphone released');
+  // Back on screen: the saved audio is transcribed and routed to the note.
+  let placed = '';
+  ctx.api.claimKept(r.keptRecording.id, words => { placed = words; return true; });
+  ctx.document.show();
+  await new Promise(done => setTimeout(done, 20)); await flush();
+  assert.equal(placed, 'Before leaving the gate is cracked.');
+  assert.equal(ctx.outcomes.length, 1);
+  const o = ctx.outcomes[0];
+  assert.equal(o.outcome, 'recovered'); assert.equal(o.reason, 'background'); assert.equal(o.cause, 'background'); assert.equal(o.interrupted, true); assert.equal(o.words, 6);
+  assert.equal(JSON.stringify(ctx.outcomes).includes('gate'), false, 'no words in outcomes');
+});
+
+test('a recording saved in the background that still cannot be transcribed reports why, then retries later', async () => {
+  const ctx = browser({ userAgent: IPHONE, recordingOk: false, recordingStatus: 502, recordingCode: 'provider-timeout' });
+  await ctx.api.refresh(); ctx.api.unlock();
+  const { r } = recorder(ctx.api);
+  r.start(); await flush(); await flush(); ctx.sockets[0].open(); ctx.speak(2);
+  ctx.document.hide(); await flush(); await flush();
+  ctx.document.show(); await new Promise(done => setTimeout(done, 20)); await flush();
+  assert.equal(ctx.outcomes.length, 1);
+  assert.equal(ctx.outcomes[0].outcome, 'kept'); assert.equal(ctx.outcomes[0].reason, 'background'); assert.equal(ctx.outcomes[0].fallback, 'upload-502-provider-timeout');
+  ctx.opts.recordingOk = true; ctx.api.claimKept(r.keptRecording.id, () => true);
+  ctx.window.dispatchEvent({ type: 'online' }); await flush(); await flush(); await flush();
+  assert.equal(ctx.outcomes.at(-1).outcome, 'retried'); assert.equal(ctx.outcomes.at(-1).reason, 'background'); assert.equal(ctx.outcomes.at(-1).attempts, 2);
+});
+
+test('recordings are not retried while the app is off screen', async () => {
+  const ctx = browser({ sessionOk: false, recordingOk: false });
+  await ctx.api.refresh(); ctx.api.unlock();
+  const { r } = recorder(ctx.api);
+  r.start(); await flush(); await flush(); ctx.speak(2); r.stop(); await flush(); await flush(); await flush();
+  const before = ctx.uploads().length;
+  ctx.document.visibilityState = 'hidden';
+  ctx.opts.recordingOk = true; ctx.api.claimKept(r.keptRecording.id, () => true);
+  ctx.window.dispatchEvent({ type: 'online' }); await flush(); await flush();
+  assert.equal(ctx.uploads().length, before);
+  ctx.document.show(); await new Promise(done => setTimeout(done, 20)); await flush();
+  assert.equal(ctx.uploads().length, before + 1);
+});
+
+test('the live words of a recovered recording are replaced, not repeated', () => {
+  const { api } = browser();
+  const swap = api._test.replaceSegment;
+  assert.equal(swap('Typed first. the crack is', { anchor: 'Typed first.', segment: 'the crack is' }, 'The crack is near the gate.'), 'Typed first. The crack is near the gate.');
+  assert.equal(swap('Typed first. the crack is Next part.', { anchor: 'Typed first.', segment: 'the crack is' }, 'The crack is near the gate.'), 'Typed first. The crack is near the gate. Next part.', 'words recorded after Continue Recording stay after it');
+  assert.equal(swap('Typed first. Next part.', { anchor: 'Typed first.', segment: '' }, 'Recovered.'), 'Typed first. Recovered. Next part.', 'no live words: inserted where the recording was');
+  assert.equal(swap('', { anchor: '', segment: '' }, 'Recovered.'), 'Recovered.');
+  assert.equal(swap('Edited by hand.', { anchor: 'Typed first.', segment: 'gone' }, 'Recovered.'), 'Edited by hand. Recovered.', 'an edited note gets the words at the end');
+  assert.equal(swap('Kept as is.', { segment: 'Kept' }, ''), 'Kept as is.', 'no recovered words leaves the note unchanged');
+});
+
+test('a failed check of the saved recording reports the upload status and server code', async () => {
+  const ctx = browser({ sessionOk: false, recordingOk: false, recordingStatus: 429, recordingCode: 'rate-limit' });
+  await ctx.api.refresh(); ctx.api.unlock();
+  const { r } = recorder(ctx.api);
+  r.start(); await flush(); await flush(); ctx.speak(2); r.stop(); await flush(); await flush(); await flush();
+  const o = ctx.outcomes.at(-1);
+  assert.equal(o.outcome, 'kept'); assert.equal(o.reason, 'token-failed'); assert.equal(o.fallback, 'upload-429-rate-limit'); assert.equal(o.mode, 'browser'); assert.equal(o.hidden, false);
+  const net = browser({ sessionOk: false, recordingNetworkDown: true });
+  await net.api.refresh(); net.api.unlock();
+  const n = recorder(net.api);
+  n.r.start(); await flush(); await flush(); net.speak(2); n.r.stop(); await flush(); await flush(); await flush();
+  assert.equal(net.outcomes.at(-1).fallback, 'upload-network');
+});
+
+test('closing the screen while words are being checked keeps the recording instead of losing it', async () => {
+  const ctx = browser({ sessionOk: false, recordingText: 'Checked after the screen closed.' });
+  let recovered = 0; ctx.window.addEventListener('photonotes-recordings-recovered', () => recovered++);
+  ctx.document.querySelector = () => ({}); // another dialog is open, so the list waits
+  await ctx.api.refresh(); ctx.api.unlock();
+  const { r, events } = recorder(ctx.api);
+  r.start(); await flush(); await flush(); ctx.speak(2);
+  r.stop(); r.abort(); // Take Photo or a new photo right after Stop
+  await flush(); await flush(); await flush(); await flush();
+  assert.ok(events.includes('end'));
+  assert.equal(ctx.uploads().length, 1, 'the check still runs');
+  assert.equal(recovered, 1, 'words go to Recovered recordings');
+  assert.equal(events.filter(e => e === 'result').length, 0, 'no words are written into the closed screen');
+  assert.equal(ctx.outcomes.at(-1).outcome, 'recovered'); assert.equal(ctx.outcomes.at(-1).cause, 'left-screen');
+});
+
+test('a microphone that sends no sound is reported as mic-silent and nothing is uploaded', async () => {
+  const ctx = browser();
+  await ctx.api.refresh(); ctx.api.unlock();
+  const { r, events } = recorder(ctx.api);
+  r.start(); await flush(); await flush(); ctx.sockets[0].open();
+  ctx.speak(3, 0);
+  ctx.timers.find(t => t.ms === 3000).fn();
+  assert.ok(events.includes('status:silent'), 'warned while recording');
+  r.stop(); await flush(); ctx.sockets[0].message({ type: 'Termination' }); await flush(); await flush();
+  assert.equal(ctx.uploads().length, 0);
+  assert.equal(ctx.outcomes.at(-1).outcome, 'failed'); assert.equal(ctx.outcomes.at(-1).reason, 'mic-silent');
+});
+
+test('a short recording with no live words is still checked against the saved audio', async () => {
+  const ctx = browser({ recordingText: 'Yes.' });
+  await ctx.api.refresh(); ctx.api.unlock();
+  const { r, text } = recorder(ctx.api);
+  r.start(); await flush(); await flush(); ctx.sockets[0].open(); ctx.speak(1);
+  r.stop(); await flush(); ctx.sockets[0].message({ type: 'Termination' }); await flush(); await flush(); await flush();
+  assert.equal(ctx.uploads().length, 1);
+  assert.equal(text(), 'Yes.');
+  assert.equal(ctx.outcomes.at(-1).outcome, 'recovered'); assert.equal(ctx.outcomes.at(-1).reason, 'no-live-text');
+});
+
+test('microphone start failures carry specific reasons', async () => {
+  for (const [name, error, reason] of [['NotAllowedError', 'not-allowed', 'mic-denied'], ['NotReadableError', 'audio-capture', 'mic-notreadable']]) {
+    const ctx = browser({ micError: name }); await ctx.api.refresh(); ctx.api.unlock();
+    const { r, events } = recorder(ctx.api);
+    r.start(); await flush(); await flush();
+    assert.ok(events.includes('error:' + error));
+    assert.equal(ctx.outcomes.at(-1).outcome, 'failed'); assert.equal(ctx.outcomes.at(-1).reason, reason);
+  }
+});
+
+test('a phone audio interruption that does not end pauses the note and keeps the words', async () => {
+  const ctx = browser({ recordingText: 'Words before the alarm.' });
+  await ctx.api.refresh(); ctx.api.unlock();
+  const { r, events } = recorder(ctx.api);
+  r.start(); await flush(); await flush(); ctx.sockets[0].open(); ctx.speak(2);
+  const audio = ctx.contexts[0];
+  audio.state = 'interrupted'; audio.resume = () => Promise.resolve(); audio.listeners.statechange();
+  ctx.timers.filter(t => t.ms === 1500).at(-1).fn();
+  await flush(); ctx.sockets[0].message({ type: 'Termination' }); await flush(); await flush(); await flush();
+  assert.ok(events.includes('end-interrupted'));
+  assert.equal(r.interruption, 'audio-interrupted');
+  assert.equal(ctx.outcomes.at(-1).cause, 'audio-interrupted');
+});
+
+test('saved-recording upload rejects non-WAV audio with a reason code and reports provider failures by code', async () => {
+  let providerCalls = 0;
+  const call = routes({ ASSEMBLYAI_API_KEY: 'k' }, async url => { providerCalls++; if (url.endsWith('/v2/upload')) return { ok: false, status: 503, json: async () => ({}) }; return json({}); });
+  const notWav = await call('POST', '/api/transcription/recording', { body: Buffer.from('ftypM4A ' + ' '.repeat(80)) });
+  assert.equal(notWav.statusCode, 415); assert.equal(notWav.body.code, 'unsupported-format'); assert.equal(providerCalls, 0);
+  assert.equal((await call('POST', '/api/transcription/recording', { body: Buffer.alloc(10) })).body.code, 'too-small');
+  const wav = Buffer.alloc(100); wav.write('RIFF', 0, 'ascii'); wav.write('WAVE', 8, 'ascii');
+  const failed = await call('POST', '/api/transcription/recording', { body: wav });
+  assert.equal(failed.statusCode, 502); assert.equal(failed.body.code, 'provider-upload-503');
+});
+
+test('starting recordings and checking saved recordings have separate limits', async () => {
+  const handlers = {};
+  const app = { get(p, ...f) { handlers['GET ' + p] = f; }, post(p, ...f) { handlers['POST ' + p] = f; } };
+  live.register(app, { requireAuth: (q, r, n) => n(), env: { ASSEMBLYAI_API_KEY: 'k' }, recordingLimiter: () => false, fetchImpl: async () => json({ token: 't' }), logger: { warn() {} } });
+  const run = async (key, req) => { const res = { statusCode: 200, set() { return this; }, status(c) { this.statusCode = c; return this; }, json(b) { this.body = b; return this; } }; for (const fn of handlers[key]) { if (fn.length === 3) { await new Promise(d => fn(req, res, d)); continue; } await fn(req, res); } return res; };
+  const wav = Buffer.alloc(100); wav.write('RIFF', 0, 'ascii'); wav.write('WAVE', 8, 'ascii');
+  const busy = await run('POST /api/transcription/recording', { user: { id: 1 }, body: wav, query: {}, headers: {} });
+  assert.equal(busy.statusCode, 429); assert.equal(busy.body.code, 'rate-limit');
+  assert.equal((await run('POST /api/transcription/session', { user: { id: 1 }, body: {}, query: {}, headers: {} })).statusCode, 200, 'a new recording can still start');
+});
+
+test('outcomes keep cause, fallback, wake lock and app state codes, and tell iPad from Mac', () => {
+  const d = live.outcomeDetail({ surface: 'capture', outcome: 'kept', reason: 'background', cause: 'background', fallback: 'upload-502-provider-upload-500+backup-5', wake: 'failed', attempts: 3, hidden: true, restored: true, touch: true, mode: 'installed' }, 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit Version/18 Safari/605.1.15');
+  assert.equal(d.os, 'iPad'); assert.equal(d.cause, 'background'); assert.equal(d.fallback, 'upload-502-provider-upload-500+backup-5'); assert.equal(d.wake, 'failed');
+  assert.equal(d.attempts, 3); assert.equal(d.hidden, true); assert.equal(d.restored, true); assert.equal(d.mode, 'installed');
+  assert.equal(live.outcomeDetail({ surface: 'capture', outcome: 'live' }, 'Mozilla/5.0 (Macintosh) Safari/605').os, 'Mac');
+});
+
+test('reliability report lists reasons per device and does not count later transcriptions as new recordings', async () => {
+  const queries = [];
+  const pool = { query: async sql => { queries.push(sql); return { rows: [] }; } };
+  const handlers = {};
+  const app = { get(p, ...f) { handlers['GET ' + p] = f; }, post(p, ...f) { handlers['POST ' + p] = f; } };
+  live.register(app, { requireAuth: (q, r, n) => n(), pool, env: {}, fetchImpl: async () => json({}), logger: { warn() {}, error() {} } });
+  const res = { set() { return this; }, status() { return this; }, json(b) { this.body = b; return this; } };
+  const fns = handlers['GET /api/admin/record-notes-reliability'];
+  await new Promise(done => fns[0]({ user: { role: 'admin' }, query: {} }, res, done));
+  await fns[1]({ user: { role: 'admin' }, query: {} }, res);
+  assert.ok(Array.isArray(res.body.reasons));
+  const devices = queries.find(q => q.includes('transcribed_later'));
+  assert.match(devices, /FILTER \(WHERE e\.detail->>'outcome'<>'retried'\)::int recordings/);
+  assert.ok(queries.some(q => q.includes("e.detail->>'fallback'") && q.includes("e.detail->>'cause'")));
+  const page = fs.readFileSync('public/admin-record-notes.js', 'utf8');
+  assert.match(page, /Reasons by device/); assert.match(page, /Why not transcribed/); assert.match(page, /Transcribed later/);
+});
+
+test('Capture shows a plain pause message with Continue Recording and replaces live words with checked words', () => {
+  const ctx = browser();
+  assert.match(ctx.api.pauseMessage('background'), /^Recording paused because PhotoNotes left the screen\. Phones do not let web apps record in the background\. Your words so far are saved\. Tap Continue Recording to keep going\.$/);
+  assert.match(ctx.api.pauseMessage('mic-ended'), /call, Siri or an alarm/);
+  const app = fs.readFileSync('public/app.js', 'utf8');
+  assert.match(app, /id="dictationRestart" type="button">Continue Recording<\/button>/);
+  assert.match(app, /showDictationInterruption\(window\.PhotoNotesLiveTranscription\?\.pauseMessage\?\.\(endEvent\.reason\)[^;]*\{paused:true\}\)/);
+  assert.match(app, /live\.replaceSegment\(value,where,text,mergeSpeechTranscript\)/);
+  assert.match(app, /if\(dictationActive&&dictationBase\)\{dictationBase=swap\(dictationBase\)/);
+  for (const text of ['Recording paused', 'Continue Recording', ctx.api.pauseMessage('background'), ctx.api.messages.backgroundSaved, ctx.api.messages.silent]) assert.ok(/[—]/.test(text) === false, 'no em dashes');
+  const i18n = fs.readFileSync('public/i18n.js', 'utf8');
+  for (const text of ['Recording paused', 'Continue Recording', ctx.api.pauseMessage('background'), ctx.api.pauseMessage('mic-ended'), ctx.api.messages.backgroundSaved, ctx.api.messages.silent]) assert.ok(i18n.includes(JSON.stringify(text)), 'Spanish for: ' + text);
 });
