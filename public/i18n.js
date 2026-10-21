@@ -234,7 +234,7 @@
     'Show issues':'Mostrar reportes', 'Open issues':'Reportes abiertos', 'Closed issues':'Reportes cerrados', 'All issues':'Todos los reportes',
     'No open issues.':'No hay reportes abiertos.', 'No closed issues.':'No hay reportes cerrados.',
     'Light mode':'Modo claro', 'Dark mode':'Modo oscuro', 'Appearance':'Apariencia',
-    "Delete Selected": "Eliminar selección", "Line": "Línea",
+    "Delete Selected": "Eliminar selección", "Select PhotoNotes to delete": "Seleccione PhotoNotes para eliminar", "Delete failed. Nothing was deleted.": "No se pudo eliminar. No se eliminó nada.", "Line": "Línea",
     "What were you trying to do?": "¿Qué intentaba hacer?",
     "What did you expect to happen?": "¿Qué esperaba que sucediera?",
     "How often does it happen?": "¿Con qué frecuencia sucede?",

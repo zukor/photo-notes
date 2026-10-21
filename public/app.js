@@ -2895,6 +2895,7 @@ async function renderList() {
       <label for="libraryAssignGroup" id="libraryAssignGroupLabel" hidden>Group (Optional)<select id="libraryAssignGroup"><option value="">No Group</option></select></label>
       <button class="btn" id="libraryAssign" type="button">Add to Project</button>
       <button class="btn secondary" id="libraryCreateAndAssign" type="button">Create New Project</button>
+      <button class="btn secondary library-delete-selected" id="libraryDeleteSelected" type="button">Delete Selected</button>
       ${featureOn('measurements')?'<button class="btn secondary" id="classifybatch" type="button">Classify Selected (AI)</button><span class="status" id="classifyprog" role="status" aria-live="polite"></span>':''}
     </section>
     <div class="organize-library-heading"><h2>Saved PhotoNotes</h2><div class="row compact"><button class="btn secondary slim" id="librarySelectAll">Select All</button><button class="btn secondary slim" id="libraryClearSelection">Clear Selection</button></div></div>
@@ -2913,6 +2914,7 @@ async function renderList() {
   document.getElementById('photoSearchClear').onclick=()=>{globalThis.PhotoNotesCustomFields?.resetFilter();document.getElementById('photoSearch').value='';document.getElementById('filter').value='';document.getElementById('jobFilter').value='';document.getElementById('searchFrom').value='';document.getElementById('searchTo').value='';document.getElementById('searchMissingAddress').checked=false;['markerFavorites','markerFlagged'].forEach(id=>{const e=document.getElementById(id);if(e)e.checked=false;});runSmartSearch();};
   document.getElementById('librarySelectAll').onclick=()=>{document.querySelectorAll('.capchk').forEach(c=>{c.checked=true;state.selectedIds.add(String(c.value));});updateAnnotationSelection();};
   document.getElementById('libraryClearSelection').onclick=()=>{state.selectedIds.clear();document.querySelectorAll('.capchk').forEach(c=>c.checked=false);updateAnnotationSelection();};
+  document.getElementById('libraryDeleteSelected').onclick=deleteSelectedLibraryPhotos;
   const scheduledPhotos=document.getElementById('fuOpen');if(scheduledPhotos)scheduledPhotos.onclick=()=>window.PhotoNotesFollowUps.open();
   document.getElementById('requestProjectPhotos').onclick=()=>{const id=document.getElementById('jobFilter').value;if(!id||id==='unassigned')return toast('Choose a project first');state._photoRequestProjectId=id;rememberPhotoToolReturn();state.view='photo-requests';renderApp();};
   const ramoSend=document.getElementById('ramoIntakeSend');if(ramoSend)ramoSend.onclick=()=>openRamoIntake();
@@ -3584,6 +3586,24 @@ function wireCards(cards, rows) {
   cards.querySelectorAll('.editconcrete').forEach(b=>b.onclick=()=>{const c=rows.find(r=>r.id===Number(b.dataset.id));if(c)openConcreteDetailsEditor(c);});
 }
 
+// Delete every checked PhotoNote in Library. The first tap asks for a second tap that names the count.
+async function deleteSelectedLibraryPhotos(){
+  const button=document.getElementById('libraryDeleteSelected'),ids=selectedCaptureIds();
+  if(!button)return;
+  if(!ids.length){toast('Select PhotoNotes to delete');return;}
+  const label=`Tap Again to Delete ${ids.length} PhotoNote${ids.length===1?'':'s'}`;
+  if(button.dataset.armed!==String(ids.length)){button.dataset.armed=String(ids.length);button.textContent=label;clearTimeout(button._disarm);button._disarm=setTimeout(()=>{delete button.dataset.armed;button.textContent='Delete Selected';},6000);return;}
+  clearTimeout(button._disarm);button.disabled=true;button.textContent='Deleting...';
+  try{
+    const r=await api('/api/captures/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids})});
+    if(!r.ok)throw Error('delete failed');
+    const d=await r.json().catch(()=>({}));
+    for(const id of ids)state.selectedIds.delete(String(id));
+    toast(`${d.deleted??ids.length} PhotoNote${(d.deleted??ids.length)===1?'':'s'} deleted`);
+    runSmartSearch();
+  }catch(e){toast('Delete failed. Nothing was deleted.');}
+  finally{const b=document.getElementById('libraryDeleteSelected');if(b){b.disabled=false;delete b.dataset.armed;b.textContent='Delete Selected';}updateAnnotationSelection();}
+}
 async function deleteOrganizePhotoNote(id, button) {
   if (!id || !confirm(uiT(`Delete this Photo Note? This can't be undone.`))) return;
   button.disabled = true;
