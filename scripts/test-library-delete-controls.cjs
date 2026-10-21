@@ -8,7 +8,7 @@ const express=require('express');
  const server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));
  try{for(const engine of [chromium,webkit]){const browser=await engine.launch();try{for(const width of [390,1440]){
  const page=await browser.newPage({viewport:{width,height:1000},serviceWorkers:'block'});const errors=[];page.on('pageerror',e=>errors.push(e.message));
- const fresh=()=>[{id:1,photo_title:'Front Gate With A Very Long Title For Phone Width Checks',note:'First',area_tags:['A'],photo_path:'/icon-192.png',created_at:'2026-03-05T15:30:00Z',address:'4521 Elm Creek Boulevard Northwest, San Antonio, TX 78230'},{id:2,photo_title:'Second',note:'Second',area_tags:['B'],photo_path:'/icon-192.png',created_at:'2026-04-10T12:00:00Z'}];
+ const fresh=()=>[{id:1,photo_title:'Front Gate With A Very Long Title For Phone Width Checks',note:'First',area_tags:['A'],photo_path:'/icon-192.png',created_at:'2026-03-05T15:30:00Z',address:'4521 Elm Creek Boulevard Northwest, San Antonio, TX 78230'},{id:2,photo_title:'Second',note:'Second',area_tags:['B'],photo_path:'/icon-192.png',created_at:'2026-04-10T12:00:00Z'},{id:3,photo_title:'Third',note:'Third',area_tags:[],photo_path:'/icon-192.png',created_at:'2026-04-11T12:00:00Z'},{id:4,photo_title:'Fourth',note:'Fourth',area_tags:[],photo_path:'/icon-192.png',created_at:'2026-04-12T12:00:00Z'}];
  let rows=fresh(),writes=[],checkouts=[],billing={checkout_enabled:true,offers:{inspection:{label:'Inspection Report',dba:'Zukor Marketing'}}};
  await page.route('**/api/**',async route=>{
   const url=new URL(route.request().url());let data=[];
@@ -17,7 +17,7 @@ const express=require('express');
   if(['/api/captures','/api/captures/search'].includes(url.pathname))data=rows;
   if(url.pathname==='/api/billing/config')data=billing;
   if(url.pathname==='/api/billing/checkout'){checkouts.push(route.request().postDataJSON());return route.fulfill({status:500,json:{error:'fixture'}});}
-  if(url.pathname==='/api/captures/delete'){const ids=route.request().postDataJSON().ids;writes.push(ids);rows=rows.filter(r=>!ids.includes(String(r.id)));data={ok:true,deleted:ids.length};}
+  if(url.pathname==='/api/captures/delete'){const ids=route.request().postDataJSON().ids.map(String);writes.push(ids);rows=rows.filter(r=>!ids.includes(String(r.id)));data={ok:true,deleted:ids.length};}
   await route.fulfill({contentType:'application/json',body:JSON.stringify(data)});
  });
  await page.addInitScript(()=>{localStorage.setItem('pn_install_prompt_dismissed_v1','dismissed');localStorage.setItem('pn_first_use_v1:'+encodeURIComponent('test@example.invalid'),'done');});
@@ -41,6 +41,15 @@ const express=require('express');
   const box=await meta.boundingBox(),card=await page.locator('.library-photo-card[data-library-photo="1"]').boundingBox();
   assert(box.height<=20,edition+' meta stays on one line');assert(box.x+box.width<=card.x+card.width+0.5,edition+' meta stays inside the card');
   assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),edition+' Library fits '+width);
+  // Check several photos and delete them at once, with a second tap that names the count.
+  await page.locator('.library-photo-card[data-library-photo="3"] .capchk').check();await page.locator('.library-photo-card[data-library-photo="4"] .capchk').check();
+  await page.locator('#libraryDeleteSelected').click();
+  assert.equal((await page.locator('#libraryDeleteSelected').textContent()).trim(),'Tap Again to Delete 2 PhotoNotes',edition+' second tap names the count');
+  assert.equal(writes.length,0,edition+' nothing deleted on the first tap');
+  await page.locator('#libraryDeleteSelected').click();
+  await page.waitForFunction(()=>!document.querySelector('.library-photo-card[data-library-photo="3"]')&&!document.querySelector('.library-photo-card[data-library-photo="4"]'));
+  assert.deepEqual(writes.pop().map(String).sort(),['3','4'],edition+' both checked photos deleted in one request');
+  assert.equal(await page.evaluate(()=>state.selectedIds.size),0,edition+' selection cleared');
   // Open a photo: the Library photo detail view keeps Delete.
   await page.locator('[data-library-open="1"]').click();await page.locator('#libraryBack').waitFor();
   assert.equal(await page.evaluate(()=>state.view+':'+state._libraryOpenId),'edit:1');
