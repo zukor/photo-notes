@@ -97,9 +97,11 @@ function browser(options = {}) {
     message(body) { this.onmessage?.({ data: JSON.stringify(body) }); }
   }
   let processor = null;
+  const contexts = [];
   class FakeContext {
-    constructor() { this.state = 'running'; this.sampleRate = 48000; this.destination = {}; }
+    constructor() { this.state = 'running'; this.sampleRate = 48000; this.destination = {}; contexts.push(this); }
     resume() { return Promise.resolve(); }
+    close() { this.state = 'closed'; return Promise.resolve(); }
     createMediaStreamSource() { return { connect() {}, disconnect() {} }; }
     createScriptProcessor() { processor = { connect() {}, disconnect() {}, onaudioprocess: null }; return processor; }
     createGain() { return { gain: { value: 1 }, connect() {}, disconnect() {} }; }
@@ -133,7 +135,7 @@ function browser(options = {}) {
   vm.runInNewContext(fs.readFileSync('public/live-transcription.js', 'utf8'), context);
   const api = window.PhotoNotesLiveTranscription;
   const speak = (seconds = 1) => { for (let i = 0; i < seconds * 12; i++) processor.onaudioprocess({ inputBuffer: { getChannelData: () => new Float32Array(4000).fill(0.1) } }); };
-  return { api, sockets, fetches, track, speak, timers, outcomes, window, document, opts };
+  return { api, sockets, fetches, track, speak, timers, outcomes, window, document, opts, contexts };
 }
 const flush = () => new Promise(r => setTimeout(r, 5));
 function recorder(api) {
@@ -430,4 +432,46 @@ test('on a phone, leaving the screen pauses recording as an interruption and kee
   ctx.sockets[0].message({ type: 'Termination' }); await flush(); await flush();
   assert.equal(text(), 'Before leaving.');
   assert.ok(events.includes('end-interrupted'));
+});
+
+test('Stop keeps audio still arriving from the microphone so the last words are sent', async () => {
+  const { api, sockets, speak } = browser();
+  await api.refresh(); api.unlock();
+  const { r } = recorder(api);
+  r.start(); await flush(); await flush();
+  const ws = sockets[0]; ws.open(); speak(1);
+  const before = ws.sent.length;
+  r.stop();
+  speak(0.5); // audio that was still in the phone's pipeline when Stop was tapped
+  await flush(); await flush();
+  const terminate = ws.sent.findIndex(m => typeof m === 'string' && JSON.parse(m).type === 'Terminate');
+  assert.ok(terminate > before + 3, 'tail audio is streamed before Terminate');
+  assert.ok(ws.sent.slice(before, terminate).every(m => typeof m !== 'string'));
+});
+
+test('after the app leaves the screen, the next recording uses a fresh audio pipeline', async () => {
+  const ctx = browser({ userAgent: 'Mozilla/5.0 (iPhone)' });
+  await ctx.api.refresh();
+  const first = ctx.api.unlock();
+  assert.equal(ctx.api.unlock(), first, 'the pipeline is reused while the app stays on screen');
+  const { r, events } = recorder(ctx.api);
+  r.start(); await flush(); await flush();
+  ctx.sockets[0].open(); ctx.speak(1);
+  ctx.document.hide();
+  ctx.sockets[0].message({ type: 'Termination' }); await flush(); await flush();
+  assert.ok(events.includes('end-interrupted'));
+  ctx.document.visibilityState = 'visible';
+  const second = ctx.api.unlock();
+  assert.notEqual(second, first);
+  assert.equal(first.state, 'closed', 'the stopped pipeline is released');
+  assert.equal(ctx.contexts.length, 2);
+  const next = recorder(ctx.api);
+  next.r.start(); await flush(); await flush();
+  ctx.speak(1);
+  assert.ok(next.r.audioSeconds >= 0.9, 'the new recording captures audio');
+});
+
+test('Restart Recording after an interruption is not held for the browser speech engine when live recording is used', () => {
+  const app = fs.readFileSync('public/app.js', 'utf8');
+  assert.match(app, /if\(isIOS\(\)&&!liveRecordNotes\(\)&&window\.PhotoNotesSpeechDocument\)dialog\.querySelector\('#dictationRestart'\)\.disabled=/);
 });

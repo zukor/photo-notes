@@ -1662,7 +1662,8 @@ function showDictationInterruption(reason) {
   dialog.setAttribute('aria-labelledby','dictationInterruptedTitle');
   dialog.innerHTML='<h2 id="dictationInterruptedTitle">Recording stopped early</h2><p id="dictationInterruptedReason" style="color:#000"></p><p style="color:#000">Your captured words are kept. Restart to continue your note.</p><button class="btn" id="dictationRestart" type="button">Restart Recording</button><button class="btn secondary" id="dictationStop" type="button">Stop</button>';
   dialog.querySelector('#dictationInterruptedReason').textContent=reason;
-  if(isIOS()&&window.PhotoNotesSpeechDocument)dialog.querySelector('#dictationRestart').disabled=!window.PhotoNotesSpeechDocument.constructor();
+  // Live Record Notes does not use the browser speech engine, so Restart is ready at once.
+  if(isIOS()&&!liveRecordNotes()&&window.PhotoNotesSpeechDocument)dialog.querySelector('#dictationRestart').disabled=!window.PhotoNotesSpeechDocument.constructor();
   const close=()=>{dialog.close();if(document.getElementById('note')===note)document.getElementById('dictate')?.focus();};
   dialog.querySelector('#dictationRestart').onclick=()=>{const current=generation===dictationGeneration&&state.photoFile===photo&&document.getElementById('note')===note;close();if(current)void toggleDictation();};
   dialog.querySelector('#dictationStop').onclick=close;

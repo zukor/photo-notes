@@ -12,6 +12,12 @@
 const RATE=16000, CHUNK=1600; // 100 ms of 16 kHz mono PCM per streamed chunk.
 const CONFIG_KEY='pn_live_transcription_v1', MAX_RECONNECTS=3;
 let config=null, configPromise=null, sharedContext=null, workletReady=null, lastFailed=null;
+// Audio kept after Stop so words still in the phone's audio pipeline reach the note.
+const STOP_TAIL_MS=600;
+// iPhone stops a page's audio pipeline when the app leaves the screen and may not
+// restart it. After the page has been hidden, the next recording uses a fresh one.
+let contextHidden=false, captures=0;
+document.addEventListener?.('visibilitychange',()=>{if(document.visibilityState==='hidden')contextHidden=true;});
 
 function readCachedConfig(){try{return JSON.parse(localStorage.getItem(CONFIG_KEY)||'null');}catch{return null;}}
 function refresh(){
@@ -29,7 +35,8 @@ function enabled(){if(!config)config=readCachedConfig();return !!(config&&config
 function unlock(){
  if(!supported())return null;
  try{
-  if(!sharedContext||sharedContext.state==='closed'){const Ctx=window.AudioContext||window.webkitAudioContext;sharedContext=new Ctx();workletReady=null;}
+  if(sharedContext&&sharedContext.state!=='closed'&&!captures&&(contextHidden||sharedContext.state==='interrupted')){const old=sharedContext;sharedContext=null;try{old.close?.()?.catch?.(()=>{});}catch{}}
+  if(!sharedContext||sharedContext.state==='closed'){const Ctx=window.AudioContext||window.webkitAudioContext;sharedContext=new Ctx();workletReady=null;contextHidden=false;}
   if(sharedContext.state!=='running')sharedContext.resume().catch(()=>{});
  }catch{sharedContext=null;}
  return sharedContext;
@@ -222,8 +229,8 @@ class LiveRecognizer{
  }
  async _attach(context,stream){
   const resample=createResampler(context.sampleRate);
-  const receive=block=>{if(this._state==='starting'||this._state==='recording')this._push(resample(block));};
-  this._source=context.createMediaStreamSource(stream);
+  const receive=block=>{if(this._state==='starting'||this._state==='recording'||this._state==='stopping')this._push(resample(block));};
+  this._source=context.createMediaStreamSource(stream);this._capturing=true;captures++;
   try{
    if(!context.audioWorklet)throw new Error('no worklet');
    if(!workletReady)workletReady=context.audioWorklet.addModule('/pcm-capture-worklet.js?v=1');
@@ -247,6 +254,7 @@ class LiveRecognizer{
   if(this._onOnline)window.removeEventListener('online',this._onOnline);
   try{this._source?.disconnect();}catch{}try{this._node?.disconnect();}catch{}try{this._sink?.disconnect();}catch{}
   if(this._node?.port)this._node.port.onmessage=null;
+  if(this._capturing){this._capturing=false;captures=Math.max(0,captures-1);}
   this._source=this._node=this._sink=null;
   this._stream?.getTracks().forEach(t=>t.stop());this._stream=null;
  }
@@ -336,6 +344,8 @@ class LiveRecognizer{
  }
  async _finalize(){
   this._emit('audioend');
+  if(!this._interrupted&&this._stream)await new Promise(resolve=>setTimeout(resolve,STOP_TAIL_MS));
+  if(this._state==='aborted')return;
   this._detach();
   if(this._pendingLength){this._chunks.push(this._pending.slice(0,this._pendingLength));this._pendingLength=0;}
   let streamed=false;
