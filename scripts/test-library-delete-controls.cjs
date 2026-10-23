@@ -64,7 +64,7 @@ const express=require('express');
   await page.locator('#libraryBack').click();await page.waitForFunction(library=>state.view===library,library);
   // Send lists photos without Delete.
   if(!['hoa','property'].includes(edition)){
-   await page.evaluate(()=>{state.view='send';sendSource='photos';renderApp();});await page.locator('#sendPhotoSelection > summary').click();await page.locator('.send-capture-row').first().waitFor();
+   await page.evaluate(()=>{state.view='send';sendSource='photos';renderApp();});await page.locator('#sendChange').click();await page.locator('.send-capture-row').first().waitFor();
    assert.equal(await page.locator('.send-delete-capture,[data-delete-capture]').count(),0,edition+' Send has no Delete');
    assert.equal(await page.locator('#billingOffers,#paymentsHeading').count(),0,edition+' Payments left Send');
    assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),edition+' Send fits '+width);

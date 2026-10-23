@@ -2,7 +2,7 @@
 
 Windows Chromium's native Web Share file allowlist excludes DOCX and ZIP. Changing MIME types or repeating Share does not remove that restriction.
 
-In Send, choose the document format, Share, then Create share link. This uploads an immutable copy of the already-generated file. Copy link works with Teams, WhatsApp, or email; Share link invokes the system's URL share menu where available. No app sends a message automatically. The recipient downloads the original format without signing into Photo Notes.
+In Send, choose the document, Format (PDF, Word or Photos), Share as the action, tap Share, then Create share link. This uploads an immutable copy of the already-generated file. Copy link works with Teams, WhatsApp, or email; Share link invokes the system's URL share menu where available. No app sends a message automatically. The recipient downloads the original format without signing into Photo Notes.
 
 The dialog explains before creation that anyone with the link can download the file. Links expire after seven days. Send > Shared document links lists active links and allows the owner to copy or revoke them. Revocation removes the snapshot immediately. Expired snapshots are removed hourly. Disabling or deleting the owner also disables download access. Revocation cannot remove copies already downloaded by recipients.
 

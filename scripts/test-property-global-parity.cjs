@@ -32,7 +32,7 @@ const {chromium,webkit}=require('playwright');
      else for(const expected of reference)assert.deepEqual(controls.find(c=>c.id===expected.id),expected,`${edition} ${section} ${expected.id} matches Pro`);
      if(edition==='paving'&&section==='organize')assert.equal(await page.locator('#pavingJobPdf').count(),1);
      if(edition==='concrete'&&section==='organize')assert.equal(await page.locator('#ramoIntakeSend').count(),1);
-     if(edition==='concrete'&&section==='send'){assert.equal(await page.locator('#sendshortcuts').count(),1);assert.equal(await page.locator('#sendToRamo').count(),1);}
+     if(edition==='concrete'&&section==='send'){assert.equal(await page.locator('#sendshortcuts').count(),1);await page.locator('#sendSource').selectOption('photos');await page.locator('#sendToRamo').waitFor();assert.equal(await page.locator('#sendToRamo').count(),1);await page.locator('#sendSource').selectOption('documents');}
      assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),`${edition} ${section} fits ${width}`);
     }
    }

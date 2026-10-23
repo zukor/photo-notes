@@ -1299,3 +1299,41 @@ html[data-theme="dark"] :is(.workflow-intro,.organize-panel,.send-feature-panel,
 .document-caption-actions .btn{margin:0}
 html[data-theme="dark"] :is(.document-settings-save-note,.document-default-template){color:#fff}
 html[data-theme="light"] :is(.document-settings-save-note,.document-default-template){color:#000}
+
+/* Send: what will be sent, then 1 Format, 2 Settings and 3 Send It. */
+.send-what { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:0 0 18px; padding:14px 16px; border:2px solid var(--pn-border-2455d9,#2455d9); border-radius:12px; background:var(--pn-bg-fff,#fff); }
+.send-what-text { display:flex; flex-direction:column; gap:4px; min-width:0; }
+.send-what-text strong { color:var(--pn-text-000,#000); font-size:18px; line-height:1.25; overflow-wrap:anywhere; }
+.send-what-text span { color:var(--pn-text-000,#000); font-size:15px; overflow-wrap:anywhere; }
+.send-what .btn { flex:0 0 auto; width:auto; min-height:44px; margin:0; }
+.send-picker { margin:0 0 18px; padding:14px; border:1px solid var(--pn-border-000,#000); border-radius:12px; }
+.send-picker[hidden], .send-step-help[hidden] { display:none; }
+.send-picker > .formhead:first-child { margin-top:0; }
+.send-step { margin:0 0 22px; }
+.send-step-head { display:flex; align-items:center; gap:10px; margin:0 0 10px; }
+.send-step-number { display:inline-flex; flex:0 0 auto; align-items:center; justify-content:center; width:30px; height:30px; border-radius:50%; background:var(--accent); color:var(--pn-text-fff,#fff); font-size:16px; font-weight:800; }
+.send-step-head h2 { margin:0; color:var(--pn-text-000,#000); font-size:20px; }
+.send-choice-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:8px; }
+.send-choice-list { display:grid; gap:8px; }
+.btn.send-choice { min-width:0; min-height:48px; margin:0; padding:8px 10px; border-width:2px; font-size:16px; overflow-wrap:anywhere; }
+.btn.send-choice[aria-pressed="true"] { background:var(--accent); border-color:var(--accent); color:var(--pn-text-fff,#fff); }
+.btn.send-preset-choice { display:flex; flex-direction:column; align-items:flex-start; gap:2px; text-align:left; }
+.send-preset-detail { font-size:14px; font-weight:400; }
+.send-step-help { margin:8px 0 0; color:var(--pn-text-000,#000); font-size:15px; }
+.send-shortcuts { margin-top:14px; }
+.send-shortcuts-label { display:block; margin:0 0 8px; color:var(--pn-text-000,#000); font-weight:700; }
+#sendManagePresets, #sendshortcuts { min-height:44px; margin:6px 0 0; }
+.send-preset-manager { margin-top:8px; }
+.send-go { margin:0 0 8px; }
+.send-summary { margin:0 0 10px; color:var(--pn-text-000,#000); font-size:17px; font-weight:700; line-height:1.35; overflow-wrap:anywhere; }
+.send-go #sendGo { min-height:48px; margin-top:0; }
+.send-shortcut-result { display:flex; flex-wrap:wrap; gap:8px; }
+.send-shortcut-result .btn { width:auto; min-height:44px; margin:0; }
+.send-shortcut-result input { flex:1 1 100%; min-width:0; }
+.send-document-list .btn[aria-pressed="true"] { outline:3px solid var(--pn-border-000,#000); outline-offset:2px; }
+#sendPhotoSelection .btn, #sendDocumentPicker .btn, .send-what .btn { min-height:44px; }
+@media(max-width:420px){ .send-choice-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } .send-what { flex-wrap:wrap; } }
+html[data-theme="dark"] :is(.send-what-text strong,.send-what-text span,.send-step-head h2,.send-step-help,.send-shortcuts-label,.send-summary){color:#fff}
+html[data-theme="dark"] .send-what{background:#111827;border-color:#fff}
+.workflow-send .btn, .workflow-send .backlink { min-height:44px; }
+html[data-theme="dark"] .workflow-send .btn.secondary:not([aria-pressed="true"]) { color:#000; }
