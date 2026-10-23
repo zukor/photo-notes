@@ -8,7 +8,7 @@ const app = fs.readFileSync(path.join(root, 'public', 'app.js'), 'utf8');
 const css = require('./helpers/light-palette')(fs.readFileSync(path.join(root, 'public', 'styles.css'), 'utf8'));
 
 test('Library presents search, projects, selection, and saved PhotoNotes', () => {
-  for (const heading of ['Library', 'Projects', 'Search', 'Selected PhotoNotes', 'Saved PhotoNotes']) {
+  for (const heading of ['Library', 'Projects', 'Search', 'id="librarySelectionCount"', 'Saved PhotoNotes']) {
     assert.match(app, new RegExp(heading));
   }
   assert.match(app, /class="organize-library-heading"/);

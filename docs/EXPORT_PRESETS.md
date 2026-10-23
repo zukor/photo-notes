@@ -20,13 +20,15 @@ Document captions are stored per document in `group_items.caption`. NULL means t
 
 Available in Photo Notes Pro, Paving, Concrete, Property Manager, HOA Maintenance, General Contractor, and Roofer Pro. Basic, Issue Reporter and Road Issue Reporter are excluded on the client and API.
 
-Use Export Preset appears in New Document setup (as Document Settings Presets), on each document page, in Send, and the Photo Library's Export Presets panel. The Photo Library provides access in HOA and Property without changing specialty navigation. Choose No preset to restore saved document settings, or the entry defaults for selected-photo packaging. The optional default is selected on entry. Download Using Preset uses the chosen format. Existing explicit PDF/Word actions continue to select their stated format.
+Use Export Preset appears in New Document setup (as Document Settings Presets), on each document page, in Send, and the Photo Library's Export Presets panel. The Photo Library provides access in HOA and Property without changing specialty navigation. Choose No preset to restore saved document settings, or the entry defaults for selected-photo packaging. The optional default is selected on entry. On a document page, Download Using Preset uses the chosen format. Existing explicit PDF/Word actions continue to select their stated format.
+
+In Send the presets are step 2, Settings, of a three-step screen (1 Format, 2 Settings, 3 Send It). Settings lists Account Defaults first (no preset, so the account document settings apply), then each saved preset as a button with its description, or its photos per page, cover page and logo use. Manage Presets opens the full preset controls (Save as Preset, Adjust Output Settings, Edit / Rename, Duplicate, Delete) below the list. In Send the Format chosen in step 1 decides the file type, not the preset's own format; the preset supplies layout, branding, logo use and image quality. Send remembers the last Format, Settings and Action on the device (`localStorage` key `pn-send-choices-v1:<user>`); a remembered preset that no longer exists falls back to the default preset or Account Defaults. Original Photos has no settings. There is no separate Download Using Preset button in Send; the main Send It button uses the chosen preset.
 
 Save as Preset copies the current controls. Name is required, Description optional. Edit / Rename, Duplicate and Delete manage the user's own entries. Adjust Output Settings applies temporary settings without changing the saved preset or document. Deleting a preset keeps documents and photos. Save Layout, Save for This Document and Save as Account Default remain the explicit persistence actions on the document page.
 
 ## Supported configuration, version 1
 
-- Formats: PDF, Word (`docx`), Markdown + Photos (`bundle`).
+- Formats: PDF, Word (`docx`), Markdown + Photos (`bundle`, labeled Photos in Send).
 - Layout: document type, orientation, photos per page (1 to 6, including vertical and horizontal 2 and 3), cover, header, footer, page numbers and their position, typefaces including Helvetica, and accent color.
 - Branding: company name, header/footer text and use of the current account logo. Logo files are not copied or stored in presets.
 - Image resolution: Standard, maximum 2048 px and JPEG quality 85; Print, 3000 px and quality 92; Web, 1400 px and quality 80. Smaller originals are never enlarged. Existing renderer preserves markings.
@@ -40,7 +42,7 @@ Markdown + Photos uses image quality and its existing metadata output; document 
 
 Configuration is sanitized into version 1 with supported enum/boolean/text values. Unknown settings and newer versions produce visible warnings. Unavailable values fall back to existing defaults. A missing current logo is omitted. Ad hoc output overrides are sanitized through the same module. No existing documents or shortcuts are migrated; only New Document settings kept in browser storage are copied, as described above.
 
-Specialty paving/proposal, Concrete evidence, HOA and Property reports remain on their existing engines. They have fixed presentation and no compatible shared document configuration. Their photos can use the shared library output without changing specialty evidence or report logic. Send Shortcuts keep their existing destinations, formats, delivery behavior and ownership; there is no automatic shortcut-to-preset reference yet. Native sharing and temporary links retain their existing behavior.
+Specialty paving/proposal, Concrete evidence, HOA and Property reports remain on their existing engines. They have fixed presentation and no compatible shared document configuration. Their photos can use the shared library output without changing specialty evidence or report logic. Send Shortcuts keep their existing destinations, delivery behavior and per-account scope. A Shortcut run from Send uses the Format and Settings chosen on the screen and works for selected PhotoNotes or a chosen document (Ramo Shortcuts need PhotoNotes); there is no stored shortcut-to-preset reference. Native sharing and temporary links retain their existing behavior.
 
 ## Files and verification
 

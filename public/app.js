@@ -4465,32 +4465,139 @@ function wireZonePopup(e, z) {
 }
 
 // ---- Send: deliver individual captures or completed documents ----
-let sendSource='documents',sendDocumentSort='alpha',sendDocumentSearch='';
+// Three steps: Format, Settings (Export Presets) and Send It (Share, Download, Print or a saved Shortcut).
+let sendSource='documents',sendDocumentSort='alpha',sendDocumentSearch='',sendDocumentId=null,sendShortcutRows=[];
+const SEND_FORMATS=[['pdf','PDF'],['docx','Word'],['bundle','Photos'],['originals','Original Photos']];
+const SEND_FORMAT_HELP={pdf:'A finished document layout.',docx:'An editable Word document.',bundle:'Photos plus their notes, in one ZIP file.',originals:'The photo files exactly as taken, shared from this device. Up to 20 at a time.'};
+const SEND_FORMAT_PHRASE={pdf:'a PDF',docx:'a Word file',bundle:'photos with their notes',originals:'original photos'};
+const SEND_ACTIONS=[['share','Share'],['download','Download'],['print','Print']];
+let sendChoice={format:'pdf',preset:undefined,action:'share',shortcut:''};
+// The last Format, Settings and Action choices are remembered on this device only.
+function sendChoiceKey(){return 'pn-send-choices-v1:'+(state.me?.id??'local');}
+function loadSendChoice(){
+ const c={format:'pdf',preset:undefined,action:'share',shortcut:''};let saved=null;
+ try{saved=JSON.parse(localStorage.getItem(sendChoiceKey())||'null');}catch{saved=null;}
+ if(saved&&typeof saved==='object'){
+  if(SEND_FORMATS.some(([v])=>v===saved.format))c.format=saved.format;
+  if(typeof saved.preset==='string')c.preset=saved.preset;
+  if(['share','download','print'].includes(saved.action))c.action=saved.action;
+  if(typeof saved.shortcut==='string')c.shortcut=saved.shortcut;
+ }
+ sendChoice=c;
+}
+function saveSendChoice(){try{localStorage.setItem(sendChoiceKey(),JSON.stringify(sendChoice));}catch{}}
+function sendFormatList(){return SEND_FORMATS.filter(([v])=>sendSource==='photos'||v!=='originals');}
+function sendFormat(){return sendFormatList().some(([v])=>v===sendChoice.format)?sendChoice.format:'pdf';}
+// The export format used by presets and shortcuts. Original Photos has none.
+function sendExportFormat(){const f=sendFormat();return f==='originals'?null:f;}
+function sendGroupId(){return sendSource==='documents'?sendDocumentId:null;}
+function sendDeliveryContext(){return {format:sendExportFormat(),groupId:sendGroupId()};}
+function sendActionBlock(action){
+ const f=sendFormat();
+ if(f==='originals'&&action!=='share')return 'Original Photos can only be shared. Choose Photos to download photos with their notes.';
+ if(action==='print'&&sendSource!=='documents')return 'Print is available for documents. Choose Documents to print one.';
+ if(action==='print'&&f!=='pdf')return 'Print is available for PDF. Choose PDF to print.';
+ return '';
+}
+function sendShortcutBlock(row){
+ if(sendFormat()==='originals')return 'Shortcuts send a PDF, Word or Photos file. Choose one of those formats to use a Shortcut.';
+ if(row&&row.type==='ramo'&&sendSource==='documents')return 'Ramo Shortcuts send selected PhotoNotes. Choose PhotoNotes to use one.';
+ return '';
+}
+function sendSelectedShortcut(){const row=sendShortcutRows.find(r=>String(r.id)===sendChoice.shortcut);return row&&!sendShortcutBlock(row)?row:null;}
+function sendAction(){return sendActionBlock(sendChoice.action)?'share':sendChoice.action;}
+function sendSelectedDocument(){return (window._sendGroups||[]).find(g=>String(g.id)===String(sendDocumentId))||null;}
+function sendWhat(){
+ if(sendSource==='photos'){const n=state.selectedIds.size;return n?`${n} PhotoNote${n===1?'':'s'}`:'';}
+ const g=sendSelectedDocument();return g?String(g.title):'';
+}
+function sendSummaryText(){
+ const what=sendWhat();
+ if(!what)return sendSource==='photos'?'Select at least one PhotoNote. Use Change to choose them.':'Choose a document. Use Change to pick one.';
+ const shortcut=sendSelectedShortcut(),f=sendFormat();
+ const verb=shortcut?'Send':SEND_ACTIONS.find(([v])=>v===sendAction())[1];
+ const using=f==='originals'?'':', using '+uiT(window.PhotoNotesExportPresets?.activeName?.()||'Account Defaults');
+ return `${verb} ${what} as ${SEND_FORMAT_PHRASE[f]}${using}${shortcut?' to '+shortcut.name:''}.`;
+}
+function sendGoLabel(){return sendSelectedShortcut()?'Send':SEND_ACTIONS.find(([v])=>v===sendAction())[1];}
+function sendChoiceButton(attr,value,label,pressed,disabled,translate=true){return `<button type="button" class="btn secondary send-choice" ${attr}="${esc(value)}" aria-pressed="${pressed?'true':'false'}"${disabled?' disabled':''}>${esc(translate?uiT(label):label)}</button>`;}
+// Redraw the parts of Send that depend on the current choices.
+function refreshSendChoices(){
+ const formats=document.getElementById('sendFormats');if(!formats)return;
+ const f=sendFormat();
+ formats.innerHTML=sendFormatList().map(([v,label])=>sendChoiceButton('data-send-format',v,label,v===f)).join('');
+ document.getElementById('sendFormatHelp').textContent=uiT(SEND_FORMAT_HELP[f]);
+ document.getElementById('sendSettingsChoices').hidden=f==='originals';
+ document.getElementById('sendSettingsNA').hidden=f!=='originals';
+ const shortcut=sendSelectedShortcut(),action=sendAction();
+ const actions=document.getElementById('sendActions');
+ actions.innerHTML=SEND_ACTIONS.map(([v,label])=>sendChoiceButton('data-send-action',v,label,!shortcut&&v===action,!!sendActionBlock(v))).join('');
+ const reasons=[...new Set(SEND_ACTIONS.map(([v])=>sendActionBlock(v)).filter(Boolean))];
+ const actionHelp=document.getElementById('sendActionHelp');actionHelp.textContent=reasons.map(uiT).join(' ');actionHelp.hidden=!reasons.length;
+ const list=document.getElementById('sendShortcutList');
+ list.innerHTML=sendShortcutRows.length?sendShortcutRows.map(row=>sendChoiceButton('data-send-shortcut',String(row.id),row.name,shortcut&&String(shortcut.id)===String(row.id),!!sendShortcutBlock(row),false)).join(''):`<p class="send-step-help">${esc(uiT('No saved Shortcuts yet. Use Manage Shortcuts to create one.'))}</p>`;
+ const shortcutReasons=[...new Set(sendShortcutRows.map(sendShortcutBlock).filter(Boolean))];
+ const shortcutHelp=document.getElementById('sendShortcutHelp');shortcutHelp.textContent=shortcutReasons.map(uiT).join(' ');shortcutHelp.hidden=!shortcutReasons.length;
+ formats.querySelectorAll('[data-send-format]').forEach(b=>b.onclick=()=>{sendChoice.format=b.dataset.sendFormat;saveSendChoice();clearSendResult();refreshSendChoices();});
+ actions.querySelectorAll('[data-send-action]').forEach(b=>b.onclick=()=>{sendChoice.action=b.dataset.sendAction;sendChoice.shortcut='';saveSendChoice();clearSendResult();refreshSendChoices();});
+ list.querySelectorAll('[data-send-shortcut]').forEach(b=>b.onclick=()=>{sendChoice.shortcut=b.dataset.sendShortcut;saveSendChoice();clearSendResult();refreshSendChoices();});
+ refreshSendSummary();
+}
+function refreshSendSummary(){
+ const summary=document.getElementById('sendSummary');if(!summary)return;
+ summary.textContent=sendSummaryText();
+ const go=document.getElementById('sendGo');if(go&&!go.dataset.busy){go.textContent=uiT(sendGoLabel());go.disabled=!sendWhat();}
+ const title=document.getElementById('sendWhatTitle'),detail=document.getElementById('sendWhatDetail');if(!title)return;
+ const parts=[];
+ if(sendSource==='photos'){
+  const n=state.selectedIds.size;title.textContent=n?`${n} PhotoNote${n===1?'':'s'} selected`:'No PhotoNotes selected';
+  for(const [id,label] of [['sendJobFilter','Project'],['sendTopicFilter','Topic']]){const select=document.getElementById(id);if(select?.value)parts.push(`${label}: ${select.selectedOptions[0]?.textContent||select.value}`);}
+ }else{
+  const g=sendSelectedDocument();title.textContent=g?String(g.title):'No document chosen';
+  if(g){const n=Number(g.item_count)||0;parts.push(`Document, ${n} PhotoNote${n===1?'':'s'}`);}
+ }
+ detail.replaceChildren(...parts.map(text=>{const span=document.createElement('span');span.textContent=text;return span;}));
+}
+function clearSendResult(){const box=document.getElementById('sendShortcutResult');if(box)box.replaceChildren();const status=document.getElementById('shareActionStatus');if(status){status.textContent='';status.classList.remove('error');}}
+function setSendStatus(message,isError=false){const status=document.getElementById('shareActionStatus');if(!status)return;status.textContent=message;status.classList.toggle('error',isError);}
+async function loadSendShortcuts(){
+ const owner=state.me?.id;let rows=[];
+ try{rows=await window.PhotoNotesShortcuts.list();}catch{rows=[];}
+ if(state.me?.id!==owner||!document.getElementById('sendShortcutList'))return;
+ sendShortcutRows=Array.isArray(rows)?rows:[];
+ if(sendChoice.shortcut&&!sendShortcutRows.some(r=>String(r.id)===sendChoice.shortcut)){sendChoice.shortcut='';saveSendChoice();}
+ document.getElementById('sendShortcutList').dataset.loaded='true';
+ refreshSendChoices();
+}
+function toggleSendPicker(open){
+ const panel=document.getElementById(sendSource==='photos'?'sendPhotoSelection':'sendDocumentPicker'),change=document.getElementById('sendChange');if(!panel)return;
+ panel.hidden=!(open??panel.hidden);change.setAttribute('aria-expanded',String(!panel.hidden));
+ if(panel.hidden){change.focus();change.scrollIntoView({block:'nearest'});}
+}
+function runSend(){
+ const go=document.getElementById('sendGo');clearSendResult();
+ if(!sendWhat()){refreshSendSummary();return;}
+ const shortcut=sendSelectedShortcut();
+ if(shortcut){window.PhotoNotesShortcuts.run(shortcut,{ready:document.getElementById('sendShortcutResult'),status:message=>setSendStatus(message),format:sendExportFormat(),groupId:sendGroupId(),manageId:'sendShortcutManageLinks'});return;}
+ if(sendFormat()==='originals')return shareSelectedPhotos(go);
+ return deliverExport(sendFormat(),sendGroupId(),sendAction());
+}
 async function renderSend() {
   window._sendCaptures=[];window._sendMatchedCaptures=[];
+  loadSendChoice();
   const body = document.getElementById('body');
   body.className = 'workflow-send';
+  const photos=sendSource==='photos';
   body.innerHTML = `
-    <div class="send-source-heading"><h1>Send</h1><select id="sendSource" aria-label="Send"><option value="documents"${sendSource==='documents'?' selected':''}>Documents</option><option value="photos"${sendSource==='photos'?' selected':''}>PhotoNotes</option></select></div>
-    <div id="sendPhotoWorkflow"${sendSource==='photos'?'':' hidden'}><div class="formhead">Share or Download Selected PhotoNotes</div>
-    ${isMacClient() ? `<div class="share-requirement"><strong>Texting an Android phone from this Mac?</strong><span>Your iPhone must have Settings → Apps → Messages → Text Message Forwarding enabled for this Mac, plus MMS or RCS messaging.</span></div>` : ''}
-    <div class="send-selection-bar">
-      <div class="status" id="sendSelection">Loading captures...</div>
-
-    </div>
-    <section id="exportPresetSend"></section>
-    <div class="delivery-actions delivery-actions-shortcuts">
-      <select id="sendformat" aria-label="File format"><option value="pdf">PDF</option><option value="docx">Word</option><option value="bundle">Markdown + Photos</option></select>
-      <button class="btn" id="sharephotos">Share</button>
-      <button class="btn secondary" id="sendshortcuts" type="button">Shortcuts</button>
-      <button class="btn secondary" id="senddocument">Download</button>
-    </div>
-    ${isConcreteClient()&&state.me.ramo_intake_access?'<div class="ramo-send-action"><button class="btn secondary" id="sendToRamo" type="button">Send to Ramo Optimizer</button></div>':''}
-    <button class="btn secondary" id="shareOriginalPhotos" type="button">Share original photos</button>
-    <div class="share-action-status" id="shareActionStatus" role="status" aria-live="polite"></div>
-    <details id="sendPhotoSelection"><summary id="sendPhotoSelectionSummary">Select Photos <span id="sendPhotoSelectionCount"></span></summary>
-      <div class="formhead">Photo Library</div>
-      <p>Select the Photo Notes you want to share, download, or include in a customer approval package. Closing this section keeps your selection.</p>
+    <div class="send-source-heading"><h1>Send</h1><select id="sendSource" aria-label="Send"><option value="documents"${sendSource==='documents'?' selected':''}>Documents</option><option value="photos"${photos?' selected':''}>PhotoNotes</option></select></div>
+    ${photos&&isMacClient() ? `<div class="share-requirement"><strong>Texting an Android phone from this Mac?</strong><span>Your iPhone must have Settings → Apps → Messages → Text Message Forwarding enabled for this Mac, plus MMS or RCS messaging.</span></div>` : ''}
+    <section class="send-what" aria-label="What will be sent">
+      <div class="send-what-text"><strong id="sendWhatTitle">${photos?'Loading PhotoNotes...':'Loading documents...'}</strong><span id="sendWhatDetail"></span></div>
+      <button class="btn secondary slim" id="sendChange" type="button" aria-expanded="${!photos&&sendDocumentId==null?'true':'false'}" aria-controls="${photos?'sendPhotoSelection':'sendDocumentPicker'}">Change</button>
+    </section>
+    ${photos?`<section id="sendPhotoSelection" class="send-picker" aria-labelledby="sendPhotoSelectionTitle" hidden>
+      <h2 class="formhead" id="sendPhotoSelectionTitle">Select Photos <span id="sendPhotoSelectionCount"></span></h2>
+      <p>Select the PhotoNotes you want to share, download, or include in a customer approval package. Closing this section keeps your selection.</p>
       <div class="send-photo-filters"><div><label for="sendJobFilter">Project</label><select id="sendJobFilter"><option value="">All Projects</option></select></div><div><label for="sendTopicFilter">Topic</label><select id="sendTopicFilter"><option value="">All Topics</option></select></div></div>
       <p>Filters narrow the library without changing your selection. Select All Matching adds the displayed records. Clear All clears every selected record.</p>
       <p id="sendFilterCount" role="status" aria-live="polite"></p>
@@ -4500,34 +4607,64 @@ async function renderSend() {
       </div>
       <div id="sendCaptures" class="send-capture-list"></div>
       <button type="button" class="backlink" id="closeSendPhotoSelection">Close Photo Selection</button>
-    </details>
+    </section>`:`<section id="sendDocumentPicker" class="send-picker" aria-label="Choose a document"${sendDocumentId==null?'':' hidden'}><label for="sendDocumentSearch">Search Documents</label><input id="sendDocumentSearch" type="search" placeholder="Search document titles" value="${esc(sendDocumentSearch)}"><section class="available-documents"><div class="available-documents-heading"><h2>Available Documents</h2><label for="sendDocumentSort">Sort<select id="sendDocumentSort"><option value="alpha"${sendDocumentSort==='alpha'?' selected':''}>A to Z</option><option value="reverse-alpha"${sendDocumentSort==='reverse-alpha'?' selected':''}>Z to A</option><option value="newest"${sendDocumentSort==='newest'?' selected':''}>Newest First</option><option value="oldest"${sendDocumentSort==='oldest'?' selected':''}>Oldest First</option></select></label></div><div id="sendDocs"><p class="status">Loading documents...</p></div></section></section>`}
+    <section class="send-step" aria-labelledby="sendStepFormat">
+      <div class="send-step-head"><span class="send-step-number" aria-hidden="true">1</span><h2 id="sendStepFormat">Format</h2></div>
+      <div class="send-choice-grid" id="sendFormats" role="group" aria-labelledby="sendStepFormat"></div>
+      <p class="send-step-help" id="sendFormatHelp"></p>
+    </section>
+    <section class="send-step" aria-labelledby="sendStepSettings">
+      <div class="send-step-head"><span class="send-step-number" aria-hidden="true">2</span><h2 id="sendStepSettings">Settings</h2></div>
+      <div id="sendSettingsChoices"><section id="exportPresetSend"></section></div>
+      <p class="send-step-help" id="sendSettingsNA" hidden>Original photos are sent exactly as taken. No layout settings apply.</p>
+    </section>
+    <section class="send-step" aria-labelledby="sendStepAction">
+      <div class="send-step-head"><span class="send-step-number" aria-hidden="true">3</span><h2 id="sendStepAction">Send It</h2></div>
+      <div class="send-choice-grid send-action-grid" id="sendActions" role="group" aria-labelledby="sendStepAction"></div>
+      <p class="send-step-help" id="sendActionHelp" hidden></p>
+      <div class="send-shortcuts" role="group" aria-labelledby="sendShortcutsLabel">
+        <span class="send-shortcuts-label" id="sendShortcutsLabel">Or use a Shortcut</span>
+        <div class="send-choice-grid" id="sendShortcutList"></div>
+        <p class="send-step-help" id="sendShortcutHelp" hidden></p>
+        <button class="backlink" id="sendshortcuts" type="button">Manage Shortcuts</button>
+      </div>
+    </section>
+    <div class="send-go">
+      <p class="send-summary" id="sendSummary" aria-live="polite"></p>
+      <button class="btn" id="sendGo" type="button">Share</button>
+      <div class="share-action-status" id="shareActionStatus" role="status" aria-live="polite"></div>
+      <div class="send-shortcut-result" id="sendShortcutResult"></div>
+    </div>
+    ${photos?`${isConcreteClient()&&state.me.ramo_intake_access?'<div class="ramo-send-action"><button class="btn secondary" id="sendToRamo" type="button">Send to Ramo Optimizer</button></div>':''}
     <section class="send-feature-panel" aria-labelledby="customerApprovalHeading">
       <div class="send-feature-heading" id="customerApprovalHeading">Customer Approval Package</div>
       <p class="status">Create a private, expiring review link for the selected photos. The customer can approve them or request changes.</p>
       <input id="approvalTitle" placeholder="Review title"><textarea id="approvalMessage" placeholder="Message to customer (optional)"></textarea>
       <button class="btn slim send-feature-action" id="createApproval">Create Customer Review Link</button><div id="approvalResult"></div><div id="approvalList"></div>
-    </section>
-    </div><div id="sendDocumentWorkflow"${sendSource==='documents'?'':' hidden'}><label for="sendDocumentSearch">Search Documents</label><input id="sendDocumentSearch" type="search" placeholder="Search document titles" value="${esc(sendDocumentSearch)}"><section class="available-documents"><div class="available-documents-heading"><h2>Available Documents</h2><label for="sendDocumentSort">Sort<select id="sendDocumentSort"><option value="alpha"${sendDocumentSort==='alpha'?' selected':''}>A to Z</option><option value="reverse-alpha"${sendDocumentSort==='reverse-alpha'?' selected':''}>Z to A</option><option value="newest"${sendDocumentSort==='newest'?' selected':''}>Newest First</option><option value="oldest"${sendDocumentSort==='oldest'?' selected':''}>Oldest First</option></select></label></div><div id="sendDocs"><p class="status">Loading documents...</p></div></section>
-    <details id="sharedDocumentLinks"><summary>Shared document links</summary><div id="sharedDocumentLinksList"></div></details>
-    </div>`;
+    </section>`:'<details id="sharedDocumentLinks"><summary>Shared document links</summary><div id="sharedDocumentLinksList"></div></details>'}`;
   document.getElementById('sendSource').onchange=e=>{sendSource=e.target.value;renderSend();};
-  document.getElementById('sendDocumentSearch').oninput=e=>{sendDocumentSearch=e.target.value;renderSendDocuments(window._sendGroups||[]);};
-  document.getElementById('sendDocumentSort').onchange=e=>{sendDocumentSort=e.target.value;renderSendDocuments(window._sendGroups||[]);};
-  document.getElementById('closeSendPhotoSelection').onclick=()=>{document.getElementById('sendPhotoSelection').open=false;const summary=document.getElementById('sendPhotoSelectionSummary');summary.focus();summary.scrollIntoView({block:'nearest'});};
-  document.getElementById('sharedDocumentLinks').ontoggle = event => { if(event.target.open) window.PhotoNotesDocumentLinks?.manage(document.getElementById('sharedDocumentLinksList')); };
-  document.getElementById('sharephotos').onclick = () => deliverExport(document.getElementById('sendformat').value, null, 'share');
-  document.getElementById('shareOriginalPhotos').onclick = shareSelectedPhotos;
-  document.getElementById('sendshortcuts').onclick=()=>window.PhotoNotesShortcuts.open();
-  document.getElementById('senddocument').onclick = () => deliverExport(document.getElementById('sendformat').value, null, 'download');
-  document.getElementById('sendJobFilter').onchange=renderSendPhotoLibrary;
-  document.getElementById('sendTopicFilter').onchange=renderSendPhotoLibrary;
-  document.getElementById('selectAllSendCaptures').onclick = selectAllSendCaptures;
-  document.getElementById('clearSendSelection').onclick = clearSendSelection;
-  const sendToRamo=document.getElementById('sendToRamo');if(sendToRamo)sendToRamo.onclick=()=>openRamoIntake();
-  document.getElementById('createApproval').onclick=createApprovalPackage;
-  window.PhotoNotesExportPresets?.mount(document.getElementById('exportPresetSend'));
+  document.getElementById('sendChange').onclick=()=>toggleSendPicker();
+  document.getElementById('sendGo').onclick=runSend;
+  document.getElementById('sendshortcuts').onclick=()=>window.PhotoNotesShortcuts.open({onClose:loadSendShortcuts});
+  if(photos){
+    document.getElementById('closeSendPhotoSelection').onclick=()=>toggleSendPicker(false);
+    document.getElementById('sendJobFilter').onchange=renderSendPhotoLibrary;
+    document.getElementById('sendTopicFilter').onchange=renderSendPhotoLibrary;
+    document.getElementById('selectAllSendCaptures').onclick = selectAllSendCaptures;
+    document.getElementById('clearSendSelection').onclick = clearSendSelection;
+    const sendToRamo=document.getElementById('sendToRamo');if(sendToRamo)sendToRamo.onclick=()=>openRamoIntake();
+    document.getElementById('createApproval').onclick=createApprovalPackage;
+  }else{
+    document.getElementById('sendDocumentSearch').oninput=e=>{sendDocumentSearch=e.target.value;renderSendDocuments(window._sendGroups||[]);};
+    document.getElementById('sendDocumentSort').onchange=e=>{sendDocumentSort=e.target.value;renderSendDocuments(window._sendGroups||[]);};
+    document.getElementById('sharedDocumentLinks').ontoggle = event => { if(event.target.open) window.PhotoNotesDocumentLinks?.manage(document.getElementById('sharedDocumentLinksList')); };
+  }
+  refreshSendChoices();
+  const presets=window.PhotoNotesExportPresets;
+  if(presets?.mount)presets.mount(document.getElementById('exportPresetSend'),{format:sendExportFormat,initial:sendChoice.preset,onChange:id=>{if(id!=null){sendChoice.preset=id;saveSendChoice();}refreshSendSummary();}});
+  loadSendShortcuts();
   loadSendCenter();
-  loadApprovalPackages();
+  if(photos)loadApprovalPackages();
 }
 
 // Payments lives in the account menu. It appears only where Send is available and Stripe checkout has offers.
@@ -4581,31 +4718,42 @@ function renderSendPhotoLibrary(){
 }
 
 async function loadSendCenter() {
-  const target=document.getElementById('sendCaptures'),owner=state.me?.id;
+  const marker=document.getElementById('sendGo'),owner=state.me?.id;
   const [cr, gr] = await Promise.all([api('/api/captures'), api('/api/groups')]);
   const captures = cr.ok ? await cr.json() : [];
   const groups = gr.ok ? await gr.json() : [];
-  if(!target?.isConnected||state.me?.id!==owner)return;
+  if(!marker?.isConnected||state.me?.id!==owner)return;
   window._sendCaptures = captures;
   window._sendGroups = groups;
   fillSendPhotoFilters(captures);
   renderSendPhotoLibrary();
   renderSendDocuments(groups);
+  refreshSendSummary();
 }
 
-function renderSendDocuments(groups){const docs=document.getElementById('sendDocs');if(!docs)return;const rows=[...groups].filter(g=>String(g.title||'').trim()&&Number(g.item_count)>0&&String(g.title).toLowerCase().includes(sendDocumentSearch.toLowerCase())).sort((a,b)=>sendDocumentSort==='alpha'?a.title.localeCompare(b.title):sendDocumentSort==='reverse-alpha'?b.title.localeCompare(a.title):sendDocumentSort==='newest'?(Date.parse(b.updated_at||b.created_at)||0)-(Date.parse(a.updated_at||a.created_at)||0):(Date.parse(a.updated_at||a.created_at)||0)-(Date.parse(b.updated_at||b.created_at)||0));if(!rows.length){docs.innerHTML='<p class="empty">No matching documents are ready to send.</p>';return;}docs.innerHTML=`<ul class="compact-document-list send-document-list">${rows.map(g=>`<li><div><strong>${esc(g.title)}</strong><span>${g.item_count} PhotoNote${g.item_count===1?'':'s'} · Last Modified: ${esc(documentModifiedLabel(g))}</span></div><div class="compact-document-actions"><button class="btn slim" data-use-document="${g.id}">Use This Document</button><button class="btn secondary slim" data-edit-document="${g.id}">Edit Draft</button></div><div class="document-send-options" data-send-options="${g.id}" hidden><label>File Format<select class="document-delivery-format"><option value="pdf">PDF</option><option value="docx">Word</option><option value="bundle">Markdown + Photos (.zip)</option></select></label><div class="compact-document-actions"><button class="btn slim" data-document-action="share">Share</button><button class="btn secondary slim" data-document-action="download">Download</button><button class="btn secondary slim" data-document-action="print">Print</button></div></div></li>`).join('')}</ul>`;docs.querySelectorAll('[data-use-document]').forEach(button=>button.onclick=()=>{docs.querySelectorAll('[data-send-options]').forEach(x=>x.hidden=x.dataset.sendOptions!==button.dataset.useDocument);});docs.querySelectorAll('[data-edit-document]').forEach(button=>button.onclick=()=>{state.groupId=Number(button.dataset.editDocument);state.view='create';renderApp();});docs.querySelectorAll('[data-send-options]').forEach(control=>{const format=control.querySelector('select');control.querySelectorAll('[data-document-action]').forEach(button=>button.onclick=()=>deliverExport(format.value,control.dataset.sendOptions,button.dataset.documentAction));});}
+// Documents: Change opens this list to pick the document that Format, Settings and Send It apply to.
+function renderSendDocuments(groups){
+ const docs=document.getElementById('sendDocs');if(!docs)return;
+ const ready=[...groups].filter(g=>String(g.title||'').trim()&&Number(g.item_count)>0);
+ if(sendDocumentId!=null&&!ready.some(g=>String(g.id)===String(sendDocumentId))){sendDocumentId=null;const picker=document.getElementById('sendDocumentPicker');if(picker){picker.hidden=false;document.getElementById('sendChange')?.setAttribute('aria-expanded','true');}}
+ const rows=ready.filter(g=>String(g.title).toLowerCase().includes(sendDocumentSearch.toLowerCase())).sort((a,b)=>sendDocumentSort==='alpha'?a.title.localeCompare(b.title):sendDocumentSort==='reverse-alpha'?b.title.localeCompare(a.title):sendDocumentSort==='newest'?(Date.parse(b.updated_at||b.created_at)||0)-(Date.parse(a.updated_at||a.created_at)||0):(Date.parse(a.updated_at||a.created_at)||0)-(Date.parse(b.updated_at||b.created_at)||0));
+ if(!rows.length){docs.innerHTML='<p class="empty">No matching documents are ready to send.</p>';refreshSendSummary();return;}
+ docs.innerHTML=`<ul class="compact-document-list send-document-list">${rows.map(g=>{const chosen=String(g.id)===String(sendDocumentId);return `<li${chosen?' class="send-document-chosen"':''}><div><strong>${esc(g.title)}</strong><span>${g.item_count} PhotoNote${g.item_count===1?'':'s'} · Last Modified: ${esc(documentModifiedLabel(g))}</span></div><div class="compact-document-actions"><button class="btn slim" data-use-document="${g.id}" aria-pressed="${chosen?'true':'false'}">Use This Document</button><button class="btn secondary slim" data-edit-document="${g.id}">Edit Draft</button></div></li>`;}).join('')}</ul>`;
+ docs.querySelectorAll('[data-use-document]').forEach(button=>button.onclick=()=>{sendDocumentId=Number(button.dataset.useDocument);clearSendResult();renderSendDocuments(window._sendGroups||groups);toggleSendPicker(false);refreshSendSummary();});
+ docs.querySelectorAll('[data-edit-document]').forEach(button=>button.onclick=()=>{state.groupId=Number(button.dataset.editDocument);state.view='create';renderApp();});
+ refreshSendSummary();
+}
 
 function updateSendCount() {
   const n = state.selectedIds.size;
   const count=document.getElementById('sendPhotoSelectionCount');if(count)count.textContent=uiT('({count} selected)').replace('{count}',n);
-  const s = document.getElementById('sendSelection');
-  if (s) s.textContent = n ? uiT('{count} selected. Open Select Photos to change your selection.').replace('{count}',n) : uiT('Open Select Photos to choose photos, or return to Library.');
   const clear = document.getElementById('clearSendSelection');
   if (clear) clear.disabled = !n;
   const selectAll = document.getElementById('selectAllSendCaptures');
   const available = (window._sendMatchedCaptures || []).filter(capture => capture && capture.id != null);
   const filterCount=document.getElementById('sendFilterCount');if(filterCount){const matching=available.filter(c=>state.selectedIds.has(String(c.id))).length;filterCount.textContent=uiT('Showing {shown} Photo Notes. {matching} selected here; {outside} selected outside these filters.').replace('{shown}',available.length).replace('{matching}',matching).replace('{outside}',n-matching);}
   if (selectAll) selectAll.disabled = !available.length || available.every(capture => state.selectedIds.has(String(capture.id)));
+  if(typeof refreshSendSummary==='function')refreshSendSummary();
 }
 
 function selectAllSendCaptures() {
@@ -4754,11 +4902,11 @@ async function deliverExport(format, groupId, action = 'download') {
   } catch (e) { if (!(e && e.name === 'AbortError')) toast(e.message || 'Send failed'); }
 }
 
-async function shareSelectedPhotos() {
+// Send > Format: Original Photos, then Share. The share-sized photo files are shared from this device.
+async function shareSelectedPhotos(button = document.getElementById('sendGo')) {
   const rows = (window._sendCaptures || []).filter(c => state.selectedIds.has(String(c.id)));
   const photoRows = rows.filter(c => c.photo_path);
   const status = document.getElementById('shareActionStatus');
-  const button = document.getElementById('shareOriginalPhotos');
   const setStatus = (message, isError = false) => {
     if (!status) return;
     status.textContent = message;
@@ -4767,7 +4915,7 @@ async function shareSelectedPhotos() {
   if (!rows.length) { setStatus('Select at least one capture first.', true); return; }
   if (!photoRows.length) { setStatus('The current selection does not contain a photo.', true); return; }
   if (photoRows.length > 20) {
-    setStatus(`${photoRows.length} photos is too many for one phone share. Select 20 or fewer, or use Download with Markdown + Photos.`, true);
+    setStatus(`${photoRows.length} photos is too many for one phone share. Select 20 or fewer, or choose Photos and Download.`, true);
     return;
   }
   const signature = JSON.stringify([state.imgv,photoRows.map(c=>[c.id,c.photo_path,c.note,c.address,c.overlays])]);
@@ -4786,8 +4934,7 @@ async function shareSelectedPhotos() {
   }
   if (!navigator.share) { setStatus('This browser cannot share photo files. Use Download instead.', true); return; }
   try {
-    button.disabled = true;
-    button.textContent = 'Preparing...';
+    if (button) { button.disabled = true; button.dataset.busy = '1'; button.textContent = uiT('Preparing...'); }
     setStatus(`Preparing 0 of ${photoRows.length} share-sized photos...`);
     const files = new Array(photoRows.length);
     let next = 0, complete = 0;
@@ -4825,8 +4972,8 @@ async function shareSelectedPhotos() {
   } catch (e) {
     setStatus(e && e.message ? e.message : 'The photos could not be prepared. Try a smaller selection.', true);
   } finally {
-    button.disabled = false;
-    button.textContent = 'Share';
+    if (button) { button.disabled = false; delete button.dataset.busy; button.textContent = uiT('Share'); }
+    if (typeof refreshSendSummary === 'function') refreshSendSummary();
   }
 }
 
@@ -5563,4 +5710,4 @@ if ('serviceWorker' in navigator) {
 }
 boot();
 
-document.addEventListener('photo-notes-languagechange',()=>{if(document.getElementById('concretePurpose'))refreshConcreteCapturePurpose();});
+document.addEventListener('photo-notes-languagechange',()=>{if(document.getElementById('concretePurpose'))refreshConcreteCapturePurpose();if(document.getElementById('sendGo'))refreshSendChoices();});
