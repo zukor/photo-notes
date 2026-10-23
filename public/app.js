@@ -473,7 +473,7 @@ function renderApp() {
               ${paymentsAvailable()?'<button type="button" id="menuPayments" hidden>Payments</button>':''}
               ${selectedEdition()==='basic'?'':'<button type="button" id="pendingPhotos">Pending Photos</button>'}
               <button type="button" id="setupPermissions">Set Up Permissions</button>
-              <button type="button" id="recordNotesSelfTest">Record Notes Self-Test</button>
+              <button type="button" id="recordNotesSelfTest" ${state.me?.is_tester||state.me?.is_testing_manager||state.me?.role==='admin'?'':'hidden'}>Record Notes Self-Test</button>
               <button type="button" id="myIssues" ${state.me?.is_tester||isTestingManager()?'hidden':''}>My Issue Reports</button>
               ${state.me?.is_super_admin ? '<a href="/admin?view=super">Super Admin Dashboard</a>' : ''}
               ${state.me && state.me.role === 'admin' ? '<a href="/admin?view=admin">Admin Dashboard</a>' : ''}
