@@ -14,27 +14,40 @@ test('app shell and installed-app launch background use pure white',()=>{
   assert.match(app,/backgroundColor:'#ffffff'/);
 });
 
-test('Send actions distinguish original-photo sharing from document downloads',()=>{
-  assert.match(app,/id="sharephotos">Share<\/button>/);
-  assert.match(app,/id="sendformat"[^>]*><option value="pdf">PDF<\/option><option value="docx">Word<\/option><option value="bundle">Markdown \+ Photos<\/option>/);
-  assert.match(app,/id="senddocument">Download<\/button>/);
+test('Send is three steps: Format, Settings and Send It, with one main button',()=>{
+  const send=app.slice(app.indexOf('// ---- Send: deliver individual captures'),app.indexOf('// Payments lives in the account menu'));
+  assert.match(send,/<h2 id="sendStepFormat">Format<\/h2>/);
+  assert.match(send,/<h2 id="sendStepSettings">Settings<\/h2>/);
+  assert.match(send,/<h2 id="sendStepAction">Send It<\/h2>/);
+  assert.match(send,/const SEND_FORMATS=\[\['pdf','PDF'\],\['docx','Word'\],\['bundle','Photos'\],\['originals','Original Photos'\]\];/);
+  assert.match(send,/bundle:'Photos plus their notes, in one ZIP file\.'/);
+  assert.match(send,/const SEND_ACTIONS=\[\['share','Share'\],\['download','Download'\],\['print','Print'\]\];/);
+  assert.match(send,/Original photos are sent exactly as taken\. No layout settings apply\./);
+  assert.match(send,/<span class="send-shortcuts-label" id="sendShortcutsLabel">Or use a Shortcut<\/span>/);
+  assert.match(send,/id="sendshortcuts" type="button">Manage Shortcuts<\/button>/);
+  assert.match(send,/<button class="btn" id="sendGo" type="button">Share<\/button>/);
+  assert.match(send,/id="sendChange" type="button"[^>]*>Change<\/button>/);
+  assert.match(send,/return deliverExport\(sendFormat\(\),sendGroupId\(\),sendAction\(\)\);/);
+  assert.match(send,/if\(sendFormat\(\)==='originals'\)return shareSelectedPhotos\(go\);/);
+  // Old duplicate controls are gone.
+  assert.doesNotMatch(app,/id="sendformat"|id="sharephotos"|id="senddocument"|id="shareOriginalPhotos"|data-send-options|data-document-action/);
   assert.doesNotMatch(app,/Send as PDF|Send as Word/);
-  assert.match(app,/deliverExport\(document\.getElementById\('sendformat'\)\.value, null, 'download'\)/);
-  assert.match(css,/\.delivery-actions \{[^}]*grid-template-columns:minmax\(0,1fr\) minmax\(92px,\.75fr\) minmax\(0,1fr\)/);
+  // Remembered choices are wrapped so blocked storage never breaks Send.
+  assert.match(send,/try\{saved=JSON\.parse\(localStorage\.getItem\(sendChoiceKey\(\)\)\|\|'null'\);\}catch/);
+  assert.match(send,/function saveSendChoice\(\)\{try\{localStorage\.setItem/);
+  assert.match(css,/\.btn\.send-choice \{[^}]*min-height:48px/);
+  assert.match(css,/\.btn\.send-choice\[aria-pressed="true"\] \{[^}]*background:var\(--accent\)/);
 });
 
-test('Document delivery separates file format from share, download, and print actions',()=>{
-  assert.match(app,/class="document-delivery-format"/);
-  assert.match(app,/<option value="pdf">PDF<\/option>/);
-  assert.match(app,/<option value="docx">Word<\/option>/);
-  assert.match(app,/<option value="bundle">Markdown \+ Photos \(\.zip\)<\/option>/);
-  assert.match(app,/data-document-action="share">Share<\/button>/);
-  assert.match(app,/data-document-action="download">Download<\/button>/);
-  assert.match(app,/data-document-action="print">Print<\/button>/);
+test('Print is offered only for documents as PDF, and Original Photos only shares',()=>{
   assert.match(app,/if\(action==='print'\)format='pdf'/);
-  assert.match(app,/deliverExport\(format\.value,control\.dataset\.sendOptions,button\.dataset\.documentAction\)/);
+  assert.match(app,/if\(f==='originals'&&action!=='share'\)return 'Original Photos can only be shared\./);
+  assert.match(app,/if\(action==='print'&&sendSource!=='documents'\)return 'Print is available for documents\./);
+  assert.match(app,/if\(action==='print'&&f!=='pdf'\)return 'Print is available for PDF\./);
+  assert.match(app,/function sendFormatList\(\)\{return SEND_FORMATS\.filter\(\(\[v\]\)=>sendSource==='photos'\|\|v!=='originals'\);\}/);
+  assert.match(app,/data-use-document="\$\{g\.id\}"[^>]*>Use This Document<\/button>/);
+  assert.match(app,/data-edit-document="\$\{g\.id\}">Edit Draft<\/button>/);
   assert.doesNotMatch(app,/Share PDF|Save PDF|Save Word|>AI ZIP</);
-  assert.match(css,/\.document-delivery-actions \.btn \{[^}]*width:auto/);
 });
 
 test('Send selection supports select all and clear all actions',()=>{
@@ -84,6 +97,7 @@ test('photo sharing is sized, bounded, visible, and recoverable',()=>{
   assert.match(app,/Preparing \$\{complete\} of \$\{photoRows\.length\} share-sized photos/);
   assert.match(app,/preparedPhotoShare\.signature === signature/);
   assert.match(app,/Tap Share again to open the share menu/);
+  assert.match(app,/Select 20 or fewer, or choose Photos and Download\./);
   assert.match(app,/api\/captures\/\$\{c\.id\}\/share-photo/);
   assert.match(css,/\.share-action-status\.error/);
   assert.match(server,/app\.get\('\/api\/captures\/:id\/share-photo', requireAuth/);

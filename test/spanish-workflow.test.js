@@ -56,3 +56,16 @@ test('current document content section heading translates in the rendered text f
  assert.equal(node.nodeValue,'4. Contenido del documento');
  api.setLanguage('en');assert.equal(node.nodeValue,label);
 });
+
+test('Send summary sentence, selection box and step labels translate and switch back to English',()=>{
+ const {api}=translator();
+ const cases={
+  'Share 6 PhotoNotes as a PDF, using Account Defaults.':'Compartir 6 PhotoNotes como PDF, con Valores predeterminados de la cuenta.',
+  'Send 1 PhotoNote as a Word file, using Field Copy to Office Email.':'Enviar 1 PhotoNote como archivo de Word, con Field Copy a Office Email.',
+  'Share 3 PhotoNotes as original photos.':'Compartir 3 PhotoNotes como fotos originales.',
+  '6 PhotoNotes selected':'6 PhotoNotes seleccionadas','1 PhotoNote selected':'1 PhotoNote seleccionada',
+  'Document, 14 PhotoNotes':'Documento, 14 PhotoNotes','Project: Oak Plaza':'Proyecto: Oak Plaza',
+  'Format':'Formato','Settings':'Ajustes','Send It':'Enviarlo','Original Photos':'Fotos originales','Manage Presets':'Administrar ajustes preestablecidos','Or use a Shortcut':'O use un atajo',
+  'Original photos are sent exactly as taken. No layout settings apply.':'Las fotos originales se envían tal como se tomaron. No se aplican ajustes de diseño.'};
+ for(const [en,es] of Object.entries(cases)){api.setLanguage('es');assert.equal(api.t(en),es);api.setLanguage('en');assert.equal(api.t(es),en);}
+});
