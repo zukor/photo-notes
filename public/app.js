@@ -417,7 +417,10 @@ function isTestingManager(){return !!(state.me?.is_testing_manager||state.me?.ro
 let testingReturnView=null;
 function enterTesting(view){if(!['my-assignment','my-issues','manage-testing'].includes(state.view))testingReturnView=state.view;state.view=view;renderApp();}
 function leaveTesting(){state.view=testingReturnView||(IS_HANDHELD?'capture':'organize');renderApp();}
-function testingNavigation(admin=false){return `<section class="testing-navigation"><button type="button" class="backlink" id="testingReturn">${uiT('Back to Photo Notes')}</button><h1>${uiT(admin?'Testing Administration':'My Testing Dashboard')}</h1><nav aria-label="${uiT('Testing sections')}" class="testing-actions">${admin?`${isTestingManager()?'<a id="testingAllIssues" class="btn secondary" href="/admin?view=super&tool=issues">'+uiT('Issues & Retests')+'</a>':''}<button type="button" class="btn secondary" id="testingAssignments">${uiT('Assignments & Results')}</button>`:`<button type="button" class="btn secondary" id="testingAssignments">${uiT('My Assignments')}</button><button type="button" class="btn secondary" id="testingIssues">${uiT('My Issue Reports')}</button>`}</nav></section>`;}
+// TM: shortcut to the Testing Dashboard for testers, testing managers and the Super Admin, with the number of
+// that person's reported issues that need their review (refreshed with the issue updates check).
+function testingBadgeAllowed(){return !!(state.me&&(state.me.is_tester||state.me.is_testing_manager||state.me.is_super_admin));}
+function testingNavigation(admin=false){return `<section class="testing-navigation"><button type="button" class="backlink" id="testingReturn">${uiT('Back to Photo Notes')}</button><h1>${uiT(admin?'Testing Administration':'Testing Dashboard')}</h1><nav aria-label="${uiT('Testing sections')}" class="testing-actions">${admin?`${isTestingManager()?'<a id="testingAllIssues" class="btn secondary" href="/admin?view=super&tool=issues">'+uiT('Issues & Retests')+'</a>':''}<button type="button" class="btn secondary" id="testingAssignments">${uiT('Assignments & Results')}</button>`:`<button type="button" class="btn secondary" id="testingAssignments">${uiT('My Assignments')}</button><button type="button" class="btn secondary" id="testingIssues">${uiT('My Issue Reports')}</button>`}</nav></section>`;}
 function bindTestingNavigation(admin=false){document.getElementById('testingReturn').onclick=leaveTesting;document.getElementById('testingAssignments').onclick=()=>enterTesting(admin?'manage-testing':'my-assignment');const issues=document.getElementById('testingIssues');if(issues)issues.onclick=()=>enterTesting('my-issues');}
 function rememberPhotoToolReturn() {
   if (!['photo-follow-ups','photo-requests'].includes(state.view)) state._photoToolReturnView=state.view;
@@ -459,6 +462,7 @@ function renderApp() {
         </div>
         <div class="header-controls">
           <div class="language-switch" aria-label="Language"><button type="button" data-language="en">EN</button><span> </span><button type="button" data-language="es">ES</button></div>
+          ${testingBadgeAllowed()?`<button type="button" class="tm-badge" id="tmBadge" aria-label="${esc(uiT('Testing Dashboard'))}"><span class="tm-label">TM</span><span class="tm-count" id="tmCount" aria-live="polite">${Number(state.tmCount)||0}</span></button>`:''}
           <div class="account-menu-wrap">
             <button class="profile-button" id="profileButton" type="button" aria-label="Account menu" aria-expanded="false">${esc(userInitials(state.me))}<span id="testerAlert" class="tester-alert" hidden aria-hidden="true">!</span></button>
             <div class="profile-menu" id="profileMenu" hidden>
@@ -467,7 +471,7 @@ function renderApp() {
               <div class="profile-plan">${isSecurityClient()?'Security Issue Reporter Pro':isIssueReporterClient()?'Issue Reporter':isRoadIssuesClient()?'Road Issue Reporter':isGeneralProClient()?'Photo Notes Pro':isProClient()?esc(productName()):'Photo Notes Basic'}</div>
               ${state.me&&Array.isArray(state.me.edition_access)&&state.me.edition_access.length>1?`<div class="profile-version"><span>Photo Notes Version</span><select id="editionSwitcher" aria-label="Switch Photo Notes version">${editionSwitcherOptions()}</select></div>`:''}
               <button type="button" id="manageTesting" ${state.me?.is_testing_manager||state.me?.role==='admin'?'':'hidden'}>${uiT('Testing Administration')}</button>
-              <button type="button" id="myAssignment" ${state.me?.is_tester||state.me?.is_testing_manager||state.me?.role==='admin'?'':'hidden'}>${uiT(isTestingManager()?'My Testing Dashboard':'Testing Dashboard')}</button>
+              <button type="button" id="myAssignment" ${state.me?.is_tester||state.me?.is_testing_manager||state.me?.role==='admin'?'':'hidden'}>${uiT('Testing Dashboard')}</button>
               ${isHoaClient()?`<button type="button" id="menuHoaCommunities">${hoaManagementLabel('communities')}</button><button type="button" id="menuHoaDashboard">${hoaManagementLabel('dashboard')}</button><button type="button" id="menuHoaReports">${hoaManagementLabel('reports')}</button>`:''}
               <button type="button" id="installHelp">Install Photo Notes</button>
               ${paymentsAvailable()?'<button type="button" id="menuPayments" hidden>Payments</button>':''}
@@ -520,6 +524,7 @@ function renderApp() {
   const selfTest=document.getElementById('recordNotesSelfTest');if(selfTest)selfTest.onclick=()=>{location.href='/record-notes-self-test.html';};
   const manageTesting=document.getElementById('manageTesting');if(manageTesting)manageTesting.onclick=()=>enterTesting('manage-testing');
   const myAssignment=document.getElementById('myAssignment');if(myAssignment)myAssignment.onclick=()=>enterTesting('my-assignment');
+  const tmBadge=document.getElementById('tmBadge');if(tmBadge)tmBadge.onclick=()=>enterTesting('my-assignment');
   const editionSwitcher=document.getElementById('editionSwitcher');if(editionSwitcher)editionSwitcher.onchange=async()=>{
     if(captureSavePending){editionSwitcher.value=selectedEdition();toast('Please wait for this photo to finish saving locally.');return;}
     const edition=editionSwitcher.value;
