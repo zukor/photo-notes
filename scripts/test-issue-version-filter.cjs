@@ -18,7 +18,7 @@ const express=require('express');
  if(path==='/api/issues/attention')data={count:0};
  return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(data)});});
  await page.goto(`http://127.0.0.1:${server.address().port}/admin.html`);
- await page.locator('[data-admin-tool="issues"] > summary').click();
+ await page.goto(page.url().split('?')[0]+'?view=testing&section=all-issues');
  await page.waitForFunction(()=>document.querySelectorAll('[data-issue-card]').length===11);
  assert.equal(await page.locator('#issueStatusFilter').inputValue(),'open');
  const cardIds=()=>page.locator('[data-issue-card]').evaluateAll(nodes=>nodes.map(n=>Number(n.dataset.issueCard)).sort((a,b)=>a-b));

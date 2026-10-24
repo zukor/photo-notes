@@ -38,7 +38,7 @@ const {chromium,webkit}=require('playwright');
    await page.locator('#issueClose').click();assert.equal(await page.evaluate(()=>issueResultFile===null&&issueResultURL===null),true);
   }
   await page.evaluate(()=>renderMyIssueReports());await page.getByText('Show Result Screenshot',{exact:true}).click();assert.equal(await page.locator('img[alt="Result screenshot supplied by the reporter"]').getAttribute('src'),evidence.result_screenshot_path);
-  await page.goto(base+'/admin.html');await page.locator('[data-admin-tool="issues"] > summary').click();await page.locator('[data-issue-card="1"] > summary').click();assert.equal(await page.getByText('Show App Screenshot',{exact:true}).count(),1);await page.getByText('Show Result Screenshot',{exact:true}).click();assert.equal(await page.locator('img[alt="Result screenshot supplied by the reporter"]').getAttribute('src'),evidence.result_screenshot_path);
+  await page.goto(base+'/admin.html');await page.goto(page.url().split('?')[0]+'?view=testing&section=all-issues');await page.locator('[data-issue-card="1"] > summary').click();assert.equal(await page.getByText('Show App Screenshot',{exact:true}).count(),1);await page.getByText('Show Result Screenshot',{exact:true}).click();assert.equal(await page.locator('img[alt="Result screenshot supplied by the reporter"]').getAttribute('src'),evidence.result_screenshot_path);
   console.log(engine.name(),width,'all ten editions: separate preview, remove, close, retry and admin evidence PASS');await page.close();
  }}finally{await browser.close();}}}finally{await new Promise(r=>server.close(r));}
 })().catch(e=>{console.error(e);process.exitCode=1;});

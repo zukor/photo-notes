@@ -919,9 +919,6 @@ body:has(#desktopHelp) .issue-fab { left:max(14px,env(safe-area-inset-left)); ri
 .shared-photo-tools .btn:focus-visible,.photo-tool-navigation .btn:focus-visible{outline:2px solid currentColor;outline-offset:2px}
 
 /* Management pages use testing navigation rather than photo workflow controls. */
-.admin-testing-page .workflow-tabs,.admin-testing-page .shared-photo-tools{display:none}
-.testing-navigation{color:var(--pn-text-000,#000);text-align:left}
-.testing-navigation .testing-actions{display:flex;flex-wrap:wrap;gap:8px}
 
 /* Optional capture choices follow the photograph and its notes, without a panel. */
 .capture-settings{margin-top:12px;text-align:left}
