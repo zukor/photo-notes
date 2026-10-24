@@ -72,8 +72,8 @@ function data(url){const p=url.pathname;
    await page.locator('#pnHelpClose').click();assert.equal(await page.locator('.pn-help-fab').getAttribute('aria-expanded'),'false');cases++;
   }
   for(const edition of ['basic','issue','roads','general','contractor','paving','hoa','property','concrete','roofer']){
-   const views=['basic','issue','roads'].includes(edition)?['capture']:['capture','organize','edit','create','send','my-issues','my-assignment','manage-testing'];
-   for(const view of views){await page.evaluate(async({edition,view})=>{state.plan=['basic','issue','roads'].includes(edition)?'free':'pro';state.proType=edition==='basic'?'general':edition;state.view=view;state._libraryOpenId=view==='edit'?1:null;state.groupId=null;state.ewrId=null;state.jobs=[{id:1,name:'Test job'}];state.communities=[{id:1,name:'Test property'}];renderApp();},{edition,view});await page.waitForTimeout(150);await check(edition+'/'+view);}
+   const views=['basic','issue','roads'].includes(edition)?['capture']:['capture','organize','edit','create','send','my-issues','my-assignment'];
+   for(const view of views){await page.evaluate(async({edition,view})=>{window.__helpMe=window.__helpMe||state.me;state.me=['my-issues','my-assignment'].includes(view)?{...window.__helpMe,role:'user',is_super_admin:false,is_testing_manager:false}:window.__helpMe;state.plan=['basic','issue','roads'].includes(edition)?'free':'pro';state.proType=edition==='basic'?'general':edition;state.view=view;state._libraryOpenId=view==='edit'?1:null;state.groupId=null;state.ewrId=null;state.jobs=[{id:1,name:'Test job'}];state.communities=[{id:1,name:'Test property'}];renderApp();},{edition,view});await page.waitForTimeout(150);await check(edition+'/'+view);}
   }
   await page.evaluate(()=>{state.plan='pro';state.proType='paving';state.view='capture';renderApp();});
   for(const fn of ['renderCameraTools','renderTicketScanner','renderAlignmentTool']){await page.evaluate(fn=>window[fn](),fn);await page.waitForTimeout(150);await check(fn);}
@@ -94,7 +94,6 @@ function data(url){const p=url.pathname;
   await page.evaluate(()=>{state.proType='concrete';renderConcreteReport();});await page.waitForTimeout(150);await check('Concrete evidence report');
   await page.evaluate(()=>{state.proType='paving';state.ewrId='new';renderEwrCreate(document.getElementById('body'));});await check('Extra work creation');
   await page.evaluate(()=>{state.proType='general';state.view='send';renderApp();});await page.waitForTimeout(150);await page.locator('#sharedDocumentLinks').evaluate(n=>n.open=true);await page.waitForTimeout(150);await check('Shared document links');
-  await page.evaluate(()=>{state.view='manage-testing';renderApp();});await page.waitForTimeout(150);await page.locator('[data-new]').click();await page.locator('[data-add]').click();await check('Testing assignment editor');
   await page.evaluate(()=>{state.view='capture';renderApp();});await page.evaluate(()=>showPendingPhotos());await page.waitForTimeout(150);await check('Pending uploads native dialog');await page.locator('dialog').getByRole('button',{name:'Close',exact:true}).click();
   await page.evaluate(()=>openIssueReporter());await page.waitForTimeout(150);await check('Issue reporter');await page.locator('#issueClose').click();
   await page.evaluate(()=>{state.proType='general';state.view='capture';renderApp();});await page.locator('.pn-help-fab').click();
@@ -105,6 +104,9 @@ function data(url){const p=url.pathname;
   await page.goto(base+'/completion-photos/help-fixture');await check('Public completion form');await page.goto(base+'/review/help-fixture');await check('Public customer review');
   await page.goto(base+'/install.html');await check('Installation guide');
   await page.goto(base+'/admin.html');await page.waitForTimeout(250);await check('Administration');
+  // Testing Dashboard page for testing managers, administrators and the Super Admin: every section, then the assignment editor.
+  for(const section of ['my-assignments','my-issues','all-issues','assignments']){await page.goto(base+'/admin.html?view=testing&section='+section);await page.waitForTimeout(300);await check('Testing Dashboard '+section);}
+  await page.locator('[data-new]').click();await page.locator('[data-add]').click();await check('Testing assignment editor');
   await page.close();console.log(`${engine.name()} ${width}: page order, dynamic update, terms, drawer, edition/screens PASS`);
  }}finally{await browser.close();}}}finally{server.close();}
  fs.writeFileSync('/tmp/pn-help-browser-coverage.json',JSON.stringify({cases,uniqueControls:seen.size,missing:[...missing.values()],errors},null,2));

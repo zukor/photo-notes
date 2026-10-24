@@ -391,8 +391,11 @@ async function refreshIssueAttentionNow(){
       profile.setAttribute('aria-label',typeof uiT==='function'?uiT(d.ready_count?'Account menu: issue ready to retest':'Account menu'):'Account menu');
       if(typeof state!=='undefined'&&state.me)state.me.is_tester=!!d.is_tester;
       if(menu)menu.hidden=!!d.is_tester||(typeof isTestingManager==='function'&&isTestingManager());
-      if(hub){hub.hidden=!(d.is_tester||attention.open_count||state.me?.is_testing_manager||state.me?.role==='admin');hub.textContent=(typeof uiT==='function'?uiT(typeof isTestingManager==='function'&&isTestingManager()?'My Testing Dashboard':'Testing Dashboard'):'Testing Dashboard')+(attention.new_count?' ('+attention.new_count+')':'');}
+      if(hub){hub.hidden=!(d.is_tester||attention.open_count||state.me?.is_testing_manager||state.me?.role==='admin');hub.textContent=(typeof uiT==='function'?uiT('Testing Dashboard'):'Testing Dashboard')+(attention.new_count?' ('+attention.new_count+')':'');}
     }
+      const tm=document.getElementById('tmCount'),n=Number(d.count)||0;
+      if(typeof state!=='undefined')state.tmCount=n;
+      if(tm&&tm.textContent!==String(n)){tm.textContent=String(n);const b=document.getElementById('tmBadge');if(b){const t=typeof uiT==='function'?uiT('Testing Dashboard'):'Testing Dashboard';b.setAttribute('aria-label',t+': '+n+(n===1?' issue needs':' issues need')+' your review');}}
     syncIssuePushNotifications();
     if(link){link.hidden=!d.count;link.textContent=`Issue updates (${d.count})`;link.setAttribute('aria-label',`${d.count} issue reports need your attention`);}
   }catch(e){}

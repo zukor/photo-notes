@@ -32,9 +32,10 @@ const express=require('express');
  assert.deepEqual(labels,[...labels].sort((a,b)=>a.localeCompare(b,language,{sensitivity:'base'})),`${role} ${next} ${language}`);
  assert.equal(await page.locator('#profileMenu a[href="/admin?view=super"]').count(),role==='super'?1:0);
  assert.equal(await page.locator('#profileMenu a[href="/admin?view=admin"]').count(),['super','admin'].includes(role)?1:0);
- assert.equal(await page.locator('#manageTesting').isVisible(),['super','admin','manager'].includes(role));
+ assert.equal(await page.locator('#manageTesting').count(),0,'Testing Administration is part of the Testing Dashboard');
  assert.equal(await page.locator('#myAssignment').isVisible(),role!=='user');
- assert.equal(await page.locator('#myIssues').isVisible(),role!=='tester');
+ // Testers, testing managers and administrators reach My Issue Reports through the Testing Dashboard.
+ assert.equal(await page.locator('#myIssues').isVisible(),role==='user');
  if(role==='super'&&next==='basic'&&language==='en')await page.screenshot({path:`/tmp/pn-menu-${engine.name()}-basic.png`});
  await page.locator('#profileButton').click();
  }

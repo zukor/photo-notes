@@ -122,7 +122,7 @@ function reset(){context={edition:'public',page:'login',name:'Sign in'};query=''
 function schedule(){clearTimeout(timer);timer=setTimeout(()=>{if(opened||!document.getElementById('photoNotesHelp')){render();}},80);}
 const observer=new MutationObserver(changes=>{if(changes.some(c=>!(c.target instanceof Element?c.target:c.target.parentElement)?.closest('#photoNotesHelp')))schedule();});
 function start(){
- const standalone=location.pathname.includes('admin')?'Administration':location.pathname.includes('install')?'Installation':location.pathname.startsWith('/review/')?'Customer review':location.pathname.startsWith('/completion-photos/')?'Completion photos':null;
+ const standalone=location.pathname.includes('admin')?(new URLSearchParams(location.search).get('view')==='testing'?'Testing Dashboard':'Administration'):location.pathname.includes('install')?'Installation':location.pathname.startsWith('/review/')?'Customer review':location.pathname.startsWith('/completion-photos/')?'Completion photos':null;
  if(standalone)context={edition:'public',page:standalone,name:standalone};
  shell();observer.observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:['hidden','aria-hidden','disabled','class','style','open'],characterData:true});
  render();

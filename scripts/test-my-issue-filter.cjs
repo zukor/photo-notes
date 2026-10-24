@@ -10,7 +10,7 @@ const express=require('express');
  let rows=['new','reviewing','fixing','testing','blocked','ready_to_test','resolved','tester_confirmed','wont_fix'].map((status,n)=>({id:n+1,management_status:status,page_name:'Capture',description:'Fixture report '+status,created_at:'2026-09-22T10:00:00Z',verification:'Verified',release_reference:'test-release'}));
  await page.route('**/api/**',route=>{
   const path=new URL(route.request().url()).pathname;let data=[];
-  if(path==='/api/me')data={id:999,name:'Filter Tester',role:'admin',plan:'pro',pro_type:'general',edition_access:['basic','pro']};
+  if(path==='/api/me')data={id:999,name:'Filter Tester',role:'user',plan:'pro',pro_type:'general',edition_access:['basic','pro']};
   if(path==='/api/issues/mine')data=rows;
   if(path==='/api/issues/attention')data={count:0};
   if(path==='/api/issues/6/retest'){rows[5].management_status='tester_confirmed';data={ok:true};}

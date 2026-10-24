@@ -919,9 +919,6 @@ body:has(#desktopHelp) .issue-fab { left:max(14px,env(safe-area-inset-left)); ri
 .shared-photo-tools .btn:focus-visible,.photo-tool-navigation .btn:focus-visible{outline:2px solid currentColor;outline-offset:2px}
 
 /* Management pages use testing navigation rather than photo workflow controls. */
-.admin-testing-page .workflow-tabs,.admin-testing-page .shared-photo-tools{display:none}
-.testing-navigation{color:var(--pn-text-000,#000);text-align:left}
-.testing-navigation .testing-actions{display:flex;flex-wrap:wrap;gap:8px}
 
 /* Optional capture choices follow the photograph and its notes, without a panel. */
 .capture-settings{margin-top:12px;text-align:left}
@@ -1337,3 +1334,8 @@ html[data-theme="dark"] :is(.send-what-text strong,.send-what-text span,.send-st
 html[data-theme="dark"] .send-what{background:#111827;border-color:#fff}
 .workflow-send .btn, .workflow-send .backlink { min-height:44px; }
 html[data-theme="dark"] .workflow-send .btn.secondary:not([aria-pressed="true"]) { color:#000; }
+/* TM: Testing Dashboard shortcut directly left of the account button, with the count of issues needing review. */
+.tm-badge { display:inline-flex; flex-direction:column; align-items:center; justify-content:center; min-width:44px; min-height:44px; padding:2px 6px; border:2px solid var(--pn-border-1554d1,#1554d1); border-radius:10px; background:#fff; color:#000; cursor:pointer; line-height:1; font-family:inherit; }
+.tm-badge:hover, .tm-badge:focus-visible { outline:2px solid #000; outline-offset:2px; }
+.tm-badge .tm-label { font-size:13px; font-weight:700; color:#1554d1; letter-spacing:.5px; }
+.tm-badge .tm-count { margin-top:2px; font-size:17px; font-weight:800; color:#ff1a1a; }

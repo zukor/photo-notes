@@ -5,10 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Photo Notes Admin</title>
   <meta name="theme-color" content="#1d4ed8" />
-  <link rel="stylesheet" href="/styles.css?v=478" />
+  <link rel="stylesheet" href="/styles.css?v=480" />
   <script src="/vendor/html2canvas.min.js?v=59"></script>
-  <script src="/issue-markup.js?v=277"></script>
-  <script src="/issue-reporter.js?v=484"></script>
+  <script src="/issue-markup.js?v=286"></script>
+  <script src="/issue-reporter.js?v=486"></script>
+  <script src="/my-issue-reports.js?v=1"></script>
   <style>
     .stat { display:inline-block; min-width:84px; margin:4px 14px 4px 0; vertical-align:top; }
     .stat .n { font-size:19px; font-weight:bold; color:var(--pn-text-000,#000); }
@@ -159,21 +160,44 @@
     .delete-user-panel label { text-transform:none; }
     .delete-user-panel h3 { margin-top:0; }
     .delete-user-panel .btn { margin:10px 8px 0 0; }
+    .open-testing-dashboard { display:inline-flex; align-items:center; justify-content:center; width:auto; min-height:44px; margin:0 0 6px; text-decoration:none; }
+    .testing-dashboard-page .admin-page-title { margin-bottom:12px; }
+    .testing-overview h2 { margin:0 0 8px; font-size:18px; color:var(--pn-text-000,#000); }
+    .testing-overview-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; }
+    .testing-overview-card { display:flex; flex-direction:column; align-items:flex-start; gap:4px; min-height:72px; margin:0; padding:12px; border:1px solid var(--pn-border-ccd5e2,#ccd5e2); border-radius:10px; background:var(--pn-bg-fff,#fff); color:var(--pn-text-000,#000); text-align:left; cursor:pointer; font:inherit; }
+    .testing-overview-card:hover, .testing-overview-card:focus-visible { border-color:var(--pn-border-1d4ed8,#1d4ed8); outline:2px solid var(--pn-border-1d4ed8,#1d4ed8); outline-offset:1px; }
+    .testing-overview-count { font-size:26px; font-weight:800; line-height:1; color:#1d4ed8; }
+    .testing-overview-card[data-overview="myReview"] .testing-overview-count { color:#ff1a1a; }
+    .testing-overview-label { font-size:14px; font-weight:bold; line-height:1.25; }
+    .testing-section-nav { display:flex; flex-wrap:wrap; gap:8px; margin:18px 0 6px; padding:6px 0; border-bottom:1px solid var(--pn-border-ccd5e2,#ccd5e2); }
+    .testing-section-nav button { width:auto; min-height:44px; margin:0; padding:10px 14px; border:1px solid var(--pn-border-1d4ed8,#1d4ed8); border-radius:8px; background:var(--pn-bg-fff,#fff); color:var(--pn-text-000,#000); font:inherit; font-weight:bold; cursor:pointer; }
+    .testing-section-nav button[aria-pressed="true"] { background:#1d4ed8; color:#fff; }
+    .testing-panel > h2 { margin:16px 0 6px; font-size:22px; color:var(--pn-text-000,#000); }
+    .testing-dashboard-page .admin-top-actions { gap:10px; }
+    @media (max-width:700px) {
+      .testing-overview-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+      .testing-section-nav button { flex:1 1 calc(50% - 8px); padding:10px 8px; }
+      .admin-top-actions { gap:8px; }
+    }
   </style>
-  <link rel="stylesheet" href="/testing-hub.css?v=277">
-  <script src="/testing-hub.js?v=350"></script>
-<link rel="stylesheet" href="/theme.css?v=389"><script src="/theme.js?v=390"></script><link rel="stylesheet" href="/help.css?v=376"><script src="/help-catalog.js?v=502" defer></script><script src="/help.js?v=470" defer></script><script src="/admin-feedback.js?v=3"></script>
+  <link rel="stylesheet" href="/testing-hub.css?v=286">
+  <script src="/testing-hub.js?v=442"></script>
+<link rel="stylesheet" href="/theme.css?v=389"><script src="/theme.js?v=390"></script><link rel="stylesheet" href="/help.css?v=376"><script src="/help-catalog.js?v=504" defer></script><script src="/help.js?v=471" defer></script><script src="/admin-feedback.js?v=3"></script>
 </head>
 <body>
   <div id="app"></div>
   <script src="/admin-ai.js?v=2"></script><script src="/admin-user-usage.js?v=2"></script><script src="/admin-record-notes.js?v=3"></script><script src="/admin-precision-measure.js?v=1"></script>
-  <script src="/account-menu.js?v=277"></script>
-  <script src="/issue-retest-guidance.js?v=320"></script>
-  <script src="/issue-review-guidance.js?v=277"></script>
+  <script src="/account-menu.js?v=286"></script>
+  <script src="/issue-retest-guidance.js?v=442"></script>
+  <script src="/issue-review-guidance.js?v=286"></script>
   <script src="/issue-presentation.js?v=314"></script>
   <script src="/issue-routing.js?v=350"></script>
   <script>
     const el = document.getElementById('app');
+    // Earlier links opened the Issue Management Center or Testing Assignments inside the admin dashboards.
+    // Both are sections of the Testing Dashboard now, so those links open the matching section.
+    {const legacy={issues:'all-issues',testing:'assignments'}[new URLSearchParams(location.search).get('tool')];if(legacy)history.replaceState(history.state,'',location.pathname+'?view=testing&section='+legacy+location.hash);}
+    const testingView=new URLSearchParams(location.search).get('view')==='testing';
     const regularAdminView=new URLSearchParams(location.search).get('view')==='admin';
     async function api(path, opts = {}) { const headers=new Headers(opts.headers);if(regularAdminView&&path.startsWith('/api/admin/'))headers.set('X-Photo-Notes-Admin-View','regular');return fetch(path, { credentials: 'same-origin', ...opts, headers }); }
     function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
@@ -384,10 +408,11 @@
       const r = await api('/api/me');
       if (!r.ok) return renderLogin();
       const me = await r.json();
-      if (me.role !== 'admin' && !me.is_testing_manager) return renderDenied();
+      // Testers without management access have their Testing Dashboard inside the app.
+      if (me.role !== 'admin' && !me.is_testing_manager) return testingView?location.replace('/?testing=1'):renderDenied();
       accountIsSuperAdmin=!!me.is_super_admin;
       currentUser = {...me,is_super_admin:accountIsSuperAdmin&&!regularAdminView};
-      renderAdmin();
+      if(testingView)renderTestingDashboard();else renderAdmin();
     }
 
     function renderLogin(){
@@ -421,19 +446,19 @@
     }
 
     function adminIssuePageName(){
+      if(testingView)return 'Testing Dashboard: '+adminTestingSectionLabel();
       const section=[...document.querySelectorAll('[data-admin-tool][open]')].map(d=>d.querySelector('summary').textContent.trim()).join(', ');
       return selectedUserId?'Admin — User Details':section?'Admin — '+section:'Admin — Users';
     }
     function isIOS(){return /iP(hone|ad|od)/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);}
     function uiSpeechLanguage(){return 'en-US';}
     function issueFabLabel(){return 'Report Issue';}
-    function renderAdmin(){
-      el.innerHTML = `
-        <div class="wrap">
-          <div class="topbar">
-            <strong>Photo Notes Admin</strong>
+    function adminTopbar(brand,testingPage=false){
+      return `<div class="topbar">
+            <strong>${esc(brand)}</strong>
             <div class="admin-top-actions"><span data-theme-host></span>
-              <a class="link" href="/">Open App</a>
+              ${testingPage?'<a class="link" id="testingBackToApp" href="/">Back to Photo Notes</a>':'<a class="link" href="/">Open App</a>'}
+              <button type="button" class="tm-badge" id="tmBadge" aria-label="Testing Dashboard"><span class="tm-label">TM</span><span class="tm-count" id="tmCount" aria-live="polite">0</span></button>
               <div class="account-menu-wrap">
                 <button class="profile-button" id="profileButton" type="button" aria-label="Account menu" aria-expanded="false">${esc(userInitials(currentUser))}</button>
                 <div class="profile-menu" id="profileMenu" hidden>
@@ -441,45 +466,16 @@
                   <div class="profile-email">${esc((currentUser && currentUser.email) || '')}</div>
                   <div class="profile-plan">${currentUser && currentUser.pro_type==='roads' ? 'Road Issue Reporter' : currentUser && currentUser.plan === 'pro' ? (currentUser.pro_type==='general'?'Photo Notes Pro':currentUser.pro_type==='contractor'?'General Contractor Pro':currentUser.pro_type==='property'?'Property Manager Pro':currentUser.pro_type==='hoa'?'HOA Maintenance Pro':currentUser.pro_type==='concrete'?'Concrete Pro':currentUser.pro_type==='roofer'?'Roofer Pro':'Paving Pro') : 'Basic'} · Administrator</div>
                   <a href="/admin?view=admin">Admin Dashboard</a>
+                  <a href="/admin?view=testing" id="menuTestingDashboard">Testing Dashboard</a>
                   ${accountIsSuperAdmin?'<a href="/admin?view=super">Super Admin Dashboard</a>':''}
                   <button type="button" id="signout">Sign Out</button>
                 </div>
               </div>
             </div>
-          </div>
-
-          <h1 class="admin-page-title">${currentUser?.is_super_admin?'Super Admin':'Admin'}</h1>
-          <h2 class="admin-tools-heading">Admin Tools</h2>
-          ${currentUser?.is_super_admin?'<div id="aiAdminHost"></div><div id="userUsageHost"></div>':''}<div id="recordNotesReliabilityHost"></div><div id="precisionMeasureHost"></div>
-          <div id="customerFeedbackHost"></div>
-          <details id="usersSection" class="admin-section" data-admin-tool="users"><summary id="usersHeading">Users</summary><div class="admin-section-body">
-            <div class="users-heading"><div><p class="helper">${currentUser?.is_super_admin?'Select a user to edit their details, password, and version access.':'Select a user to view their details and change version access.'}</p></div><button class="btn" type="button" id="addUser" aria-expanded="false" aria-controls="createUserPanel">Add User</button></div>
-            <div id="createUserPanel" class="admin-panel" hidden>          <h2>Create User</h2>
-          <div class="helper">Create access for a person. First name, last name, email, and password are required; industry is optional.</div>
-          <label for="cname">First and Last Name</label><input id="cname" type="text" placeholder="First and last name" autocomplete="name" />
-          <label for="cemail">Email</label><input id="cemail" type="email" placeholder="Email" inputmode="email" autocomplete="email" style="margin-top:8px" />
-          <label for="ccategory">User Category</label><select id="ccategory">${categoryOptions()}</select>
-          <label for="cindustry">Industry (optional)</label><input id="cindustry" type="text" placeholder="Industry (optional)" style="margin-top:8px" />
-          <fieldset class="version-access"><legend>Versions</legend><div class="feature-grid">${versionChecks('new',['basic'])}</div></fieldset>
-          <label for="cpass">Password</label><div class="password-row">
-            <input id="cpass" type="password" placeholder="Create Password" autocomplete="new-password" />
-            <button class="btn secondary" type="button" id="generatepass">Generate</button>
-            <button class="btn secondary" type="button" id="copypass">Copy Password</button>
-          </div>
-          <div class="helper" id="passhelp">Use Generate for a strong 20-character password, then copy it before creating the login.</div>
-          <button class="btn" id="createbtn">Create User</button>
-
-<button class="btn secondary" type="button" id="cancelCreate">Cancel</button></div>
-            <details class="admin-section" id="userTotals"><summary>Totals Across All Users</summary><div class="admin-section-body">
-          <div class="helper">Combined account and activity counts for all users.</div>
-          <div id="summary"></div>
-
-          </div></details>
-            <div id="userListTools" class="user-list-tools"><label for="userSearch">Find a user<input id="userSearch" type="search" placeholder="Search name or email"></label><label for="categoryFilter">User Category<select id="categoryFilter"><option value="">All Categories</option>${categoryOptions('')}</select></label><label for="sortsel">Sort<select id="sortsel"><option value="name">Name (A–Z)</option><option value="active">Recently active</option><option value="newest">Newest login</option><option value="captures">Most captures</option></select></label></div>
-            <div id="users" aria-live="polite"></div>
-          </div></details>
-<details class="admin-section" data-admin-tool="issues"><summary>Issue Management Center</summary><div class="admin-section-body">
-          <details class="issue-help"><summary>How issue reports are handled</summary>
+          </div>`;
+    }
+    function issueCenterMarkup(){
+      return `<details class="issue-help"><summary>How issue reports are handled</summary>
             <ul><li><strong>Bug/Problem:</strong> enters the automatic repair queue. Routine failures and tester replies return to the repair worker. Product decisions need Sam’s review. Repeated technical failures go to Developer Investigation.</li><li><strong>Ideas:</strong> UI improvements, feature improvement ideas, and new feature ideas require Sam’s approval before implementation.</li><li><strong>Tester updates:</strong> ready-to-test fixes and requests for details appear in the reporter’s app. Outstanding retests receive in-app reminders every four hours, copied to active testing managers. Enabled browser notifications also receive reminders. Email copies require a configured email service. When immediate email notifications are enabled, new issue reports email the configured issue-report recipient and new retest or clarification requests email the tester and testing managers. Only Super Admin can change immediate email notifications, additional retest reminder emails and their frequency in Email Notification Settings. Reminders stop when a retest is submitted. Testing managers can monitor every open and closed issue here.</li></ul>
           </details>
           <details class="issue-help" id="issueStatusDescriptions"><summary>Status Descriptions</summary><p>Open Issues is the default and counts only reports that remain open. Use the separate Closed Issues link to see the closed total and categories. Developer Investigation holds technical blockers needing a developer. Waiting for Tester includes questions and retests. Ideas need approval before implementation. Failed bug retests return to repair automatically once; repeated failures go to Developer Investigation. Completed, Fixed and Verified requires a deployed fix and confirmation from the reporting tester. Closed Without Verified Fix includes reports closed without a repair or marked resolved without that evidence. Reports are ranked by impact, repeated failures, and age.</p>${issueStatusOrder.map(status=>`<p><strong>${esc(issueStatusLabels[status])}:</strong> ${esc(issueStatusDescriptions[status])}</p>`).join('')}</details>
@@ -515,21 +511,140 @@
             <label>Device<select id="issueDeviceFilter"><option value="all">All Devices</option><option value="android">Android</option><option value="ios">iPhone / iPad</option><option value="desktop">Desktop</option><option value="unknown">Unknown</option></select></label>
           </div></details>
           </details><p id="issueQueueHeading" role="status"></p>
-          <div id="issues"><p class="status">Loading...</p></div>
+          <div id="issues"><p class="status">Loading...</p></div>`;
+    }
+    function bindAdminTopbar(){
+      window.PhotoNotesAccountMenu.sort();
+      document.getElementById('issueFab').onclick=openIssueReporter;
+      const profileButton=document.getElementById('profileButton');
+      const profileMenu=document.getElementById('profileMenu');
+      profileButton.onclick=(e)=>{ e.stopPropagation(); profileMenu.hidden=!profileMenu.hidden; profileButton.setAttribute('aria-expanded',String(!profileMenu.hidden)); };
+      document.onclick=(e)=>{ if(!e.target.closest('.account-menu-wrap')){ profileMenu.hidden=true; profileButton.setAttribute('aria-expanded','false'); } };
+      document.getElementById('signout').onclick = async () => { await api('/api/logout', { method:'POST' }); currentUser=null; renderLogin(); };
+      // TM: the same shortcut and live count as in the app. The count is the number of your own reported issues that need your review.
+      document.getElementById('tmBadge').onclick=()=>{if(testingView)showTestingSection('my-issues');else location.assign('/admin?view=testing&section=my-issues');};
+      const updates=document.getElementById('issueUpdates');if(updates){updates.href='/admin?view=testing&section=my-issues';if(testingView)updates.onclick=e=>{e.preventDefault();showTestingSection('my-issues');};}
+      refreshIssueAttention();
+    }
 
+    // Testing Dashboard: one place for testing managers, administrators and the Super Admin. Testers use the
+    // Testing Dashboard inside the app, which shows only their own assignments and issue reports.
+    const TESTING_SECTIONS=[['my-assignments','My Assignments'],['my-issues','My Issue Reports'],['all-issues','All Issues'],['assignments','Assignments and Results']];
+    let testingSection='my-assignments';
+    // Monitoring every issue matches the earlier Issue Management Center: Super Admin and testing managers.
+    function canMonitorIssues(){return !!(currentUser?.is_super_admin||currentUser?.is_testing_manager);}
+    // Managing assignments matches the earlier Testing Assignments and Testing Administration: administrators and testing managers.
+    function canManageAssignments(){return !!(currentUser?.role==='admin'||currentUser?.is_testing_manager);}
+    function testingSections(){return TESTING_SECTIONS.filter(([key])=>key==='all-issues'?canMonitorIssues():key==='assignments'?canManageAssignments():true);}
+    function overviewCard(section,key,label){return `<button type="button" class="testing-overview-card" data-testing-overview="${section}" data-overview="${key}"><span class="testing-overview-count" id="overview-${key}">-</span><span class="testing-overview-label">${esc(label)}</span></button>`;}
+    function renderTestingDashboard(){
+      const sections=testingSections(),requested=new URLSearchParams(location.search).get('section');
+      testingSection=sections.some(([key])=>key===requested)?requested:sections[0][0];
+      el.innerHTML = `
+        <div class="wrap testing-dashboard-page">
+          ${adminTopbar('PhotoNotes AI',true)}
+          <h1 class="admin-page-title">Testing Dashboard</h1>
+          <section class="testing-overview" aria-labelledby="testingOverviewHeading"><h2 id="testingOverviewHeading">Overview</h2><div class="testing-overview-grid">
+            ${overviewCard('my-issues','myReview','My Issues Needing Review')}
+            ${overviewCard('my-assignments','myAssignments','My Open Assignments')}
+            ${canMonitorIssues()?overviewCard('all-issues','decision','Issues Needing Sam’s Review'):''}
+            ${canManageAssignments()?overviewCard('assignments','results','Results Awaiting Review'):''}
+          </div></section>
+          <nav class="testing-section-nav" aria-label="Testing Dashboard sections">${sections.map(([key,label])=>`<button type="button" data-testing-section="${key}" aria-pressed="false">${esc(label)}</button>`).join('')}</nav>
+          <section class="testing-panel" data-testing-panel="my-assignments" hidden><div id="testingMyAssignments"></div></section>
+          <section class="testing-panel" data-testing-panel="my-issues" hidden><div id="testingMyIssues"></div></section>
+          ${canMonitorIssues()?`<section class="testing-panel" data-testing-panel="all-issues" hidden><h2>All Issues</h2><p class="helper">Every tester’s issue reports with retest instructions, replies and repair history.${currentUser?.is_super_admin?' Customer Feedback reports are included for the Super Admin.':''}</p>${issueCenterMarkup()}</section>`:''}
+          ${canManageAssignments()?`<section class="testing-panel" data-testing-panel="assignments" hidden><h2>Assignments and Results</h2><div id="assignments"></div></section>`:''}
+        </div>
+        <button class="issue-fab" id="issueFab" type="button" data-html2canvas-ignore="true">Report Issue</button>
+        ${issueReporterMarkup()}`;
+      bindAdminTopbar();
+      document.querySelectorAll('[data-testing-section]').forEach(button=>button.onclick=()=>showTestingSection(button.dataset.testingSection));
+      document.querySelectorAll('[data-testing-overview]').forEach(card=>card.onclick=()=>{
+        if(card.dataset.overview==='decision'){const filter=document.getElementById('issueStatusFilter');if(filter)filter.value='decision';if(allIssues.length)renderIssues();}
+        showTestingSection(card.dataset.testingOverview);
+      });
+      const tm=document.getElementById('tmCount');
+      const syncReview=()=>{const n=document.getElementById('overview-myReview');if(n)n.textContent=tm.textContent;};
+      new MutationObserver(syncReview).observe(tm,{childList:true,characterData:true,subtree:true});
+      if(canMonitorIssues()){
+        for(const id of ['issueVersionFilter','issueTypeFilter','issueStatusFilter','issuePriorityFilter','issueTesterFilter','issueDeviceFilter','issueDateSort','issueRecommendedAction'])document.getElementById(id).onchange=renderIssues;
+        if(currentUser?.is_super_admin)document.getElementById('issueEmailSettingsForm').onsubmit=saveIssueEmailSettings;
+        // The tester filter lists every tester, including testers who have not reported anything yet.
+        api('/api/testing/people').then(r=>r.ok?r.json():[]).then(people=>{if(Array.isArray(people)&&!allUsers.length){allUsers=people;populateIssueFilters();}}).catch(()=>{});
+        loadIssues();
+      }
+      showTestingSection(testingSection,{initial:true});
+    }
+    function refreshTestingOverviewIssues(){const n=document.getElementById('overview-decision');if(n&&Array.isArray(allIssues))n.textContent=String(allIssues.filter(i=>PhotoNotesIssueRouting.disposition(i)==='decision').length);}
+    function adminTestingSectionLabel(){return (TESTING_SECTIONS.find(([key])=>key===testingSection)||[])[1]||'';}
+    async function refreshTestingOverview(){
+      if(!testingView)return;
+      const set=(key,value)=>{const n=document.getElementById('overview-'+key);if(n)n.textContent=String(value);};
+      if(allIssues.length)refreshTestingOverviewIssues();
+      try{const r=await api('/api/testing/assignments/mine');if(r.ok){const rows=await r.json();set('myAssignments',rows.filter(a=>a.status!=='submitted').length);}}catch{}
+      if(canManageAssignments())try{const r=await api('/api/admin/testing-assignments');if(r.ok){const rows=await r.json();set('results',rows.filter(a=>a.status==='submitted'&&(!a.review_status||a.review_status==='pending')).length);}}catch{}
+    }
+    function showTestingSection(section,{initial=false}={}){
+      if(!testingSections().some(([key])=>key===section))section=testingSections()[0][0];
+      testingSection=section;
+      document.querySelectorAll('[data-testing-section]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.testingSection===section)));
+      document.querySelectorAll('[data-testing-panel]').forEach(panel=>panel.hidden=panel.dataset.testingPanel!==section);
+      const panel=document.querySelector(`[data-testing-panel="${section}"]`);
+      const url=new URL(location.href);url.searchParams.set('view','testing');url.searchParams.set('section',section);history.replaceState(history.state,'',url.pathname+url.search+url.hash);
+      if(panel&&!panel.dataset.loaded){
+        panel.dataset.loaded='true';
+        if(section==='my-assignments')PhotoNotesTesting.renderTester(document.getElementById('testingMyAssignments'),{dashboard:{header:'',bind(){}},back(){},openIssues:()=>showTestingSection('my-issues'),reportIssue:context=>openIssueReporter(context)});
+        else if(section==='my-issues')renderMyIssueList(document.getElementById('testingMyIssues'));
+        else if(section==='assignments')PhotoNotesTesting.renderAdmin(document.getElementById('assignments'));
+      }
+      refreshTestingOverview();
+      if(!initial)document.querySelector('.testing-section-nav')?.scrollIntoView({block:'start'});
+    }
+    function renderAdmin(){
+      el.innerHTML = `
+        <div class="wrap">
+          ${adminTopbar('Photo Notes Admin')}
 
-</div></details><details class="admin-section" data-admin-tool="system-status"><summary>System Status</summary><div class="admin-section-body">          <p id="issueSystemNotice" class="issue-system-notice" role="status" hidden></p>
+          <h1 class="admin-page-title">${currentUser?.is_super_admin?'Super Admin Dashboard':'Admin'}</h1>
+          <h2 class="admin-tools-heading">Admin Tools</h2>
+          <a class="btn secondary open-testing-dashboard" id="openTestingDashboard" href="/admin?view=testing">Open Testing Dashboard</a>
+          <p class="helper">Testing Dashboard holds your assignments and issue reports, All Issues with retests and replies, and Assignments and Results.</p>
+          ${currentUser?.is_super_admin?'<div id="aiAdminHost"></div><div id="userUsageHost"></div>':''}<div id="recordNotesReliabilityHost"></div><div id="precisionMeasureHost"></div>
+          <div id="customerFeedbackHost"></div>
+          <details id="usersSection" class="admin-section" data-admin-tool="users"><summary id="usersHeading">Users</summary><div class="admin-section-body">
+            <div class="users-heading"><div><p class="helper">${currentUser?.is_super_admin?'Select a user to edit their details, password, and version access.':'Select a user to view their details and change version access.'}</p></div><button class="btn" type="button" id="addUser" aria-expanded="false" aria-controls="createUserPanel">Add User</button></div>
+            <div id="createUserPanel" class="admin-panel" hidden>          <h2>Create User</h2>
+          <div class="helper">Create access for a person. First name, last name, email, and password are required; industry is optional.</div>
+          <label for="cname">First and Last Name</label><input id="cname" type="text" placeholder="First and last name" autocomplete="name" />
+          <label for="cemail">Email</label><input id="cemail" type="email" placeholder="Email" inputmode="email" autocomplete="email" style="margin-top:8px" />
+          <label for="ccategory">User Category</label><select id="ccategory">${categoryOptions()}</select>
+          <label for="cindustry">Industry (optional)</label><input id="cindustry" type="text" placeholder="Industry (optional)" style="margin-top:8px" />
+          <fieldset class="version-access"><legend>Versions</legend><div class="feature-grid">${versionChecks('new',['basic'])}</div></fieldset>
+          <label for="cpass">Password</label><div class="password-row">
+            <input id="cpass" type="password" placeholder="Create Password" autocomplete="new-password" />
+            <button class="btn secondary" type="button" id="generatepass">Generate</button>
+            <button class="btn secondary" type="button" id="copypass">Copy Password</button>
+          </div>
+          <div class="helper" id="passhelp">Use Generate for a strong 20-character password, then copy it before creating the login.</div>
+          <button class="btn" id="createbtn">Create User</button>
+
+<button class="btn secondary" type="button" id="cancelCreate">Cancel</button></div>
+            <details class="admin-section" id="userTotals"><summary>Totals Across All Users</summary><div class="admin-section-body">
+          <div class="helper">Combined account and activity counts for all users.</div>
+          <div id="summary"></div>
+
+          </div></details>
+            <div id="userListTools" class="user-list-tools"><label for="userSearch">Find a user<input id="userSearch" type="search" placeholder="Search name or email"></label><label for="categoryFilter">User Category<select id="categoryFilter"><option value="">All Categories</option>${categoryOptions('')}</select></label><label for="sortsel">Sort<select id="sortsel"><option value="name">Name (A–Z)</option><option value="active">Recently active</option><option value="newest">Newest login</option><option value="captures">Most captures</option></select></label></div>
+            <div id="users" aria-live="polite"></div>
+          </div></details>
+<details class="admin-section" data-admin-tool="system-status"><summary>System Status</summary><div class="admin-section-body">          <p id="issueSystemNotice" class="issue-system-notice" role="status" hidden></p>
 
             <p class="helper">Technical checks for automatic repairs and tester notifications. These describe the services, not the progress of an individual report.</p>
             <div id="repairWorkerStatus"><p class="helper">Loading repair queue status...</p></div>
             <div id="cloudWorkerDetail"><p class="helper">Loading background service status...</p></div>
 
-</div></details><details class="admin-section" data-admin-tool="testing"><summary>Testing Assignments</summary><div class="admin-section-body">
-          <div class="helper">Create assignments, publish to individual testers, and review results and linked issues.</div>
-          <button class="btn secondary" id="refreshAssignments" type="button" style="width:auto;margin:0 0 10px">Refresh Assignments</button>
-          <div id="assignments"><p class="status">Loading...</p></div>
-
-          </div></details><details class="admin-section" data-admin-tool="health"><summary>System Health</summary><div class="admin-section-body">
+</div></details><details class="admin-section" data-admin-tool="health"><summary>System Health</summary><div class="admin-section-body">
           <div class="helper">A safe operational check of the services Photo Notes needs. This shows configuration and availability without displaying passwords or API keys.</div>
           <div id="health"><p class="status">Checking...</p></div>
 
@@ -547,46 +662,26 @@
                   </div>
         <button class="issue-fab" id="issueFab" type="button" data-html2canvas-ignore="true">Report Issue</button>
         ${issueReporterMarkup()}`;
-      if(!currentUser?.is_super_admin&&!currentUser?.is_testing_manager)document.querySelectorAll('[data-admin-tool="issues"],[data-admin-tool="system-status"],[data-admin-tool="health"],[data-admin-tool="billing"],[data-admin-tool="activity"],.issue-diagnostics,#issueSystemNotice,#addUser,#createUserPanel,#userTotals').forEach(section=>section.remove());
-      if(currentUser?.is_testing_manager&&!currentUser?.is_super_admin){document.querySelectorAll('[data-admin-tool]').forEach(section=>{if(!['issues','testing','record-notes-reliability','precision-measure-validation'].includes(section.dataset.adminTool))section.remove();});document.querySelector('.admin-page-title').textContent='Testing Management';document.querySelector('.admin-tools-heading').textContent='Issues and Testing';}
+      if(!currentUser?.is_super_admin&&!currentUser?.is_testing_manager)document.querySelectorAll('[data-admin-tool="system-status"],[data-admin-tool="health"],[data-admin-tool="billing"],[data-admin-tool="activity"],.issue-diagnostics,#issueSystemNotice,#addUser,#createUserPanel,#userTotals').forEach(section=>section.remove());
+      if(currentUser?.is_testing_manager&&!currentUser?.is_super_admin){document.querySelectorAll('[data-admin-tool]').forEach(section=>{if(!['record-notes-reliability','precision-measure-validation'].includes(section.dataset.adminTool))section.remove();});document.querySelector('.admin-page-title').textContent='Testing Management';document.querySelector('.admin-tools-heading').textContent='Testing Tools';}
       if(currentUser?.is_super_admin)PhotoNotesAdminUsage.mount(document.getElementById('userUsageHost'),api);
       PhotoNotesAdminRecordNotes.mount(document.getElementById('recordNotesReliabilityHost'),api);
       PhotoNotesAdminPrecisionMeasure.mount(document.getElementById('precisionMeasureHost'),api);
       mountCustomerFeedbackAdmin(document.getElementById('customerFeedbackHost'),api);
       if(currentUser?.is_super_admin)PhotoNotesAdminAI.mount(document.getElementById('aiAdminHost'),api);
-      window.PhotoNotesAccountMenu.sort();
       const tools=[...document.querySelectorAll('[data-admin-tool]')];
       tools.sort((a,b)=>a.querySelector('summary').textContent.trim().localeCompare(b.querySelector('summary').textContent.trim(),'en',{sensitivity:'base'}));
       // Panels mounted inside their own host keep the host (it carries their styles) and sort with the other tools.
       const toolUnit=tool=>tool.parentElement?.matches('[id$="Host"]')&&tool.parentElement.children.length<=2?tool.parentElement:tool;
       const toolList=tools.map(toolUnit).find(unit=>!unit.matches('[id$="Host"]'))?.parentElement;
       if(toolList)tools.forEach(tool=>toolList.appendChild(toolUnit(tool)));
-      if(new URLSearchParams(location.search).get('tool')==='issues'){const issues=document.querySelector('[data-admin-tool="issues"]');if(issues){issues.open=true;issues.scrollIntoView();}}
-      document.getElementById('issueFab').onclick=openIssueReporter;
-      refreshIssueAttention();
-      const profileButton=document.getElementById('profileButton');
-      const profileMenu=document.getElementById('profileMenu');
-      profileButton.onclick=(e)=>{ e.stopPropagation(); profileMenu.hidden=!profileMenu.hidden; profileButton.setAttribute('aria-expanded',String(!profileMenu.hidden)); };
-      document.onclick=(e)=>{ if(!e.target.closest('.account-menu-wrap')){ profileMenu.hidden=true; profileButton.setAttribute('aria-expanded','false'); } };
-      document.getElementById('signout').onclick = async () => { await api('/api/logout', { method:'POST' }); currentUser=null; renderLogin(); };
+      bindAdminTopbar();
       if(currentUser?.is_super_admin){
         document.getElementById('createbtn').onclick = createUser;
         document.getElementById('generatepass').onclick = generatePassword;
         document.getElementById('copypass').onclick = copyPassword;
       }
-      if(currentUser?.is_super_admin||currentUser?.is_testing_manager){
-      document.getElementById('issueVersionFilter').onchange = renderIssues;
-      document.getElementById('issueTypeFilter').onchange = renderIssues;
-      document.getElementById('issueStatusFilter').onchange = renderIssues;
-      document.getElementById('issuePriorityFilter').onchange = renderIssues;
-      document.getElementById('issueTesterFilter').onchange = renderIssues;
-      document.getElementById('issueDeviceFilter').onchange = renderIssues;
-      document.getElementById('issueDateSort').onchange = renderIssues;
-      document.getElementById('issueRecommendedAction').onchange = renderIssues;
-      }
-      if(currentUser?.is_super_admin)document.getElementById('issueEmailSettingsForm').onsubmit=saveIssueEmailSettings;
-      document.getElementById('refreshAssignments').onclick = loadAssignments;
-      const toolLoaders={'system-status':loadIssueSystemStatus,health:loadHealth,billing:loadStripeBilling,activity:loadActivity,issues:loadIssues,testing:loadAssignments};
+      const toolLoaders={'system-status':loadIssueSystemStatus,health:loadHealth,billing:loadStripeBilling,activity:loadActivity};
       document.querySelectorAll('[data-admin-tool]').forEach(panel=>panel.ontoggle=()=>{if(panel.open&&!panel.dataset.loaded){panel.dataset.loaded='true';const load=toolLoaders[panel.dataset.adminTool];if(load)load();}});
       const createPanel=document.getElementById('createUserPanel'),add=document.getElementById('addUser');
       if(add&&createPanel){
@@ -596,7 +691,6 @@
       if(document.getElementById('userSearch')){document.getElementById('userSearch').oninput=renderUserList;loadUsers();}
     }
 
-    async function loadAssignments(){const box=document.getElementById('assignments');if(box)await PhotoNotesTesting.renderAdmin(box);}
 
     const issueTypeLabels={bug_problem:'Bug/Problem',ui_improvement:'UI Improvement',feature_improvement:'Feature Improvement Idea',new_feature:'New Feature Idea'};
     const issueStatusOrder=['new','reviewing','blocked','fixing','testing','retest_requested','ready_to_test','resolved','wont_fix'];
@@ -626,6 +720,7 @@
     function matchesIssueType(issue,type){return type==='all'||(type==='ideas'?['ui_improvement','feature_improvement','new_feature'].includes(issue.issue_type):(issue.issue_type||'bug_problem')===type);}
     function renderIssues(){
       const box=document.getElementById('issues'); if(!box)return;
+      refreshTestingOverviewIssues();
       const version=(document.getElementById('issueVersionFilter')||{}).value||'all';
       const category=(document.getElementById('issueTypeFilter')||{}).value||'all';
       const sf=(document.getElementById('issueStatusFilter')||{}).value||'open';
@@ -713,10 +808,10 @@
       const i=allIssues.find(i=>Number(i.id)===Number(id)),bug=i.issue_type==='bug_problem',success=['resolved','tester_confirmed'].includes(i.management_status),failed=i.tester_result==='still_happening',unable=i.tester_result==='unable_to_test';
       const recommended=PhotoNotesIssueRouting.failures(i)>=2?'developer':window.PhotoNotesReviewGuidance.explain(i).action;
       const queued=['new','reviewing','fixing','testing'].includes(i.management_status);
-      const message=queued?'The repair worker owns the next action. The latest tester evidence stays attached to this report. You can override the instructions if needed.':(['ready_to_test','retest_requested'].includes(i.management_status)?'Waiting for the tester’s result. You can revise the instructions if needed.':success?(i.tester_result==='fixed'?'Retest succeeded. This issue is closed; no action is required. You can request another retest or reopen it if needed.':'This issue is closed without verified repair evidence. No action is required; you can request another retest or reopen it if needed.'):failed?'Retest failed. The next action and responsible person are shown above.':unable?'The tester could not complete the retest. Clarify the missing details or send revised instructions.':'');
+      const message=queued?'The repair worker is responsible for the next action. The latest tester evidence stays attached to this report. You can override the instructions if needed.':(['ready_to_test','retest_requested'].includes(i.management_status)?'Waiting for the tester’s result. You can revise the instructions if needed.':success?(i.tester_result==='fixed'?'Retest succeeded. This issue is closed; no action is required. You can request another retest or reopen it if needed.':'This issue is closed without verified repair evidence. No action is required; you can request another retest or reopen it if needed.'):failed?'Retest failed. The next action and responsible person are shown above.':unable?'The tester could not complete the retest. Clarify the missing details or send revised instructions.':'');
       const actions=success?[['retest','Request Another Retest'],['implement',bug?'Reopen And Repair':'Reopen And Implement'],['clarify','Request Clarification']]:unable?[['clarify','Request Clarification'],['retest','Send Revised Retest Instructions'],['implement',bug?'Retry Repair':'Implement Change'],['no_change',bug?'Close Without Fix':'Make No Change']]:[['implement',bug?'Retry Repair':'Implement Change'],['clarify','Request Clarification'],['retest',failed?'Request Another Retest':'Retest'],['no_change',bug?'Close Without Fix':'Make No Change']];
       if(!success)actions.push(['developer','Developer Investigation']);
-      return `<section class="admin-panel"><h3>${queued?'Optional Owner Override':'Your Decision'}</h3>${message?'<p>'+esc(message)+'</p>':''}${!queued&&PhotoNotesIssueRouting.disposition(i)==='decision'&&['developer','implement','clarify','retest','no_change'].includes(recommended)?'<button type="button" class="btn secondary" data-issue-recommend="'+id+'" data-action="'+recommended+'">Prepare Recommended Action: '+esc({developer:'Developer Investigation',implement:'Retry Repair',clarify:'Request Clarification',retest:'Retest',no_change:'Close Without Fix'}[recommended])+'</button>':''}${i.management_status==='blocked'?'<details><summary>Review Guidance</summary>'+reviewGuidancePanels(i)+'</details>':''}<label for="ui-decision-${id}">Choose An Action</label><select id="ui-decision-${id}" data-ui-decision="${id}"><option value="">Choose an action</option>${actions.map(([value,label])=>'<option value="'+value+'">'+label+'</option>').join('')}</select><div id="ui-entry-${id}" hidden><label id="ui-label-${id}" for="ui-instructions-${id}"></label><textarea class="issue-notes" id="ui-instructions-${id}" maxlength="5000"></textarea><p id="ui-help-${id}"></p><div class="issue-actions"><button class="btn" type="button" data-ui-submit="${id}">Submit Decision</button></div></div><p id="ui-result-${id}" role="status"></p></section>`;
+      return `<section class="admin-panel"><h3>${queued?'Optional Override':'Your Decision'}</h3>${message?'<p>'+esc(message)+'</p>':''}${!queued&&PhotoNotesIssueRouting.disposition(i)==='decision'&&['developer','implement','clarify','retest','no_change'].includes(recommended)?'<button type="button" class="btn secondary" data-issue-recommend="'+id+'" data-action="'+recommended+'">Prepare Recommended Action: '+esc({developer:'Developer Investigation',implement:'Retry Repair',clarify:'Request Clarification',retest:'Retest',no_change:'Close Without Fix'}[recommended])+'</button>':''}${i.management_status==='blocked'?'<details><summary>Review Guidance</summary>'+reviewGuidancePanels(i)+'</details>':''}<label for="ui-decision-${id}">Choose An Action</label><select id="ui-decision-${id}" data-ui-decision="${id}"><option value="">Choose an action</option>${actions.map(([value,label])=>'<option value="'+value+'">'+label+'</option>').join('')}</select><div id="ui-entry-${id}" hidden><label id="ui-label-${id}" for="ui-instructions-${id}"></label><textarea class="issue-notes" id="ui-instructions-${id}" maxlength="5000"></textarea><p id="ui-help-${id}"></p><div class="issue-actions"><button class="btn" type="button" data-ui-submit="${id}">Submit Decision</button></div></div><p id="ui-result-${id}" role="status"></p></section>`;
     }
     function isRetestFollowup(i){
       return /^(?:What happened:\s*)?(?:I|We)\s+(?:retested|re-tested|tested (?:this|it|the .+?) again)\b/i.test(String(i.description||'').trim());
@@ -761,7 +856,7 @@
     function issueHistoryDetail(detail){
       let data;try{data=JSON.parse(detail);}catch{return `<p class="issue-description">${esc(detail)}</p>`;}
       if(!data||typeof data!=='object')return `<p>${esc(detail)}</p>`;
-      const labels={instructions:'Owner Instructions Or Question',reason:'Reason',blocked_reason:'Why Work Stopped',fix_summary:'Repair Summary',retest_instructions:'Retest Instructions',verification:'Verification',status:'Status',previous_status:'Previous Status',release_reference:'Release',previous_note:'Previous Question Or Reason',previous_instructions:'Previous Instructions',previous_tester_result:'Previous Tester Result',previous_tester_notes:'Previous Tester Notes'};
+      const labels={instructions:'Instructions Or Question',reason:'Reason',blocked_reason:'Why Work Stopped',fix_summary:'Repair Summary',retest_instructions:'Retest Instructions',verification:'Verification',status:'Status',previous_status:'Previous Status',release_reference:'Release',previous_note:'Previous Question Or Reason',previous_instructions:'Previous Instructions',previous_tester_result:'Previous Tester Result',previous_tester_notes:'Previous Tester Notes'};
       const entries=Object.entries(labels).filter(([key])=>data[key]);
       return entries.length?entries.map(([key,label])=>`<p class="issue-description"><strong>${label}:</strong> ${esc(typeof data[key]==='string'?data[key]:JSON.stringify(data[key]))}</p>`).join(''):`<pre style="white-space:pre-wrap;overflow-wrap:anywhere">${esc(JSON.stringify(data,null,2))}</pre>`;
     }
@@ -988,8 +1083,6 @@
               const result=await api(`/api/admin/users/${id}`,{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({confirm_email:input.value})});
               const data=await result.json();if(!result.ok)throw new Error(data.error||'User could not be deleted');
               selectedUserId=null;await loadUsers();
-              const assignments=document.querySelector('[data-admin-tool="testing"]');if(assignments){delete assignments.dataset.loaded;if(assignments.open)loadAssignments();}
-              const issues=document.querySelector('[data-admin-tool="issues"]');if(issues){delete issues.dataset.loaded;if(issues.open)loadIssues();}
               loadActivity();toast(data.file_cleanup_pending?'User deleted. Attachment cleanup is pending.':'User permanently deleted');
             }catch(e){document.getElementById('deleteStatus').textContent=e.message;confirm.disabled=false;cancel.disabled=false;input.disabled=false;confirm.textContent='Delete Permanently';}
           };
