@@ -18,7 +18,7 @@ const express=require('express');
  await page.goto(`http://127.0.0.1:${server.address().port}/admin.html${preview?'?view=admin':''}`);
  await page.locator('#usersHeading').waitFor();
  const menuLabels=await page.locator('#profileMenu > a, #profileMenu > button').allTextContents();assert.equal(menuLabels.pop(),'Sign Out');assert.deepEqual(menuLabels,[...menuLabels].sort((a,b)=>a.localeCompare(b,'en')));assert.equal(await page.locator('#profileMenu a[href="/admin?view=super"]').count(),accountOwner?1:0);
- assert.equal(await page.locator('h1').textContent(),owner?'Super Admin':'Admin');
+ assert.equal(await page.locator('h1').textContent(),owner?'Super Admin Dashboard':'Admin');
  const labels=await page.locator('[data-admin-tool] > summary').allTextContents();
  assert(labels.includes('Users'));assert.deepEqual(labels,[...labels].sort((a,b)=>a.localeCompare(b,'en')));
  assert(await page.locator('.admin-tools-heading').evaluate(heading=>[...document.querySelectorAll('[data-admin-tool]')].every(tool=>!!(heading.compareDocumentPosition(tool)&Node.DOCUMENT_POSITION_FOLLOWING))));
