@@ -526,6 +526,7 @@ input.dimfield.suggested {
   .app-header { grid-template-columns:auto minmax(0,1fr) auto; column-gap:4px; }
   .app-header .header-controls { gap:6px; }
   .language-switch, .language-switch button { font-size:11px; }
+  .tm-badge .tm-label, .tm-badge .tm-count { font-size:11px; }
   .edition-label { font-size:11px; }
   .pill { padding: 7px 11px; font-size: 14px; }
   .btn { padding: 13px; font-size: 16px; }
@@ -1337,5 +1338,5 @@ html[data-theme="dark"] .workflow-send .btn.secondary:not([aria-pressed="true"])
 /* TM: Testing Dashboard shortcut directly left of the account button, with the count of issues needing review. */
 .tm-badge { display:inline-flex; flex-direction:column; align-items:center; justify-content:center; min-width:44px; min-height:44px; padding:2px 6px; border:2px solid var(--pn-border-1554d1,#1554d1); border-radius:10px; background:#fff; color:#000; cursor:pointer; line-height:1; font-family:inherit; }
 .tm-badge:hover, .tm-badge:focus-visible { outline:2px solid #000; outline-offset:2px; }
-.tm-badge .tm-label { font-size:13px; font-weight:700; color:#1554d1; letter-spacing:.5px; }
-.tm-badge .tm-count { margin-top:2px; font-size:17px; font-weight:800; color:#ff1a1a; }
+.tm-badge .tm-label { font-size:12px; font-weight:700; color:#1554d1; letter-spacing:.5px; }
+.tm-badge .tm-count { margin-top:2px; font-size:12px; font-weight:800; color:#ff1a1a; }
