@@ -1,20 +1,28 @@
 /* One-tap first-use setup. Permissions belong to this device, and on iPhone
    the Home Screen app has its own permissions, so this runs once per signed-in
-   account in each browser or installed app. */
+   account in each browser or installed app.
+   Only the microphone and location are requested. Take Photo opens the phone's own
+   camera through a file picker, which needs no camera permission, so the camera is
+   never requested here (asking would add an extra iPhone prompt for nothing). When
+   live Record Notes is available, the microphone stream from this request is kept and
+   reused by the first recording instead of asking again. iOS still decides whether to
+   show its own prompts and how long the Home Screen app remembers the answers. */
 (function(){
  const t=(en,es)=>window.photoNotesI18n?.getLanguage()==='es'?es:en;
  const KEY='pn_first_use_v1:';
  const isIOS=()=>/iPhone|iPad|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
  const isPhone=()=>/Android|iPhone|iPad|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
  const isInstalled=()=>matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
- const ITEMS=[['microphone',()=>t('Microphone','Micrófono'),()=>t('for Record Notes','para Grabar notas')],['camera',()=>t('Camera','Cámara'),()=>t('for photos','para fotos')],['location',()=>t('Location','Ubicación'),()=>t('to show where each photo was taken','para mostrar dónde se tomó cada foto')]];
- const LABEL={waiting:()=>t('Not on yet','Aún no activado'),working:()=>t('Asking...','Solicitando...'),allowed:()=>t('On','Activado'),denied:()=>t('Not allowed','No permitido'),failed:()=>t('Could not turn on','No se pudo activar'),unsupported:()=>t('Not available here','No disponible aquí')};
+ const ITEMS=[['microphone',()=>t('Microphone','Micrófono'),()=>t('for Record Notes','para Grabar notas')],['camera',()=>t('Camera','Cámara'),()=>t('for photos, opens your phone camera','para fotos, abre la cámara del teléfono')],['location',()=>t('Location','Ubicación'),()=>t('to show where each photo was taken','para mostrar dónde se tomó cada foto')]];
+ const LABEL={ready:()=>t('Ready, no permission needed','Listo, no necesita permiso'),waiting:()=>t('Not on yet','Aún no activado'),working:()=>t('Asking...','Solicitando...'),allowed:()=>t('On','Activado'),denied:()=>t('Not allowed','No permitido'),failed:()=>t('Could not turn on','No se pudo activar'),unsupported:()=>t('Not available here','No disponible aquí')};
  const stopAll=stream=>{try{stream?.getTracks().forEach(track=>track.stop());}catch{}};
  const denied=error=>error&&(error.name==='NotAllowedError'||error.name==='SecurityError'||error.code===1);
 
- async function requestMedia(kinds){
-  const want={};if(kinds.includes('microphone'))want.audio=true;if(kinds.includes('camera'))want.video={facingMode:{ideal:'environment'}};
-  const stream=await navigator.mediaDevices.getUserMedia(want);stopAll(stream);
+ async function requestMicrophone(){
+  const live=window.PhotoNotesLiveTranscription;
+  // Keep the stream for the first recording (released after a minute away from Capture).
+  if(live?.enabled?.()&&live.acquireMicrophone){await live.acquireMicrophone();live.releaseMicrophone?.();return;}
+  const stream=await navigator.mediaDevices.getUserMedia({audio:true});stopAll(stream);
  }
  function requestLocation(){
   return new Promise((resolve,reject)=>navigator.geolocation.getCurrentPosition(()=>resolve(),reject,{enableHighAccuracy:true,timeout:15000,maximumAge:0}));
@@ -26,7 +34,7 @@
   const key=KEY+encodeURIComponent(me.email);
   if(!force)try{if(localStorage.getItem(key))return false;}catch{}
   const account=me.email,wantIcon=isPhone()&&!isInstalled();
-  const status={microphone:'waiting',camera:'waiting',location:'waiting'};let busy=false,phase='permissions';
+  const status={microphone:'waiting',camera:'ready',location:'waiting'};let busy=false,phase='permissions';
   const dialog=document.createElement('dialog');dialog.id='firstUseSetup';dialog.className='first-use-dialog';dialog.setAttribute('aria-labelledby','firstUseTitle');
   dialog.innerHTML='<h2 id="firstUseTitle"></h2><p id="firstUseIntro"></p><ul class="first-use-list" id="firstUseList"></ul><div id="firstUseIcon" class="first-use-icon" hidden></div><p id="firstUseStatus" role="status" aria-live="polite"></p><div class="first-use-actions"><button class="btn" id="firstUseYes" type="button"></button><button class="btn secondary" id="firstUseNext" type="button"></button></div>';
   document.body.append(dialog);
@@ -70,35 +78,28 @@
    q('firstUseNext').textContent=t('Done','Listo');q(q('firstUseYes').hidden?'firstUseNext':'firstUseYes').focus();
   }
   function summary(){
-   const off=ITEMS.filter(([id])=>status[id]!=='allowed').map(([,name])=>name());
+   const off=ITEMS.filter(([id])=>!['allowed','ready'].includes(status[id])).map(([,name])=>name());
    if(!off.length)return t('Everything is on.','Todo está activado.');
    return t('Not turned on: ','Sin activar: ')+off.join(', ')+'. '+t('You can allow them later in your browser or phone settings. Typing notes and choosing photos still work.','Puede permitirlos después en los ajustes del navegador o del teléfono. Escribir notas y elegir fotos sigue funcionando.');
   }
   async function turnOnEverything(){
    busy=true;q('firstUseYes').disabled=true;q('firstUseNext').disabled=true;
-   const media=['microphone','camera'];
    try{
-    if(!navigator.mediaDevices?.getUserMedia){media.forEach(id=>status[id]='unsupported');}
-    else{
-     media.forEach(id=>status[id]='working');renderList();
-     // One combined request shows a single camera-and-microphone prompt on most phones.
-     try{await requestMedia(media);media.forEach(id=>status[id]='allowed');}
-     catch(error){
-      if(!dialog.open||!current())return;
-      // Ask separately so one refusal does not block the other.
-      for(const id of media){
-       try{await requestMedia([id]);status[id]='allowed';}catch(e){status[id]=denied(e)?'denied':(e&&e.name==='NotFoundError')?'unsupported':'failed';}
-       if(!dialog.open||!current())return;
-      }
+    if(status.microphone!=='allowed'){
+     if(!navigator.mediaDevices?.getUserMedia)status.microphone='unsupported';
+     else{
+      status.microphone='working';renderList();
+      try{await requestMicrophone();status.microphone='allowed';}
+      catch(e){status.microphone=denied(e)?'denied':(e&&e.name==='NotFoundError')?'unsupported':'failed';}
      }
     }
     if(!dialog.open||!current())return;
     renderList();
     if(!navigator.geolocation)status.location='unsupported';
-    else{status.location='working';renderList();try{await requestLocation();status.location='allowed';}catch(e){status.location=denied(e)?'denied':'failed';}}
+    else if(status.location!=='allowed'){status.location='working';renderList();try{await requestLocation();status.location='allowed';}catch(e){status.location=denied(e)?'denied':'failed';}}
     if(!dialog.open||!current())return;
     renderList();q('firstUseStatus').textContent=summary();
-    if(wantIcon&&ITEMS.every(([id])=>status[id]==='allowed')){setTimeout(()=>{if(dialog.open&&phase==='permissions')showIcon();},900);return;}
+    if(wantIcon&&ITEMS.every(([id])=>['allowed','ready'].includes(status[id]))){setTimeout(()=>{if(dialog.open&&phase==='permissions')showIcon();},900);return;}
     q('firstUseYes').hidden=!ITEMS.some(([id])=>['failed','denied'].includes(status[id]));q('firstUseYes').textContent=t('Try Again','Intentar de nuevo');
     q('firstUseNext').textContent=wantIcon?t('Continue','Continuar'):t('Done','Listo');
    }finally{busy=false;q('firstUseYes').disabled=false;q('firstUseNext').disabled=false;}

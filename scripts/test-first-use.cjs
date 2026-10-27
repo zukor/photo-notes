@@ -22,12 +22,15 @@ for(const engine of engines){const browser=await engine.launch();
  assert.equal(await page.locator('#firstUseYes').textContent(),'Turn On Everything');
  assert.equal(await page.locator('.first-use-item').count(),3);
  assert.equal(await page.evaluate(()=>calls.length),0);
- // One tap: combined camera+microphone request, then location, then Home Screen step.
+ // One tap: microphone, then location, then Home Screen step. The camera is never
+ // requested: Take Photo uses the phone camera through a file picker, with no prompt.
+ assert.equal(await page.locator('[data-permission=camera] .first-use-state').textContent(),'Ready, no permission needed');
  await page.locator('#firstUseYes').click();
  await page.waitForFunction(()=>document.querySelector('#firstUseTitle')?.textContent==='Add PhotoNotes to your Home Screen');
  const calls=await page.evaluate(()=>calls);
- assert.equal(calls.length,2);assert.equal(calls[0].audio,true);assert.ok(calls[0].video);assert.equal(calls[1].location.timeout,15000);
- assert.equal(await page.evaluate(()=>stops),2,'all tracks released immediately');
+ assert.equal(calls.length,2);assert.equal(calls[0].audio,true);assert.equal(calls[0].video,undefined,'no camera prompt');assert.equal(calls[1].location.timeout,15000);
+ assert.equal(calls.filter(c=>c.video).length,0,'camera never requested');
+ assert.equal(await page.evaluate(()=>stops),1,'without live Record Notes the microphone track is released at once');
  const steps=await page.locator('#firstUseIcon').textContent();
  if(ua==='iPhone'){assert.match(steps,/Share button/);assert.match(steps,/Add to Home Screen/);assert.match(steps,/Turn On Everything there once more/);assert.equal(await page.locator('#firstUseYes').isHidden(),true);}
  else assert.match(steps,/three dots menu in Chrome/);
@@ -40,16 +43,24 @@ for(const engine of engines){const browser=await engine.launch();
   await page.locator('#firstUseYes').click();await page.waitForFunction(()=>document.querySelector('#firstUseYes')?.textContent==='Add to Home Screen');
   await page.locator('#firstUseYes').click();await page.waitForFunction(()=>!document.querySelector('dialog'));assert.equal(await page.evaluate(()=>prompted),1);
  }
- // Camera refused: microphone still turns on separately; summary explains, Try Again offered.
- await page.evaluate(()=>{state.me.email='camera-denied@example.invalid';mediaMode='deny-camera';calls.length=0;PhotoNotesFirstUse.offer(state.me);});
+ // Microphone refused: location still turns on; summary explains, Try Again asks only for what is off.
+ await page.evaluate(()=>{state.me.email='mic-denied@example.invalid';mediaMode='deny';calls.length=0;PhotoNotesFirstUse.offer(state.me);});
  await page.locator('#firstUseYes').click();await page.waitForFunction(()=>document.querySelector('#firstUseStatus').textContent.includes('Not turned on'));
- assert.equal(await page.locator('[data-permission=microphone] .first-use-state').textContent(),'On');
- assert.equal(await page.locator('[data-permission=camera] .first-use-state').textContent(),'Not allowed');
+ assert.equal(await page.locator('[data-permission=microphone] .first-use-state').textContent(),'Not allowed');
+ assert.equal(await page.locator('[data-permission=camera] .first-use-state').textContent(),'Ready, no permission needed');
  assert.equal(await page.locator('[data-permission=location] .first-use-state').textContent(),'On');
- assert.match(await page.locator('#firstUseStatus').textContent(),/Camera/);
+ assert.match(await page.locator('#firstUseStatus').textContent(),/Microphone/);
  assert.equal(await page.locator('#firstUseYes').textContent(),'Try Again');
- await page.evaluate(()=>mediaMode='allow');await page.locator('#firstUseYes').click();
+ await page.evaluate(()=>{mediaMode='allow';calls.length=0;});await page.locator('#firstUseYes').click();
  await page.waitForFunction(()=>document.querySelector('#firstUseTitle')?.textContent==='Add PhotoNotes to your Home Screen');
+ assert.equal(await page.evaluate(()=>calls.filter(c=>c.location).length),0,'Try Again does not ask for location again');
+ await page.locator('#firstUseNext').click();await page.waitForFunction(()=>!document.querySelector('dialog'));
+ // With live Record Notes, the microphone stream is kept for the first recording.
+ await page.evaluate(()=>{state.me.email='held@example.invalid';calls.length=0;stops=0;window.held=0;window.PhotoNotesLiveTranscription={enabled:()=>true,acquireMicrophone:async()=>{held++;return navigator.mediaDevices.getUserMedia({audio:true});},releaseMicrophone(){}};PhotoNotesFirstUse.offer(state.me);});
+ await page.locator('#firstUseYes').click();
+ await page.waitForFunction(()=>document.querySelector('#firstUseTitle')?.textContent==='Add PhotoNotes to your Home Screen');
+ assert.equal(await page.evaluate(()=>held),1);assert.equal(await page.evaluate(()=>stops),0,'stream kept for reuse');
+ await page.evaluate(()=>{delete window.PhotoNotesLiveTranscription;});
  await page.locator('#firstUseNext').click();await page.waitForFunction(()=>!document.querySelector('dialog'));
  // Location timeout reports could-not-turn-on, never blocks the app.
  await page.evaluate(()=>{state.me.email='slow-gps@example.invalid';locationMode='timeout';PhotoNotesFirstUse.offer(state.me);});
@@ -75,5 +86,5 @@ for(const engine of engines){const browser=await engine.launch();
   await page.evaluate(({edition,choice,width})=>{state.me={email:edition+width+'@matrix.invalid',...choice};PhotoNotesFirstUse.offer(state.me);},{edition,choice,width});
   await page.locator('#firstUseYes').click();await page.waitForFunction(()=>document.querySelector('#firstUseTitle')?.textContent==='Add PhotoNotes to your Home Screen');
   await page.locator('#firstUseNext').click();await page.waitForFunction(()=>!document.querySelector('dialog'));}}
- await browser.close();console.log(engine.name()+': one-tap permissions, combined camera and microphone, partial refusal, retry, location timeout, skip, install prompt, iPhone steps, installed app, account switch, all editions passed');}
+ await browser.close();console.log(engine.name()+': one-tap permissions, microphone and location only (no camera prompt), microphone kept for reuse, partial refusal, retry, location timeout, skip, install prompt, iPhone steps, installed app, account switch, all editions passed');}
 server.close();})().catch(e=>{console.error(e);process.exit(1);});

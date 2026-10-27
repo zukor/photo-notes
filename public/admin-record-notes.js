@@ -6,11 +6,14 @@ const LABEL={live:'Worked live',recovered:'Recovered from saved audio',retried:'
 const SURFACE={capture:'Record Notes',feedback:'Send Feedback',issue:'Report Issue',ewr:'Extra Work',selftest:'Self-test'};
 const APP=mode=>mode==='installed'?'Home Screen app':'Browser';
 // Reason codes in plain English. Unknown codes are shown as sent.
-const CODE={background:'App left the screen','mic-ended':'Microphone ended','mic-muted':'Microphone muted by the phone','audio-interrupted':'Phone audio interrupted','audio-suspended':'Phone audio paused','left-screen':'Screen closed while checking',
+const CODE={background:'App left the screen','needs-tap':'Could not continue without a tap','audio-not-started':'Phone audio did not start','mic-ended':'Microphone ended','mic-muted':'Microphone muted by the phone','audio-interrupted':'Phone audio interrupted','audio-suspended':'Phone audio paused','left-screen':'Screen closed while checking',
  'token-failed':'Live session could not start','ws-closed':'Live connection closed','ws-timeout':'Live connection timed out','ws-not-finished':'Live connection did not finish','ws-provider-error':'Live service error','send-failed':'Audio could not be sent',reconnected:'Reconnected during the note','no-live-text':'No live words','recheck-failed':'Check against recording failed',
  'mic-denied':'Microphone not allowed','mic-silent':'Microphone sent no sound','no-audio-suspended':'Audio did not start (paused)','no-audio-interrupted':'Audio did not start (interrupted)','no-audio-running':'Audio did not start','background-short':'Left the screen right away',
  'upload-network':'No connection for the recording','upload-offline':'Phone was offline','upload-hidden':'App was off screen','upload-timeout':'Recording check timed out','upload-429-rate-limit':'Too many recordings','upload-415-unsupported-format':'Unsupported audio format'};
 const plain=c=>c?(CODE[c]||c):'';
+// Screen wake lock and microphone reuse codes reported with each recording.
+const WAKE={ok:'Granted',failed:'Not granted',released:'Released by the phone',pending:'Not answered yet',none:'Not available'};
+const MIC={reused:'Reused (no new request)',new:'New request',renewed:'New request after the phone ended it','':'Not reported'};
 window.PhotoNotesAdminRecordNotes={mount(host,api){
  if(!host)return;
  host.innerHTML=`<style>#recordNotesReliabilityHost,#recordNotesReliabilityHost *{color:#000!important;text-align:left}#recordNotesReliabilityHost select{background:#fff!important}#recordNotesReliabilityHost button{background:#ffe600!important}#recordNotesReliabilityHost table{width:100%;border-collapse:collapse}#recordNotesReliabilityHost td,#recordNotesReliabilityHost th{border-bottom:1px solid #000;padding:4px}</style>
@@ -32,6 +35,7 @@ window.PhotoNotesAdminRecordNotes={mount(host,api){
     +table(['Outcome','Recordings'],d.totals.map(t=>row([LABEL[t.outcome]||t.outcome,t.count])))
     +'<h3>By device</h3>'+table(['Device','Browser','App','Recordings','Success','Recovered','Not transcribed','Transcribed later','Interrupted'],d.devices.map(x=>row([x.os,x.browser,APP(x.mode),x.recordings,pct(x.succeeded,x.recordings),x.recovered,x.not_transcribed,x.transcribed_later??0,x.interrupted])))
     +'<h3>Reasons by device</h3>'+table(['Device','Browser','App','Outcome','Interrupted by','Reason','Why not transcribed','Recordings'],(d.reasons||[]).map(x=>row([x.os,x.browser,APP(x.mode),LABEL[x.outcome]||x.outcome,plain(x.cause),plain(x.reason),plain(x.fallback),x.count])))
+    +'<h3>Screen kept on and microphone reuse</h3>'+table(['Device','App','Screen wake lock','Microphone','Recordings','Continued by itself','Continued by tap'],(d.screen||[]).map(x=>row([x.os,APP(x.mode),WAKE[x.wake]||x.wake,MIC[x.mic]??x.mic,x.recordings,x.auto_continued,x.tap_continued])))
     +'<h3>By app version</h3>'+table(['Version','Recordings','Not transcribed'],d.versions.map(x=>row([x.version,x.recordings,x.not_transcribed])))
     +'<h3>Recent problems</h3>'+table(['When','Person','Where','Outcome','Device','App','Reason','Why not transcribed','Length'],d.problems.map(p=>row([new Date(p.created_at).toLocaleString(),p.name||p.email||'',SURFACE[p.detail.surface]||p.detail.surface,(LABEL[p.detail.outcome]||p.detail.outcome)+(p.detail.interrupted?' (interrupted)':''),`${p.detail.os} ${p.detail.os_version||''} ${p.detail.browser}`.trim(),APP(p.detail.mode),[p.detail.cause&&p.detail.cause!==p.detail.reason?plain(p.detail.cause):'',plain(p.detail.reason)].filter(Boolean).join(', ')+(p.detail.restored?' (app was reopened)':''),plain(p.detail.fallback),`${p.detail.seconds||0} s`])));
   }catch(e){out.textContent=e.message;}

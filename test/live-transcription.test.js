@@ -124,7 +124,7 @@ function browser(options = {}) {
     localStorage: { getItem: () => null, setItem() {} },
     navigator: { userAgent, onLine: true, mediaDevices: { getUserMedia: async () => { if (opts.micError) throw Object.assign(new Error('mic'), { name: opts.micError }); return { getTracks: () => [track], getAudioTracks: () => [track] }; } } },
     setTimeout: (fn, ms) => { timers.push({ fn, ms }); if (ms <= 1000) return setTimeout(fn, 0); return timers.length; },
-    clearTimeout: id => clearTimeout(id),
+    clearTimeout: id => clearTimeout(id), setInterval: () => 0, clearInterval: () => {},
     fetch: async (url, options = {}) => {
       fetches.push({ url, options });
       if (url.startsWith('/api/transcription/config')) return json({ live: true });
@@ -137,7 +137,7 @@ function browser(options = {}) {
   vm.runInNewContext(fs.readFileSync('public/live-transcription.js', 'utf8'), context);
   const api = window.PhotoNotesLiveTranscription;
   const speak = (seconds = 1, level = 0.1) => { for (let i = 0; i < seconds * 12; i++) processor.onaudioprocess({ inputBuffer: { getChannelData: () => new Float32Array(4000).fill(level) } }); };
-  return { api, sockets, fetches, track, speak, timers, outcomes, window, document, opts, contexts, uploads: () => fetches.filter(f => f.url.startsWith('/api/transcription/recording')) };
+  return { api, sockets, fetches, track, navigator: context.navigator, speak, timers, outcomes, window, document, opts, contexts, uploads: () => fetches.filter(f => f.url.startsWith('/api/transcription/recording')) };
 }
 const flush = () => new Promise(r => setTimeout(r, 5));
 function recorder(api) {
@@ -190,7 +190,9 @@ test('live words appear as spoken, turns stay in order, and Stop waits for final
   await flush(); await flush();
   assert.equal(text(), 'The crack is near the gate. About two feet long.');
   assert.ok(events.includes('end'));
-  assert.equal(track.stopped, true, 'microphone released');
+  assert.equal(track.stopped, false, 'the microphone stays open for the next recording, so the phone does not ask again');
+  api.releaseMicrophone({ now: true });
+  assert.equal(track.stopped, true, 'microphone released when Capture is left');
 });
 
 test('lost connection keeps recording and transcribes the saved audio after Stop', async () => {
@@ -254,6 +256,8 @@ test('abort releases the microphone and ends without further results', async () 
   const count = events.filter(e => e === 'result').length;
   sockets[0].message({ type: 'Turn', turn_order: 0, transcript: 'late', end_of_turn: true });
   assert.equal(events.filter(e => e === 'result').length, count);
+  assert.equal(track.stopped, false, 'abort leaves the shared microphone for the next recording');
+  api.releaseMicrophone({ now: true });
   assert.equal(track.stopped, true);
   assert.ok(events.includes('end'));
 });
@@ -496,7 +500,7 @@ test('leaving the screen saves the captured audio at once and ends without waiti
   assert.equal(ctx.uploads().length, 0, 'nothing is sent while the app is off screen');
   assert.equal(ctx.outcomes.length, 0, 'the outcome waits for the result');
   assert.equal(text(), 'Before leaving', 'live words stay in the note');
-  assert.equal(ctx.track.stopped, true, 'microphone released');
+  assert.equal(ctx.track.stopped, false, 'the shared microphone is kept; iPhone mutes it while the app is away');
   // Back on screen: the saved audio is transcribed and routed to the note.
   let placed = '';
   ctx.api.claimKept(r.keptRecording.id, words => { placed = words; return true; });
@@ -673,16 +677,62 @@ test('reliability report lists reasons per device and does not count later trans
   assert.match(page, /Reasons by device/); assert.match(page, /Why not transcribed/); assert.match(page, /Transcribed later/);
 });
 
-test('Capture shows a plain pause message with Continue Recording and replaces live words with checked words', () => {
+test('Capture shows Paused with Continue Recording and replaces live words with checked words', () => {
   const ctx = browser();
   assert.match(ctx.api.pauseMessage('background'), /^Recording paused because PhotoNotes left the screen\. Phones do not let web apps record in the background\. Your words so far are saved\. Tap Continue Recording to keep going\.$/);
   assert.match(ctx.api.pauseMessage('mic-ended'), /call, Siri or an alarm/);
   const app = fs.readFileSync('public/app.js', 'utf8');
-  assert.match(app, /id="dictationRestart" type="button">Continue Recording<\/button>/);
-  assert.match(app, /showDictationInterruption\(window\.PhotoNotesLiveTranscription\?\.pauseMessage\?\.\(endEvent\.reason\)[^;]*\{paused:true\}\)/);
+  // A live pause is a Paused state on the Capture screen, not a stopped dialog.
+  assert.match(app, /if\(live&&endEvent\?\.interrupted\)pauseRecordNotes\(endEvent\.reason\|\|'background'\)/);
+  assert.match(app, /const SCREEN_OFF_PAUSE='Recording paused because the screen turned off\. Your note so far is saved\.'/);
+  assert.match(app, /id="recordNotesState" data-state="stopped" role="status">Stopped</);
+  assert.match(app, /id="dictationDone"[^>]*hidden>Stop Recording</);
   assert.match(app, /live\.replaceSegment\(value,where,text,mergeSpeechTranscript\)/);
   assert.match(app, /if\(dictationActive&&dictationBase\)\{dictationBase=swap\(dictationBase\)/);
-  for (const text of ['Recording paused', 'Continue Recording', ctx.api.pauseMessage('background'), ctx.api.messages.backgroundSaved, ctx.api.messages.silent]) assert.ok(/[—]/.test(text) === false, 'no em dashes');
+  const screenOff = 'Recording paused because the screen turned off. Your note so far is saved.';
+  const texts = ['Recording paused', 'Continue Recording', 'Recording', 'Paused', 'Stopped', 'Stop Recording', 'Continuing Recording...', screenOff, screenOff + ' Tap Continue Recording to keep going.', 'The microphone did not start. Your note so far is saved. Tap Continue Recording to try again.', 'Continuing your recording. Your note so far is saved.', 'Recording stopped. Your note so far is saved.', ctx.api.pauseMessage('background'), ctx.api.pauseMessage('mic-ended'), ctx.api.messages.backgroundSaved, ctx.api.messages.silent];
+  for (const text of texts) assert.ok(/[\u2014]/.test(text) === false, 'no em dashes');
   const i18n = fs.readFileSync('public/i18n.js', 'utf8');
-  for (const text of ['Recording paused', 'Continue Recording', ctx.api.pauseMessage('background'), ctx.api.pauseMessage('mic-ended'), ctx.api.messages.backgroundSaved, ctx.api.messages.silent]) assert.ok(i18n.includes(JSON.stringify(text)), 'Spanish for: ' + text);
+  for (const text of texts) assert.ok(i18n.includes(JSON.stringify(text)), 'Spanish for: ' + text);
+});
+
+test('every recording in a capture session reuses one microphone stream', async () => {
+  let calls = 0;
+  const ctx = browser();
+  ctx.track.readyState = 'live'; ctx.track.muted = false;
+  ctx.track.removeEventListener = () => {};
+  const gum = ctx.navigator.mediaDevices.getUserMedia;
+  ctx.navigator.mediaDevices.getUserMedia = async (...a) => { calls++; return gum(...a); };
+  await ctx.api.refresh(); ctx.api.holdMicrophone(true);
+  for (let i = 0; i < 2; i++) {
+    ctx.api.unlock();
+    const { r, events } = recorder(ctx.api);
+    r.start(); await flush(); await flush();
+    ctx.sockets.at(-1).open(); ctx.speak(1);
+    r.stop(); await flush();
+    ctx.sockets.at(-1).message({ type: 'Termination' }); await flush(); await flush(); await flush();
+    assert.ok(events.includes('end'));
+  }
+  assert.equal(calls, 1, 'one getUserMedia call for two recordings');
+  assert.equal(ctx.api.microphoneRequests(), 1);
+  assert.equal(ctx.track.stopped, false);
+  assert.ok(ctx.outcomes.some(o => o.mic === 'new') && ctx.outcomes.some(o => o.mic === 'reused'), 'reuse is reported');
+  // A track the phone ended is replaced automatically by the next recording.
+  ctx.track.readyState = 'ended';
+  ctx.api.unlock();
+  const { r } = recorder(ctx.api);
+  r.start(); await flush(); await flush();
+  assert.equal(calls, 2, 'ended track is requested again');
+  ctx.track.readyState = 'live'; r.abort(); await flush();
+  ctx.api.releaseMicrophone({ now: true });
+  assert.equal(ctx.track.stopped, true);
+});
+
+test('server keeps microphone reuse and continue codes and reports wake lock by device', () => {
+  const d = live.outcomeDetail({ surface: 'capture', outcome: 'live', wake: 'ok', mic: 'reused', resume: 'auto' }, 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X)');
+  assert.equal(d.wake, 'ok'); assert.equal(d.mic, 'reused'); assert.equal(d.resume, 'auto');
+  const server = fs.readFileSync('live-transcription.js', 'utf8');
+  assert.match(server, /screen, problems/);
+  const page = fs.readFileSync('public/admin-record-notes.js', 'utf8');
+  assert.match(page, /Screen kept on and microphone reuse/);
 });
