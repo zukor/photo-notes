@@ -129,7 +129,8 @@ async function transcribeWithBackup(buffer, options = {}) {
 function deviceFrom(userAgent = '') {
   const ua = String(userAgent);
   const os = /iPhone/.test(ua) ? 'iPhone' : /iPad/.test(ua) ? 'iPad' : /Android/.test(ua) ? 'Android' : /Macintosh/.test(ua) ? 'Mac' : /Windows/.test(ua) ? 'Windows' : 'Other';
-  const browser = /Edg\//.test(ua) ? 'Edge' : /CriOS|Chrome\//.test(ua) ? 'Chrome' : /FxiOS|Firefox\//.test(ua) ? 'Firefox' : /Safari\//.test(ua) ? 'Safari' : 'Other';
+  // The PhotoNotes AI iPhone app adds PhotoNotesAI-iOS to its web view's user agent.
+  const browser = /PhotoNotesAI-iOS\//.test(ua) ? 'iOS App' : /Edg\//.test(ua) ? 'Edge' : /CriOS|Chrome\//.test(ua) ? 'Chrome' : /FxiOS|Firefox\//.test(ua) ? 'Firefox' : /Safari\//.test(ua) ? 'Safari' : 'Other';
   const version = (ua.match(/OS (\d+)[_.]\d/) || ua.match(/Android (\d+)/) || [])[1] || '';
   return { os, browser, os_version: version };
 }
@@ -147,7 +148,7 @@ function outcomeDetail(body = {}, userAgent = '') {
   if (device.os === 'Mac' && b.touch === true) device.os = 'iPad';
   return {
     surface: b.surface, outcome: b.outcome, ...device,
-    mode: b.mode === 'installed' ? 'installed' : 'browser',
+    mode: b.mode === 'installed' || b.mode === 'ios-app' ? b.mode : 'browser',
     version: clamp(b.version, 100000), seconds: clamp(b.seconds, 3600), reconnects: clamp(b.reconnects, 20),
     words: clamp(b.words, 100000), reason: code(b.reason), interrupted: b.interrupted === true,
     cause: code(b.cause), fallback: code(b.fallback), wake: code(b.wake).slice(0, 10), attempts: clamp(b.attempts, 50),

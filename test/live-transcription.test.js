@@ -332,6 +332,14 @@ test('outcomes are validated, content-free, and device comes from the request', 
   assert.equal('text' in d, false);
 });
 
+test('the PhotoNotes AI iPhone app is reported as its own app', () => {
+  const ua = 'Mozilla/5.0 (iPhone; CPU iPhone OS 27_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 PhotoNotesAI-iOS/1.0';
+  const d = live.outcomeDetail({ surface: 'capture', outcome: 'live', mode: 'ios-app', wake: 'native' }, ua);
+  assert.equal(d.os, 'iPhone'); assert.equal(d.os_version, '27'); assert.equal(d.browser, 'iOS App'); assert.equal(d.mode, 'ios-app'); assert.equal(d.wake, 'native');
+  // Unknown modes are still stored as browser.
+  assert.equal(live.outcomeDetail({ surface: 'capture', outcome: 'live', mode: 'other' }, ua).mode, 'browser');
+});
+
 test('outcome and reliability routes store and summarize without content', async () => {
   const queries = [];
   const pool = { query: async (sql, params) => { queries.push({ sql, params }); return { rows: sql.includes('GROUP BY 1 ORDER BY 2') ? [{ outcome: 'live', count: 9 }, { outcome: 'kept', count: 1 }] : [] }; } };

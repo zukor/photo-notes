@@ -4,7 +4,7 @@ const escape=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>'
 const pct=(a,b)=>b?`${(100*a/b).toFixed(1)}%`:'None';
 const LABEL={live:'Worked live',recovered:'Recovered from saved audio',retried:'Transcribed later',kept:'Saved, waiting to retry',failed:'Failed',empty:'No speech',cancelled:'Cancelled',interrupted:'Interrupted'};
 const SURFACE={capture:'Record Notes',feedback:'Send Feedback',issue:'Report Issue',ewr:'Extra Work',selftest:'Self-test'};
-const APP=mode=>mode==='installed'?'Home Screen app':'Browser';
+const APP=mode=>mode==='ios-app'?'iPhone app':mode==='installed'?'Home Screen app':'Browser';
 // Reason codes in plain English. Unknown codes are shown as sent.
 const CODE={background:'App left the screen','mic-ended':'Microphone ended','mic-muted':'Microphone muted by the phone','audio-interrupted':'Phone audio interrupted','audio-suspended':'Phone audio paused','left-screen':'Screen closed while checking',
  'token-failed':'Live session could not start','ws-closed':'Live connection closed','ws-timeout':'Live connection timed out','ws-not-finished':'Live connection did not finish','ws-provider-error':'Live service error','send-failed':'Audio could not be sent',reconnected:'Reconnected during the note','no-live-text':'No live words','recheck-failed':'Check against recording failed',
