@@ -324,7 +324,12 @@ async function refreshOnlineSession(){
 }
 
 function isInstalledApp() {
-  return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
+  return globalThis.PhotoNotesNativeCapture?.enabled?.() || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
+}
+// The PhotoNotes AI iPhone app: Take Photo, Record Notes and location use the native app (public/native-capture.js).
+function openCaptureCamera(){
+  if(globalThis.PhotoNotesNativeCapture?.enabled?.()){void globalThis.PhotoNotesNativeCapture.takePhoto().then(file=>{if(file)onPhotoChosen(file);});return;}
+  const input=document.getElementById('photoCam');if(!input)return;input.value='';input.click();
 }
 
 function isPhoneInstallCandidate() {
@@ -514,7 +519,7 @@ function renderApp() {
       profileButton.setAttribute('aria-expanded', 'false');
     }
   };
-  document.getElementById('signout').onclick = async () => { if(captureSavePending){toast('Please wait for this photo to finish saving locally.');return;}try{await persistCaptureDraft();const r=await api('/api/logout',{method:'POST'});if(!r.ok)throw Error();forgetSession();queueAccount=null;bgQueue=[];clearTimeout(queueRetryTimer);stopCaptureDictation();location.reload();}catch(error){toast('Could not sign out. Check your connection and try again.');} };
+  document.getElementById('signout').onclick = async () => { if(captureSavePending){toast('Please wait for this photo to finish saving locally.');return;}try{await persistCaptureDraft();const r=await api('/api/logout',{method:'POST'});if(!r.ok)throw Error();forgetSession();queueAccount=null;bgQueue=[];clearTimeout(queueRetryTimer);stopCaptureDictation();await globalThis.PhotoNotesNativeCapture?.release?.();location.reload();}catch(error){toast('Could not sign out. Check your connection and try again.');} };
   document.getElementById('installHelp').onclick=showInstallHelp;
   const menuPayments=document.getElementById('menuPayments');if(menuPayments){menuPayments.onclick=()=>{profileMenu.hidden=true;profileButton.setAttribute('aria-expanded','false');showPayments();};void revealPaymentsMenu();}
   for(const [id,view] of [['menuHoaCommunities','hoa-communities'],['menuHoaDashboard','hoa-dashboard'],['menuHoaReports','hoa-reports']]){const button=document.getElementById(id);if(button)button.onclick=()=>{profileMenu.hidden=true;profileButton.setAttribute('aria-expanded','false');openHoaManagementView(view);};}
@@ -659,7 +664,7 @@ function renderRoadIssueReport() {
     <div id="locwrap" style="display:none"><label>GPS Coordinates</label><div class="status" id="gps"></div><label>Address or Geographic Area</label><div class="status" id="addr"></div><div class="capture-location-actions"><button type="button" class="btn secondary slim" id="retryLocation">Retry location</button><button type="button" class="btn secondary slim" id="correctAddress">Correct address</button></div></div>
     <button type="button" class="btn road-send" id="roadIssueSend">Send</button>
     <div class="status" id="roadIssueStatus" aria-live="polite"></div>`;
-  document.getElementById('takephoto').onclick=()=>{const input=document.getElementById('photoCam');input.value='';input.click();};
+  document.getElementById('takephoto').onclick=openCaptureCamera;
   document.getElementById('photoCam').onchange=e=>{if(e.target.files&&e.target.files[0])onPhotoChosen(e.target.files[0]);};
   document.getElementById('retakePhoto').onclick=retakeCapturePhoto;
   document.getElementById('cancelPhoto').onclick=cancelCapturePhoto;
@@ -942,7 +947,7 @@ function renderCapture() {
   const cameraToolsButton = document.getElementById('openCameraTools');
   if (cameraToolsButton) cameraToolsButton.onclick = () => { state.view = 'camera-tools'; renderApp(); };
 
-  document.getElementById('takephoto').onclick = () => { stopCaptureDictation(); const input=document.getElementById('photoCam');input.value='';input.click(); };
+  document.getElementById('takephoto').onclick = () => { stopCaptureDictation(); openCaptureCamera(); };
   const pmButton=document.getElementById('precisionMeasure');if(pmButton)pmButton.onclick=()=>{stopCaptureDictation();startPrecisionMeasure();};
   document.getElementById('choosephoto').onclick = () => { stopCaptureDictation(); const input=document.getElementById('photoLib');input.value='';input.click(); };
   document.getElementById('photoCam').onchange = (e) => { if (e.target.files[0]) onPhotoChosen(e.target.files[0]); };
@@ -965,7 +970,8 @@ function renderCapture() {
 
   const dictateBtn = document.getElementById('dictate');
   if (dictateBtn) dictateBtn.onclick = toggleDictation;
-  if(isIOS()&&window.PhotoNotesSpeechDocument)window.PhotoNotesSpeechDocument.prepare(({ready,failed})=>{if(document.getElementById('dictate')!==dictateBtn||dictationActive||dictationPending||dictationFinish)return;if(liveRecordNotes()){dictateBtn.disabled=false;dictateBtn.textContent='Record Notes';return;}const restart=document.getElementById('dictationRestart');if(restart)restart.disabled=!ready&&!failed;dictateBtn.disabled=!ready&&!failed;dictateBtn.textContent=ready||failed?'Record Notes':'Preparing microphone...';if(failed){const status=document.getElementById('dictationStatus');if(status)status.textContent='Speech could not initialize. Reload Photo Notes and try Record Notes again.';}});
+  if(globalThis.PhotoNotesNativeCapture?.enabled?.())globalThis.PhotoNotesNativeCapture.mount();
+  else if(isIOS()&&window.PhotoNotesSpeechDocument)window.PhotoNotesSpeechDocument.prepare(({ready,failed})=>{if(document.getElementById('dictate')!==dictateBtn||dictationActive||dictationPending||dictationFinish)return;if(liveRecordNotes()){dictateBtn.disabled=false;dictateBtn.textContent='Record Notes';return;}const restart=document.getElementById('dictationRestart');if(restart)restart.disabled=!ready&&!failed;dictateBtn.disabled=!ready&&!failed;dictateBtn.textContent=ready||failed?'Record Notes':'Preparing microphone...';if(failed){const status=document.getElementById('dictationStatus');if(status)status.textContent='Speech could not initialize. Reload Photo Notes and try Record Notes again.';}});
 
   // preserve any typed note across re-renders
   if (state._note) document.getElementById('note').value = state._note;
@@ -1442,6 +1448,8 @@ function onPhotoChosen(file, source='camera') {
   if(state._measureRecord&&file!==state._precisionFile){state._measureRecord=null;state._dims=null;const st=document.getElementById('precisionMeasureStatus');if(st)st.textContent='';}
   if(captureSavePending){toast('Please wait for the current photo to save.');return;}
   const replacing=!!state.photoFile;stopCaptureDictation();
+  // The iPhone app keeps recording while a photo is taken; only a replaced photo ends the recording.
+  if(replacing&&globalThis.PhotoNotesNativeCapture?.enabled?.())globalThis.PhotoNotesNativeCapture.cancel('Recording stopped because the photo was replaced. It is saved under Recordings On This iPhone.');
   captureLocationGeneration++;
   if(replacing){state._note='';const note=document.getElementById('note');if(note)note.value='';}
   state.photoFile = file;state._photoSource=source==='library'?'library':'camera';
@@ -1471,13 +1479,13 @@ function showCapturePreview(file){
 }
 function retakeCapturePhoto(){
   stopCaptureDictation();
-  const input=document.getElementById('photoCam');
-  if(!input)return;input.value='';input.click();
+  openCaptureCamera();
 }
 function cancelCapturePhoto(){
   state._captureShareSave=null;
   if(captureSavePending){toast('Please wait for the current photo to save.');return;}
   stopCaptureDictation();
+  if(globalThis.PhotoNotesNativeCapture?.enabled?.())globalThis.PhotoNotesNativeCapture.cancel('Recording stopped because the photo was cancelled. It is saved under Recordings On This iPhone.');
   captureLocationGeneration++;
   if(state._previewUrl)URL.revokeObjectURL(state._previewUrl);
   state._previewUrl=null;state.photoFile=null;state._qualityResult=null;state._qualityPromise=null;state.location=null;state.address=null;state._locationPromise=null;
@@ -1647,6 +1655,8 @@ function stopCaptureDictation(){
 
 // Stop listening, but keep this session valid until Safari delivers its final result.
 function finishCaptureDictation(){
+  // Resolves false only when native words could not be prepared and the person chose to keep editing.
+  if(globalThis.PhotoNotesNativeCapture?.enabled?.())return globalThis.PhotoNotesNativeCapture.finish();
   if(dictationFinish)return dictationFinish.promise;
   dictationActive=false;
   if(dictationRestartTimer)clearTimeout(dictationRestartTimer);
@@ -1708,6 +1718,7 @@ function isIOS() {
 }
 
 async function toggleDictation() {
+  if(globalThis.PhotoNotesNativeCapture?.enabled?.())return globalThis.PhotoNotesNativeCapture.toggle();
   const noteEl = document.getElementById('note');
   const btn = document.getElementById('dictate');
   const live = liveRecordNotes();
@@ -2557,6 +2568,7 @@ async function drainQueue() {
         const saved=await r.json();if(!saved.id)throw Error('Upload confirmation missing');
         if(item.receipt){item.receipt.uploaded=true;item.receipt.captureId=saved.id;if(Object.prototype.hasOwnProperty.call(item.receipt,'jobId')&&String(saved.job_id||'')!==String(item.receipt.jobId||''))void setSavedCaptureProject(item.receipt,item.receipt.jobId);}
         await queueDelete(item.id);
+        globalThis.PhotoNotesNativeCapture?.uploaded?.(item.payload);
         if(queueAccount!==account||selectedEdition()!==edition)break;
         bgQueue=bgQueue.filter(row=>row.id!==item.id);
         void renderPendingLibrary();
@@ -2598,6 +2610,8 @@ async function saveCaptureDurably(options = {}) {
   await finishCaptureDictation();
   stopCaptureDictation();
   const note = document.getElementById('note').value.trim();
+  // iPhone app: the words could not be prepared and the person chose to keep the screen open.
+  if(globalThis.PhotoNotesNativeCapture?.keepEditing?.())return false;
   if(state._duplicateContext&&!state.photoFile){toast('Take or select a new photo before saving this Photo Note.');return false;}
   if (!state.photoFile && !note) { toast('Take a photo or add a note first'); return; }
   if(isHoaClient()&&!globalThis.PhotoNotesIncidents?.active()&&!state.communityId){toast(hoaText('Select an HOA or community'));return;}
@@ -2637,6 +2651,8 @@ async function saveCaptureDurably(options = {}) {
   let jobChanged=false;
   if(!alreadySaved){
     if(jobId!==undefined)receipt.jobId=jobId;
+    // The iPhone app keeps the recordings behind these words until this PhotoNote has uploaded.
+    globalThis.PhotoNotesNativeCapture?.attach?.(payload);
     try{await enqueueUpload(payload,hadCoords,{requireDurable:true,receipt});}
     catch(e){toast('Could not save this photo. Your draft is still here.');return false;}
   }else if(Object.prototype.hasOwnProperty.call(options,'jobId')&&String(receipt.jobId||'')!==String(jobId||'')){
@@ -5647,6 +5663,14 @@ if ('serviceWorker' in navigator) {
     } catch (_) {}
   });
 }
+// The iPhone app's native Record Notes reads the open capture through these.
+globalThis.PhotoNotesNativeCapture?.configure?.({
+  photo:()=>state.photoFile||null,
+  account:async()=>state.me?.email?PhotoNotesQueue.accountKey(state.me.email):null,
+  language:()=>uiSpeechLanguage(),
+  toast:(message,duration)=>toast(message,duration),
+  placed:()=>{}
+});
 boot();
 
 document.addEventListener('photo-notes-languagechange',()=>{if(document.getElementById('concretePurpose'))refreshConcreteCapturePurpose();if(document.getElementById('sendGo'))refreshSendChoices();});

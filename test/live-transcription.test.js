@@ -686,3 +686,10 @@ test('Capture shows a plain pause message with Continue Recording and replaces l
   const i18n = fs.readFileSync('public/i18n.js', 'utf8');
   for (const text of ['Recording paused', 'Continue Recording', ctx.api.pauseMessage('background'), ctx.api.pauseMessage('mic-ended'), ctx.api.messages.backgroundSaved, ctx.api.messages.silent]) assert.ok(i18n.includes(JSON.stringify(text)), 'Spanish for: ' + text);
 });
+
+test('iPhone app recordings are reported as the iPhone app in native mode', () => {
+  const ua = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 PhotoNotesAI-iOS/1';
+  const d = live.outcomeDetail({ surface: 'capture', outcome: 'live', mode: 'native', interrupted: true, seconds: 125 }, ua);
+  assert.equal(d.os, 'iPhone'); assert.equal(d.browser, 'iPhone app'); assert.equal(d.mode, 'native'); assert.equal(d.interrupted, true); assert.equal(d.seconds, 125);
+  assert.equal(live.outcomeDetail({ surface: 'capture', outcome: 'live', mode: 'other' }, ua).mode, 'browser');
+});

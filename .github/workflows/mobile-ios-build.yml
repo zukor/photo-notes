@@ -1,0 +1,48 @@
+# Builds the PhotoNotes AI iPhone app for the iOS Simulator, without signing.
+# Manual only: macOS runners use paid minutes, so this never runs on push or pull request.
+# Run it from the Actions tab, Mobile iOS Build, Run workflow.
+name: Mobile iOS Build
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mobile-ios-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  simulator-build:
+    runs-on: macos-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - name: Install
+        run: npm ci
+      - name: Check the iPhone project
+        run: npm test
+      - name: Copy Capacitor configuration into the iPhone project
+        run: npx cap sync ios
+      - name: Show Xcode version
+        run: xcodebuild -version
+      - name: Build for the iOS Simulator without signing
+        run: |
+          xcodebuild \
+            -project ios/App/App.xcodeproj \
+            -scheme App \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/photonotes-ios" \
+            CODE_SIGNING_ALLOWED=NO \
+            build

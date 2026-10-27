@@ -1,0 +1,17 @@
+{
+  "appId": "com.zukor.photonotes.ai",
+  "appName": "PhotoNotes AI",
+  "webDir": "www",
+  "server": {
+    "url": "https://photonotesapp.com",
+    "errorPath": "offline.html",
+    "cleartext": false
+  },
+  "ios": {
+    "contentInset": "automatic",
+    "appendUserAgent": "PhotoNotesAI-iOS/1"
+  },
+  "android": {
+    "allowMixedContent": false
+  }
+}
