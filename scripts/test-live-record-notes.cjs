@@ -13,6 +13,29 @@ const {chromium}=require('playwright');
   const uploads=[],outcomes=[];let recordingMode='ok';
   await page.addInitScript(()=>{
    localStorage.setItem('pn_install_prompt_dismissed_v1','1');localStorage.setItem('pn_first_use_v1:'+encodeURIComponent('live@example.invalid'),'done');
+   // Microphone requests, wake lock requests and audio resumes are counted. Streams are
+   // kept so a test can end them, as iPhone does to a page that was off screen.
+   // A tap is a real click (page.evaluate would count as a user gesture in Chromium).
+   window.gumCalls=0;window.gumStreams=[];window.blockMicWithoutTap=false;window.lastTapAt=0;
+   document.addEventListener('click',()=>{window.lastTapAt=Date.now();},true);
+   const gum=navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+   navigator.mediaDevices.getUserMedia=async options=>{gumCalls++;if(window.blockMicWithoutTap&&window.lastTapAt<window.blockMicWithoutTap)throw new DOMException('A tap is needed','NotAllowedError');const stream=await gum(options);gumStreams.push(stream);return stream;};
+   window.wakeCalls=0;
+   Object.defineProperty(navigator,'wakeLock',{configurable:true,value:{request:async()=>{wakeCalls++;const lock={released:false,release:async()=>{lock.released=true;},addEventListener(){}};return lock;}}});
+   window.resumeCalls=0;window.audioContexts=[];window.startSuspended=false;
+   const Ctx=window.AudioContext;
+   window.AudioContext=class extends Ctx{constructor(...a){super(...a);audioContexts.push(this);if(window.startSuspended)void this.suspend();}resume(){resumeCalls++;return super.resume();}};
+   // Every rendered moment of Record Notes shows exactly one state with matching buttons.
+   window.stateProblems=[];window.statesSeen=new Set();
+   const checkState=()=>{const labels=document.querySelectorAll('#recordNotesState');if(!labels.length)return;
+    const label=labels[0].textContent,button=document.getElementById('dictate')?.textContent||'',done=document.getElementById('dictationDone');
+    statesSeen.add(label);
+    const problem=labels.length!==1?'two state labels':!['Recording','Paused','Stopped'].includes(label)?'unknown state '+label
+     :label==='Paused'&&(!/^Continu(e|ing) Recording/.test(button)||done.hidden||document.getElementById('dictationInterruptedDialog'))?'paused with '+button
+     :label==='Recording'&&(!/Starting microphone|Recording\.\.\. tap to stop|Finishing Notes/.test(button)||!done.hidden)?'recording with '+button
+     :label==='Stopped'&&(button!=='Record Notes'||!done.hidden)?'stopped with '+button:'';
+    if(problem)stateProblems.push(problem);};
+   new MutationObserver(checkState).observe(document,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['hidden','data-state']});
    // Stand-in for the transcription socket: counts streamed audio and replies with turns.
    window.socketLog=[];window.socketMode='normal';
    window.WebSocket=class{constructor(url){this.url=url;this.readyState=0;this.bytes=0;this.turn=0;window.socketLog.push(this);setTimeout(()=>{if(window.socketMode==='refuse'){this.readyState=3;this.onclose?.({code:1006});return;}this.readyState=1;this.onopen?.();},30);}
@@ -52,6 +75,9 @@ const {chromium}=require('playwright');
    await page.locator('#dictate').click();await page.waitForFunction(()=>document.getElementById('dictate').textContent==='Record Notes'&&!document.getElementById('dictate').disabled);
   }
   assert.equal(await page.locator('#note').inputValue(),'Typed first. Final words 0. Final words 1. Final words 2.');
+  assert.equal(await page.evaluate(()=>gumCalls),1,'three recordings in a row use one microphone request');
+  assert.equal(await page.locator('#recordNotesState').textContent(),'Stopped');
+  assert.ok(await page.evaluate(()=>wakeCalls)>=3,'the wake lock is requested at the start of each recording');
   // 3. Connection drops mid-note: recording continues, saved audio fills in after Stop.
   await page.evaluate(()=>{socketMode='drop';document.getElementById('note').value='';state._note='';});
   await page.locator('#dictate').click();
@@ -111,32 +137,81 @@ const {chromium}=require('playwright');
   assert.ok(['feedback','issue','ewr'].every(surface=>outcomes.some(o=>o.surface===surface)));
   assert.equal(JSON.stringify(outcomes).includes('Final words'),false,'no words in outcomes');
   if(label==='iPhone'){
-   // 10. Leaving the screen: recording pauses, the audio so far is saved and transcribed
-   // when the app is back, replacing the live words, and Continue Recording keeps going.
+   // 10. Screen off: recording pauses, the words and audio so far are saved, and back on
+   // screen it continues by itself into the same note (the reused microphone needs no tap).
    await page.evaluate(()=>{socketMode='normal';state.view='capture';renderApp();document.getElementById('note').value='Typed first.';state._note='Typed first.';window.__hidden=false;
     Object.defineProperty(document,'visibilityState',{configurable:true,get:()=>window.__hidden?'hidden':'visible'});Object.defineProperty(document,'hidden',{configurable:true,get:()=>!!window.__hidden});});
    recordingMode='ok';const before=uploads.length,reported=outcomes.length;
+   const hide=()=>page.evaluate(()=>{window.__hidden=true;document.dispatchEvent(new Event('visibilitychange'));});
+   const show=()=>page.evaluate(()=>{window.__hidden=false;document.dispatchEvent(new Event('visibilitychange'));});
    await page.locator('#dictate').click();
    await page.waitForFunction(()=>/live words/.test(document.getElementById('note').value),null,{timeout:15000});
-   await page.evaluate(()=>{window.__hidden=true;document.dispatchEvent(new Event('visibilitychange'));});
-   await page.locator('#dictationInterruptedDialog').waitFor({timeout:10000});
-   assert.equal(await page.locator('#dictationInterruptedTitle').textContent(),'Recording paused');
-   assert.equal(await page.locator('#dictationRestart').textContent(),'Continue Recording');
-   assert.equal(await page.locator('#dictationRestart').isDisabled(),false,'Continue Recording is ready at once');
-   assert.match(await page.locator('#dictationInterruptedReason').textContent(),/Phones do not let web apps record in the background\. Your words so far are saved\./);
-   assert.match(await page.locator('#dictationStatus').textContent(),/saved on this device/);
+   assert.equal(await page.locator('#recordNotesState').textContent(),'Recording');
+   const gumBefore=await page.evaluate(()=>gumCalls),wakeBefore=await page.evaluate(()=>wakeCalls);
+   await hide();
+   await page.waitForFunction(()=>document.getElementById('recordNotesState').textContent==='Paused',null,{timeout:10000});
+   assert.equal(await page.locator('#dictationInterruptedDialog').count(),0,'no stopped dialog for a pause');
+   assert.equal(await page.locator('#dictate').textContent(),'Continue Recording');
+   assert.equal(await page.locator('#dictationDone').isVisible(),true);
+   assert.equal(await page.locator('#dictationStatus').textContent(),'Recording paused because the screen turned off. Your note so far is saved.');
+   assert.equal(await page.locator('#dictationRetryTranscription').count(),0,'no extra button while paused');
+   const pausedNote=await page.locator('#note').inputValue();
+   assert.match(pausedNote,/^Typed first\. live words/,'words so far stay in the note');
+   assert.match(await page.evaluate(()=>JSON.stringify(state._note)),/live words/,'and in the saved draft');
    await page.waitForTimeout(1500);
    assert.equal(uploads.length,before,'nothing is sent while the app is off screen');
    assert.equal(await page.evaluate(async()=>(await PhotoNotesLiveTranscription.listKept()).filter(i=>i.status==='pending').length),1,'audio saved on the device at once');
-   await page.evaluate(()=>{window.__hidden=false;document.dispatchEvent(new Event('visibilitychange'));});
-   await page.waitForFunction(()=>document.getElementById('note').value==='Typed first. Recovered from the recording.',null,{timeout:15000});
+   // iPhone suspends the page's audio while it is away: the next audio pipeline starts suspended.
+   await page.evaluate(()=>{startSuspended=true;resumeCalls=0;});
+   await show();
+   await page.waitForFunction(()=>document.getElementById('recordNotesState').textContent==='Recording'&&document.getElementById('dictate').textContent.includes('Recording...'),null,{timeout:15000});
+   await page.waitForFunction(()=>document.getElementById('note').value.startsWith('Typed first. Recovered from the recording.'),null,{timeout:15000});
+   await page.waitForFunction(()=>/Recovered from the recording\. live words/.test(document.getElementById('note').value),null,{timeout:15000});
+   assert.equal(await page.evaluate(()=>gumCalls),gumBefore,'continuing reuses the open microphone');
+   assert.ok(await page.evaluate(()=>wakeCalls)>wakeBefore,'the wake lock is requested again on return');
+   assert.ok(await page.evaluate(()=>resumeCalls)>=1,'the suspended audio pipeline is resumed');
+   assert.equal(await page.evaluate(()=>audioContexts.at(-1).state),'running');
+   await page.evaluate(()=>{startSuspended=false;});
+   await page.locator('#dictate').click();
+   await page.waitForFunction(()=>/^Typed first\. Recovered from the recording\. Final words \d+\.$/.test(document.getElementById('note').value)&&document.getElementById('recordNotesState').textContent==='Stopped',null,{timeout:15000});
    assert.equal(uploads.length,before+1);
    assert.ok(outcomes.slice(reported).some(o=>o.outcome==='recovered'&&o.reason==='background'&&o.cause==='background'&&o.interrupted===true),'background outcome reported');
-   await page.locator('#dictationRestart').click();
-   await page.waitForFunction(()=>document.getElementById('dictate').textContent.includes('Recording')&&/live words/.test(document.getElementById('note').value),null,{timeout:15000});
-   await page.locator('#dictate').click();
-   await page.waitForFunction(()=>/^Typed first\. Recovered from the recording\. Final words \d+\.$/.test(document.getElementById('note').value)&&document.getElementById('dictate').textContent==='Record Notes',null,{timeout:15000});
+   assert.ok(outcomes.slice(reported).some(o=>o.outcome==='live'&&o.resume==='auto'&&o.mic==='reused'&&o.wake==='ok'),'continued by itself, reused microphone, wake lock granted');
    assert.equal(await page.evaluate(async()=>(await PhotoNotesLiveTranscription.listKept()).length),0,'removed from the device once transcribed');
+   // 10b. The phone ended the microphone while away and needs a tap to ask again:
+   // one Continue Recording button, which adds a new part to the same note.
+   await page.evaluate(()=>{document.getElementById('note').value='Second note.';state._note='Second note.';});
+   await page.locator('#dictate').click();
+   await page.waitForFunction(()=>/live words/.test(document.getElementById('note').value),null,{timeout:15000});
+   await hide();
+   await page.waitForFunction(()=>document.getElementById('recordNotesState').textContent==='Paused',null,{timeout:10000});
+   await page.evaluate(()=>{gumStreams.forEach(s=>s.getTracks().forEach(t=>t.stop()));blockMicWithoutTap=Date.now();});
+   const gumHidden=await page.evaluate(()=>gumCalls);
+   await show();
+   await page.waitForFunction(n=>gumCalls>n&&document.getElementById('dictate').textContent==='Continue Recording'&&!document.getElementById('dictate').disabled,gumHidden,{timeout:15000});
+   assert.equal(await page.locator('#recordNotesState').textContent(),'Paused');
+   assert.equal(await page.locator('#dictationStatus').textContent(),'Recording paused because the screen turned off. Your note so far is saved. Tap Continue Recording to keep going.');
+   await page.waitForFunction(()=>document.getElementById('note').value.startsWith('Second note. Recovered from the recording.'),null,{timeout:15000});
+   const kept=await page.locator('#note').inputValue();
+   await page.locator('#dictate').click();
+   await page.waitForFunction(()=>document.getElementById('recordNotesState').textContent==='Recording'&&/Recording\.\.\./.test(document.getElementById('dictate').textContent),null,{timeout:15000});
+   await page.waitForFunction(k=>document.getElementById('note').value.startsWith(k+' live words'),kept,{timeout:15000});
+   await page.locator('#dictate').click();
+   await page.waitForFunction(()=>/^Second note\. Recovered from the recording\. Final words \d+\.$/.test(document.getElementById('note').value)&&document.getElementById('recordNotesState').textContent==='Stopped',null,{timeout:15000});
+   assert.ok(outcomes.some(o=>o.outcome==='cancelled'&&o.resume==='auto'),'the attempt that needed a tap is not counted as a failure');
+   assert.ok(outcomes.some(o=>o.outcome==='live'&&o.resume==='tap'&&o.mic!=='reused'),'the tap asked for a fresh microphone');
+   // 10c. Stop Recording while paused ends at Stopped and keeps the note.
+   await page.evaluate(()=>{blockMicWithoutTap=false;});
+   await page.locator('#dictate').click();
+   await page.waitForFunction(()=>document.getElementById('dictate').textContent.includes('Recording...'),null,{timeout:15000});
+   await page.evaluate(()=>{window.__hidden=true;document.dispatchEvent(new Event('visibilitychange'));});
+   await page.waitForFunction(()=>document.getElementById('recordNotesState').textContent==='Paused',null,{timeout:10000});
+   await page.locator('#dictationDone').click();
+   assert.equal(await page.locator('#recordNotesState').textContent(),'Stopped');
+   await show();await page.waitForTimeout(1200);
+   assert.equal(await page.locator('#recordNotesState').textContent(),'Stopped','a stopped note does not start again by itself');
+   assert.deepEqual(await page.evaluate(()=>stateProblems),[],'Record Notes never showed two states or mismatched buttons');
+   assert.deepEqual(await page.evaluate(()=>[...statesSeen].sort()),['Paused','Recording','Stopped']);
    // 11. A saved recording survives closing the app and is recovered at the next open.
    await page.evaluate(()=>{socketMode='refuse';state.view='capture';renderApp();document.getElementById('note').value='';});recordingMode='fail';
    await page.locator('#dictate').click();await page.waitForTimeout(1500);await page.locator('#dictate').click();
@@ -166,6 +241,6 @@ const {chromium}=require('playwright');
    await page.screenshot({path:'/tmp/live-self-test.png',fullPage:true});
   }
   await page.close();
-  console.log(label+': live words, Stop final words, repeated recordings, dropped connection recovery, retry, finish-before-save, Feedback and Capture handoff, Report Issue and Extra Work, outcomes'+(label==='iPhone'?', background pause and Continue Recording, saved recording across reload, self-test':'')+' passed');
+  console.log(label+': live words, Stop final words, repeated recordings, dropped connection recovery, retry, finish-before-save, Feedback and Capture handoff, Report Issue and Extra Work, outcomes'+(label==='iPhone'?', one microphone request across recordings, screen-off pause with automatic continue (wake lock again, audio resumed), Continue Recording when a tap is needed, Stop while paused, one state at a time, saved recording across reload, self-test':'')+' passed');
  }}finally{await browser.close();server.close();}
 })().catch(e=>{console.error(e);process.exit(1);});

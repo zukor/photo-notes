@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>PhotoNotes AI</title>
+<style>
+  :root { --blue: #1f4fd1; --red: #e5202e; --ink: #000; --paper: #fff; }
+  html, body { margin: 0; background: var(--paper); color: var(--ink); font: 17px/1.45 -apple-system, Helvetica, Arial, sans-serif; }
+  main { padding: calc(32px + env(safe-area-inset-top)) 20px 32px; max-width: 520px; margin: 0 auto; text-align: left; }
+  h1 { font-size: 26px; margin: 0 0 12px; color: var(--blue); }
+  p { margin: 0 0 14px; }
+  button { display: block; width: 100%; margin-top: 18px; padding: 14px 16px; font: 600 18px -apple-system, Helvetica, Arial, sans-serif; color: #fff; background: var(--blue); border: 0; border-radius: 12px; }
+  #status { min-height: 1.4em; }
+</style>
+</head>
+<body>
+<main>
+  <h1>PhotoNotes AI</h1>
+  <p>PhotoNotes AI could not reach photonotesapp.com. Check Wi-Fi or cellular data, then tap Try Again.</p>
+  <p>Photos and recordings already saved on this iPhone are kept. They upload when PhotoNotes AI opens with a connection.</p>
+  <button type="button" id="retry">Try Again</button>
+  <p id="status" role="status"></p>
+</main>
+<script>
+  var target = 'https://photonotesapp.com/';
+  function retry() {
+    document.getElementById('status').textContent = 'Connecting...';
+    location.href = target;
+  }
+  document.getElementById('retry').addEventListener('click', retry);
+  window.addEventListener('online', retry);
+</script>
+</body>
+</html>

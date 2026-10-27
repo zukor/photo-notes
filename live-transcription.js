@@ -129,14 +129,16 @@ async function transcribeWithBackup(buffer, options = {}) {
 function deviceFrom(userAgent = '') {
   const ua = String(userAgent);
   const os = /iPhone/.test(ua) ? 'iPhone' : /iPad/.test(ua) ? 'iPad' : /Android/.test(ua) ? 'Android' : /Macintosh/.test(ua) ? 'Mac' : /Windows/.test(ua) ? 'Windows' : 'Other';
-  const browser = /Edg\//.test(ua) ? 'Edge' : /CriOS|Chrome\//.test(ua) ? 'Chrome' : /FxiOS|Firefox\//.test(ua) ? 'Firefox' : /Safari\//.test(ua) ? 'Safari' : 'Other';
+  // The PhotoNotes AI iPhone app adds PhotoNotesAI-iOS to its web view's user agent.
+  const browser = /PhotoNotesAI-iOS\//.test(ua) ? 'iPhone app' : /Edg\//.test(ua) ? 'Edge' : /CriOS|Chrome\//.test(ua) ? 'Chrome' : /FxiOS|Firefox\//.test(ua) ? 'Firefox' : /Safari\//.test(ua) ? 'Safari' : 'Other';
   const version = (ua.match(/OS (\d+)[_.]\d/) || ua.match(/Android (\d+)/) || [])[1] || '';
   return { os, browser, os_version: version };
 }
 
 // Reason codes only: reason (why the live text was incomplete or the recording ended),
 // cause (what interrupted it), fallback (why the saved recording was not transcribed),
-// wake (screen wake lock state). Never words or audio.
+// wake (screen wake lock state), mic (microphone stream reused or newly requested) and
+// resume (a paused note continued by itself or by a tap). Never words or audio.
 function outcomeDetail(body = {}, userAgent = '') {
   const b = body || {};
   if (!SURFACES.has(b.surface) || !OUTCOMES.has(b.outcome)) return null;
@@ -147,10 +149,10 @@ function outcomeDetail(body = {}, userAgent = '') {
   if (device.os === 'Mac' && b.touch === true) device.os = 'iPad';
   return {
     surface: b.surface, outcome: b.outcome, ...device,
-    mode: b.mode === 'installed' ? 'installed' : 'browser',
+    mode: b.mode === 'installed' || b.mode === 'native' ? b.mode : 'browser',
     version: clamp(b.version, 100000), seconds: clamp(b.seconds, 3600), reconnects: clamp(b.reconnects, 20),
     words: clamp(b.words, 100000), reason: code(b.reason), interrupted: b.interrupted === true,
-    cause: code(b.cause), fallback: code(b.fallback), wake: code(b.wake).slice(0, 10), attempts: clamp(b.attempts, 50),
+    cause: code(b.cause), fallback: code(b.fallback), wake: code(b.wake).slice(0, 10), mic: code(b.mic).slice(0, 10), resume: code(b.resume).slice(0, 10), attempts: clamp(b.attempts, 50),
     hidden: b.hidden === true, restored: b.restored === true,
   };
 }
@@ -220,8 +222,15 @@ function register(app, { requireAuth, requireAdmin, pool, env = process.env, fet
         COALESCE(NULLIF(e.detail->>'cause',''),'') cause,COALESCE(e.detail->>'reason','') reason,COALESCE(NULLIF(e.detail->>'fallback',''),'') fallback,COUNT(*)::int count
         FROM events e WHERE ${where} AND (e.detail->>'outcome' IN ('recovered','kept','failed','interrupted') OR (e.detail->>'interrupted')::boolean)
         GROUP BY 1,2,3,4,5,6,7 ORDER BY count DESC LIMIT 100`, [days])).rows;
+      // Whether the screen wake lock was granted and whether recordings reused the open
+      // microphone (no new permission request), per device and app.
+      const screen = (await pool.query(`SELECT e.detail->>'os' os,e.detail->>'mode' mode,COALESCE(NULLIF(e.detail->>'wake',''),'none') wake,COALESCE(NULLIF(e.detail->>'mic',''),'') mic,
+        COUNT(*) FILTER (WHERE e.detail->>'outcome'<>'retried')::int recordings,
+        COUNT(*) FILTER (WHERE e.detail->>'resume'='auto')::int auto_continued,
+        COUNT(*) FILTER (WHERE e.detail->>'resume'='tap')::int tap_continued
+        FROM events e WHERE ${where} AND e.detail->>'outcome' NOT IN ('retried','empty') AND e.detail->>'surface'<>'selftest' GROUP BY 1,2,3,4 ORDER BY recordings DESC LIMIT 60`, [days])).rows;
       const problems = (await pool.query(`SELECT e.created_at,u.name,u.email,e.detail FROM events e LEFT JOIN users u ON u.id=e.user_id WHERE ${where} AND e.detail->>'outcome' IN ('recovered','kept','failed','interrupted') ORDER BY e.created_at DESC LIMIT 50`, [days])).rows;
-      res.set('Cache-Control', 'no-store').json({ days, totals, devices, versions, reasons, problems });
+      res.set('Cache-Control', 'no-store').json({ days, totals, devices, versions, reasons, screen, problems });
     } catch (e) { logger.error?.('[live-transcription] reliability', e); res.status(500).json({ error: 'Reliability could not be loaded' }); }
   });
 }

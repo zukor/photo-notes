@@ -45,6 +45,11 @@ let dictationBase = '';
 let dictationEmptySessions = 0;
 let dictationLastResultAt = 0;
 let dictationPending = false;
+// Record Notes always shows exactly one state: Recording (including starting and
+// finishing), Paused (the phone stopped the microphone, for example when the screen
+// turned off; Continue Recording adds to the same note) or Stopped.
+let recordNotesState = 'stopped', recordNotesPause = null, dictationResumeMode = '', recordNotesHiddenAt = 0;
+document.addEventListener?.('visibilitychange',()=>{if(document.visibilityState==='hidden')recordNotesHiddenAt=Date.now();});
 function recordDictationEvent(event, detail = '', context = null) {
   try {
     const key='photoNotesSpeechDiagnostics';
@@ -324,7 +329,12 @@ async function refreshOnlineSession(){
 }
 
 function isInstalledApp() {
-  return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
+  return globalThis.PhotoNotesNativeCapture?.enabled?.() || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
+}
+// The PhotoNotes AI iPhone app: Take Photo, Record Notes and location use the native app (public/native-capture.js).
+function openCaptureCamera(){
+  if(globalThis.PhotoNotesNativeCapture?.enabled?.()){void globalThis.PhotoNotesNativeCapture.takePhoto().then(file=>{if(file)onPhotoChosen(file);});return;}
+  const input=document.getElementById('photoCam');if(!input)return;input.value='';input.click();
 }
 
 function isPhoneInstallCandidate() {
@@ -445,6 +455,9 @@ function photoToolWorkflowView() {
 }
 function renderApp() {
   ensureEditionTools();
+  // One microphone stream is kept while Capture is open, so recordings do not ask again.
+  window.PhotoNotesLiveTranscription?.holdMicrophone?.(state.view==='capture');
+  if(state.view!=='capture'&&recordNotesState==='paused'){recordNotesState='stopped';recordNotesPause=null;}
   window.PhotoNotesUsage?.screen(state.view,selectedEdition(),state.me);
   cropReturnContext=null;
   // The old Edit page is retired. The 'edit' view key only shows one PhotoNote in the Library photo detail view.
@@ -514,7 +527,7 @@ function renderApp() {
       profileButton.setAttribute('aria-expanded', 'false');
     }
   };
-  document.getElementById('signout').onclick = async () => { if(captureSavePending){toast('Please wait for this photo to finish saving locally.');return;}try{await persistCaptureDraft();const r=await api('/api/logout',{method:'POST'});if(!r.ok)throw Error();forgetSession();queueAccount=null;bgQueue=[];clearTimeout(queueRetryTimer);stopCaptureDictation();location.reload();}catch(error){toast('Could not sign out. Check your connection and try again.');} };
+  document.getElementById('signout').onclick = async () => { if(captureSavePending){toast('Please wait for this photo to finish saving locally.');return;}try{await persistCaptureDraft();const r=await api('/api/logout',{method:'POST'});if(!r.ok)throw Error();forgetSession();queueAccount=null;bgQueue=[];clearTimeout(queueRetryTimer);stopCaptureDictation();await globalThis.PhotoNotesNativeCapture?.release?.();location.reload();}catch(error){toast('Could not sign out. Check your connection and try again.');} };
   document.getElementById('installHelp').onclick=showInstallHelp;
   const menuPayments=document.getElementById('menuPayments');if(menuPayments){menuPayments.onclick=()=>{profileMenu.hidden=true;profileButton.setAttribute('aria-expanded','false');showPayments();};void revealPaymentsMenu();}
   for(const [id,view] of [['menuHoaCommunities','hoa-communities'],['menuHoaDashboard','hoa-dashboard'],['menuHoaReports','hoa-reports']]){const button=document.getElementById(id);if(button)button.onclick=()=>{profileMenu.hidden=true;profileButton.setAttribute('aria-expanded','false');openHoaManagementView(view);};}
@@ -659,7 +672,7 @@ function renderRoadIssueReport() {
     <div id="locwrap" style="display:none"><label>GPS Coordinates</label><div class="status" id="gps"></div><label>Address or Geographic Area</label><div class="status" id="addr"></div><div class="capture-location-actions"><button type="button" class="btn secondary slim" id="retryLocation">Retry location</button><button type="button" class="btn secondary slim" id="correctAddress">Correct address</button></div></div>
     <button type="button" class="btn road-send" id="roadIssueSend">Send</button>
     <div class="status" id="roadIssueStatus" aria-live="polite"></div>`;
-  document.getElementById('takephoto').onclick=()=>{const input=document.getElementById('photoCam');input.value='';input.click();};
+  document.getElementById('takephoto').onclick=openCaptureCamera;
   document.getElementById('photoCam').onchange=e=>{if(e.target.files&&e.target.files[0])onPhotoChosen(e.target.files[0]);};
   document.getElementById('retakePhoto').onclick=retakeCapturePhoto;
   document.getElementById('cancelPhoto').onclick=cancelCapturePhoto;
@@ -903,7 +916,9 @@ function renderCapture() {
     </div>
 
     <label>Notes</label>
+    <div class="record-notes-state" id="recordNotesState" data-state="stopped" role="status">Stopped</div>
     <button type="button" class="btn" id="dictate" style="margin-bottom:8px">Record Notes</button>
+    <button type="button" class="btn secondary" id="dictationDone" style="margin-bottom:8px" hidden>Stop Recording</button>
     <div class="status" id="dictationStatus" aria-live="polite"></div>
     <textarea id="note" placeholder="Your recorded notes will appear here as words."></textarea>
     ${isConcreteClient()?concreteCaptureDetailsMarkup():''}
@@ -942,7 +957,7 @@ function renderCapture() {
   const cameraToolsButton = document.getElementById('openCameraTools');
   if (cameraToolsButton) cameraToolsButton.onclick = () => { state.view = 'camera-tools'; renderApp(); };
 
-  document.getElementById('takephoto').onclick = () => { stopCaptureDictation(); const input=document.getElementById('photoCam');input.value='';input.click(); };
+  document.getElementById('takephoto').onclick = () => { stopCaptureDictation(); openCaptureCamera(); };
   const pmButton=document.getElementById('precisionMeasure');if(pmButton)pmButton.onclick=()=>{stopCaptureDictation();startPrecisionMeasure();};
   document.getElementById('choosephoto').onclick = () => { stopCaptureDictation(); const input=document.getElementById('photoLib');input.value='';input.click(); };
   document.getElementById('photoCam').onchange = (e) => { if (e.target.files[0]) onPhotoChosen(e.target.files[0]); };
@@ -964,8 +979,12 @@ function renderCapture() {
   };}
 
   const dictateBtn = document.getElementById('dictate');
-  if (dictateBtn) dictateBtn.onclick = toggleDictation;
-  if(isIOS()&&window.PhotoNotesSpeechDocument)window.PhotoNotesSpeechDocument.prepare(({ready,failed})=>{if(document.getElementById('dictate')!==dictateBtn||dictationActive||dictationPending||dictationFinish)return;if(liveRecordNotes()){dictateBtn.disabled=false;dictateBtn.textContent='Record Notes';return;}const restart=document.getElementById('dictationRestart');if(restart)restart.disabled=!ready&&!failed;dictateBtn.disabled=!ready&&!failed;dictateBtn.textContent=ready||failed?'Record Notes':'Preparing microphone...';if(failed){const status=document.getElementById('dictationStatus');if(status)status.textContent='Speech could not initialize. Reload Photo Notes and try Record Notes again.';}});
+  if (dictateBtn) dictateBtn.onclick = () => toggleDictation();
+  // iPhone app: the native recorder drives this button; the web microphone is never opened.
+  if(globalThis.PhotoNotesNativeCapture?.enabled?.()){const done=document.getElementById('dictationDone');if(done)done.hidden=true;globalThis.PhotoNotesNativeCapture.mount();}
+  else{const dictationDone=document.getElementById('dictationDone');if(dictationDone)dictationDone.onclick=endPausedRecordNotes;
+  renderRecordNotesState();
+  if(isIOS()&&window.PhotoNotesSpeechDocument)window.PhotoNotesSpeechDocument.prepare(({ready,failed})=>{if(document.getElementById('dictate')!==dictateBtn||dictationActive||dictationPending||dictationFinish)return;if(liveRecordNotes()){if(recordNotesState==='paused')return;dictateBtn.disabled=false;dictateBtn.textContent='Record Notes';return;}const restart=document.getElementById('dictationRestart');if(restart)restart.disabled=!ready&&!failed;dictateBtn.disabled=!ready&&!failed;dictateBtn.textContent=ready||failed?'Record Notes':'Preparing microphone...';if(failed){const status=document.getElementById('dictationStatus');if(status)status.textContent='Speech could not initialize. Reload Photo Notes and try Record Notes again.';}});}
 
   // preserve any typed note across re-renders
   if (state._note) document.getElementById('note').value = state._note;
@@ -1442,6 +1461,8 @@ function onPhotoChosen(file, source='camera') {
   if(state._measureRecord&&file!==state._precisionFile){state._measureRecord=null;state._dims=null;const st=document.getElementById('precisionMeasureStatus');if(st)st.textContent='';}
   if(captureSavePending){toast('Please wait for the current photo to save.');return;}
   const replacing=!!state.photoFile;stopCaptureDictation();
+  // The iPhone app keeps recording while a photo is taken; only a replaced photo ends the recording.
+  if(replacing&&globalThis.PhotoNotesNativeCapture?.enabled?.())globalThis.PhotoNotesNativeCapture.cancel('Recording stopped because the photo was replaced. It is saved under Recordings On This iPhone.');
   captureLocationGeneration++;
   if(replacing){state._note='';const note=document.getElementById('note');if(note)note.value='';}
   state.photoFile = file;state._photoSource=source==='library'?'library':'camera';
@@ -1471,13 +1492,13 @@ function showCapturePreview(file){
 }
 function retakeCapturePhoto(){
   stopCaptureDictation();
-  const input=document.getElementById('photoCam');
-  if(!input)return;input.value='';input.click();
+  openCaptureCamera();
 }
 function cancelCapturePhoto(){
   state._captureShareSave=null;
   if(captureSavePending){toast('Please wait for the current photo to save.');return;}
   stopCaptureDictation();
+  if(globalThis.PhotoNotesNativeCapture?.enabled?.())globalThis.PhotoNotesNativeCapture.cancel('Recording stopped because the photo was cancelled. It is saved under Recordings On This iPhone.');
   captureLocationGeneration++;
   if(state._previewUrl)URL.revokeObjectURL(state._previewUrl);
   state._previewUrl=null;state.photoFile=null;state._qualityResult=null;state._qualityPromise=null;state.location=null;state.address=null;state._locationPromise=null;
@@ -1528,6 +1549,12 @@ function correctCaptureAddress(){
   if(addr)addr.textContent=state.address||'No address entered. GPS coordinates will still be saved.';
 }
 
+// Location is asked for once per app session. Each new photo reads the current position
+// again (it needs its own location), but after the first answer iOS does not prompt again
+// until the app is reopened; iOS decides that, and how long the Home Screen app remembers it.
+// If location was refused in this session, new photos do not ask again on their own;
+// only Retry location and address asks again.
+let locationRefusedThisSession=false;
 function acquireLocation(force=false) {
   if (state._locationPromise && !force) return state._locationPromise;
   const gps = document.getElementById('gps');
@@ -1550,6 +1577,13 @@ function acquireLocation(force=false) {
     state._locationPromise = Promise.resolve();
     return state._locationPromise;
   }
+  if (!fromLibrary && locationRefusedThisSession && !force) {
+    if (gps) gps.textContent = 'Location permission is blocked for this site.';
+    if (addr) addr.textContent = 'Tap Retry location and address, or save without an address.';
+    if (retry) retry.disabled = false;
+    state._locationPromise = Promise.resolve();
+    return state._locationPromise;
+  }
   state._locationPromise = (async () => {
     let pos;
     if (fromLibrary) {
@@ -1564,6 +1598,7 @@ function acquireLocation(force=false) {
       pos = { coords: { latitude: stored.lat, longitude: stored.lng, accuracy: null } };
     } else try {
       pos = await browserPosition({ enableHighAccuracy:true, timeout:12000, maximumAge:0 });
+      locationRefusedThisSession = false;
     } catch (firstError) {
       if (firstError && firstError.code === 1) throw firstError;
       // Android browsers can time out while enabling precise GPS immediately
@@ -1584,6 +1619,7 @@ function acquireLocation(force=false) {
       } catch (e) { if (isCurrent() && addr) addr.textContent = 'Address lookup failed. GPS coordinates will still be saved.'; }
     } finally { if(isCurrent())void persistCaptureDraft().catch(()=>{});if (isCurrent() && retry) retry.disabled=false; }
   })().catch(err => {
+    if (err && err.code === 1) locationRefusedThisSession = true;
     if (!isCurrent()) return;
     if (gps) gps.textContent = err && err.code===1 ? 'Location permission is blocked for this site.' : 'Location timed out or is unavailable.';
     if (addr) addr.textContent = 'Tap Retry location and address, or save without an address.';
@@ -1592,17 +1628,16 @@ function acquireLocation(force=false) {
   return state._locationPromise;
 }
 
-// paused: live Record Notes paused on its own (the app left the screen, or the phone
-// used the microphone). The words so far are saved and Continue Recording keeps going.
-function showDictationInterruption(reason,{paused=false}={}) {
+// Recording stopped early (browser speech engine, or a microphone that never started).
+// A live note that pauses on its own uses the Paused state instead (pauseRecordNotes).
+function showDictationInterruption(reason) {
   document.getElementById('dictationInterruptedDialog')?.remove();
   const note=document.getElementById('note'),photo=state.photoFile,generation=dictationGeneration;
   if(!note)return;
-  const status=document.getElementById('dictationStatus');if(status&&!document.getElementById('dictationRetryTranscription'))status.textContent=paused?'Recording paused. Your words so far are saved.':'Recording stopped early. Your captured words are kept.';
+  const status=document.getElementById('dictationStatus');if(status&&!document.getElementById('dictationRetryTranscription'))status.textContent='Recording stopped early. Your captured words are kept.';
   const dialog=document.createElement('dialog');dialog.id='dictationInterruptedDialog';dialog.className='web-help-dialog';dialog.style.background='#fff';dialog.style.color='#000';
   dialog.setAttribute('aria-labelledby','dictationInterruptedTitle');
-  dialog.innerHTML=paused?'<h2 id="dictationInterruptedTitle">Recording paused</h2><p id="dictationInterruptedReason" style="color:#000"></p><button class="btn" id="dictationRestart" type="button">Continue Recording</button><button class="btn secondary" id="dictationStop" type="button">Stop</button>'
-    :'<h2 id="dictationInterruptedTitle">Recording stopped early</h2><p id="dictationInterruptedReason" style="color:#000"></p><p style="color:#000">Your captured words are kept. Restart to continue your note.</p><button class="btn" id="dictationRestart" type="button">Restart Recording</button><button class="btn secondary" id="dictationStop" type="button">Stop</button>';
+  dialog.innerHTML='<h2 id="dictationInterruptedTitle">Recording stopped early</h2><p id="dictationInterruptedReason" style="color:#000"></p><p style="color:#000">Your captured words are kept. Restart to continue your note.</p><button class="btn" id="dictationRestart" type="button">Restart Recording</button><button class="btn secondary" id="dictationStop" type="button">Stop</button>';
   dialog.querySelector('#dictationInterruptedReason').textContent=reason;
   // Live Record Notes does not use the browser speech engine, so Restart is ready at once.
   if(isIOS()&&!liveRecordNotes()&&window.PhotoNotesSpeechDocument)dialog.querySelector('#dictationRestart').disabled=!window.PhotoNotesSpeechDocument.constructor();
@@ -1626,7 +1661,80 @@ function cleanupDictation() {
   recognizer = null;
   const btn = document.getElementById('dictate');
   if (btn) { btn.disabled = false; btn.textContent = 'Record Notes'; btn.classList.remove('on'); }
+  dictationResumeMode='';setRecordNotesState('stopped');
   if(isIOS())window.PhotoNotesSpeechDocument?.reset();
+}
+
+// ---------- Record Notes state: Recording, Paused or Stopped ----------
+const RECORD_NOTES_LABEL={recording:'Recording',paused:'Paused',stopped:'Stopped'};
+// Plain message for a pause because the page left the screen. iPhone suspends a web
+// app and its microphone when the screen turns off; that cannot be prevented here.
+const SCREEN_OFF_PAUSE='Recording paused because the screen turned off. Your note so far is saved.';
+// A paused note continues by itself when PhotoNotes is back on screen within this time.
+const AUTO_CONTINUE_MS=5*60000;
+function setRecordNotesState(next){
+  if(next!=='paused')recordNotesPause=null;
+  recordNotesState=next;renderRecordNotesState();
+}
+function renderRecordNotesState(){
+  const label=document.getElementById('recordNotesState');
+  if(label){if(label.dataset)label.dataset.state=recordNotesState;label.textContent=RECORD_NOTES_LABEL[recordNotesState];}
+  const done=document.getElementById('dictationDone');if(done)done.hidden=recordNotesState!=='paused';
+  const btn=document.getElementById('dictate');
+  if(btn)btn.classList[recordNotesState==='paused'?'add':'remove']('paused');
+  if(btn&&recordNotesState==='paused'&&!dictationPending&&!dictationActive){btn.disabled=!!recordNotesPause?.continuing;btn.textContent=recordNotesPause?.continuing?'Continuing Recording...':'Continue Recording';btn.classList.remove('on');}
+}
+// The note paused on its own. Its words are already in the note and saved in the draft,
+// and the audio so far is saved on this device. reason: background (left the screen),
+// needs-tap (could not continue by itself), audio-not-started, or a microphone/audio code.
+function pauseRecordNotes(reason){
+  const noteEl=document.getElementById('note');if(!noteEl)return;
+  const previous=recordNotesPause,auto=reason==='background';
+  recordNotesState='paused';
+  recordNotesPause={reason,photo:state.photoFile,note:noteEl,continuing:false,autoTried:!auto||!!previous?.autoTried};
+  renderRecordNotesState();
+  document.getElementById('dictationRetryTranscription')?.remove();
+  const status=document.getElementById('dictationStatus');
+  if(status)status.textContent=reason==='background'?SCREEN_OFF_PAUSE
+    :reason==='needs-tap'||reason==='not-allowed'?SCREEN_OFF_PAUSE+' Tap Continue Recording to keep going.'
+    :reason==='mic-denied'?'Microphone access was not allowed. Your note so far is saved. Allow the microphone, then tap Continue Recording.'
+    :reason==='audio-not-started'?'The microphone did not start. Your note so far is saved. Tap Continue Recording to try again.'
+    :(window.PhotoNotesLiveTranscription?.pauseMessage?.(reason)||'Recording paused. Your words so far are saved. Tap Continue Recording to keep going.');
+  void persistCaptureDraft().catch(()=>{});
+  if(auto)scheduleAutoContinue(recordNotesPause);
+}
+// Back on screen: continue the same note without a tap when the phone allows it. If
+// it needs a tap, Continue Recording stays on screen. Tried once per pause.
+function scheduleAutoContinue(pause){
+  if(pause.autoTried)return;
+  const current=()=>recordNotesPause===pause&&recordNotesState==='paused'&&document.getElementById('note')===pause.note&&state.photoFile===pause.photo&&pause.note.isConnected;
+  const tryNow=()=>{
+    if(document.visibilityState==='hidden')return;
+    document.removeEventListener?.('visibilitychange',tryNow);window.removeEventListener?.('pageshow',tryNow);
+    if(!current()||pause.autoTried)return;
+    pause.autoTried=true;
+    if(recordNotesHiddenAt&&Date.now()-recordNotesHiddenAt>AUTO_CONTINUE_MS){const status=document.getElementById('dictationStatus');if(status)status.textContent=SCREEN_OFF_PAUSE+' Tap Continue Recording to keep going.';return;}
+    pause.continuing=true;renderRecordNotesState();
+    // A moment for the phone to give the app its audio back after it returns.
+    setTimeout(()=>{if(!current()){pause.continuing=false;renderRecordNotesState();return;}void toggleDictation({auto:true});},400);
+  };
+  document.addEventListener?.('visibilitychange',tryNow);window.addEventListener?.('pageshow',tryNow);
+  tryNow();
+}
+// Stop Recording while paused: the note keeps everything recorded so far.
+function endPausedRecordNotes(){
+  if(recordNotesState!=='paused')return;
+  setRecordNotesState('stopped');
+  const btn=document.getElementById('dictate');if(btn){btn.disabled=false;btn.textContent='Record Notes';}
+  const status=document.getElementById('dictationStatus');if(status)status.textContent='Recording stopped. Your note so far is saved.';
+  btn?.focus();
+}
+// A recording that was continuing a paused note could not start: stay Paused.
+function failRecordNotesStart(reason,message){
+  const resuming=dictationResumeMode;
+  stopCaptureDictation();
+  // A refusal after a tap is the person's answer, not the screen turning off.
+  if(resuming)pauseRecordNotes(reason==='not-allowed'&&resuming==='tap'?'mic-denied':reason);else showDictationInterruption(message);
 }
 
 function stopCaptureDictation(){
@@ -1642,11 +1750,14 @@ function stopCaptureDictation(){
   // delivers onend. Graceful Stop/Save still waits for final words above.
   const current=recognizer;recognizer=null;iosDictationSession=null;iosDictationConstructor=null;if(current)try{current.abort();recordDictationEvent('abort');}catch(e){try{current.stop();}catch(ignore){}}
   const btn=document.getElementById('dictate');if(btn){btn.disabled=false;btn.textContent='Record Notes';btn.classList.remove('on');}
+  dictationResumeMode='';setRecordNotesState('stopped');
   if(isIOS())window.PhotoNotesSpeechDocument?.reset();
 }
 
 // Stop listening, but keep this session valid until Safari delivers its final result.
 function finishCaptureDictation(){
+  // Resolves false only when native words could not be prepared and the person chose to keep editing.
+  if(globalThis.PhotoNotesNativeCapture?.enabled?.())return globalThis.PhotoNotesNativeCapture.finish();
   if(dictationFinish)return dictationFinish.promise;
   dictationActive=false;
   if(dictationRestartTimer)clearTimeout(dictationRestartTimer);
@@ -1688,10 +1799,14 @@ function showLiveRecordingStatus(phase,photo,noteEl,kept,where={},detail=''){
       // A recording continued after the pause builds on the note; keep it in step.
       if(dictationActive&&dictationBase){dictationBase=swap(dictationBase);if(dictationBase&&!dictationBase.endsWith(' '))dictationBase+=' ';}
     }
-    const current=document.getElementById('dictationStatus');if(current)current.textContent=text?'Words added from your recording.':'No words were found in the recording.';
+    // While recording or paused, the status line keeps describing that state.
+    const current=document.getElementById('dictationStatus');if(current&&recordNotesState==='stopped')current.textContent=text?'Words added from your recording.':'No words were found in the recording.';
     document.getElementById('dictationRetryTranscription')?.remove();return true;
   };
   if(kept)window.PhotoNotesLiveTranscription.claimKept(kept.id,place);
+  // Left the screen: the saved audio is checked automatically when PhotoNotes is back,
+  // and the Paused state explains what happened. No extra button is needed.
+  if(detail==='background')return;
   status.textContent=detail==='background'?(live?.messages?.backgroundSaved||'Your words so far are saved on this device.'):'Your recording is saved on this device and will be turned into text automatically when the connection returns. You can also tap Transcribe Recording.';
   const button=document.createElement('button');button.type='button';button.className='btn secondary';button.id='dictationRetryTranscription';button.textContent='Transcribe Recording';
   button.onclick=async()=>{
@@ -1707,10 +1822,13 @@ function isIOS() {
     (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 }
 
-async function toggleDictation() {
+// auto: continue a paused note by itself when PhotoNotes is back on screen (no tap).
+async function toggleDictation({auto=false}={}) {
+  if(globalThis.PhotoNotesNativeCapture?.enabled?.())return auto?undefined:globalThis.PhotoNotesNativeCapture.toggle();
   const noteEl = document.getElementById('note');
   const btn = document.getElementById('dictate');
   const live = liveRecordNotes();
+  if(auto&&(!live||recordNotesState!=='paused'||dictationActive||dictationPending||dictationFinish)){if(recordNotesPause){recordNotesPause.continuing=false;renderRecordNotesState();}return;}
   // iPhone allows audio only from the tap itself, before any await.
   if (live && !dictationActive && !dictationPending && !dictationFinish) window.PhotoNotesLiveTranscription.unlock();
   const SR = live ? window.PhotoNotesLiveTranscription.Recognizer : (window.SpeechRecognition || window.webkitSpeechRecognition);
@@ -1734,10 +1852,15 @@ async function toggleDictation() {
     return;
   }
   const requestGeneration=++dictationGeneration;
+  // Continuing a paused note: a new recording segment that adds to the same note.
+  const resumeMode=live&&recordNotesState==='paused'?(auto?'auto':'tap'):'';
+  dictationResumeMode=resumeMode;if(recordNotesPause)recordNotesPause.continuing=false;
   dictationPending=true;
-  recordDictationEvent('request');
-  if(btn)btn.textContent='Starting microphone... tap to cancel';
-  dictationWatchdog=setTimeout(()=>{if(requestGeneration!==dictationGeneration)return;recordDictationEvent('permission-timeout');stopCaptureDictation();showDictationInterruption('The microphone did not start.');},15000);
+  recordNotesState='recording';recordNotesPause=null;renderRecordNotesState();
+  recordDictationEvent(resumeMode?'continue-'+resumeMode:'request');
+  if(btn){btn.disabled=false;btn.textContent='Starting microphone... tap to cancel';}
+  const status0=document.getElementById('dictationStatus');if(status0&&resumeMode)status0.textContent='Continuing your recording. Your note so far is saved.';
+  dictationWatchdog=setTimeout(()=>{if(requestGeneration!==dictationGeneration)return;recordDictationEvent('permission-timeout');failRecordNotesStart('audio-not-started','The microphone did not start.');},15000);
   try {
     // Live recording requests the microphone itself and keeps it for the whole note.
     if(live){recordDictationEvent('live-engine');}
@@ -1751,8 +1874,8 @@ async function toggleDictation() {
     }
   } catch (e) {
     if(requestGeneration!==dictationGeneration)return;
-    recordDictationEvent('permission-error',e.name);stopCaptureDictation();
-    showDictationInterruption('Microphone access was denied. Allow access before restarting.');
+    recordDictationEvent('permission-error',e.name);
+    failRecordNotesStart('not-allowed','Microphone access was denied. Allow access before restarting.');
     return;
   }
   if(requestGeneration!==dictationGeneration)return;
@@ -1781,6 +1904,7 @@ function startDictationSession(SR, continuedText = '') {
   try{if(ios&&iosDictationSession){iosDictationSession=null;iosDictationConstructor=null;recordDictationEvent('completed-session-released');}const SessionSR=!live&&ios&&window.PhotoNotesSpeechDocument?window.PhotoNotesSpeechDocument.constructor():SR;if(!SessionSR)throw Error('Speech document unavailable');session=new SessionSR();if(ios){if(window.PhotoNotesSpeechDocument)recordDictationEvent('fresh-document');iosDictationSession=session;iosDictationConstructor=SR;}}catch(error){stopCaptureDictation();showDictationInterruption('The microphone could not start. Type your note or reload Photo Notes and try again.');return;}
   const generation=++dictationGeneration, photoForSession=state.photoFile;
   recognizer = session;
+  if(live){session.resumeWithoutTap=dictationResumeMode==='auto';session.resumed=dictationResumeMode;}
   session.lang = uiSpeechLanguage();
   session.continuous = true;
   session.interimResults = true;
@@ -1796,7 +1920,8 @@ function startDictationSession(SR, continuedText = '') {
     recordDictationEvent('started');
     const status=document.getElementById('dictationStatus');if(status)status.textContent=ios?'Listening. On iPhone, words may appear after you pause.':'Listening...';
     if(live)clearDictationWatch(generation);
-    const btn=document.getElementById('dictate');if(btn)btn.textContent='Recording... tap to stop';
+    dictationResumeMode='';if(recordNotesState!=='recording')setRecordNotesState('recording');
+    const btn=document.getElementById('dictate');if(btn){btn.disabled=false;btn.textContent='Recording... tap to stop';}
   };
   // Starting audio is not proof of transcription. Bound a session that never
   // receives its first result, while allowing pauses after words arrive.
@@ -1804,7 +1929,7 @@ function startDictationSession(SR, continuedText = '') {
     if(dictationWatchdog)clearTimeout(dictationWatchdog);
     // The live engine saves audio locally, so silence or a lost connection
     // never ends the note. Only a microphone that never starts is bounded.
-    if(live){dictationWatchdog=setTimeout(()=>{if(generation!==dictationGeneration||!dictationActive||microphoneStarted)return;recordDictationEvent('start-timeout');stopCaptureDictation();showDictationInterruption('The microphone did not start.');},20000);return;}
+    if(live){dictationWatchdog=setTimeout(()=>{if(generation!==dictationGeneration||!dictationActive||microphoneStarted)return;recordDictationEvent('start-timeout');failRecordNotesStart('audio-not-started','The microphone did not start.');},20000);return;}
     const quietContinuation=android&&dictationLastResultAt>0;
     dictationWatchdog=setTimeout(()=>{
       if(generation!==dictationGeneration||!dictationActive)return;
@@ -1850,6 +1975,9 @@ function startDictationSession(SR, continuedText = '') {
     const err=e&&e.error;
     recordDictationEvent('error',err);
     if(!dictationActive||dictationFinish)return;
+    // Continuing a paused note did not start (the phone needs a tap, or audio would not
+    // start): stay Paused with Continue Recording, never a stopped or half-started state.
+    if(live&&!microphoneStarted&&dictationResumeMode){failRecordNotesStart(e&&e.reason==='needs-tap'?'needs-tap':err==='not-allowed'?'not-allowed':'audio-not-started','');return;}
     if(err==='no-speech'&&android&&pauseRemaining()>0&&navigator.onLine!==false&&document.visibilityState!=='hidden'&&document.getElementById('note')===noteEl&&state.photoFile===photoForSession){
       recordDictationEvent('pause-no-speech');
       // Wait for the normal end callback, bounded even if it never arrives.
@@ -1887,7 +2015,7 @@ function startDictationSession(SR, continuedText = '') {
     cleanupDictation();
     if(interrupted&&current){
       const status=document.getElementById('dictationStatus');if(status&&!(live&&endEvent?.interrupted))status.textContent='Recording stopped early. Your captured words are kept.';
-      if(live&&endEvent?.interrupted)showDictationInterruption(window.PhotoNotesLiveTranscription?.pauseMessage?.(endEvent.reason)||'Recording paused. Your words so far are saved. Tap Continue Recording to keep going.',{paused:true});
+      if(live&&endEvent?.interrupted)pauseRecordNotes(endEvent.reason||'background');
       else showDictationInterruption('Speech recognition stopped before you pressed Stop.');
     }
   };
@@ -2557,6 +2685,7 @@ async function drainQueue() {
         const saved=await r.json();if(!saved.id)throw Error('Upload confirmation missing');
         if(item.receipt){item.receipt.uploaded=true;item.receipt.captureId=saved.id;if(Object.prototype.hasOwnProperty.call(item.receipt,'jobId')&&String(saved.job_id||'')!==String(item.receipt.jobId||''))void setSavedCaptureProject(item.receipt,item.receipt.jobId);}
         await queueDelete(item.id);
+        globalThis.PhotoNotesNativeCapture?.uploaded?.(item.payload);
         if(queueAccount!==account||selectedEdition()!==edition)break;
         bgQueue=bgQueue.filter(row=>row.id!==item.id);
         void renderPendingLibrary();
@@ -2598,6 +2727,8 @@ async function saveCaptureDurably(options = {}) {
   await finishCaptureDictation();
   stopCaptureDictation();
   const note = document.getElementById('note').value.trim();
+  // iPhone app: the words could not be prepared and the person chose to keep the screen open.
+  if(globalThis.PhotoNotesNativeCapture?.keepEditing?.())return false;
   if(state._duplicateContext&&!state.photoFile){toast('Take or select a new photo before saving this Photo Note.');return false;}
   if (!state.photoFile && !note) { toast('Take a photo or add a note first'); return; }
   if(isHoaClient()&&!globalThis.PhotoNotesIncidents?.active()&&!state.communityId){toast(hoaText('Select an HOA or community'));return;}
@@ -2637,6 +2768,8 @@ async function saveCaptureDurably(options = {}) {
   let jobChanged=false;
   if(!alreadySaved){
     if(jobId!==undefined)receipt.jobId=jobId;
+    // The iPhone app keeps the recordings behind these words until this PhotoNote has uploaded.
+    globalThis.PhotoNotesNativeCapture?.attach?.(payload);
     try{await enqueueUpload(payload,hadCoords,{requireDurable:true,receipt});}
     catch(e){toast('Could not save this photo. Your draft is still here.');return false;}
   }else if(Object.prototype.hasOwnProperty.call(options,'jobId')&&String(receipt.jobId||'')!==String(jobId||'')){
@@ -5647,6 +5780,14 @@ if ('serviceWorker' in navigator) {
     } catch (_) {}
   });
 }
+// The iPhone app's native Record Notes reads the open capture through these.
+globalThis.PhotoNotesNativeCapture?.configure?.({
+  photo:()=>state.photoFile||null,
+  account:async()=>state.me?.email?PhotoNotesQueue.accountKey(state.me.email):null,
+  language:()=>uiSpeechLanguage(),
+  toast:(message,duration)=>toast(message,duration),
+  placed:()=>{}
+});
 boot();
 
 document.addEventListener('photo-notes-languagechange',()=>{if(document.getElementById('concretePurpose'))refreshConcreteCapturePurpose();if(document.getElementById('sendGo'))refreshSendChoices();});

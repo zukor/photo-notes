@@ -1,0 +1,24 @@
+{
+  "name": "photo-notes-mobile",
+  "private": true,
+  "version": "0.2.0",
+  "type": "module",
+  "description": "PhotoNotes AI iPhone app: a native shell for photonotesapp.com with native Take Photo, Record Notes and location.",
+  "scripts": {
+    "check": "tsc --noEmit",
+    "test": "tsc --noEmit && tsx --test test/*.test.ts",
+    "sync": "cap sync ios",
+    "ios": "cap open ios"
+  },
+  "dependencies": {
+    "@capacitor/camera": "8.2.4",
+    "@capacitor/core": "8.5.1",
+    "@capacitor/ios": "8.5.1"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.5.1",
+    "@types/node": "^24.0.0",
+    "tsx": "^4.21.0",
+    "typescript": "~5.9.3"
+  }
+}
