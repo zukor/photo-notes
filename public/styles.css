@@ -1340,3 +1340,11 @@ html[data-theme="dark"] .workflow-send .btn.secondary:not([aria-pressed="true"])
 .tm-badge:hover, .tm-badge:focus-visible { outline:2px solid #000; outline-offset:2px; }
 .tm-badge .tm-label { font-size:12px; font-weight:700; color:#1554d1; letter-spacing:.5px; }
 .tm-badge .tm-count { margin-top:2px; font-size:12px; font-weight:800; color:#ff1a1a; }
+
+/* Record Notes state: exactly one of Recording, Paused or Stopped. Text stays black. */
+.record-notes-state { display:inline-flex; align-items:center; gap:8px; min-height:28px; margin:0 0 6px; padding:2px 10px; border:1px solid #000; border-radius:999px; background:#fff; color:#000; font-weight:700; font-size:15px; }
+.record-notes-state::before { content:""; width:12px; height:12px; border-radius:50%; background:#8a8a8a; flex:none; }
+.record-notes-state[data-state="recording"]::before { background:#ff1a1a; }
+.record-notes-state[data-state="paused"]::before { background:#0057ff; }
+#dictate, #dictationDone { min-height:44px; }
+#dictate.paused { font-size:18px; min-height:56px; }

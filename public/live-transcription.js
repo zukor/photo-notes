@@ -29,6 +29,50 @@ const UPLOAD_TIMEOUT_MS=110000;
 const SILENT_PEAK=2;
 const hidden=()=>document.visibilityState==='hidden';
 
+// ---------- One microphone for the capture session ----------
+// iPhone can ask for the microphone again whenever a page calls getUserMedia after
+// stopping its earlier tracks, and the Home Screen app forgets the answer quickly.
+// So one microphone stream is kept while Capture is open and every recording reuses
+// it. It is released 60 seconds after leaving Capture (or the last field recording),
+// when the page is closed (pagehide), and dropped when the phone ends the track; the
+// next recording then asks for a fresh one automatically.
+// What iOS still controls, and PhotoNotes cannot change: whether it asks at all (the
+// site setting in Settings > Apps > Safari > Microphone, or Allow in the prompt), the
+// orange microphone dot while the stream is held, muting or ending the track when the
+// screen locks, a call or Siri, and suspending the page while it is off screen.
+const MIC_IDLE_MS=60000;
+let micStream=null,micPromise=null,micHold=false,micTimer=null,micUsers=0,micCalls=0;
+const micLive=stream=>{const tracks=stream?.getAudioTracks?.()||[];return tracks.length>0&&tracks.every(t=>t.readyState==='live');};
+function dropMic(){clearTimeout(micTimer);micTimer=null;const stream=micStream;micStream=null;try{stream?.getTracks().forEach(t=>t.stop());}catch{}}
+function idleMic(){clearTimeout(micTimer);micTimer=null;if(micUsers||!micStream||micHold)return;micTimer=setTimeout(()=>{micTimer=null;if(!micUsers&&!micHold)dropMic();},MIC_IDLE_MS);}
+// A track still muted after the app returns may never deliver sound again.
+function unmuted(track,ms){return new Promise(resolve=>{if(!track.muted)return resolve(true);let timer;const on=()=>{clearTimeout(timer);track.removeEventListener?.('unmute',on);resolve(true);};timer=setTimeout(()=>{track.removeEventListener?.('unmute',on);resolve(!track.muted);},ms);track.addEventListener?.('unmute',on);});}
+// source: 'reused' (no getUserMedia call, so no prompt), 'new' or 'renewed' (the
+// previous track had ended or stayed muted). Reported with each recording.
+async function acquireMicrophone(){
+ clearTimeout(micTimer);micTimer=null;
+ let renewed=false;
+ if(micStream){
+  if(micLive(micStream)&&await unmuted(micStream.getAudioTracks()[0],1000)&&micLive(micStream))return {stream:micStream,source:'reused'};
+  if(!micUsers)dropMic();else micStream=null;renewed=true;
+ }
+ if(!micPromise){
+  micCalls++;
+  micPromise=navigator.mediaDevices.getUserMedia({audio:{channelCount:1,echoCancellation:true,noiseSuppression:true,autoGainControl:true}}).then(stream=>{
+   if(micStream&&micStream!==stream&&!micUsers)dropMic();
+   micStream=stream;
+   for(const track of stream.getAudioTracks())track.addEventListener?.('ended',()=>{if(micStream===stream&&!micLive(stream))micStream=null;});
+   return stream;
+  }).finally(()=>{micPromise=null;});
+ }
+ const stream=await micPromise;
+ return {stream,source:renewed?'renewed':'new'};
+}
+// Capture calls holdMicrophone(true) while it is the open screen and false when it is not.
+function holdMicrophone(on){micHold=!!on;if(micHold){clearTimeout(micTimer);micTimer=null;}else idleMic();}
+function releaseMicrophone({now=false}={}){if(now&&!micUsers){dropMic();return;}idleMic();}
+window.addEventListener?.('pagehide',()=>{if(!micUsers)dropMic();else micHold=false;});
+
 function readCachedConfig(){try{return JSON.parse(localStorage.getItem(CONFIG_KEY)||'null');}catch{return null;}}
 function refresh(){
  configPromise=fetch('/api/transcription/config',{credentials:'same-origin',cache:'no-store'})
@@ -98,9 +142,13 @@ function installed(){try{return navigator.standalone===true||!!window.matchMedia
 // reason: why the live text was incomplete or the recording ended (background, mic-ended,
 // closed, session). cause: what interrupted it. fallback: why the saved recording could
 // not be transcribed (upload-502, upload-network). Codes only, never words or audio.
-function report(outcome,{surface='capture',seconds=0,reconnects=0,words=0,reason='',interrupted=false,cause='',fallback='',attempts=0,restored=false,wake=''}={}){
+// wake: whether the screen wake lock was granted (ok, failed, released, pending, none
+// when the browser has no wake lock). mic: whether the microphone stream was reused
+// (no new permission request) or newly requested. resume: auto when a paused note
+// continued by itself on return, tap when Continue Recording was tapped.
+function report(outcome,{surface='capture',seconds=0,reconnects=0,words=0,reason='',interrupted=false,cause='',fallback='',attempts=0,restored=false,wake='',mic='',resume=''}={}){
  const code=v=>String(v||'').slice(0,40);
- const body={surface,outcome,seconds,reconnects,words,reason:code(reason),interrupted:!!interrupted,cause:code(cause),fallback:code(fallback),attempts,restored:!!restored,wake:code(wake),hidden:hidden(),
+ const body={surface,outcome,seconds,reconnects,words,reason:code(reason),interrupted:!!interrupted,cause:code(cause),fallback:code(fallback),attempts,restored:!!restored,wake:code(wake),mic:code(mic),resume:code(resume),hidden:hidden(),
   mode:installed()?'installed':'browser',touch:Number(navigator.maxTouchPoints)>1,version:appVersion()};
  try{fetch('/api/transcription/outcome',{method:'POST',credentials:'same-origin',keepalive:true,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).catch(()=>{});}catch{}
 }
@@ -231,7 +279,11 @@ class LiveRecognizer{
   this._state='idle';this._turns=new Map();this._chunks=[];this._pending=new Int16Array(CHUNK);this._pendingLength=0;
   this._sent=0;this._ws=null;this._open=false;this._terminated=false;this._failure='';this._spoke=false;this._ended=false;
   this._session=0;this._sessionStart=0;this._confirmed=0;this._reconnects=0;this._dropped=false;this._outcome=null;
-  this._peak=0;this._wakeState='none';this._abandoned=false;
+  this._peak=0;this._wakeState='none';this._abandoned=false;this._mic='';
+  // resumeWithoutTap: this recording continues a paused note by itself when the app is
+  // back on screen. If the phone needs a tap to start audio, it ends with 'needs-tap'
+  // quickly instead of hanging, and Capture shows Continue Recording.
+  this.resumeWithoutTap=false;this.resumed='';
  }
  static get isPhotoNotesLive(){return true;}
  get audioSeconds(){return (this._chunks.length*CHUNK+this._pendingLength)/RATE;}
@@ -239,7 +291,7 @@ class LiveRecognizer{
  get interruption(){return this._interrupted||'';}
  _emit(name,event={}){if(this._abandoned&&name!=='end')return;const fn=this['on'+name];if(typeof fn==='function')try{fn.call(this,event);}catch(error){setTimeout(()=>{throw error;});}}
  _status(state,detail=''){this._emit('status',{state,detail});}
- _report(outcome,reason='',extra={}){if(this._outcome)return;this._outcome=outcome;report(outcome,{surface:this.surface,seconds:Math.round(this.audioSeconds),reconnects:this._reconnects,words:wordCount(joinTurns(this._turns)),reason,interrupted:!!this._interrupted,cause:this._interrupted||'',wake:this._wakeState,...extra});}
+ _report(outcome,reason='',extra={}){if(this._outcome)return;this._outcome=outcome;report(outcome,{surface:this.surface,seconds:Math.round(this.audioSeconds),reconnects:this._reconnects,words:wordCount(joinTurns(this._turns)),reason,interrupted:!!this._interrupted,cause:this._interrupted||'',wake:this._wakeState,mic:this._mic,resume:this.resumed,...extra});}
  _cancelled(){return this._state==='aborted'&&!this._abandoned;}
  _result(){
   if(this._abandoned)return;
@@ -263,11 +315,13 @@ class LiveRecognizer{
   // release the lock (older Home Screen apps never grant it), so it is requested again.
   try{
    if(!navigator.wakeLock?.request){this._wakeState='none';return;}
-   navigator.wakeLock.request('screen').then(lock=>{
+   if(this._wake||this._wakeAsking)return;
+   this._wakeAsking=true;if(this._wakeState!=='ok')this._wakeState='pending';
+   navigator.wakeLock.request('screen').then(lock=>{this._wakeAsking=false;
     if(this._state!=='recording'){lock.release().catch(()=>{});return;}
     this._wake=lock;this._wakeState='ok';
     lock.addEventListener?.('release',()=>{if(this._wake!==lock)return;this._wake=null;if(this._state==='recording'&&!hidden()&&(this._wakeRetries=(this._wakeRetries||0)+1)<=3){this._wakeState='released';setTimeout(()=>{if(this._state==='recording'&&!hidden())this._keepAwake();},500);}});
-   }).catch(()=>{this._wakeState='failed';});
+   }).catch(()=>{this._wakeAsking=false;this._wakeState='failed';});
   }catch{this._wakeState='failed';}
  }
  async _run(){
@@ -277,29 +331,55 @@ class LiveRecognizer{
   // Newer iPhones let a web app declare that it records, so Safari routes the microphone for capture.
   try{if(navigator.audioSession&&navigator.audioSession.type!=='play-and-record'){this._audioType=navigator.audioSession.type;navigator.audioSession.type='play-and-record';}}catch{}
   let stream;
-  try{stream=await navigator.mediaDevices.getUserMedia({audio:{channelCount:1,echoCancellation:true,noiseSuppression:true,autoGainControl:true}});}
+  try{const mic=await acquireMicrophone();stream=mic.stream;this._mic=mic.source;}
   catch(error){
    const denied=error&&(error.name==='NotAllowedError'||error.name==='SecurityError');
    throw Object.assign(speechError(denied?'not-allowed':'audio-capture'),{reason:denied?'mic-denied':'mic-'+String(error&&error.name||'error').toLowerCase().replace(/error$/,'').replace(/[^a-z]/g,'').slice(0,20)});
   }
-  if(this._state!=='starting'){stream.getTracks().forEach(t=>t.stop());return;}
-  this._stream=stream;
+  if(this._state!=='starting'){idleMic();return;}
+  // The stream is shared by every recording in this capture session; this recording
+  // only adds its own listeners and removes them when it ends. It never stops the tracks.
+  this._stream=stream;micUsers++;this._usesMic=true;this._trackListeners=[];
+  const listen=(track,name,fn)=>{track.addEventListener(name,fn);this._trackListeners.push([track,name,fn]);};
   for(const track of stream.getAudioTracks()){
    if(track.readyState==='ended'){this._detach();throw Object.assign(speechError('audio-capture'),{reason:'mic-ended-at-start'});}
    if(track.muted)this._startedMuted=true;
-   track.addEventListener('ended',()=>this._captureEnded('mic-ended'));
+   listen(track,'ended',()=>this._captureEnded('mic-ended'));
    // A muted track means the phone has taken the microphone (call, Siri) or paused the app.
-   track.addEventListener('mute',()=>{clearTimeout(this._muteTimer);this._muteTimer=setTimeout(()=>{if(track.muted)this._captureEnded('mic-muted');},1500);});
-   track.addEventListener('unmute',()=>clearTimeout(this._muteTimer));
+   listen(track,'mute',()=>{clearTimeout(this._muteTimer);this._muteTimer=setTimeout(()=>{if(track.muted)this._captureEnded('mic-muted');},1500);});
+   listen(track,'unmute',()=>clearTimeout(this._muteTimer));
   }
   // Phones stop the microphone when the app leaves the screen. Desktop browsers keep recording.
-  if(/iPhone|iPad|iPod|Android/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1)){
-   this._onHidden=()=>{if(document.visibilityState==='hidden')this._captureEnded('background');};
-   document.addEventListener('visibilitychange',this._onHidden);
+  const phone=/iPhone|iPad|iPod|Android/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+  // Back on screen while still recording (desktop browsers keep recording): the browser
+  // released the screen wake lock when the page was hidden, so it is requested again.
+  // On a phone, a page that was suspended without a hidden event (the screen locked
+  // while the app was frozen) is treated as a pause, never left looking like Recording.
+  this._onVisibility=()=>{
+   if(document.visibilityState==='hidden'){if(phone)this._captureEnded('background',true);return;}
+   if(this._state!=='recording')return;
+   if(phone&&this._stalled())return this._captureEnded('background',true);
+   this._wakeRetries=0;this._keepAwake();
+  };
+  document.addEventListener('visibilitychange',this._onVisibility);
+  window.addEventListener('pageshow',this._onVisibility);
+  if(phone){
+   // A timer that fires late by seconds means the phone froze the page (screen off).
+   let last=Date.now();
+   this._heartbeat=setInterval(()=>{const now=Date.now(),gap=now-last;last=now;if(this._state==="recording"&&gap>6000)this._captureEnded('background',true);},1000);
   }
   this._onOnline=()=>{if(this._state==='recording'&&!this._open&&this._failure){this._failure='';this._reconnects=Math.min(this._reconnects,MAX_RECONNECTS-1);this._reconnect();}};
   window.addEventListener('online',this._onOnline);
-  if(context.state!=='running')try{await context.resume();}catch{}
+  // iPhone can leave resume() unresolved when audio is not allowed to start, so the
+  // wait is bounded. A context that will not run cannot record: the recording ends
+  // at once with a clear reason instead of showing Recording with no sound.
+  if(context.state!=='running'){
+   try{await Promise.race([context.resume(),new Promise(r=>setTimeout(r,1500))]);}catch{}
+   if(context.state!=='running'&&this._state==='starting'){
+    contextHidden=true;
+    throw Object.assign(speechError('audio-capture'),{reason:this.resumeWithoutTap?'needs-tap':'audio-not-started'});
+   }
+  }
   await this._attach(context,stream);
   if(this._state!=='starting'){this._detach();return;}
   // iPhone can interrupt the audio pipeline (alarm, Siri, another app's audio) without
@@ -312,7 +392,8 @@ class LiveRecognizer{
    this._contextTimer=setTimeout(()=>{if(this._state==='recording'&&context.state!=='running')this._captureEnded('audio-'+context.state);},1500);
   };
   context.addEventListener?.('statechange',this._onContextState);
-  this._state='recording';this._emit('start');this._emit('audiostart');
+  this._state='recording';this._lastBeat=Date.now();this._emit('start');this._emit('audiostart');
+  // The wake lock is requested as soon as recording starts; its result is reported.
   this._keepAwake();
   this._status('capture',`rate=${context.sampleRate} state=${context.state} node=${this._node&&this._node.port?'worklet':'script'}${this._startedMuted?' muted':''}`);
   // A paused audio pipeline would record silence. Detect it within seconds instead of losing the note.
@@ -325,6 +406,9 @@ class LiveRecognizer{
  }
  // The microphone delivers audio but no sound at all (the phone muted the input).
  // Tell the person while they can still restart; the words cannot be recovered later.
+ // The microphone or audio stopped while the page was away: muted or ended track, or a
+ // paused audio pipeline.
+ _stalled(){const track=this._stream?.getAudioTracks?.()[0];return !track||track.readyState!=='live'||track.muted||(this._context&&this._context.state!=='running');}
  _checkSilent(){if(this._state==='recording'&&this._peak<=SILENT_PEAK&&this.audioSeconds>=2)this._status('silent');}
  async _attach(context,stream){
   const resample=createResampler(context.sampleRate);
@@ -349,14 +433,17 @@ class LiveRecognizer{
   try{this._wake?.release().catch(()=>{});}catch{}this._wake=null;
   try{if(this._audioType!==undefined&&navigator.audioSession){navigator.audioSession.type=this._audioType;this._audioType=undefined;}}catch{}
   clearTimeout(this._silenceCheck);clearTimeout(this._muteTimer);clearTimeout(this._reconnectTimer);clearTimeout(this._contextTimer);
-  if(this._onHidden)document.removeEventListener('visibilitychange',this._onHidden);
+  if(this._onVisibility){document.removeEventListener('visibilitychange',this._onVisibility);window.removeEventListener('pageshow',this._onVisibility);this._onVisibility=null;}
+  clearInterval(this._heartbeat);this._heartbeat=null;
   if(this._onOnline)window.removeEventListener('online',this._onOnline);
   if(this._onContextState){try{this._context?.removeEventListener?.('statechange',this._onContextState);}catch{}this._onContextState=null;}
   try{this._source?.disconnect();}catch{}try{this._node?.disconnect();}catch{}try{this._sink?.disconnect();}catch{}
   if(this._node?.port)this._node.port.onmessage=null;
   if(this._capturing){this._capturing=false;captures=Math.max(0,captures-1);}
   this._source=this._node=this._sink=null;
-  this._stream?.getTracks().forEach(t=>t.stop());this._stream=null;
+  for(const [track,name,fn] of this._trackListeners||[])try{track.removeEventListener(name,fn);}catch{}
+  this._trackListeners=[];this._stream=null;
+  if(this._usesMic){this._usesMic=false;micUsers=Math.max(0,micUsers-1);idleMic();}
  }
  _push(samples){
   for(let i=0;i<samples.length;i++){const v=samples[i]<0?-samples[i]:samples[i];if(v>this._peak)this._peak=v;}
@@ -421,11 +508,11 @@ class LiveRecognizer{
   this._sessionStart=this._confirmed;this._sent=this._confirmed;this._failure='';
   this._connect(details.url);
  }
- _captureEnded(reason){
+ _captureEnded(reason,background=false){
   // The phone took the microphone away or the app went to the background. Keep what was captured.
   if(this._state!=='recording')return;
   // A call or a locked screen also hides the app; the app cannot record until it is back.
-  this._interrupted=hidden()?'background':reason||'mic-ended';this.stop();
+  this._interrupted=background||hidden()?'background':reason||'mic-ended';this.stop();
  }
  stop(){
   if(this._state==='starting'){this._state='aborted';this._detach();this._close();this._report('cancelled','before-start');this._end();return;}
@@ -509,8 +596,10 @@ class LiveRecognizer{
  }
  _fail(error,reason=error){
   if(this._state==='aborted'||this._state==='ended')return;
+  // A paused note that could not continue by itself is not a failed recording.
+  const notStarted=this._state==='starting'&&this.resumeWithoutTap;
   this._state='aborted';this._detach();this._close();
-  this._report('failed',reason);
+  this._report(notStarted?'cancelled':'failed',reason);
   this._emit('error',{error,reason});this._end();
  }
  _end(){if(this._ended)return;this._ended=true;const aborted=this._state==='aborted';this._state=aborted?'aborted':'ended';setTimeout(()=>this._emit('end',{interrupted:!!this._interrupted,reason:this._interrupted||''}),0);}
@@ -590,7 +679,8 @@ function releaseKept(id){claimers.delete(id);}
 window.addEventListener?.('photonotes-recordings-recovered',()=>{setTimeout(()=>{if(!document.querySelector('dialog[open]'))void showRecovered();},500);});
 
 window.PhotoNotesLiveTranscription={
- refresh,enabled,supported,unlock,Recognizer:LiveRecognizer,dictateField,stopField,fieldActive,claimKept,releaseKept,
+ refresh,enabled,supported,unlock,Recognizer:LiveRecognizer,acquireMicrophone,holdMicrophone,releaseMicrophone,
+ microphoneRequests(){return micCalls;},dictateField,stopField,fieldActive,claimKept,releaseKept,
  pendingRecording(){return lastFailed;},
  retryPending,retryKept,listKept,showRecovered,
  discardPending(){if(lastFailed)void removeKept(lastFailed.id);lastFailed=null;},

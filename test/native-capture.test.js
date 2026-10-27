@@ -200,7 +200,11 @@ test('the web app routes Take Photo, Record Notes, Save and uploads through the 
   const app = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
   const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
   assert.ok(html.indexOf('/native-capture.js') > 0 && html.indexOf('/native-capture.js') < html.indexOf('/app.js'), 'loaded before app.js');
-  assert.match(app, /async function toggleDictation\(\) \{\n  if\(globalThis\.PhotoNotesNativeCapture\?\.enabled\?\.\(\)\)return globalThis\.PhotoNotesNativeCapture\.toggle\(\);/);
+  assert.match(app, /async function toggleDictation\(\{auto=false\}=\{\}\) \{\n  if\(globalThis\.PhotoNotesNativeCapture\?\.enabled\?\.\(\)\)return auto\?undefined:globalThis\.PhotoNotesNativeCapture\.toggle\(\);/);
+  // In the iPhone app the web Record Notes controls and their microphone are never set up.
+  assert.match(app, /if\(globalThis\.PhotoNotesNativeCapture\?\.enabled\?\.\(\)\)\{const done=document\.getElementById\('dictationDone'\);if\(done\)done\.hidden=true;globalThis\.PhotoNotesNativeCapture\.mount\(\);\}\n  else\{/);
+  const firstUse = fs.readFileSync(path.join(__dirname, '..', 'public', 'first-use.js'), 'utf8');
+  assert.match(firstUse, /function offer\(me,\{force=false\}=\{\}\)\{\n[^\n]*\n[^\n]*\n  if\(window\.PhotoNotesNativeCapture\?\.enabled\?\.\(\)\)return false;/);
   assert.match(app, /function finishCaptureDictation\(\)\{[\s\S]{0,200}if\(globalThis\.PhotoNotesNativeCapture\?\.enabled\?\.\(\)\)return globalThis\.PhotoNotesNativeCapture\.finish\(\);/);
   assert.match(app, /await finishCaptureDictation\(\);\n  stopCaptureDictation\(\);\n  const note = [^\n]+\n  [^\n]*\n  if\(globalThis\.PhotoNotesNativeCapture\?\.keepEditing\?\.\(\)\)return false;/);
   assert.match(app, /PhotoNotesNativeCapture\?\.attach\?\.\(payload\);\n    try\{await enqueueUpload/);
