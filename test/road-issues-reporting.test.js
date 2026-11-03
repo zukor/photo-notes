@@ -45,5 +45,5 @@ test('road reports are stored before an attached-photo email is attempted',()=>{
   assert.match(server,/app\.post\('\/api\/road-issues',requireAuth,upload\.single\('photo'\)/);
   assert.match(server,/INSERT INTO road_issue_reports/);
   assert.match(server,/process\.env\.ROAD_ISSUE_EMAIL\|\|'zukor@earthlink\.net'/);
-  assert.match(server,/attachments=\[\{filename:`road-issue-\$\{report\.id\}\$\{path\.extname\(local\)\|\|'\.jpg'\}`/);
+  assert.match(server,/attachments=\[\{filename:`road-issue-\$\{report\.id\}\$\{\(\(\)=>\{const e=path\.extname\(local\)\.toLowerCase\(\);return e&&e!=='\.bin'\?e:\(sniffImageExtension\(local\)\|\|'\.jpg'\);\}\)\(\)\}`/);
 });
