@@ -150,6 +150,9 @@ app.use('/uploads', express.static(UPLOAD_DIR,{setHeaders(res,file){
   // Photos are private to the signed-in browser. A versioned address may be reused for a day.
   res.setHeader('Cache-Control',versionedRequest(res.req)?'private, max-age=86400':'private, no-cache');
   res.setHeader('Content-Security-Policy',"sandbox; default-src 'none'; img-src 'self' data:; media-src 'self'; style-src 'unsafe-inline'");
+  // Older uploads stored as .bin may still be photos: serve them as the image they are.
+  const binImage=/\.bin$/i.test(file)?sniffImageExtension(file):null;
+  if(binImage){res.setHeader('Content-Type',{'.jpg':'image/jpeg','.png':'image/png','.webp':'image/webp','.gif':'image/gif','.heic':'image/heic'}[binImage]);return;}
   if(!/\.(jpe?g|png|webp|gif|heic|heif|m4a|mp4|mov|webm|ogg|wav|mp3|aac|caf)$/i.test(file))res.setHeader('Content-Disposition','attachment');
 }}));
 
@@ -714,6 +717,7 @@ async function hoaOwnsCommunity(companyId,communityId,db=pool){return !!(await d
 
 // ---- photo upload ----
 const SAFE_UPLOAD_EXTENSIONS = new Set(['.jpg','.jpeg','.png','.webp','.heic','.heif','.gif','.m4a','.mp4','.mov','.webm','.ogg','.wav','.mp3','.aac','.caf','.docx','.pdf']);
+const {safeUploadExtension,sniffImageExtension}=require('./upload-types')(SAFE_UPLOAD_EXTENSIONS);
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, UPLOAD_DIR),
   filename: (req, file, cb) => {
@@ -721,8 +725,7 @@ const storage = multer.diskStorage({
     // Unguessable names. The extension comes from a fixed list, never from the
     // uploader, so an uploaded page or script can never be served as one.
     const rand = crypto.randomBytes(12).toString('hex');
-    const ext = (file.originalname.match(/\.[a-zA-Z0-9]+$/) || ['.jpg'])[0].toLowerCase();
-    cb(null, `${stamp}_${rand}${SAFE_UPLOAD_EXTENSIONS.has(ext) ? ext : '.bin'}`);
+    cb(null, `${stamp}_${rand}${safeUploadExtension(file)}`);
   },
 });
 const upload = multer({ storage, limits: { fileSize: 25 * 1024 * 1024 } });
@@ -1746,7 +1749,7 @@ async function emailRoadIssueReport(report,user){
   const when=new Date(report.created_at).toLocaleString('en-US',{timeZone:'America/Chicago'});
   const gps=report.latitude!=null&&report.longitude!=null?`${Number(report.latitude).toFixed(6)}, ${Number(report.longitude).toFixed(6)}`:'Not available';
   const body={from,to:[recipient],subject:`Road Issue #${report.id}: ${report.issue_type}`,html:`<h2>Road Issue #${report.id}</h2><p><strong>Type:</strong> ${escXml(report.issue_type)}</p><p><strong>Submitted by:</strong> ${escXml(user.name||'')} (${escXml(user.email||'')})</p><p><strong>Submitted:</strong> ${escXml(when)} CT</p><p><strong>GPS:</strong> ${escXml(gps)}</p><p><strong>Address or geographic area:</strong> ${escXml(report.address||'Not available')}</p>`};
-  const local=localPhoto(report.photo_path);if(local&&fs.existsSync(local))body.attachments=[{filename:`road-issue-${report.id}${path.extname(local)||'.jpg'}`,content:fs.readFileSync(local).toString('base64')}];
+  const local=localPhoto(report.photo_path);if(local&&fs.existsSync(local))body.attachments=[{filename:`road-issue-${report.id}${(()=>{const e=path.extname(local).toLowerCase();return e&&e!=='.bin'?e:(sniffImageExtension(local)||'.jpg');})()}`,content:fs.readFileSync(local).toString('base64')}];
   try{const response=await fetch('https://api.resend.com/emails',{method:'POST',headers:{'content-type':'application/json','authorization':`Bearer ${key}`},body:JSON.stringify(body)});if(!response.ok)return {status:'failed',error:`Mail service returned ${response.status}`};return {status:'sent',error:null};}catch(e){return {status:'failed',error:ticketText(e&&e.message,200)||'Mail request failed'};}
 }
 app.post('/api/road-issues',requireAuth,upload.single('photo'),async(req,res)=>{
