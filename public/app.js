@@ -237,9 +237,20 @@ if (typeof window !== 'undefined' && typeof window.openRamoIntake !== 'function'
 // { timeout: ms } to change it, or 0 for none. Saves, uploads, AI tools and exports have no default limit.
 const API_TIMEOUT_MS = 20000;
 const LONG_API_REQUEST = /\/(export|report|stamped|share-photo)(\/|\?|$)|[?&]doc=/;
+// The person's time zone and language travel with every request so the server can print
+// dates and times the way that person sees them (production runs on a UTC clock).
+function clientTimeZone(){try{return Intl.DateTimeFormat().resolvedOptions().timeZone||'';}catch(e){return '';}}
+function clientLanguage(){try{return (window.photoNotesI18n&&window.photoNotesI18n.getLanguage())||(localStorage.getItem('photo-notes-language')||'en');}catch(e){return 'en';}}
+// Query string for links the browser opens directly (downloads, printable pages).
+function localeQuery(){const tz=clientTimeZone(),lang=clientLanguage();return 'tz='+encodeURIComponent(tz)+'&lang='+encodeURIComponent(lang);}
+function withLocale(url){return url+(url.includes('?')?'&':'?')+localeQuery();}
 async function api(path, opts = {}) {
   const { timeout, ...options } = opts;
   const method = String(options.method || 'GET').toUpperCase();
+  const headers = new Headers(options.headers || undefined);
+  if (!headers.has('x-pn-tz')) { const tz = clientTimeZone(); if (tz) headers.set('x-pn-tz', tz); }
+  if (!headers.has('x-pn-lang')) headers.set('x-pn-lang', clientLanguage());
+  options.headers = headers;
   const limit = timeout !== undefined ? Number(timeout) || 0 : (method === 'GET' && !LONG_API_REQUEST.test(String(path)) ? API_TIMEOUT_MS : 0);
   if (!limit) return fetch(path, { credentials: 'same-origin', ...options });
   const controller = new AbortController(), timer = setTimeout(() => controller.abort(), limit);
